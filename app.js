@@ -133,6 +133,36 @@ function saveMerchantToStorage(merch) {
     } catch (e) {}
 }
 
+function loadSavedHub() {
+    try {
+        const saved = localStorage.getItem("talathub_logged_in_hub");
+        if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return null;
+}
+
+function saveHubToStorage(hub) {
+    try {
+        if (hub) localStorage.setItem("talathub_logged_in_hub", JSON.stringify(hub));
+        else localStorage.removeItem("talathub_logged_in_hub");
+    } catch (e) {}
+}
+
+function loadSavedRider() {
+    try {
+        const saved = localStorage.getItem("talathub_logged_in_rider");
+        if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return null;
+}
+
+function saveRiderToStorage(rider) {
+    try {
+        if (rider) localStorage.setItem("talathub_logged_in_rider", JSON.stringify(rider));
+        else localStorage.removeItem("talathub_logged_in_rider");
+    } catch (e) {}
+}
+
 function loadSavedMarketData() {
     try {
         const saved = localStorage.getItem("talathub_custom_market_stalls");
@@ -2072,6 +2102,12 @@ function selectPaymentMethod(method) {
 
 // Order Checkout Processor
 function processOrderCheckout() {
+    if (!state.customer || !state.customer.isLoggedIn) {
+        showToast("🔒 กรุณาเข้าสู่ระบบลูกค้าก่อนชำระเงินครับ");
+        openCustomerLoginModal();
+        return;
+    }
+
     const totals = calculateCartTotals();
     if (totals.itemsCount === 0) {
         showToast("กรุณาเลือกสินค้าลงตะกร้าก่อนทำรายการ");
@@ -3179,7 +3215,149 @@ function logoutMerchant() {
     activeMerchantStallId = null;
     saveMerchantToStorage(null);
     renderAuthHeaderButtons();
+    setActiveRoleView("customer");
     showToast("🚪 ออกจากระบบร้านค้าเรียบร้อยแล้ว");
+}
+
+// ==========================================
+// ROLE-BASED ACCESS CONTROL & ROLE SWITCHING
+// ==========================================
+function switchRole(targetRole) {
+    if (targetRole === "customer") {
+        setActiveRoleView("customer");
+        return;
+    }
+
+    if (targetRole === "hub") {
+        if (!state.activeHub || !state.activeHub.isLoggedIn) {
+            openHubLoginModal();
+            return;
+        }
+        setActiveRoleView("hub");
+        return;
+    }
+
+    if (targetRole === "merchant") {
+        if (!state.activeMerchant || !state.activeMerchant.isLoggedIn) {
+            openMerchantLoginModal();
+            return;
+        }
+        setActiveRoleView("merchant");
+        return;
+    }
+
+    if (targetRole === "rider") {
+        if (!state.activeRider || !state.activeRider.isLoggedIn) {
+            openRiderLoginModal();
+            return;
+        }
+        setActiveRoleView("rider");
+        return;
+    }
+}
+
+function setActiveRoleView(role) {
+    state.currentRole = role;
+    const containers = ["customer", "hub", "merchant", "rider"];
+    containers.forEach(r => {
+        const el = document.getElementById(`${r}-view-container`);
+        const btn = document.getElementById(`role-btn-${r}`);
+        if (el) {
+            if (r === role) el.classList.remove("hidden");
+            else el.classList.add("hidden");
+        }
+        if (btn) {
+            if (r === role) {
+                btn.className = "role-btn active px-2.5 py-1.5 rounded-lg font-bold bg-emerald-600 text-white shadow-xs flex items-center gap-1 transition-all";
+            } else {
+                btn.className = "role-btn px-2.5 py-1.5 rounded-lg font-medium text-slate-300 hover:text-white transition-all flex items-center gap-1";
+            }
+        }
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// Hub Login & Logout
+function openHubLoginModal() {
+    document.getElementById("hub-login-modal").classList.remove("hidden");
+}
+
+function closeHubLoginModal() {
+    document.getElementById("hub-login-modal").classList.add("hidden");
+}
+
+function handleHubLoginSubmit() {
+    const pin = document.getElementById("hub-pin-input")?.value.trim();
+    if (!pin || pin.length < 4) {
+        showToast("⚠️ กรุณากรอกรหัส PIN ให้ครบ 4 หลัก");
+        return;
+    }
+    state.activeHub = {
+        isLoggedIn: true,
+        name: "คุณเอกชัย (หัวหน้า Hub กลาง)",
+        role: "hub_admin"
+    };
+    saveHubToStorage(state.activeHub);
+    closeHubLoginModal();
+    setActiveRoleView("hub");
+    renderAuthHeaderButtons();
+    showToast("🎉 เข้าสู่ระบบร้าน Hub กลางสำเร็จ! ยินดีต้อนรับคุณเอกชัย");
+}
+
+function quickLoginHub() {
+    state.activeHub = {
+        isLoggedIn: true,
+        name: "คุณเอกชัย (หัวหน้า Hub กลาง)",
+        role: "hub_admin"
+    };
+    saveHubToStorage(state.activeHub);
+    closeHubLoginModal();
+    setActiveRoleView("hub");
+    renderAuthHeaderButtons();
+    showToast("🎉 เข้าสู่ระบบร้าน Hub กลางสำเร็จ! ยินดีต้อนรับคุณเอกชัย");
+}
+
+function logoutHub() {
+    state.activeHub = null;
+    saveHubToStorage(null);
+    setActiveRoleView("customer");
+    renderAuthHeaderButtons();
+    showToast("🚪 ออกจากระบบร้าน Hub กลางเรียบร้อยแล้ว");
+}
+
+// Rider Login & Logout
+function openRiderLoginModal() {
+    document.getElementById("rider-login-modal").classList.remove("hidden");
+}
+
+function closeRiderLoginModal() {
+    document.getElementById("rider-login-modal").classList.add("hidden");
+}
+
+function handleRiderLoginSubmit() {
+    const riderSelect = document.getElementById("rider-select-input");
+    const val = riderSelect ? riderSelect.value : "rider_somchai";
+    const name = val === "rider_sombat" ? "พี่สมบัติ (2ขค 4511)" : "พี่สมชาย (1กข 8902)";
+
+    state.activeRider = {
+        isLoggedIn: true,
+        riderId: val,
+        name: name,
+        phone: "081-234-5678"
+    };
+    saveRiderToStorage(state.activeRider);
+    closeRiderLoginModal();
+    setActiveRoleView("rider");
+    renderAuthHeaderButtons();
+    showToast(`🎉 เข้าสู่ระบบไรเดอร์สำเร็จ! ยินดีต้อนรับ ${name}`);
+}
+
+function logoutRider() {
+    state.activeRider = null;
+    saveRiderToStorage(null);
+    setActiveRoleView("customer");
+    renderAuthHeaderButtons();
+    showToast("🚪 ออกจากระบบไรเดอร์เรียบร้อยแล้ว");
 }
 
 function renderAuthHeaderButtons() {
@@ -3770,9 +3948,12 @@ function previewMerchantLiveStore() {
 function initTalatHubApp() {
     state.customer = loadSavedCustomer();
     state.activeMerchant = loadSavedMerchant();
+    state.activeHub = loadSavedHub();
+    state.activeRider = loadSavedRider();
     state.favorites = loadSavedFavorites();
     state.deliveryLocation = loadSavedLocation();
 
+    setActiveRoleView("customer");
     updateDeliveryLocationUI();
     renderAuthHeaderButtons();
     updateCustomerLoyaltyBanner();

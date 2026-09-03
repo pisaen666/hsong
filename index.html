@@ -785,6 +785,10 @@
                     <span class="text-[11px] bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded-lg">
                         คิวรอส่ง: <strong class="text-amber-400" id="hub-queue-count">2</strong>
                     </span>
+                    <button onclick="logoutHub()" class="text-[10px] bg-rose-950/80 hover:bg-rose-800 text-rose-300 hover:text-white border border-rose-700/60 px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 active:scale-95" title="ออกจากระบบร้าน Hub">
+                        <span class="material-symbols-outlined text-xs">logout</span>
+                        <span>ออกจากระบบ</span>
+                    </button>
                 </div>
             </div>
 
@@ -932,7 +936,13 @@
                     <div class="text-[10px] text-orange-200 uppercase font-semibold">บริการไรเดอร์ประจำตลาด</div>
                     <h2 class="font-bold text-sm">แผงค้าเรียกไรเดอร์ส่งของด่วน</h2>
                 </div>
-                <span class="material-symbols-outlined text-orange-200">moped</span>
+                <div class="flex items-center gap-1.5">
+                    <button onclick="logoutMerchant()" class="text-[10px] bg-black/30 hover:bg-black/50 text-white border border-white/20 px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 active:scale-95" title="ออกจากระบบแผงค้า">
+                        <span class="material-symbols-outlined text-xs">logout</span>
+                        <span>ออกจากระบบ</span>
+                    </button>
+                    <span class="material-symbols-outlined text-orange-200">moped</span>
+                </div>
             </div>
 
             <div class="p-4 flex-1 overflow-y-auto space-y-4 text-xs pb-10">
@@ -1020,10 +1030,16 @@
                         <h2 class="font-extrabold text-sm">พี่สมชาย • ทะเบียน 1กข 8902</h2>
                     </div>
                 </div>
-                <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span>พร้อมรับงาน</span>
-                </span>
+                <div class="flex items-center gap-2">
+                    <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>พร้อมรับงาน</span>
+                    </span>
+                    <button onclick="logoutRider()" class="text-[10px] bg-black/30 hover:bg-black/50 text-white border border-white/20 px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 active:scale-95" title="ออกจากระบบไรเดอร์">
+                        <span class="material-symbols-outlined text-xs">logout</span>
+                        <span>ออกจากระบบ</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Rider Content -->
@@ -2566,6 +2582,96 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- HUB MANAGER LOGIN MODAL                    -->
+    <!-- ========================================== -->
+    <div id="hub-login-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 border border-slate-100 text-left">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="w-9 h-9 rounded-2xl bg-amber-500/20 text-amber-600 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-xl">inventory_2</span>
+                    </span>
+                    <div>
+                        <h3 class="font-extrabold text-sm text-slate-900">เข้าสู่ระบบร้าน Hub กลาง</h3>
+                        <p class="text-[11px] text-slate-500">สำหรับหัวหน้า Hub และทีมจัดของสด</p>
+                    </div>
+                </div>
+                <button onclick="closeHubLoginModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <div class="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 space-y-1">
+                <div class="font-bold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm text-amber-700">security</span>
+                    <span>พื้นที่เฉพาะเจ้าหน้าที่ร้าน Hub</span>
+                </div>
+                <div class="text-[11px] text-amber-800">กรุณากรอกรหัส PIN ประจำร้าน หรือกดปุ่มเข้าสู่ระบบด่วน</div>
+            </div>
+
+            <div class="space-y-2">
+                <label class="block text-xs font-bold text-slate-700">รหัส PIN ร้าน Hub (4 หลัก):</label>
+                <input type="password" id="hub-pin-input" maxlength="6" placeholder="เช่น 8888" value="8888" class="w-full p-3 rounded-xl border border-slate-300 font-bold text-center tracking-widest text-base focus:ring-2 focus:ring-amber-500">
+            </div>
+
+            <div class="pt-1 space-y-2">
+                <button onclick="handleHubLoginSubmit()" class="w-full bg-slate-900 hover:bg-slate-800 text-amber-400 font-extrabold py-3 rounded-xl shadow-md text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm">login</span>
+                    <span>เข้าสู่ระบบจัดการร้าน Hub</span>
+                </button>
+                <button onclick="quickLoginHub()" class="w-full bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all">
+                    <span>🍗 เข้าสู่ระบบในฐานะ: คุณเอกชัย (หัวหน้า Hub)</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- RIDER LOGIN MODAL                          -->
+    <!-- ========================================== -->
+    <div id="rider-login-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 border border-slate-100 text-left">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="w-9 h-9 rounded-2xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-xl">two_wheeler</span>
+                    </span>
+                    <div>
+                        <h3 class="font-extrabold text-sm text-slate-900">เข้าสู่ระบบไรเดอร์ประจำตลาด</h3>
+                        <p class="text-[11px] text-slate-500">Community Rider Dispatch Platform</p>
+                    </div>
+                </div>
+                <button onclick="closeRiderLoginModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 space-y-1">
+                <div class="font-bold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm text-emerald-700">badge</span>
+                    <span>สำหรับไรเดอร์รับงานส่งของสด</span>
+                </div>
+                <div class="text-[11px] text-emerald-800">เลือกรหัสไรเดอร์ของคุณเพื่อเข้าดูคิวงานและนำส่งออเดอร์</div>
+            </div>
+
+            <div class="space-y-2">
+                <label class="block text-xs font-bold text-slate-700">เลือกรหัสไรเดอร์ประจำตลาด:</label>
+                <select id="rider-select-input" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-xs bg-slate-50">
+                    <option value="rider_somchai">🛵 พี่สมชาย • ทะเบียน 1กข 8902 (Hub Rider 1)</option>
+                    <option value="rider_sombat">🛵 พี่สมบัติ • ทะเบียน 2ขค 4511 (Hub Rider 2)</option>
+                </select>
+            </div>
+
+            <div class="pt-1 space-y-2">
+                <button onclick="handleRiderLoginSubmit()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold py-3 rounded-xl shadow-md text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm">check_circle</span>
+                    <span>เข้าสู่ระบบ & พร้อมรับงานส่งของ</span>
+                </button>
+            </div>
         </div>
     </div>
 
