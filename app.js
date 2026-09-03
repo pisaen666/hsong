@@ -2334,12 +2334,25 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
     state.cart = [];
     updateCartUI();
 
+    // 1. Play Sound Alert (กระดิ่งเตือนออเดอร์ใหม่)
+    playOrderAlertSound();
+
+    // 2. Send LINE Notification (ส่งแจ้งเตือนเข้า LINE)
+    sendLineOrderNotification(state.activeOrder);
+
+    // 3. Update Hub Badge
+    const hubBadge = document.getElementById("hub-badge-count");
+    if (hubBadge) {
+        hubBadge.classList.remove("hidden");
+        hubBadge.textContent = "NEW";
+    }
+
     if (paymentType === "bank_transfer") {
-        showToast("🎉 ยืนยันการโอนเงิน SCB สำเร็จ! ส่งออเดอร์ไปยังระบบจัดส่งแล้ว");
+        showToast("🎉 โอนเงิน SCB สำเร็จ! ส่งแจ้งเตือนเข้า LINE & ระบบจัดส่งแล้ว 🔔");
     } else if (paymentType === "cod") {
-        showToast("🎉 สั่งซื้อสำเร็จ! เตรียมชำระเงินสดปลายทางกับไรเดอร์");
+        showToast("🎉 สั่งซื้อสำเร็จ! ส่งแจ้งเตือนเข้า LINE & เตรียมชำระเงินสดกับไรเดอร์ 🔔");
     } else {
-        showToast("🎉 ชำระเงินสำเร็จ! ส่งออเดอร์ไปยังระบบจัดส่งเรียบร้อยแล้ว");
+        showToast("🎉 ชำระเงินสำเร็จ! ส่งแจ้งเตือนเข้า LINE & ระบบจัดส่งเรียบร้อยแล้ว 🔔");
     }
     
     goToTrackingScreen();
@@ -3324,6 +3337,101 @@ function logoutHub() {
 }
 
 // ==========================================
+// ORDER NOTIFICATION & LINE INTEGRATION
+// ==========================================
+function playOrderAlertSound() {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        
+        // Bell chime tone 1 (D5)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = "sine";
+        osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc1.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+        gain1.gain.setValueAtTime(0.35, ctx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(ctx.currentTime);
+        osc1.stop(ctx.currentTime + 0.6);
+
+        // Bell chime tone 2 (D6 harmonious chime)
+        setTimeout(() => {
+            try {
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                osc2.type = "sine";
+                osc2.frequency.setValueAtTime(1174.66, ctx.currentTime);
+                gain2.gain.setValueAtTime(0.45, ctx.currentTime);
+                gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+                osc2.connect(gain2);
+                gain2.connect(ctx.destination);
+                osc2.start(ctx.currentTime);
+                osc2.stop(ctx.currentTime + 0.8);
+            } catch (e) {}
+        }, 180);
+    } catch (e) {
+        console.warn("Audio notification notice:", e);
+    }
+}
+
+function generateLineOrderMessage(order) {
+    if (!order) return "";
+    const slot = getNextDeliverySlotInfo();
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    let itemsList = "";
+    let itemIndex = 1;
+    if (order.stalls) {
+        order.stalls.forEach(stall => {
+            itemsList += `\n📍 ${stall.name}:`;
+            (stall.items || []).forEach(item => {
+                const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
+                itemsList += `\n   ${itemIndex++}. ${item.name} - ฿${price}`;
+            });
+        });
+    }
+
+    return `🔔【เฮียส่ง】มีออเดอร์ใหม่เข้ามาแล้ว!
+━━━━━━━━━━━━━━━━━━
+📦 รหัสออเดอร์: ${order.orderId}
+⏰ เวลาสั่งซื้อ: ${timeStr} น. (${slot.slotText})
+👤 ผู้สั่ง: ${order.customerName || 'คุณสุรีย์'} (${order.customerPhone || '089-xxx-4211'})
+📍 ที่อยู่จัดส่ง: ${order.address || 'เทศบาลเมืองบ้านบึง'}
+📝 โน้ตถึงไรเดอร์: ${order.deliveryNote || order.note || 'แขวนไว้ที่รั้วสีขาว'}
+━━━━━━━━━━━━━━━━━━
+🛒 รายการสินค้าที่ต้องจัด:${itemsList}
+━━━━━━━━━━━━━━━━━━
+💰 ยอดชำระรวม: ฿${order.grandTotal || order.total || 0} (${order.paymentDesc || 'ชำระแล้ว'})
+🛵 สถานะ: รอทีมงานจัดของสด & ปล่อยไรเดอร์
+━━━━━━━━━━━━━━━━━━
+👉 ดูใบจัดของสด: https://pisaen666.github.io/hsong/`;
+}
+
+function sendLineOrderNotification(order) {
+    if (!order) return;
+    const msg = generateLineOrderMessage(order);
+    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
+    
+    state.latestLineMessage = msg;
+    state.latestLineUrl = lineUrl;
+}
+
+function openLineShareApp() {
+    if (!state.activeOrder && !state.latestLineMessage) {
+        showToast("⚠️ ยังไม่มีออเดอร์ใหม่ในระบบ");
+        return;
+    }
+    const msg = state.latestLineMessage || generateLineOrderMessage(state.activeOrder);
+    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
+    window.open(lineUrl, '_blank');
+}
+
+// ==========================================
 // HUB / DISPATCH SYSTEM DYNAMIC LOGIC
 // ==========================================
 function renderHubPickingList() {
@@ -3427,6 +3535,18 @@ function renderHubPickingList() {
                     <span class="text-sm font-black text-orange-600">฿${total}</span>
                     <div class="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full mt-1 font-bold">${paymentDesc}</div>
                 </div>
+            </div>
+
+            <!-- LINE Notification Status & Action Bar -->
+            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-2.5 flex items-center justify-between gap-2 shadow-2xs">
+                <div class="flex items-center gap-2 text-emerald-950 text-xs font-bold min-w-0 flex-1">
+                    <span class="w-6 h-6 rounded-lg bg-[#06C755] text-white flex items-center justify-center font-black text-[10px] shrink-0 shadow-2xs">LINE</span>
+                    <span class="truncate text-[11px]">ส่งแจ้งเตือนออเดอร์เข้า LINE ส่วนตัวแล้ว</span>
+                </div>
+                <button onclick="openLineShareApp()" class="bg-[#06C755] hover:bg-[#05a847] text-white font-extrabold text-[10px] px-2.5 py-1.5 rounded-xl shadow-xs flex items-center gap-1 active:scale-95 transition-all shrink-0" title="เปิดดูข้อความออเดอร์ใน LINE">
+                    <span>เปิดใน LINE</span>
+                    <span class="material-symbols-outlined text-xs">open_in_new</span>
+                </button>
             </div>
 
             <div class="space-y-3 pt-1">
