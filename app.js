@@ -310,9 +310,9 @@ function detectCurrentLocationGPS() {
     const btnLabel = document.getElementById("gps-button-label");
 
     if (radar) radar.classList.remove("hidden");
-    if (btnLabel) btnLabel.textContent = "🛰️ กำลังค้นหาสัญญาณดาวเทียม GPS / IP...";
+    if (btnLabel) btnLabel.textContent = "🛰️ กำลังค้นหาสัญญาณดาวเทียม GPS / เครือข่าย...";
 
-    showToast("🛰️ กำลังค้นหาพิกัดจริงของคุณจากดาวเทียม GPS และเครือข่าย...");
+    showToast("🛰️ กำลังค้นหาพิกัดจริงของคุณจากดาวเทียม GPS...");
 
     // Helper to apply and save detected coordinates
     async function applyDetectedCoords(lat, lng, accuracy, sourceName) {
@@ -322,36 +322,51 @@ function detectCurrentLocationGPS() {
         const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
         const fee = calculateDeliveryFee(distKm);
 
-        let addressTitle = `พิกัดจริง (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+        let addressTitle = `พิกัดปัจจุบัน (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
 
-        // Reverse Geocode to Thai Address Name
+        // 1. Try Reverse Geocoding via BigDataCloud client API (Fast & Thai locality aware)
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
-                headers: { 'Accept-Language': 'th,en' },
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=th`, {
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
 
-            if (response.ok) {
-                const data = await response.json();
-                if (data && data.address) {
-                    const road = data.address.road || data.address.suburb || data.address.neighbourhood || "";
-                    const subdistrict = data.address.subdistrict || data.address.village || data.address.city_district || "";
-                    const district = data.address.district || data.address.city || "";
-                    const province = data.address.province || data.address.state || "";
-                    
-                    const parts = [road, subdistrict, district, province].filter(p => p && p.trim() !== "");
-                    if (parts.length > 0) {
-                        addressTitle = parts.join(", ");
-                    } else if (data.display_name) {
-                        addressTitle = data.display_name.split(",").slice(0, 3).join(",");
-                    }
+            if (res.ok) {
+                const data = await res.json();
+                const parts = [data.locality, data.city, data.principalSubdivision].filter(p => p && p.trim());
+                if (parts.length > 0) {
+                    addressTitle = parts.join(", ");
                 }
             }
-        } catch (e) {
-            console.warn("Reverse geocoding network notice:", e);
+        } catch (e1) {
+            // 2. Fallback to OpenStreetMap Nominatim
+            try {
+                const controller2 = new AbortController();
+                const timeoutId2 = setTimeout(() => controller2.abort(), 3500);
+                const res2 = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
+                    headers: { 'Accept-Language': 'th,en' },
+                    signal: controller2.signal
+                });
+                clearTimeout(timeoutId2);
+
+                if (res2.ok) {
+                    const data2 = await res2.json();
+                    if (data2 && data2.address) {
+                        const road = data2.address.road || data2.address.suburb || data2.address.neighbourhood || "";
+                        const subdistrict = data2.address.subdistrict || data2.address.village || data2.address.city_district || "";
+                        const district = data2.address.district || data2.address.city || "";
+                        const province = data2.address.province || data2.address.state || "";
+                        const parts = [road, subdistrict, district, province].filter(p => p && p.trim());
+                        if (parts.length > 0) {
+                            addressTitle = parts.join(", ");
+                        }
+                    }
+                }
+            } catch (e2) {
+                console.warn("Reverse geocode notice:", e2);
+            }
         }
 
         // Update State
@@ -383,7 +398,7 @@ function detectCurrentLocationGPS() {
                 hasResolved = true;
                 fallbackToIPLocation(applyDetectedCoords);
             }
-        }, 2500); // 2.5s fast timeout to prevent desktop hanging
+        }, 8000); // 8s timeout for mobile GPS chip
 
         navigator.geolocation.getCurrentPosition(
             function(position) {
@@ -393,7 +408,7 @@ function detectCurrentLocationGPS() {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
                 const acc = position.coords.accuracy || 15;
-                applyDetectedCoords(lat, lng, acc, "GPS ดาวเทียมสด");
+                applyDetectedCoords(lat, lng, acc, "GPS ดาวเทียมมือถือ");
             },
             function(geoError) {
                 if (hasResolved) return;
@@ -403,9 +418,9 @@ function detectCurrentLocationGPS() {
                 fallbackToIPLocation(applyDetectedCoords);
             },
             {
-                enableHighAccuracy: false,
-                timeout: 2500,
-                maximumAge: 60000
+                enableHighAccuracy: true,
+                timeout: 8000,
+                maximumAge: 30000
             }
         );
     } else {
@@ -413,7 +428,7 @@ function detectCurrentLocationGPS() {
     }
 }
 
-// Attempt 2: IP-based Real Geolocation for Desktop PC / Laptops without hardware GPS
+// Attempt 2: IP-based Real Geolocation for Devices without hardware GPS
 async function fallbackToIPLocation(callback) {
     const radar = document.getElementById("gps-searching-indicator");
     const btnLabel = document.getElementById("gps-button-label");
@@ -449,7 +464,7 @@ async function fallbackToIPLocation(callback) {
     // Default Fallback
     if (radar) radar.classList.add("hidden");
     if (btnLabel) btnLabel.textContent = "🛰️ หาพิกัด GPS จริงจากอุปกรณ์ปัจจุบัน";
-    applyDetectedCoords(13.9120, 100.3400, 50, "พิกัดย่านตลาดสดเทศบาล");
+    callback(13.9120, 100.3400, 50, "พิกัดย่านตลาดสดเทศบาล");
 }
 
 function selectSavedLocation(title, distance, fee, lat, lng) {
