@@ -167,12 +167,12 @@ function loadSavedLocation() {
         if (saved) return JSON.parse(saved);
     } catch (e) {}
     return {
-        title: "บ้านคุณสุรีย์ (ร้านเจ๊เจียบ ซ.เปิดน้อย)",
-        detail: "ที่อยู่บ้านสุรีย์ - ติดต่อที่บ้านคุณ (ห่างจากตลาด 1.8 กม.)",
-        distance: "1.8 กม.",
+        title: "ระบุที่อยู่จัดส่งของคุณ",
+        detail: "แตะ 'หาพิกัดจริง' เพื่อคำนวณระยะทาง & ค่าส่งตามจริง",
+        distance: "แตะระบุพิกัด",
         fee: 25,
-        lat: 13.9120,
-        lng: 100.3400,
+        lat: 13.9125,
+        lng: 100.3275,
         isRealGPS: false
     };
 }
@@ -3208,6 +3208,63 @@ function renderAuthHeaderButtons() {
     }
 
     container.innerHTML = html;
+    updateCustomerLoyaltyBanner();
+}
+
+function updateCustomerLoyaltyBanner() {
+    const banner = document.getElementById("customer-loyalty-banner");
+    if (!banner) return;
+
+    if (state.customer && state.customer.isLoggedIn) {
+        const id = state.customer.identifier || "ลูกค้า";
+        const pts = state.customerPoints !== undefined ? state.customerPoints : 160;
+        banner.innerHTML = `
+            <div onclick="openCustomerWalletModal()" class="bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-300 text-slate-950 rounded-2xl p-3 shadow-md border border-amber-300 flex items-center justify-between cursor-pointer hover:shadow-lg active:scale-[0.99] transition-all">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-10 h-10 rounded-2xl bg-slate-950 text-amber-300 flex items-center justify-center font-black text-xl shadow-xs shrink-0">
+                        🪙
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="font-black text-xs text-slate-950" id="loyalty-banner-name">คุณ ${id}</span>
+                            <span class="text-[9px] bg-slate-950 text-amber-300 font-black px-1.5 py-0.2 rounded-full">👑 Platinum</span>
+                        </div>
+                        <div class="text-[11px] font-extrabold text-slate-900 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            <span>แต้มสะสม: <strong class="text-emerald-950 font-black text-xs" id="loyalty-banner-points">${pts} แต้ม</strong></span>
+                            <span class="bg-emerald-900 text-emerald-100 text-[10px] px-1.5 py-0.2 rounded font-bold">🎟️ มีคูปองส่วนลด</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center text-slate-950 text-xs font-black gap-0.5 shrink-0 bg-white/50 hover:bg-white/70 px-2 py-1.5 rounded-xl transition-all shadow-2xs">
+                    <span>กระเป๋า</span>
+                    <span class="material-symbols-outlined text-sm">chevron_right</span>
+                </div>
+            </div>
+        `;
+    } else {
+        banner.innerHTML = `
+            <div onclick="openCustomerLoginModal()" class="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 text-white rounded-2xl p-3 shadow-md border border-emerald-600 flex items-center justify-between cursor-pointer hover:shadow-lg active:scale-[0.99] transition-all">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-xl shadow-xs shrink-0">
+                        🎁
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="font-black text-xs text-amber-300">ยินดีต้อนรับสู่เฮียส่ง!</span>
+                            <span class="text-[9px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-full">รับ ฿20 ฟรี</span>
+                        </div>
+                        <div class="text-[11px] text-emerald-100 mt-0.5">
+                            <span>แตะเพื่อ <strong>เข้าสู่ระบบ / สมัครสมาชิก</strong> สะสมแต้มรับของรางวัล</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center text-emerald-950 bg-amber-400 hover:bg-amber-300 text-xs font-black gap-1 shrink-0 px-2.5 py-1.5 rounded-xl transition-all shadow-sm">
+                    <span>เข้าสู่ระบบ</span>
+                    <span class="material-symbols-outlined text-sm">login</span>
+                </div>
+            </div>
+        `;
+    }
 }
 
 function openMerchantLoginModal() {
@@ -3677,3 +3734,27 @@ function saveMerchantStallData() {
 function previewMerchantLiveStore() {
     saveMerchantStallData();
 }
+
+// ==========================================
+// INITIALIZE APPLICATION
+// ==========================================
+function initTalatHubApp() {
+    state.customer = loadSavedCustomer();
+    state.activeMerchant = loadSavedMerchant();
+    state.favorites = loadSavedFavorites();
+    state.deliveryLocation = loadSavedLocation();
+
+    updateDeliveryLocationUI();
+    renderAuthHeaderButtons();
+    updateCustomerLoyaltyBanner();
+    renderFavoriteStallsBar();
+    renderCatalog();
+    renderCart();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTalatHubApp);
+} else {
+    initTalatHubApp();
+}
+
