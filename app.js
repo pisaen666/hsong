@@ -663,48 +663,7 @@ const state = {
     customer: loadSavedCustomer(),   // Logged in customer session
     activeMerchant: loadSavedMerchant(), // Logged in merchant session
     deliveryLocation: loadSavedLocation(), // Active delivery location
-    cart: [
-        {
-            stallId: "stall_b01",
-            stallName: "ผักสวนครัวลุงสนั่น",
-            stallNumber: "แผง B01",
-            productId: "vegb_05",
-            name: "มะเขือเปราะกรอบหวาน",
-            price: 15,
-            unit: "500 กรัม",
-            qty: 1
-        },
-        {
-            stallId: "stall_b01",
-            stallName: "ผักสวนครัวลุงสนั่น",
-            stallNumber: "แผง B01",
-            productId: "vegb_04",
-            name: "ข่าอ่อน + ตะไคร้สด + ใบมะกรูด",
-            price: 15,
-            unit: "1 ชุด",
-            qty: 1
-        },
-        {
-            stallId: "stall_c01",
-            stallName: "กะทิสดชาวเกาะ ลุงสมหมาย",
-            stallNumber: "แผง C01",
-            productId: "cocon_01",
-            name: "หัวกะทิสดคั้นแท้ 100%",
-            price: 40,
-            unit: "500 มล.",
-            qty: 1
-        },
-        {
-            stallId: "stall_seafood",
-            stallName: "อาหารทะเลสดลุงหวัง",
-            stallNumber: "แผง E11",
-            productId: "sea_02",
-            name: "ปลาหมึกกล้วยสดไซส์กลาง",
-            price: 110,
-            unit: "500 กรัม",
-            qty: 1
-        }
-    ],
+    cart: [],                        // Initialized to 0 items
     activeOrder: {
         orderId: "#TH-8902",
         status: "picking",
