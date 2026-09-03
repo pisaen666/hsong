@@ -193,9 +193,9 @@ if (_savedStalls && Array.isArray(_savedStalls) && _savedStalls.length > 0) {
 // REAL GPS & DELIVERY LOCATION ENGINE
 // ==========================================
 const MARKET_ORIGIN = {
-    lat: 13.9125,
-    lng: 100.3275,
-    name: "ตลาดสดกลางเฮียส่ง (Hub รวม 100 แผง)"
+    lat: 13.3105,
+    lng: 101.1150,
+    name: "ตลาดสดเทศบาลเมืองบ้านบึง (สไก่สด Hub รวม 100 แผง)"
 };
 
 function loadSavedLocation() {
@@ -215,8 +215,8 @@ function loadSavedLocation() {
         detail: "แตะ 'หาพิกัดจริง' เพื่อคำนวณระยะทาง & ค่าส่งตามจริง",
         distance: "แตะระบุพิกัด",
         fee: 25,
-        lat: 13.9125,
-        lng: 100.3275,
+        lat: 13.3105,
+        lng: 101.1150,
         isRealGPS: false
     };
 }
@@ -520,7 +520,7 @@ async function fallbackToIPLocation(callback) {
     // Default Fallback
     if (radar) radar.classList.add("hidden");
     if (btnLabel) btnLabel.textContent = "🛰️ หาพิกัด GPS จริงจากอุปกรณ์ปัจจุบัน";
-    callback(13.9120, 100.3400, 50, "พิกัดย่านตลาดสดเทศบาล");
+    callback(13.3105, 101.1150, 50, "พิกัดย่านตลาดสดบ้านบึง");
 }
 
 function selectSavedLocation(title, distance, fee, lat, lng) {
@@ -529,8 +529,8 @@ function selectSavedLocation(title, distance, fee, lat, lng) {
         detail: `ชุมชนรอบตลาด • ห่างจากตลาดสด ${distance}`,
         distance: distance,
         fee: fee,
-        lat: lat || 13.912,
-        lng: lng || 100.340,
+        lat: lat || 13.3105,
+        lng: lng || 101.1150,
         isRealGPS: false
     };
     saveLocationToStorage(state.deliveryLocation);

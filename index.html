@@ -1461,27 +1461,27 @@
 
                 <div class="bg-white p-2.5 rounded-xl border border-emerald-200">
                     <div class="font-extrabold text-slate-900 text-xs" id="modal-gps-address-text">
-                        หมู่บ้านพฤกษา 3 (ซอย 5)
+                        ตลาดสดเทศบาลเมืองบ้านบึง ชลบุรี
                     </div>
                     <div class="text-[10px] text-slate-500 mt-0.5" id="modal-gps-detail-subtext">
-                        ซอย 5 บ้านเลขที่ 108/42 • พร้อมรับออเดอร์
+                        ศูนย์กลาง Hub ตลาดสด • พร้อมคำนวณระยะทางและค่าส่ง
                     </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-1.5 text-[11px] pt-1">
                     <div class="bg-white/80 p-1.5 rounded-lg border border-emerald-100 flex items-center gap-1">
                         <span class="material-symbols-outlined text-xs text-emerald-600">route</span>
-                        <span>ระยะทาง: <strong class="text-emerald-800" id="modal-gps-dist">1.8 กม.</strong></span>
+                        <span>ระยะทาง: <strong class="text-emerald-800" id="modal-gps-dist">0.8 กม.</strong></span>
                     </div>
                     <div class="bg-white/80 p-1.5 rounded-lg border border-emerald-100 flex items-center gap-1">
                         <span class="material-symbols-outlined text-xs text-amber-600">moped</span>
-                        <span>ค่าส่ง: <strong class="text-amber-800 font-bold" id="modal-gps-fee">฿25</strong></span>
+                        <span>ค่าส่ง: <strong class="text-amber-800 font-bold" id="modal-gps-fee">฿20</strong></span>
                     </div>
                 </div>
 
                 <div class="text-[10px] text-slate-500 flex items-center justify-between pt-1 border-t border-emerald-200/70">
-                    <span>🌐 ละติจูด: <strong id="modal-gps-lat">13.9120</strong></span>
-                    <span>ลองจิจูด: <strong id="modal-gps-lng">100.3400</strong></span>
+                    <span>🌐 ละติจูด: <strong id="modal-gps-lat">13.3105</strong></span>
+                    <span>ลองจิจูด: <strong id="modal-gps-lng">101.1150</strong></span>
                 </div>
             </div>
 
@@ -1489,21 +1489,21 @@
             <div class="space-y-1.5 pt-1">
                 <label class="block text-[11px] font-bold text-slate-700">หรือคลิกเลือกพิกัดย่านชุมชนรอบตลาด:</label>
                 <div class="grid grid-cols-2 gap-1.5 text-[11px]">
-                    <button type="button" onclick="selectSavedLocation('ตลาดสดกลาง (Hub เฮียส่ง)', '0.0 กม.', 0, 13.9125, 100.3275)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
-                        <div class="font-bold text-slate-800">🏪 ตลาดสดกลาง (Hub)</div>
+                    <button type="button" onclick="selectSavedLocation('ตลาดสดเทศบาลเมืองบ้านบึง (Hub)', '0.0 กม.', 0, 13.3105, 101.1150)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
+                        <div class="font-bold text-slate-800">🏪 ตลาดสดเทศบาล (Hub)</div>
                         <div class="text-[10px] text-emerald-700">0.0 กม. • รับที่ตลาด (ฟรี)</div>
                     </button>
-                    <button type="button" onclick="selectSavedLocation('หมู่บ้านพฤกษา 3 (ซอย 5)', '1.8 กม.', 25, 13.9120, 100.3400)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
-                        <div class="font-bold text-slate-800">🏡 ม.พฤกษา 3</div>
-                        <div class="text-[10px] text-emerald-700">1.8 กม. • ค่าส่ง ฿25</div>
+                    <button type="button" onclick="selectSavedLocation('ชุมชนตลาดเก่าบ้านบึง', '0.8 กม.', 20, 13.3080, 101.1180)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
+                        <div class="font-bold text-slate-800">🏡 ชุมชนตลาดเก่าบ้านบึง</div>
+                        <div class="text-[10px] text-emerald-700">0.8 กม. • ค่าส่ง ฿20</div>
                     </button>
-                    <button type="button" onclick="selectSavedLocation('หมู่บ้านบัวทองธานี (ซอย 12)', '2.5 กม.', 30, 13.9250, 100.3550)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
-                        <div class="font-bold text-slate-800">🏡 ม.บัวทองธานี</div>
-                        <div class="text-[10px] text-emerald-700">2.5 กม. • ค่าส่ง ฿30</div>
+                    <button type="button" onclick="selectSavedLocation('ชุมชนบ้านบึงพัฒนา (ซอย 12)', '1.5 กม.', 25, 13.3150, 101.1250)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
+                        <div class="font-bold text-slate-800">🏡 ชุมชนบ้านบึงพัฒนา</div>
+                        <div class="text-[10px] text-emerald-700">1.5 กม. • ค่าส่ง ฿25</div>
                     </button>
-                    <button type="button" onclick="selectSavedLocation('คอนโดลุมพินี พาร์ค ทาวน์', '3.2 กม.', 35, 13.9350, 100.3600)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
-                        <div class="font-bold text-slate-800">🏢 คอนโดลุมพินี</div>
-                        <div class="text-[10px] text-emerald-700">3.2 กม. • ค่าส่ง ฿35</div>
+                    <button type="button" onclick="selectSavedLocation('ซอยวัดบึงบวรสถิตย์ (บ้านบึง)', '2.2 กม.', 25, 13.3020, 101.1080)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
+                        <div class="font-bold text-slate-800">🏢 ซอยวัดบึงบวรสถิตย์</div>
+                        <div class="text-[10px] text-emerald-700">2.2 กม. • ค่าส่ง ฿25</div>
                     </button>
                 </div>
             </div>
