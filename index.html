@@ -773,19 +773,24 @@
         </section>
 
         <!-- ========================================== -->
-        <!-- ROLE 2: HUB ADMIN & PICKER VIEW (ร้านคุณ)  -->
+        <!-- ROLE 2: HUB / DISPATCH VIEW (เฮียส่ง ระบบจัดส่ง) -->
         <!-- ========================================== -->
         <section id="hub-view-container" class="view-section hidden flex-1 flex flex-col bg-slate-100">
-            <div class="bg-slate-900 text-white p-4 sticky top-0 z-20 flex items-center justify-between">
-                <div>
-                    <div class="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider">🍗 ร้านไก่สด Hub Manager</div>
-                    <h2 class="font-bold text-sm">ใบจัดของสด & ปล่อยไรเดอร์</h2>
+            <div class="bg-slate-900 text-white p-4 sticky top-0 z-20 flex items-center justify-between shadow-md">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-2xl bg-emerald-600 border border-emerald-400/40 text-white font-black flex items-center justify-center text-sm shadow shrink-0">
+                        🏪
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">เฮียส่ง • ระบบจัดส่ง & จัดเตรียมสินค้า</div>
+                        <h2 class="font-extrabold text-sm">ใบจัดของสด & ปล่อยไรเดอร์</h2>
+                    </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <span class="text-[11px] bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded-lg">
-                        คิวรอส่ง: <strong class="text-amber-400" id="hub-queue-count">2</strong>
+                    <span class="text-[11px] bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-lg font-bold">
+                        คิวรอส่ง: <strong class="text-amber-400" id="hub-queue-count">0</strong>
                     </span>
-                    <button onclick="logoutHub()" class="text-[10px] bg-rose-950/80 hover:bg-rose-800 text-rose-300 hover:text-white border border-rose-700/60 px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 active:scale-95" title="ออกจากระบบร้าน Hub">
+                    <button onclick="logoutHub()" class="text-[10px] bg-rose-950/80 hover:bg-rose-800 text-rose-300 hover:text-white border border-rose-700/60 px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 active:scale-95" title="ออกจากระบบจัดส่ง">
                         <span class="material-symbols-outlined text-xs">logout</span>
                         <span>ออกจากระบบ</span>
                     </button>
@@ -801,129 +806,14 @@
                 </button>
             </div>
 
-            <!-- Tab 1: Picking List -->
+            <!-- Tab 1: Picking List (Dynamic) -->
             <div id="hub-content-picking" class="p-4 flex-1 overflow-y-auto space-y-4">
-                <div class="bg-white rounded-2xl p-4 shadow-card border border-slate-200 space-y-3">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <span class="bg-emerald-100 text-emerald-800 font-bold text-[10px] px-2 py-0.5 rounded-full">ออเดอร์ #TH-8902</span>
-                            <div class="text-xs font-bold text-slate-800 mt-1">ผู้รับ: คุณสุรีย์ (ม.พฤกษา 3 ซอย 5)</div>
-                            <div class="text-[11px] text-slate-500">โทร: 089-xxx-4211 • โน้ต: แขวนไว้ที่รั้วสีขาว</div>
-                        </div>
-                        <div class="text-right">
-                            <span class="text-xs font-bold text-orange-600">฿235</span>
-                            <div class="text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded mt-0.5">จ่ายพร้อมเพย์แล้ว</div>
-                        </div>
-                    </div>
-
-                    <!-- Stalls Picking List -->
-                    <div class="space-y-3 pt-2 border-t border-slate-100 text-xs">
-                        <div class="text-[11px] font-bold text-slate-500 uppercase">เดินหยิบตามแผงค้าในตลาด:</div>
-
-                        <div class="bg-orange-50/70 border border-orange-200 rounded-xl p-3 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-orange-900 flex items-center gap-1">
-                                    <span>🍗 แผง A01 (ร้านไก่สดของเรา)</span>
-                                </span>
-                                <span class="text-[10px] text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full font-medium">หยิบจากหน้าร้านเรา</span>
-                            </div>
-                            <label class="flex items-center gap-2 cursor-pointer bg-white p-2 rounded-lg border border-orange-100">
-                                <input type="checkbox" checked onchange="togglePickerItem(this)" class="rounded text-emerald-600 focus:ring-emerald-500">
-                                <span class="flex-1 text-slate-700 font-medium">อกไก่ลอกหนัง 1 กก. (฿85)</span>
-                                <span class="text-emerald-600 text-xs">✓ พร้อมแล้ว</span>
-                            </label>
-                            <label class="flex items-center gap-2 cursor-pointer bg-white p-2 rounded-lg border border-orange-100">
-                                <input type="checkbox" checked onchange="togglePickerItem(this)" class="rounded text-emerald-600 focus:ring-emerald-500">
-                                <span class="flex-1 text-slate-700 font-medium">น่องติดสะโพก 500 กรัม (฿45)</span>
-                                <span class="text-emerald-600 text-xs">✓ พร้อมแล้ว</span>
-                            </label>
-                        </div>
-
-                        <div class="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-emerald-900 flex items-center gap-1">
-                                    <span>🥬 แผง B04 (ผักสดป้าสมร)</span>
-                                </span>
-                                <span class="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-medium">แผงผักซอย 2</span>
-                            </div>
-                            <div class="bg-white p-2 rounded-lg border border-emerald-100 space-y-1.5">
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" id="picker-veg-chk" onchange="togglePickerItem(this)" class="rounded text-emerald-600 focus:ring-emerald-500">
-                                    <span class="flex-1 text-slate-700 font-medium">ผักกาดขาว 1 หัว (ประเมิน ฿25)</span>
-                                </label>
-                                <div class="flex items-center gap-2 pl-6 pt-1 text-[11px] text-slate-600">
-                                    <span>ชั่งจริง:</span>
-                                    <input type="number" id="actual-veg-weight" value="27" class="w-16 p-1 border rounded text-center text-xs font-bold text-slate-800">
-                                    <span>บาท</span>
-                                    <button onclick="alert('บันทึกราคาน้ำหนักจริงแล้ว')" class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded text-[10px]">บันทึก</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="bg-red-50/70 border border-red-200 rounded-xl p-3 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-red-900 flex items-center gap-1">
-                                    <span>🌶️ แผง C02 (เครื่องแกงเจ๊ณี)</span>
-                                </span>
-                                <span class="text-[10px] text-red-700 bg-red-100 px-2 py-0.5 rounded-full font-medium">แผงเครื่องแกงซอย 4</span>
-                            </div>
-                            <label class="flex items-center gap-2 cursor-pointer bg-white p-2 rounded-lg border border-red-100">
-                                <input type="checkbox" onchange="togglePickerItem(this)" class="rounded text-emerald-600 focus:ring-emerald-500">
-                                <span class="flex-1 text-slate-700 font-medium">พริกแกงเผ็ด 2 ขีด (฿30)</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="pt-2 border-t border-slate-100 space-y-2">
-                        <button onclick="dispatchRider('TH-8902')" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-xl shadow flex items-center justify-center gap-2 text-xs">
-                            <span class="material-symbols-outlined text-base">moped</span>
-                            <span>รวมถุงเสร็จแล้ว • ปล่อยไรเดอร์ออกเดินทาง 🚀</span>
-                        </button>
-                    </div>
-                </div>
+                <!-- Dynamically populated via renderHubPickingList() -->
             </div>
 
-            <!-- Tab 2: Vendor Settlement Summary -->
+            <!-- Tab 2: Vendor Settlement Summary (Dynamic) -->
             <div id="hub-content-settlement" class="p-4 flex-1 overflow-y-auto space-y-4 hidden text-xs">
-                <div class="bg-white rounded-2xl p-4 shadow-card border border-slate-200 space-y-3">
-                    <div class="flex items-center justify-between">
-                        <h3 class="font-bold text-sm text-slate-800">สรุปยอดจ่ายแม่ค้าวันนี้</h3>
-                        <span class="text-[11px] text-slate-500">2 ก.ย. 2026</span>
-                    </div>
-
-                    <div class="space-y-2">
-                        <div class="flex justify-between items-center p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                            <div>
-                                <div class="font-bold text-slate-800">🥬 แผงผักป้าสมร (B04)</div>
-                                <div class="text-[10px] text-slate-500">ยอดรวม 6 ออเดอร์</div>
-                            </div>
-                            <div class="text-right">
-                                <div class="font-bold text-emerald-700">฿380</div>
-                                <button onclick="alert('โอนเงินผ่านพร้อมเพย์ให้ป้าสมร')" class="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded font-medium mt-0.5">เคลียร์เงิน</button>
-                            </div>
-                        </div>
-
-                        <div class="flex justify-between items-center p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                            <div>
-                                <div class="font-bold text-slate-800">🌶️ เครื่องแกงเจ๊ณี (C02)</div>
-                                <div class="text-[10px] text-slate-500">ยอดรวม 4 ออเดอร์</div>
-                            </div>
-                            <div class="text-right">
-                                <div class="font-bold text-emerald-700">฿240</div>
-                                <button onclick="alert('โอนเงินผ่านพร้อมเพย์ให้เจ๊ณี')" class="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded font-medium mt-0.5">เคลียร์เงิน</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-gradient-to-r from-emerald-800 to-slate-900 text-white rounded-2xl p-4 shadow-card space-y-2">
-                    <div class="text-xs text-emerald-300 font-semibold">รายรับร้านเรา (ค่าไก่ + ค่าบริการ + ค่าส่ง)</div>
-                    <div class="text-2xl font-bold">฿1,840 <span class="text-xs font-normal text-slate-300">บาท (วันนี้)</span></div>
-                    <div class="text-[11px] text-slate-300 flex justify-between pt-1 border-t border-slate-700">
-                        <span>ยอดขายไก่สด: ฿1,280</span>
-                        <span>ค่าส่ง+รวมแผง: ฿560</span>
-                    </div>
-                </div>
+                <!-- Dynamically populated via renderHubSettlement() -->
             </div>
         </section>
 
@@ -2690,6 +2580,42 @@
         </div>
     </div>
 
-    <script src="app.js?v=2.5"></script>
+    <!-- ========================================== -->
+    <!-- DISPATCH SUCCESS & NEXT STEP MODAL         -->
+    <!-- ========================================== -->
+    <div id="dispatch-success-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 border border-slate-100 text-center animate-scale-up">
+            <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-3xl shadow-sm">
+                🛵
+            </div>
+            <div>
+                <h3 class="font-extrabold text-base text-slate-900" id="dispatch-modal-title">รวมถุงเสร็จแล้ว & ปล่อยไรเดอร์เรียบร้อย! 🚀</h3>
+                <p class="text-xs text-slate-500 mt-1" id="dispatch-modal-desc">
+                    ออเดอร์ถูกส่งไปยังระบบไรเดอร์ประจำตลาดแล้ว ไรเดอร์กำลังนำของสดไปส่งถึงบ้านลูกค้า
+                </p>
+            </div>
+
+            <div class="space-y-2 pt-1 text-xs">
+                <!-- Action 1: Go to Rider View (ปุ่ม 4) -->
+                <button onclick="goToRiderTrackingScreen()" class="w-full bg-slate-900 hover:bg-slate-800 text-amber-400 font-extrabold py-3 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-base">two_wheeler</span>
+                    <span>1. ไปดูหน้าจอไรเดอร์รับงาน (ปุ่ม 4)</span>
+                </button>
+
+                <!-- Action 2: Go to Customer Tracking (ปุ่ม 1) -->
+                <button onclick="goToCustomerLiveTracking()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold py-3 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-base">near_me</span>
+                    <span>2. ไปดูหน้าจอติดตามส่งของลูกค้า (ปุ่ม 1)</span>
+                </button>
+
+                <!-- Action 3: Close modal and stay in Hub view -->
+                <button onclick="closeDispatchSuccessModal()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl active:scale-95 transition-all">
+                    ปิดหน้าต่าง & จัดการออเดอร์ถัดไป
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js?v=2.6"></script>
 </body>
 </html>
