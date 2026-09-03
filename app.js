@@ -7,7 +7,7 @@ const MARKET_DATA = [
     // ========================================================
     {
         stallId: "stall_chicken",
-        stallName: "ร้านไก่สดของเรา (Hub กลาง)",
+        stallName: "ร้านไก่สดเฮียส่ง (แผง A01)",
         stallNumber: "แผง A01",
         zone: "A",
         category: "chicken",
@@ -18,7 +18,7 @@ const MARKET_DATA = [
         isFavorite: true,
         stallImage: "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=700&auto=format&fit=crop&q=80",
         ownerImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
-        ownerName: "คุณเอกชัย (เจ้าของร้าน & หัวหน้า Hub)",
+        ownerName: "เฮียส่ง (เจ้าของร้านไก่สด & ผู้จัดการระบบจัดส่ง)",
         phone: "089-123-4567",
         experience: "ประสบการณ์ในตลาด 15 ปี",
         highlight: "ไก่สดอนามัยชำแหละวันต่อวัน มาตรฐานฟาร์มปิด สะอาด ปลอดภัย",
@@ -2550,6 +2550,50 @@ function simulateOrderStatus(targetStatus) {
         showToast("🎉 ขั้นตอนที่ 4: จัดส่งสำเร็จถึงมือคุณเรียบร้อยแล้ว!");
     }
     renderTrackingScreen();
+}
+
+// Step 2 Link Handler: Connects to Hub Preparation & Rider Delivery
+function handleTrackingStep2Link() {
+    simulateOrderStatus("delivering");
+    openTrackingStep2Modal();
+}
+
+function openTrackingStep2Modal() {
+    const modal = document.getElementById("tracking-step2-link-modal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeTrackingStep2Modal() {
+    const modal = document.getElementById("tracking-step2-link-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function switchToHubFromTracking() {
+    state.activeHub = {
+        isLoggedIn: true,
+        name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง",
+        role: "hub_admin"
+    };
+    saveHubToStorage(state.activeHub);
+    setActiveRoleView("hub");
+    renderAuthHeaderButtons();
+    renderHubPickingList();
+    renderHubSettlement();
+    showToast("🏪 สลับไปยังหน้าจอ '2. ระบบจัดส่ง' (การจัดเตรียมสินค้าโดยฮับ) เรียบร้อย");
+}
+
+function switchToRiderFromTracking() {
+    state.activeRider = {
+        isLoggedIn: true,
+        name: "พี่สมชาย (1กข 8902)",
+        phone: "081-234-5678",
+        license: "1กข 8902"
+    };
+    saveRiderToStorage(state.activeRider);
+    setActiveRoleView("rider");
+    renderAuthHeaderButtons();
+    renderRiderScreen();
+    showToast("🛵 สลับไปยังหน้าจอ '4. ไรเดอร์' (ระบบการจัดส่งโดยไรเดอร์) เรียบร้อย");
 }
 
 // Refresh status button cycles through workflow
