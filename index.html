@@ -813,6 +813,10 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-1.5">
+                    <button onclick="clearAllTestData()" class="text-[10px] bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 active:scale-95 shadow-2xs" title="ล้างออเดอร์ทดสอบและเริ่มต้นใหม่">
+                        <span class="material-symbols-outlined text-xs">delete_sweep</span>
+                        <span>ล้างออเดอร์</span>
+                    </button>
                     <button onclick="syncLatestOrderFromCloud(); showToast('☁️ กำลังตรวจสอบออเดอร์ล่าสุดจากคลาวด์...');" class="text-[10px] bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 active:scale-95 shadow-2xs" title="กดเพื่อตรวจสอบออเดอร์ใหม่จากคลาวด์">
                         <span class="material-symbols-outlined text-xs animate-spin-slow">sync</span>
                         <span>ซิงค์สด</span>
@@ -2687,6 +2691,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=4.0"></script>
+    <script src="app.js?v=4.2"></script>
 </body>
 </html>

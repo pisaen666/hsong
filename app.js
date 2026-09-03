@@ -214,13 +214,18 @@ function loadSavedActiveOrder() {
         if (saved) {
             const parsed = JSON.parse(saved);
             if (parsed && parsed.orderId) {
-                // ✅ ทิ้งออเดอร์ที่ delivered แล้ว หรือนานเกิน 24 ชม. (ไม่ใช่ข้อมูลจริง)
+                // ✅ ทิ้งออเดอร์ตัวอย่างเก่า เช่น #TH-4692 หรือไม่มี savedAt timestamp
+                if (!parsed.savedAt || parsed.orderId === "#TH-4692") {
+                    localStorage.removeItem("talathub_active_order");
+                    return null;
+                }
+                // ทิ้งออเดอร์ที่ delivered แล้ว
                 if (parsed.status === "delivered") {
                     localStorage.removeItem("talathub_active_order");
                     return null;
                 }
                 // ทิ้งออเดอร์ที่เก่าเกิน 24 ชั่วโมง
-                if (parsed.savedAt && (Date.now() - parsed.savedAt) > 86400000) {
+                if ((Date.now() - parsed.savedAt) > 86400000) {
                     localStorage.removeItem("talathub_active_order");
                     return null;
                 }
