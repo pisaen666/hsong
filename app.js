@@ -205,27 +205,18 @@ function loadSavedLocation() {
         const saved = localStorage.getItem("talathub_delivery_location");
         if (saved) {
             const parsed = JSON.parse(saved);
-            if (parsed && parsed.title && (parsed.title.includes("เจ๊เอี่ยม") || parsed.title.includes("สุรีย์") || parsed.title.includes("เชิดน้อย") || parsed.title.includes("เปิดน้อย") || parsed.title.includes("พฤกษา 3 (ซอย 5)"))) {
-                localStorage.removeItem("talathub_delivery_location");
-            } else if (parsed && parsed.title) {
+            if (parsed && parsed.isSet && parsed.title) {
                 return parsed;
             }
         }
     } catch (e) {}
-    return {
-        title: "ระบุที่อยู่จัดส่งของคุณ",
-        detail: "แตะ 'หาพิกัดจริง' เพื่อคำนวณระยะทางจากตลาดวิศิษฐ์ชัย & ค่าส่ง",
-        distance: "แตะระบุพิกัด",
-        fee: 25,
-        lat: 13.3080,
-        lng: 101.1214,
-        isRealGPS: false
-    };
+    return null; // Not set yet initially
 }
 
 function saveLocationToStorage(loc) {
     try {
-        localStorage.setItem("talathub_delivery_location", JSON.stringify(loc));
+        if (loc) localStorage.setItem("talathub_delivery_location", JSON.stringify(loc));
+        else localStorage.removeItem("talathub_delivery_location");
     } catch (e) {}
 }
 
@@ -242,131 +233,138 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// Flat delivery fee based on true km distance from Central Market Hub
+// Flat delivery fee based on true km distance from Wisit Chai Market
 function calculateDeliveryFee(distanceKm) {
-    if (distanceKm <= 1.0) return 20;
-    if (distanceKm <= 2.5) return 25;
-    if (distanceKm <= 4.0) return 30;
-    if (distanceKm <= 6.0) return 40;
-    if (distanceKm <= 10.0) return 50;
-    return 60;
+    if (distanceKm <= 3.0) return 20; // ฿20 within 3km in Ban Bueng town
+    if (distanceKm <= 7.0) return 25; // ฿25 within 7km
+    if (distanceKm <= 12.0) return 35; // ฿35 within 12km
+    return 45; // ฿45 beyond 12km
 }
 
+// ==========================================
+// REAL-TIME 30-MINUTE DELIVERY BATCH ENGINE
+// ==========================================
 function getNextDeliverySlotInfo() {
     const now = new Date();
     const day = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    const hour = now.getHours();
-    const min = now.getMinutes();
-    const totalMin = hour * 60 + min;
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTotalMinutes = currentHour * 60 + currentMinute;
 
-    const OPEN_MIN = 6 * 60;   // 06:00 (360 min)
-    const CLOSE_MIN = 17 * 60; // 17:00 (1020 min)
+    const startMinutes = 6 * 60;   // 06:00 (360 mins)
+    const endMinutes = 17 * 60;    // 17:00 (1020 mins)
 
-    // 1. Check if Sunday (Closed all day)
+    // Rule 1: Closed on Sunday (วันอาทิตย์ ปิดให้บริการ)
     if (day === 0) {
         return {
             isOpen: false,
-            badgeText: "⛔ ปิดวันอาทิตย์",
+            slotText: "ปิดวันอาทิตย์",
+            fullText: "วันอาทิตย์ ตลาดปิดให้บริการ (เริ่มส่งอีกครั้งวันจันทร์ 06:00 น.)",
+            badgeText: "⛔ ปิดทำการวันอาทิตย์",
             badgeClass: "bg-rose-600 text-white",
-            slotText: "หยุดวันอาทิตย์ (ส่งรอบวันจันทร์ 06:00)",
-            fullText: "ขณะนี้อยู่นอกเวลาให้บริการ (หยุดทำการทุกวันอาทิตย์ • เปิดรับออเดอร์ล่วงหน้าสำหรับรอบวันจันทร์ 06:00 น.)",
-            isOffHours: true,
-            subLabel: "ตลาดหยุดทำการวันนี้ (วันอาทิตย์):"
+            subLabel: "รอบจัดส่งถัดไป:"
         };
     }
 
-    // 2. Before 06:00 (Early morning before opening)
-    if (totalMin < OPEN_MIN) {
-        const diffMin = OPEN_MIN - totalMin;
-        const diffHours = Math.floor(diffMin / 60);
-        const diffMins = diffMin % 60;
-        const remainingStr = diffHours > 0 ? `อีก ${diffHours} ชม. ${diffMins} นาที` : `อีก ${diffMins} นาที`;
-
+    // Rule 2: Before 06:00 AM (ก่อนเวลาทำการ)
+    if (currentTotalMinutes < startMinutes) {
+        const minsLeft = startMinutes - currentTotalMinutes;
+        const hoursLeft = Math.floor(minsLeft / 60);
+        const remMins = minsLeft % 60;
+        const timeRemainingText = hoursLeft > 0 ? `อีก ${hoursLeft} ชม. ${remMins} นาที` : `อีก ${remMins} นาที`;
+        
         return {
             isOpen: false,
-            badgeText: "🌙 นอกเวลาทำการ",
+            slotText: "รอบแรก 06:00 น.",
+            fullText: `รอบแรก 06:00 น. (${timeRemainingText} • เริ่มส่งของเช้าตรู่)`,
+            badgeText: "🌙 สั่งซื้อล่วงหน้า",
             badgeClass: "bg-amber-600 text-white",
-            slotText: "รอบแรกวันนี้ 06:00",
-            fullText: `ขณะนี้อยู่นอกเวลาให้บริการ (เริ่มส่งรอบแรกของวันเวลา 06:00 น. • ${remainingStr})`,
-            isOffHours: true,
-            subLabel: "สั่งซื้อตอนนี้ จะได้รับสินค้ารอบแรก:"
+            subLabel: "อยู่นอกเวลาทำการ (สั่งล่วงหน้ารอบ):"
         };
     }
 
-    // 3. During Business Hours (06:00 - 17:00) -> 30-minute interval slots
-    if (totalMin >= OPEN_MIN && totalMin <= CLOSE_MIN) {
-        // Calculate next 30-minute batch
-        let nextBatchMin = Math.ceil((totalMin + 1) / 30) * 30;
+    // Rule 3: Within Operating Hours (06:00 - 17:00 ทุก 30 นาที)
+    if (currentTotalMinutes >= startMinutes && currentTotalMinutes < endMinutes) {
+        let nextSlotMinutes = Math.ceil((currentTotalMinutes + 1) / 30) * 30;
+        if (nextSlotMinutes > endMinutes) nextSlotMinutes = endMinutes;
 
-        if (nextBatchMin <= CLOSE_MIN) {
-            const diffMin = nextBatchMin - totalMin;
-            const nextH = Math.floor(nextBatchMin / 60);
-            const nextM = nextBatchMin % 60;
-            const timeStr = `${String(nextH).padStart(2, '0')}:${String(nextM).padStart(2, '0')} น.`;
-            const isLastRound = nextBatchMin === CLOSE_MIN;
+        const nextSlotHour = Math.floor(nextSlotMinutes / 60);
+        const nextSlotMin = nextSlotMinutes % 60;
+        const timeStr = `${String(nextSlotHour).padStart(2, '0')}:${String(nextSlotMin).padStart(2, '0')} น.`;
+        
+        const minutesLeft = nextSlotMinutes - currentTotalMinutes;
+        const isLastSlot = nextSlotMinutes === endMinutes;
+        const note = isLastSlot ? " (รอบสุดท้ายของวันนี้! • ไรเดอร์ส่งของทุก 30 นาที)" : ` (อีก ${minutesLeft} นาที • ไรเดอร์ส่งของทุก 30 นาที)`;
 
-            return {
-                isOpen: true,
-                badgeText: "⚡ เปิดรับออเดอร์",
-                badgeClass: "bg-emerald-600 text-white",
-                slotText: `รอบ ${timeStr}`,
-                fullText: isLastRound 
-                    ? `รอบ ${timeStr} (รอบสุดท้ายของวันนี้! • ไรเดอร์ส่งของทุก 30 นาที)`
-                    : `รอบ ${timeStr} (อีก ${diffMin} นาที • ไรเดอร์ส่งของทุก 30 นาที)`,
-                isOffHours: false,
-                subLabel: "สั่งซื้อตอนนี้ จะได้รับสินค้ารอบ:"
-            };
-        }
+        return {
+            isOpen: true,
+            slotText: `รอบ ${timeStr}`,
+            fullText: `รอบ ${timeStr}${note}`,
+            badgeText: "⚡ เปิดรับออเดอร์",
+            badgeClass: "bg-emerald-600 text-white",
+            subLabel: "สั่งซื้อตอนนี้ จะได้รับสินค้ารอบ:"
+        };
     }
 
-    // 4. After 17:00 (After closing)
-    const isSaturday = (day === 6);
-    const nextOpenDayText = isSaturday 
-        ? "วันจันทร์ 06:00 น. (วันอาทิตย์หยุดทำการ)" 
-        : "วันพรุ่งนี้ 06:00 น.";
+    // Rule 4: After 17:00 PM (หลังเวลาทำการ)
+    const isSaturday = day === 6;
+    const nextDayText = isSaturday ? "วันจันทร์ 06:00 น." : "พรุ่งนี้ 06:00 น.";
 
     return {
         isOpen: false,
-        badgeText: "🌙 นอกเวลาทำการ",
-        badgeClass: "bg-slate-700 text-slate-200",
         slotText: isSaturday ? "รอบวันจันทร์ 06:00" : "รอบเช้าพรุ่งนี้ 06:00",
-        fullText: `ขณะนี้อยู่นอกเวลาให้บริการจัดส่ง (ปิดรอบวันนี้ 17:00 น. แล้ว • สั่งล่วงหน้ารับรอบ ${nextOpenDayText})`,
-        isOffHours: true,
+        fullText: `ขณะนี้อยู่นอกเวลาการให้บริการ (เริ่มส่งรอบแรก ${nextDayText})`,
+        badgeText: "🌙 นอกเวลาทำการ",
+        badgeClass: "bg-slate-700 text-amber-300",
         subLabel: "อยู่นอกเวลาทำการ (สั่งล่วงหน้ารอบ):"
     };
 }
 
 function updateDeliveryLocationUI() {
-    if (!state.deliveryLocation) {
-        state.deliveryLocation = loadSavedLocation();
-    }
     const loc = state.deliveryLocation;
     const slotInfo = getNextDeliverySlotInfo();
 
     // 1. Top Navbar Selected Address Preview
     const topAddressPreview = document.getElementById("selected-address-preview");
-    if (topAddressPreview) topAddressPreview.textContent = loc.title;
+    if (topAddressPreview) {
+        if (loc && loc.isSet) {
+            topAddressPreview.textContent = loc.title;
+        } else {
+            topAddressPreview.textContent = "แตะระบุที่อยู่จัดส่ง";
+        }
+    }
 
     // 2. Top Navbar Delivery Slot Badge
     const topSlotText = document.getElementById("top-delivery-slot-text");
     if (topSlotText) topSlotText.textContent = slotInfo.slotText;
 
     // 3. Welcome Banner Location Card
+    const modeBadge = document.getElementById("location-detection-mode-badge");
     const welcomeLocTitle = document.getElementById("welcome-location-title");
-    if (welcomeLocTitle) welcomeLocTitle.textContent = loc.title;
-
     const welcomeDistText = document.getElementById("welcome-distance-text");
-    if (welcomeDistText) welcomeDistText.textContent = loc.distance;
-
     const welcomeFeeText = document.getElementById("welcome-fee-text");
-    if (welcomeFeeText) welcomeFeeText.textContent = `฿${loc.fee}`;
+    const welcomeSublabel = document.getElementById("welcome-location-sublabel");
+
+    if (loc && loc.isSet) {
+        if (modeBadge) modeBadge.textContent = loc.isRealGPS ? "🛰️ พิกัดจริงของคุณ (GPS / แผนที่)" : "📍 พิกัดจัดส่งที่เลือกไว้";
+        if (welcomeSublabel) welcomeSublabel.textContent = "ขณะนี้คุณอยู่ที่นี่:";
+        if (welcomeLocTitle) welcomeLocTitle.textContent = loc.title;
+        if (welcomeDistText) welcomeDistText.textContent = loc.distance || "0.8 กม.";
+        if (welcomeFeeText) welcomeFeeText.textContent = `฿${loc.fee || 20}`;
+    } else {
+        if (modeBadge) modeBadge.textContent = "📍 ยังไม่ได้ระบุตำแหน่งจัดส่ง";
+        if (welcomeSublabel) welcomeSublabel.textContent = "ตำแหน่งจัดส่งของคุณ:";
+        if (welcomeLocTitle) welcomeLocTitle.textContent = "กรุณาระบุตำแหน่งจัดส่งของคุณ (หรือแตะหาพิกัดจริง)";
+        if (welcomeDistText) welcomeDistText.textContent = "แตะหาพิกัดจริง";
+        if (welcomeFeeText) welcomeFeeText.textContent = "เริ่มต้น ฿20";
+    }
 
     // Delivery Slot & Schedule Banner
     const welcomeNextSlot = document.getElementById("welcome-next-slot-text");
     if (welcomeNextSlot) welcomeNextSlot.textContent = slotInfo.fullText;
 
-    const welcomeSublabel = document.getElementById("welcome-slot-sublabel");
-    if (welcomeSublabel) welcomeSublabel.textContent = slotInfo.subLabel;
+    const welcomeSlotSublabel = document.getElementById("welcome-slot-sublabel");
+    if (welcomeSlotSublabel) welcomeSlotSublabel.textContent = slotInfo.subLabel;
 
     const welcomeBadge = document.getElementById("welcome-slot-status-badge");
     if (welcomeBadge) {
@@ -376,26 +374,30 @@ function updateDeliveryLocationUI() {
 
     // 4. Update Checkout View Delivery Fee if present
     const checkoutFeeElem = document.getElementById("checkout-delivery-fee");
-    if (checkoutFeeElem) checkoutFeeElem.textContent = `฿${loc.fee}`;
+    if (checkoutFeeElem) checkoutFeeElem.textContent = `฿${(loc && loc.fee) ? loc.fee : 20}`;
 
     // 5. Update Location Modal Live GPS details box
     const gpsBox = document.getElementById("real-gps-details-box");
     if (gpsBox) {
-        gpsBox.classList.remove("hidden");
-        const addrText = document.getElementById("modal-gps-address-text");
-        if (addrText) addrText.textContent = loc.title;
-        const subText = document.getElementById("modal-gps-detail-subtext");
-        if (subText) subText.textContent = loc.detail || "พร้อมคำนวณระยะทางและรอบจัดส่ง";
-        const latText = document.getElementById("modal-gps-lat");
-        if (latText) latText.textContent = loc.lat ? Number(loc.lat).toFixed(4) : "13.3080";
-        const lngText = document.getElementById("modal-gps-lng");
-        if (lngText) lngText.textContent = loc.lng ? Number(loc.lng).toFixed(4) : "101.1214";
-        const distText = document.getElementById("modal-gps-dist");
-        if (distText) distText.textContent = loc.distance;
-        const feeText = document.getElementById("modal-gps-fee");
-        if (feeText) feeText.textContent = `฿${loc.fee}`;
-        const sourceBadge = document.getElementById("modal-gps-source-badge");
-        if (sourceBadge) sourceBadge.textContent = loc.isRealGPS ? "🛰️ พิกัดจริงของคุณ (ตรวจพบแล้ว):" : "📍 พิกัดที่เลือกไว้:";
+        if (loc && loc.isSet) {
+            gpsBox.classList.remove("hidden");
+            const addrText = document.getElementById("modal-gps-address-text");
+            if (addrText) addrText.textContent = loc.title;
+            const subText = document.getElementById("modal-gps-detail-subtext");
+            if (subText) subText.textContent = loc.detail || "พร้อมคำนวณระยะทางและรอบจัดส่ง";
+            const latText = document.getElementById("modal-gps-lat");
+            if (latText) latText.textContent = loc.lat ? Number(loc.lat).toFixed(4) : "13.3080";
+            const lngText = document.getElementById("modal-gps-lng");
+            if (lngText) lngText.textContent = loc.lng ? Number(loc.lng).toFixed(4) : "101.1214";
+            const distText = document.getElementById("modal-gps-dist");
+            if (distText) distText.textContent = loc.distance;
+            const feeText = document.getElementById("modal-gps-fee");
+            if (feeText) feeText.textContent = `฿${loc.fee}`;
+            const sourceBadge = document.getElementById("modal-gps-source-badge");
+            if (sourceBadge) sourceBadge.textContent = loc.isRealGPS ? "🛰️ พิกัดจริงของคุณ (ตรวจพบแล้ว):" : "📍 พิกัดที่เลือกไว้:";
+        } else {
+            gpsBox.classList.add("hidden");
+        }
     }
 }
 
@@ -497,7 +499,8 @@ function detectCurrentLocationGPS() {
             fee: fee,
             lat: lat,
             lng: lng,
-            isRealGPS: true
+            isRealGPS: true,
+            isSet: true
         };
 
         saveLocationToStorage(state.deliveryLocation);
@@ -621,7 +624,8 @@ function selectSavedLocation(title, distance, fee, lat, lng) {
         fee: fee,
         lat: lat || 13.3105,
         lng: lng || 101.1150,
-        isRealGPS: false
+        isRealGPS: false,
+        isSet: true
     };
     saveLocationToStorage(state.deliveryLocation);
     updateDeliveryLocationUI();
@@ -643,7 +647,8 @@ function applyManualCustomLocation() {
         fee: 25,
         lat: 13.912,
         lng: 100.340,
-        isRealGPS: false
+        isRealGPS: false,
+        isSet: true
     };
     saveLocationToStorage(state.deliveryLocation);
     updateDeliveryLocationUI();
@@ -3154,8 +3159,25 @@ function handleCustomerLoginSubmit() {
         method: selectedCustomerLoginMethod
     };
     saveCustomerToStorage(state.customer);
+
+    // Auto-load member saved address if no location was picked
+    if (!state.deliveryLocation || !state.deliveryLocation.isSet) {
+        state.deliveryLocation = {
+            title: "บ้านคุณสุรีย์ (ร้านเจ๊เจียบ ซอยเปิดน้อย)",
+            detail: "ห่างจากตลาดวิศิษฐ์ชัย 1.2 กม. • ที่อยู่สมาชิกหลัก",
+            distance: "1.2 กม.",
+            fee: 20,
+            lat: 13.3150,
+            lng: 101.1280,
+            isRealGPS: false,
+            isSet: true
+        };
+        saveLocationToStorage(state.deliveryLocation);
+    }
+
     closeCustomerLoginModal();
     renderAuthHeaderButtons();
+    updateDeliveryLocationUI();
     renderCatalog();
 
     // Auto-fulfill pending add to cart if customer clicked before logging in
