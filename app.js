@@ -108,21 +108,21 @@ function loadSavedCustomer() {
             }
             return parsed;
         }
-    } catch (e) {}
+    } catch (e) { }
     return { isLoggedIn: false, phone: "" };
 }
 
 function saveCustomerToStorage(cust) {
     try {
         localStorage.setItem("talathub_logged_in_customer", JSON.stringify(cust));
-    } catch (e) {}
+    } catch (e) { }
 }
 
 function loadSavedMerchant() {
     try {
         const saved = localStorage.getItem("talathub_logged_in_merchant");
         if (saved) return JSON.parse(saved);
-    } catch (e) {}
+    } catch (e) { }
     return null;
 }
 
@@ -130,14 +130,14 @@ function saveMerchantToStorage(merch) {
     try {
         if (merch) localStorage.setItem("talathub_logged_in_merchant", JSON.stringify(merch));
         else localStorage.removeItem("talathub_logged_in_merchant");
-    } catch (e) {}
+    } catch (e) { }
 }
 
 function loadSavedHub() {
     try {
         const saved = localStorage.getItem("talathub_logged_in_hub");
         if (saved) return JSON.parse(saved);
-    } catch (e) {}
+    } catch (e) { }
     return null;
 }
 
@@ -145,14 +145,14 @@ function saveHubToStorage(hub) {
     try {
         if (hub) localStorage.setItem("talathub_logged_in_hub", JSON.stringify(hub));
         else localStorage.removeItem("talathub_logged_in_hub");
-    } catch (e) {}
+    } catch (e) { }
 }
 
 function loadSavedRider() {
     try {
         const saved = localStorage.getItem("talathub_logged_in_rider");
         if (saved) return JSON.parse(saved);
-    } catch (e) {}
+    } catch (e) { }
     return null;
 }
 
@@ -160,7 +160,7 @@ function saveRiderToStorage(rider) {
     try {
         if (rider) localStorage.setItem("talathub_logged_in_rider", JSON.stringify(rider));
         else localStorage.removeItem("talathub_logged_in_rider");
-    } catch (e) {}
+    } catch (e) { }
 }
 
 function loadSavedMarketData() {
@@ -172,14 +172,14 @@ function loadSavedMarketData() {
                 return parsed;
             }
         }
-    } catch (e) {}
+    } catch (e) { }
     return null;
 }
 
 function saveMarketDataToStorage() {
     try {
         localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(MARKET_DATA));
-    } catch (e) {}
+    } catch (e) { }
 }
 
 // Restore saved custom stalls if available
@@ -209,7 +209,7 @@ function loadSavedLocation() {
                 return parsed;
             }
         }
-    } catch (e) {}
+    } catch (e) { }
     return null; // Not set yet initially
 }
 
@@ -217,7 +217,7 @@ function saveLocationToStorage(loc) {
     try {
         if (loc) localStorage.setItem("talathub_delivery_location", JSON.stringify(loc));
         else localStorage.removeItem("talathub_delivery_location");
-    } catch (e) {}
+    } catch (e) { }
 }
 
 // Haversine formula to compute true geographical distance in Kilometers
@@ -225,11 +225,11 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
     const R = 6371; // Earth radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 }
 
@@ -272,7 +272,7 @@ function getNextDeliverySlotInfo() {
         const hoursLeft = Math.floor(minsLeft / 60);
         const remMins = minsLeft % 60;
         const timeRemainingText = hoursLeft > 0 ? `อีก ${hoursLeft} ชม. ${remMins} นาที` : `อีก ${remMins} นาที`;
-        
+
         return {
             isOpen: false,
             slotText: "รอบแรก 06:00 น.",
@@ -291,7 +291,7 @@ function getNextDeliverySlotInfo() {
         const nextSlotHour = Math.floor(nextSlotMinutes / 60);
         const nextSlotMin = nextSlotMinutes % 60;
         const timeStr = `${String(nextSlotHour).padStart(2, '0')}:${String(nextSlotMin).padStart(2, '0')} น.`;
-        
+
         const minutesLeft = nextSlotMinutes - currentTotalMinutes;
         const isLastSlot = nextSlotMinutes === endMinutes;
         const note = isLastSlot ? " (รอบสุดท้ายของวันนี้! • ไรเดอร์ส่งของทุก 30 นาที)" : ` (อีก ${minutesLeft} นาที • ไรเดอร์ส่งของทุก 30 นาที)`;
@@ -524,7 +524,7 @@ function detectCurrentLocationGPS() {
         }, 8000); // 8s timeout for mobile GPS chip
 
         navigator.geolocation.getCurrentPosition(
-            function(position) {
+            function (position) {
                 if (hasResolved) return;
                 hasResolved = true;
                 clearTimeout(timer);
@@ -533,7 +533,7 @@ function detectCurrentLocationGPS() {
                 const acc = position.coords.accuracy || 15;
                 applyDetectedCoords(lat, lng, acc, "GPS ดาวเทียมมือถือ");
             },
-            function(geoError) {
+            function (geoError) {
                 if (hasResolved) return;
                 hasResolved = true;
                 clearTimeout(timer);
@@ -778,7 +778,7 @@ function renderCatalog() {
 
         MARKET_DATA.forEach(stall => {
             // Check in stall products
-            let matchedItems = stall.products.filter(p => 
+            let matchedItems = stall.products.filter(p =>
                 p.name.toLowerCase().includes(searchQuery) ||
                 p.desc.toLowerCase().includes(searchQuery) ||
                 (p.category && p.category.toLowerCase().includes(searchQuery))
@@ -822,7 +822,7 @@ function renderCatalog() {
             // Step B: Smart Related / Fuzzy Suggestions when no direct match found
             isSuggestedMode = true;
             let relatedStalls = [];
-            
+
             // Extract keywords (e.g. หมู, ไก่, ผัก, กุ้ง, ปลา, แกง, ซุป, สด)
             const keywords = ["หมู", "ไก่", "ผัก", "กุ้ง", "ปลา", "แกง", "เนื้อ", "ไข่", "ทะเล", "ซุป", "สด"];
             const matchedKeyword = keywords.find(kw => searchQuery.includes(kw));
@@ -830,8 +830,8 @@ function renderCatalog() {
             MARKET_DATA.forEach(stall => {
                 let suggestedItems = [];
                 if (matchedKeyword) {
-                    suggestedItems = stall.products.filter(p => 
-                        p.name.includes(matchedKeyword) || 
+                    suggestedItems = stall.products.filter(p =>
+                        p.name.includes(matchedKeyword) ||
                         p.desc.includes(matchedKeyword) ||
                         stall.category.includes(matchedKeyword) ||
                         stall.stallTag.includes(matchedKeyword)
@@ -1049,10 +1049,10 @@ function renderCatalog() {
                 <!-- Products Grid (6 รายการ ขนาดเท่ากันทุกช่อง) -->
                 <div class="grid grid-cols-2 gap-2.5 px-3.5">
                     ${stall.products.map(product => {
-                        const inCart = state.cart.find(item => item.productId === product.id);
-                        const qtyInCart = inCart ? inCart.qty : 0;
+            const inCart = state.cart.find(item => item.productId === product.id);
+            const qtyInCart = inCart ? inCart.qty : 0;
 
-                        return `
+            return `
                             <div class="bg-slate-50/90 hover:bg-white rounded-2xl p-2.5 border ${qtyInCart > 0 ? 'border-emerald-500 bg-emerald-50/30 ring-1 ring-emerald-400' : 'border-slate-200/80'} flex flex-col justify-between hover:shadow-md transition-all">
                                 <div>
                                     <div class="relative mb-2 overflow-hidden rounded-xl bg-slate-200 aspect-[4/3]">
@@ -1097,7 +1097,7 @@ function renderCatalog() {
                                 </div>
                             </div>
                         `;
-                    }).join("")}
+        }).join("")}
                 </div>
 
                 <!-- Bottom Full-Width "ดูเพิ่มเติม" Action Button -->
@@ -1680,8 +1680,8 @@ function renderStallCatalogModal() {
         const filteredItems = group.items.filter(item => {
             if (!currentModalSearch) return true;
             return item.name.toLowerCase().includes(currentModalSearch) ||
-                   item.spec.toLowerCase().includes(currentModalSearch) ||
-                   group.groupName.toLowerCase().includes(currentModalSearch);
+                item.spec.toLowerCase().includes(currentModalSearch) ||
+                group.groupName.toLowerCase().includes(currentModalSearch);
         });
 
         if (filteredItems.length === 0) return null;
@@ -1722,10 +1722,10 @@ function renderStallCatalogModal() {
                     <!-- Items Table List -->
                     <div class="divide-y divide-slate-100">
                         ${group.items.map((item, idx) => {
-                            const inCart = state.cart.find(c => c.productId === item.id);
-                            const qty = inCart ? inCart.qty : 0;
+                const inCart = state.cart.find(c => c.productId === item.id);
+                const qty = inCart ? inCart.qty : 0;
 
-                            return `
+                return `
                                 <div class="p-3 flex items-center justify-between gap-3 hover:bg-emerald-50/30 transition-colors">
                                     
                                     <!-- Left: Index + Name & Spec -->
@@ -1766,7 +1766,7 @@ function renderStallCatalogModal() {
 
                                 </div>
                             `;
-                        }).join("")}
+            }).join("")}
                     </div>
                 </div>
             `;
@@ -1789,7 +1789,7 @@ function addToCartFromModal(stallId, productId, name, price, unit) {
 
     const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
     const existing = state.cart.find(item => item.productId === productId);
-    
+
     if (existing) {
         existing.qty += 1;
     } else {
@@ -1936,7 +1936,7 @@ function calculateCartTotals() {
     if (!state.cart) state.cart = [];
     const itemsCount = state.cart.reduce((sum, item) => sum + (item.qty || 0), 0);
     const itemsSubtotal = state.cart.reduce((sum, item) => sum + ((item.price || 0) * (item.qty || 0)), 0);
-    
+
     const uniqueStalls = new Set(state.cart.map(item => item.stallId));
     const stallsCount = uniqueStalls.size;
 
@@ -1945,7 +1945,7 @@ function calculateCartTotals() {
     if (stallsCount >= 4) multiStallFee = 15;
 
     const deliveryFee = (state.deliveryLocation && typeof state.deliveryLocation.fee === "number") ? state.deliveryLocation.fee : 25;
-    
+
     // Active coupon discount calculation
     let discountAmount = 0;
     let couponCode = "";
@@ -1959,7 +1959,7 @@ function calculateCartTotals() {
             discountAmount = state.activeCoupon.discount;
         }
     }
-    
+
     const grandTotal = Math.max(0, itemsSubtotal + multiStallFee + deliveryFee - discountAmount);
 
     return {
@@ -2041,7 +2041,7 @@ function renderCheckoutPage() {
     Object.keys(grouped).forEach(stallId => {
         const stallGroup = grouped[stallId];
         const stallObj = ALL_100_STALLS.find(s => s.stallId === stallId) || MARKET_DATA.find(s => s.stallId === stallId);
-        
+
         let badgeStyle = "bg-emerald-100 text-emerald-800 border-emerald-200";
         if (stallGroup.stallNumber.includes("A")) badgeStyle = "bg-orange-100 text-orange-900 border-orange-200";
         else if (stallGroup.stallNumber.includes("B")) badgeStyle = "bg-emerald-100 text-emerald-900 border-emerald-200";
@@ -2092,7 +2092,7 @@ function renderCheckoutPage() {
     setVal("summary-stall-count", totals.stallsCount);
     setVal("summary-multistall-fee", `฿${totals.multiStallFee}`);
     setVal("summary-delivery-fee", `฿${totals.deliveryFee}`);
-    
+
     // Coupon Discount row in summary
     const discountRow = document.getElementById("summary-discount-row");
     if (discountRow) {
@@ -2199,7 +2199,7 @@ function handlePromptPaySlipUpload(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
         const img = document.getElementById("promptpay-slip-img");
         const previewBox = document.getElementById("promptpay-slip-preview-box");
         if (img && previewBox) {
@@ -2255,7 +2255,7 @@ function handleSCBSlipUpload(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
         const img = document.getElementById("scb-slip-img");
         const previewBox = document.getElementById("scb-slip-preview-box");
         if (img && previewBox) {
@@ -2284,7 +2284,7 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
     closePromptPayModal();
     closeSCBModal();
     const totals = calculateCartTotals();
-    
+
     let paymentDesc = "จ่ายผ่านพร้อมเพย์แล้ว";
     if (paymentType === "bank_transfer") paymentDesc = "โอนผ่าน SCB แล้ว (4111305737)";
     else if (paymentType === "cod") paymentDesc = "เก็บเงินสดปลายทาง (COD)";
@@ -2354,7 +2354,7 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
     } else {
         showToast("🎉 ชำระเงินสำเร็จ! ส่งแจ้งเตือนเข้า LINE & ระบบจัดส่งเรียบร้อยแล้ว 🔔");
     }
-    
+
     goToTrackingScreen();
 }
 
@@ -2366,23 +2366,23 @@ function renderTrackingScreen() {
     if (!order) return;
 
     const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-    
+
     setVal("tracking-order-id", `ออเดอร์ ${order.orderId}`);
-    
+
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} น.`;
     const payMethodText = order.paymentType === "bank_transfer" ? "โอน SCB" : (order.paymentType === "cod" ? "เก็บเงินสด COD" : "พร้อมเพย์");
-    
+
     setVal("tracking-step1-subtitle", `${timeStr} • ยอดรวม ฿${order.total} (${payMethodText})`);
-    
+
     const stallsCount = order.stalls ? order.stalls.length : 3;
     setVal("tracking-step2-title", `กำลังเดินรวบรวมของสด (${stallsCount} แผง)`);
-    
+
     if (order.stalls && order.stalls.length > 0) {
         const stallNames = order.stalls.map(s => s.name).join(" + ");
         setVal("tracking-step2-stalls", stallNames);
     }
-    
+
     const destTitle = state.deliveryLocation ? state.deliveryLocation.title : "บ้านคุณสุรีย์ (ร้านเจ๊เจียบ ซ.เปิดน้อย)";
     setVal("tracking-step3-dest", `มุ่งหน้า ${destTitle}`);
 
@@ -2402,7 +2402,7 @@ function renderTrackingScreen() {
         if (statusTitle) statusTitle.textContent = "ทีมงานกำลังเดินหยิบของสดในตลาด";
         if (statusDesc) statusDesc.textContent = "กำลังรวบรวมชิ้นส่วนไก่ และผักสดจากแผงค้า";
         if (etaPill) etaPill.innerHTML = `<span class="material-symbols-outlined text-xs text-amber-600">alarm</span><span>คาดว่าจะถึงในเวลา <strong>09:15 น.</strong> (อีกประมาณ 20 นาที)</span>`;
-        
+
         if (stepPicking) {
             stepPicking.classList.remove("opacity-50");
             const sp = stepPicking.querySelector("span");
@@ -2465,7 +2465,7 @@ function renderTrackingScreen() {
             }
         });
     }
-    
+
     // Toggle Post-Delivery Completed Actions Box
     const completedActionsBox = document.getElementById("tracking-completed-actions-box");
     if (completedActionsBox) {
@@ -2475,7 +2475,7 @@ function renderTrackingScreen() {
             completedActionsBox.classList.add("hidden");
         }
     }
-    
+
     // Render Stall Progress Checklist matching user screenshot
     const container = document.getElementById("tracking-stalls-progress");
     if (!container) return;
@@ -2485,7 +2485,7 @@ function renderTrackingScreen() {
     order.stalls.forEach((stall, idx) => {
         const isReady = stall.pickedCount >= stall.itemsCount;
         if (isReady) totalPicked++;
-        
+
         let statusBadge = `<span class="text-[10px] text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs"><span>⏳</span><span>กำลังจัดเตรียม</span></span>`;
         if (isReady) {
             statusBadge = `<span class="text-[10px] text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs"><span>✓</span><span>หยิบครบแล้ว</span></span>`;
@@ -2522,7 +2522,7 @@ function toggleStallPicking(stallIndex) {
         stall.pickedCount = stall.itemsCount;
         showToast(`✓ แผง "${stall.name}" จัดของสดครบเรียบร้อยแล้ว!`);
     }
-    
+
     // Check if all are picked
     const allPicked = state.activeOrder.stalls.every(s => s.pickedCount >= s.itemsCount);
     if (allPicked && state.activeOrder.status === "picking") {
@@ -2626,7 +2626,7 @@ function openRiderChatModal() {
         if (orderBadge && state.activeOrder) orderBadge.textContent = state.activeOrder.orderId;
         const destText = document.getElementById("chat-dest-text");
         if (destText && state.deliveryLocation) destText.textContent = `📍 ปลายทาง: ${state.deliveryLocation.title}`;
-        
+
         const input = document.getElementById("rider-chat-input");
         if (input) setTimeout(() => input.focus(), 200);
     }
@@ -2757,9 +2757,9 @@ function setRatingStars(score) {
             s.className = "material-symbols-outlined fill-1 text-amber-400 hover:scale-110 transition-transform";
         } else {
             s.className = "material-symbols-outlined text-slate-300 hover:scale-110 transition-transform";
-        }
+        } 1
     });
-    
+
     const labels = [
         "",
         "ต้องปรับปรุง (1/5)",
@@ -2812,14 +2812,14 @@ function selectRiderTip(tip) {
 
 function submitOrderRating() {
     closeRatingModal();
-    
+
     // Add 20 loyalty points
     state.customerPoints = (state.customerPoints || 140) + 20;
-    
+
     // Update active banner and displays
     const bannerPts = document.getElementById("loyalty-banner-points");
     if (bannerPts) bannerPts.textContent = `${state.customerPoints} แต้ม`;
-    
+
     // Open Celebration & Reward Modal
     openReviewRewardModal();
     showToast(`🎉 รีวิวสำเร็จ! ได้รับ +20 แต้มสะสม และคูปอง FRESH20 แล้ว`);
@@ -2857,7 +2857,7 @@ function openCustomerWalletModal() {
     const modal = document.getElementById("customer-wallet-modal");
     if (!modal) return;
     modal.classList.remove("hidden");
-    
+
     const pts = state.customerPoints !== undefined ? state.customerPoints : 60;
     const ptsDisplay = document.getElementById("wallet-points-display");
     if (ptsDisplay) ptsDisplay.textContent = `${pts} แต้ม`;
@@ -2867,7 +2867,7 @@ function openCustomerWalletModal() {
         const pct = Math.min(100, Math.round((pts / 100) * 100));
         bar.style.width = `${pct}%`;
     }
-    
+
     const idEl = document.getElementById("wallet-customer-id");
     if (idEl) {
         const id = state.customer && state.customer.isLoggedIn ? state.customer.identifier : "@pisaen6666";
@@ -2891,7 +2891,7 @@ function reorderAndGoCheckout() {
     ];
     // Auto-apply FRESH20 discount coupon
     state.activeCoupon = { code: "FRESH20", discount: 20, desc: "ส่วนลด ฿20 สั่งของสดรอบถัดไป" };
-    
+
     updateCartUI();
     goToCheckoutScreen();
     showToast("🔁 หยิบ 4 รายการเดิมลงตะกร้า & ใช้คูปอง FRESH20 (-฿20) ให้เรียบร้อยแล้ว!");
@@ -2918,13 +2918,13 @@ function redeemRewardItem(rewardName, cost) {
         const pct = Math.min(100, Math.round((state.customerPoints / 100) * 100));
         bar.style.width = `${pct}%`;
     }
-    
+
     showToast(`🎁 แลกรับ "${rewardName}" สำเร็จ! คูปองถูกบันทึกในกระเป๋าของคุณแล้ว 🎉`);
 }
 
 function copyCouponCode(code) {
     if (navigator.clipboard) {
-        navigator.clipboard.writeText(code).catch(() => {});
+        navigator.clipboard.writeText(code).catch(() => { });
     }
     showToast(`📋 คัดลอกโค้ดส่วนลด "${code}" เรียบร้อยแล้ว!`);
 }
@@ -2955,7 +2955,7 @@ function applyManualCouponCode() {
         showToast("⚠️ กรุณากรอกโค้ดส่วนลดก่อนครับ");
         return;
     }
-    
+
     if (code === "FRESH20") {
         selectCheckoutCoupon("FRESH20", 20);
     } else if (code === "FREESHIP") {
@@ -3101,7 +3101,7 @@ let selectedCustomerLoginMethod = null; // 'mobile' | 'line_phone' | 'line_id'
 
 function openCustomerLoginModal() {
     selectedCustomerLoginMethod = null;
-    
+
     // Reset method buttons styling
     document.querySelectorAll(".customer-method-btn").forEach(btn => {
         btn.classList.remove("ring-2", "ring-emerald-500", "bg-emerald-50", "border-emerald-500", "text-emerald-900");
@@ -3388,7 +3388,7 @@ function playOrderAlertSound() {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         if (!AudioContext) return;
         const ctx = new AudioContext();
-        
+
         // Bell chime tone 1 (D5)
         const osc1 = ctx.createOscillator();
         const gain1 = ctx.createGain();
@@ -3415,7 +3415,7 @@ function playOrderAlertSound() {
                 gain2.connect(ctx.destination);
                 osc2.start(ctx.currentTime);
                 osc2.stop(ctx.currentTime + 0.8);
-            } catch (e) {}
+            } catch (e) { }
         }, 180);
     } catch (e) {
         console.warn("Audio notification notice:", e);
@@ -3460,7 +3460,7 @@ function sendLineOrderNotification(order) {
     if (!order) return;
     const msg = generateLineOrderMessage(order);
     const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
-    
+
     state.latestLineMessage = msg;
     state.latestLineUrl = lineUrl;
 }
@@ -3522,12 +3522,12 @@ function renderHubPickingList() {
     order.stalls.forEach((stall, sIdx) => {
         const items = stall.items || [];
         let itemsHtml = "";
-        
+
         items.forEach((item, iIdx) => {
             const isPicked = item.picked || false;
             const hasScale = item.hasScale || false;
             const actualPrice = item.actualPrice !== undefined ? item.actualPrice : item.price;
-            
+
             itemsHtml += `
                 <div class="bg-white p-2.5 rounded-xl border ${isPicked ? 'border-emerald-300 bg-emerald-50/40 ring-1 ring-emerald-400/50' : 'border-slate-200'} space-y-1.5 transition-all">
                     <label class="flex items-center gap-2.5 cursor-pointer select-none">
@@ -3643,7 +3643,7 @@ function completePickingAndDispatchOrder(orderId) {
             if (s.items) s.items.forEach(i => i.picked = true);
         });
     }
-    
+
     // Auto populate rider job
     state.activeRider = state.activeRider || {
         isLoggedIn: true,
@@ -4041,7 +4041,7 @@ function handleMerchantFileUpload(event, targetInputId, targetPreviewImgId) {
     }
 
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
         const dataUrl = e.target.result;
         const input = document.getElementById(targetInputId);
         const preview = document.getElementById(targetPreviewImgId);
@@ -4055,7 +4055,7 @@ function handleMerchantFileUpload(event, targetInputId, targetPreviewImgId) {
 function updateMerchantImagePreviews() {
     const stallImgUrl = document.getElementById("m-stall-image-url").value.trim();
     const ownerImgUrl = document.getElementById("m-owner-image-url").value.trim();
-    
+
     const previewStall = document.getElementById("m-preview-stall-img");
     const previewOwner = document.getElementById("m-preview-owner-img");
 
@@ -4078,7 +4078,7 @@ function setMerchantOwnerImgPreset(type) {
 function loginAsMerchantStall(stallId) {
     closeMerchantLoginModal();
     activeMerchantStallId = stallId;
-    
+
     let stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
     if (!stall) {
         stall = MARKET_DATA[0];
