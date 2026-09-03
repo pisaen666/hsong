@@ -182,7 +182,7 @@
                                     <div class="text-[10px] text-slate-300 mt-1 flex flex-wrap items-center gap-1.5">
                                         <span class="bg-white/10 px-1.5 py-0.5 rounded text-emerald-300 font-bold flex items-center gap-0.5">
                                             <span class="material-symbols-outlined text-[10px]">route</span>
-                                            <span>ระยะทาง <strong id="welcome-distance-text">แตะระบุพิกัด</strong> จากตลาดสด</span>
+                                            <span>ระยะทาง <strong id="welcome-distance-text">แตะระบุพิกัด</strong> จากตลาดวิศิษฐ์ชัย</span>
                                         </span>
                                         <span class="bg-amber-400/20 border border-amber-400/30 px-1.5 py-0.5 rounded text-amber-300 font-extrabold flex items-center gap-0.5">
                                             <span class="material-symbols-outlined text-[10px]">moped</span>
@@ -1428,6 +1428,21 @@
                 </button>
             </div>
 
+            <!-- Wisit Chai Market Hub Origin Badge -->
+            <div class="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-900 text-white p-3 rounded-2xl border border-emerald-500/40 shadow-xs space-y-1">
+                <div class="flex items-center justify-between">
+                    <span class="font-black text-emerald-300 flex items-center gap-1.5 text-xs">
+                        <span class="material-symbols-outlined text-base text-emerald-400">storefront</span>
+                        <span>ตลาดวิศิษฐ์ชัย อ.บ้านบึง</span>
+                    </span>
+                    <span class="text-[10px] bg-emerald-500 text-slate-950 font-black px-2 py-0.5 rounded-full">Hub กลาง</span>
+                </div>
+                <div class="text-[11px] text-slate-300 flex items-center justify-between pt-0.5">
+                    <span>📍 พิกัดตั้งต้น: <strong>13°18'28.8"N 101°07'17.0"E</strong></span>
+                </div>
+                <div class="text-[10px] text-emerald-400">คำนวณระยะทางและค่าส่งตามระยะจริงจากตลาดวิศิษฐ์ชัย</div>
+            </div>
+
             <!-- Auto GPS Detection Live Button -->
             <button onclick="detectCurrentLocationGPS()" id="btn-trigger-gps" class="w-full py-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all">
                 <span class="relative flex h-3 w-3">
@@ -1445,7 +1460,7 @@
                 </div>
                 <div class="text-[11px] leading-tight flex-1">
                     <div class="font-bold text-emerald-300">กำลังสแกนหาตำแหน่งพิกัด GPS / IP...</div>
-                    <div class="text-[10px] text-slate-400">ระบุพิกัดดาวเทียมและคำนวณระยะทางจากตลาด</div>
+                    <div class="text-[10px] text-slate-400">ระบุพิกัดดาวเทียมและคำนวณระยะห่างจากตลาดวิศิษฐ์ชัย</div>
                 </div>
             </div>
 
@@ -1461,17 +1476,17 @@
 
                 <div class="bg-white p-2.5 rounded-xl border border-emerald-200">
                     <div class="font-extrabold text-slate-900 text-xs" id="modal-gps-address-text">
-                        ตลาดสดเทศบาลเมืองบ้านบึง ชลบุรี
+                        ตลาดวิศิษฐ์ชัย อ.บ้านบึง จ.ชลบุรี
                     </div>
                     <div class="text-[10px] text-slate-500 mt-0.5" id="modal-gps-detail-subtext">
-                        ศูนย์กลาง Hub ตลาดสด • พร้อมคำนวณระยะทางและค่าส่ง
+                        ห่างจากตลาดวิศิษฐ์ชัย 0.0 กม. • พร้อมรับออเดอร์
                     </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-1.5 text-[11px] pt-1">
                     <div class="bg-white/80 p-1.5 rounded-lg border border-emerald-100 flex items-center gap-1">
                         <span class="material-symbols-outlined text-xs text-emerald-600">route</span>
-                        <span>ระยะทาง: <strong class="text-emerald-800" id="modal-gps-dist">0.8 กม.</strong></span>
+                        <span>ระยะทาง: <strong class="text-emerald-800" id="modal-gps-dist">0.0 กม. จากตลาดวิศิษฐ์ชัย</strong></span>
                     </div>
                     <div class="bg-white/80 p-1.5 rounded-lg border border-emerald-100 flex items-center gap-1">
                         <span class="material-symbols-outlined text-xs text-amber-600">moped</span>
@@ -1480,30 +1495,30 @@
                 </div>
 
                 <div class="text-[10px] text-slate-500 flex items-center justify-between pt-1 border-t border-emerald-200/70">
-                    <span>🌐 ละติจูด: <strong id="modal-gps-lat">13.3105</strong></span>
-                    <span>ลองจิจูด: <strong id="modal-gps-lng">101.1150</strong></span>
+                    <span>🌐 ละติจูด: <strong id="modal-gps-lat">13.3080</strong></span>
+                    <span>ลองจิจูด: <strong id="modal-gps-lng">101.1214</strong></span>
                 </div>
             </div>
 
             <!-- Quick District / Landmark Pin Buttons -->
             <div class="space-y-1.5 pt-1">
-                <label class="block text-[11px] font-bold text-slate-700">หรือคลิกเลือกพิกัดย่านชุมชนรอบตลาด:</label>
+                <label class="block text-[11px] font-bold text-slate-700">หรือคลิกเลือกพิกัดย่านชุมชนรอบตลาดวิศิษฐ์ชัย:</label>
                 <div class="grid grid-cols-2 gap-1.5 text-[11px]">
-                    <button type="button" onclick="selectSavedLocation('ตลาดสดเทศบาลเมืองบ้านบึง (Hub)', '0.0 กม.', 0, 13.3105, 101.1150)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
-                        <div class="font-bold text-slate-800">🏪 ตลาดสดเทศบาล (Hub)</div>
+                    <button type="button" onclick="selectSavedLocation('ตลาดวิศิษฐ์ชัย อ.บ้านบึง (Hub)', '0.0 กม.', 0, 13.3080, 101.1214)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
+                        <div class="font-bold text-slate-800">🏪 ตลาดวิศิษฐ์ชัย (Hub)</div>
                         <div class="text-[10px] text-emerald-700">0.0 กม. • รับที่ตลาด (ฟรี)</div>
                     </button>
-                    <button type="button" onclick="selectSavedLocation('ชุมชนตลาดเก่าบ้านบึง', '0.8 กม.', 20, 13.3080, 101.1180)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
-                        <div class="font-bold text-slate-800">🏡 ชุมชนตลาดเก่าบ้านบึง</div>
-                        <div class="text-[10px] text-emerald-700">0.8 กม. • ค่าส่ง ฿20</div>
+                    <button type="button" onclick="selectSavedLocation('ชุมชนตลาดวิศิษฐ์ชัย - เทศบาลบ้านบึง', '0.5 กม.', 20, 13.3090, 101.1200)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
+                        <div class="font-bold text-slate-800">🏡 ชุมชนตลาดวิศิษฐ์ชัย</div>
+                        <div class="text-[10px] text-emerald-700">0.5 กม. • ค่าส่ง ฿20</div>
                     </button>
-                    <button type="button" onclick="selectSavedLocation('ชุมชนบ้านบึงพัฒนา (ซอย 12)', '1.5 กม.', 25, 13.3150, 101.1250)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
+                    <button type="button" onclick="selectSavedLocation('ชุมชนบ้านบึงพัฒนา (ซอย 12)', '1.2 กม.', 25, 13.3150, 101.1250)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
                         <div class="font-bold text-slate-800">🏡 ชุมชนบ้านบึงพัฒนา</div>
-                        <div class="text-[10px] text-emerald-700">1.5 กม. • ค่าส่ง ฿25</div>
+                        <div class="text-[10px] text-emerald-700">1.2 กม. • ค่าส่ง ฿25</div>
                     </button>
-                    <button type="button" onclick="selectSavedLocation('ซอยวัดบึงบวรสถิตย์ (บ้านบึง)', '2.2 กม.', 25, 13.3020, 101.1080)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
+                    <button type="button" onclick="selectSavedLocation('ซอยวัดบึงบวรสถิตย์ (บ้านบึง)', '1.8 กม.', 25, 13.3020, 101.1120)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
                         <div class="font-bold text-slate-800">🏢 ซอยวัดบึงบวรสถิตย์</div>
-                        <div class="text-[10px] text-emerald-700">2.2 กม. • ค่าส่ง ฿25</div>
+                        <div class="text-[10px] text-emerald-700">1.8 กม. • ค่าส่ง ฿25</div>
                     </button>
                 </div>
             </div>

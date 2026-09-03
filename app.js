@@ -193,9 +193,11 @@ if (_savedStalls && Array.isArray(_savedStalls) && _savedStalls.length > 0) {
 // REAL GPS & DELIVERY LOCATION ENGINE
 // ==========================================
 const MARKET_ORIGIN = {
-    lat: 13.3105,
-    lng: 101.1150,
-    name: "ตลาดสดเทศบาลเมืองบ้านบึง (สไก่สด Hub รวม 100 แผง)"
+    lat: 13.3080,
+    lng: 101.1214,
+    dms: "13°18'28.8\"N 101°07'17.0\"E",
+    name: "ตลาดวิศิษฐ์ชัย อ.บ้านบึง จ.ชลบุรี",
+    shortName: "ตลาดวิศิษฐ์ชัย"
 };
 
 function loadSavedLocation() {
@@ -212,11 +214,11 @@ function loadSavedLocation() {
     } catch (e) {}
     return {
         title: "ระบุที่อยู่จัดส่งของคุณ",
-        detail: "แตะ 'หาพิกัดจริง' เพื่อคำนวณระยะทาง & ค่าส่งตามจริง",
+        detail: "แตะ 'หาพิกัดจริง' เพื่อคำนวณระยะทางจากตลาดวิศิษฐ์ชัย & ค่าส่ง",
         distance: "แตะระบุพิกัด",
         fee: 25,
-        lat: 13.3105,
-        lng: 101.1150,
+        lat: 13.3080,
+        lng: 101.1214,
         isRealGPS: false
     };
 }
@@ -399,11 +401,18 @@ function detectCurrentLocationGPS() {
             }
         }
 
+        // Compute clear distance description
+        let distanceText = `${distKm.toFixed(1)} กม.`;
+        if (distKm < 0.1) {
+            distanceText = "อยู่ที่ตลาดวิศิษฐ์ชัย (0.0 กม.)";
+        }
+
         // Update State
         state.deliveryLocation = {
             title: addressTitle,
-            detail: `พิกัดจริง (${lat.toFixed(4)}, ${lng.toFixed(4)}) • ${sourceName}`,
+            detail: `ห่างจากตลาดวิศิษฐ์ชัย ${distKm.toFixed(1)} กม. • ${sourceName}`,
             distance: `${distKm.toFixed(1)} กม.`,
+            distFromMarketText: `ห่างจากตลาดวิศิษฐ์ชัย ${distKm.toFixed(1)} กม.`,
             fee: fee,
             lat: lat,
             lng: lng,
@@ -417,7 +426,7 @@ function detectCurrentLocationGPS() {
         const modeBadge = document.getElementById("location-detection-mode-badge");
         if (modeBadge) modeBadge.textContent = `พิกัดจริงของคุณ (${sourceName})`;
 
-        showToast(`📍 ตรวจพบพิกัดจริงสำเร็จ! (${distKm.toFixed(1)} กม. จากตลาด • ค่าส่ง ฿${fee})`);
+        showToast(`📍 ตรวจพบพิกัดสำเร็จ! คุณอยู่ห่างจากตลาดวิศิษฐ์ชัย ${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee}`);
     }
 
     // Attempt 1: Browser Geolocation API
