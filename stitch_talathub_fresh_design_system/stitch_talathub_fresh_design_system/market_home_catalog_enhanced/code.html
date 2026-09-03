@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+
+<html class="light" lang="th"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>TalatHub - Market Home &amp; Multi-Vendor Catalog</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-fixed": "#ffdbca",
+                        "error": "#ba1a1a",
+                        "on-error-container": "#93000a",
+                        "on-primary": "#ffffff",
+                        "surface-variant": "#e0e3e5",
+                        "inverse-primary": "#4edea3",
+                        "surface-dim": "#d8dadc",
+                        "on-secondary-fixed-variant": "#783200",
+                        "outline": "#6c7a71",
+                        "primary-fixed-dim": "#4edea3",
+                        "primary-fixed": "#6ffbbe",
+                        "on-surface": "#191c1e",
+                        "on-surface-variant": "#3c4a42",
+                        "on-error": "#ffffff",
+                        "tertiary-fixed-dim": "#adc6ff",
+                        "surface-container-highest": "#e0e3e5",
+                        "error-container": "#ffdad6",
+                        "on-secondary-container": "#5c2400",
+                        "secondary": "#9d4300",
+                        "surface-container": "#eceef0",
+                        "on-tertiary-fixed-variant": "#004395",
+                        "tertiary-container": "#71a1ff",
+                        "surface-container-low": "#f2f4f6",
+                        "primary": "#006c49",
+                        "outline-variant": "#bbcabf",
+                        "inverse-surface": "#2d3133",
+                        "secondary-container": "#fd761a",
+                        "on-secondary": "#ffffff",
+                        "on-background": "#191c1e",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-on-surface": "#eff1f3",
+                        "on-tertiary-fixed": "#001a42",
+                        "on-primary-fixed-variant": "#005236",
+                        "secondary-fixed-dim": "#ffb690",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#002113",
+                        "primary-container": "#10b981",
+                        "surface-bright": "#f7f9fb",
+                        "surface-container-high": "#e6e8ea",
+                        "tertiary": "#005ac2",
+                        "on-secondary-fixed": "#341100",
+                        "on-tertiary-container": "#00367a",
+                        "tertiary-fixed": "#d8e2ff",
+                        "surface": "#f7f9fb",
+                        "surface-tint": "#006c49",
+                        "background": "#f7f9fb",
+                        "on-primary-container": "#00422b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "container-margin": "16px",
+                        "sm": "8px",
+                        "xl": "32px",
+                        "xs": "4px",
+                        "md": "16px",
+                        "gutter": "12px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter", "Sukhumvit Set", "sans-serif"],
+                        "headline-lg-mobile": ["Inter", "Sukhumvit Set", "sans-serif"],
+                        "body-lg": ["Inter", "Sukhumvit Set", "sans-serif"],
+                        "body-md": ["Inter", "Sukhumvit Set", "sans-serif"],
+                        "headline-lg": ["Inter", "Sukhumvit Set", "sans-serif"],
+                        "headline-md": ["Inter", "Sukhumvit Set", "sans-serif"],
+                        "display-lg": ["Inter", "Sukhumvit Set", "sans-serif"],
+                        "label-sm": ["Inter", "Sukhumvit Set", "sans-serif"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", { "lineHeight": "1.4", "fontWeight": "600" }],
+                        "headline-lg-mobile": ["24px", { "lineHeight": "1.3", "fontWeight": "700" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "headline-lg": ["28px", { "lineHeight": "1.3", "fontWeight": "700" }],
+                        "headline-md": ["20px", { "lineHeight": "1.4", "fontWeight": "600" }],
+                        "display-lg": ["36px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "label-sm": ["12px", { "lineHeight": "1.4", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        .glass-nav {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-top: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        @keyframes popClick {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+        .btn-pop:active {
+            animation: popClick 0.2s ease-out;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface antialiased pb-24 font-body-md">
+<!-- Top Navigation App Bar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-margin h-16 bg-white/80 dark:bg-inverse-surface/80 backdrop-blur-xl border-b border-white/50 dark:border-outline/20 shadow-sm hidden md:flex">
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-primary text-xl">storefront</span>
+<span class="text-headline-lg-mobile font-headline-lg-mobile font-bold text-primary">TalatHub</span>
+</div>
+<div class="flex items-center gap-md">
+<div class="relative w-96">
+<span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-outline">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-low border border-surface-variant rounded-full text-body-md focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" placeholder="ค้นหาวัตถุดิบ, ไก่สด, ผัก, ร้านค้าในตลาด..." type="text"/>
+</div>
+<button class="relative p-2 text-on-surface-variant hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined">search</span>
+</button>
+</div>
+</header>
+<!-- Mobile Header -->
+<div class="md:hidden sticky top-0 z-40 bg-white/90 backdrop-blur-md pb-4 pt-4 px-4 shadow-[0_4px_20px_rgba(15,23,42,0.05)] border-b border-white/50">
+<div class="flex justify-between items-start mb-4">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-1 text-on-surface">
+<span class="material-symbols-outlined text-primary text-[18px]">location_on</span>
+<span class="font-label-md text-label-md truncate max-w-[200px]">ส่งที่: หมู่บ้านพฤกษา 3 ซอย 5 ▼</span>
+</div>
+<div class="inline-flex items-center bg-primary text-white font-label-sm text-label-sm px-2 py-1 rounded-full w-max">
+<span class="material-symbols-outlined text-[14px] mr-1">schedule</span>
+                    รอบเช้า 08:00 - 09:30 น.
+                </div>
+</div>
+<button class="relative flex items-center bg-white border border-surface-variant rounded-full pl-2 pr-3 py-1.5 shadow-sm hover:border-primary transition-colors">
+<div class="bg-primary/10 text-primary rounded-full w-7 h-7 flex items-center justify-center mr-2">
+<span class="material-symbols-outlined text-[16px]">shopping_cart</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-[10px] text-outline font-label-sm leading-none mb-0.5">2 รายการ</span>
+<span class="text-primary font-label-md text-[13px] leading-none font-bold">฿145</span>
+</div>
+<div class="absolute -top-1 -right-1 bg-secondary-container text-on-secondary font-label-sm text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">2</div>
+</button>
+</div>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline z-10">search</span>
+<input class="w-full pl-10 pr-4 py-2.5 bg-surface rounded-xl border border-surface-variant text-body-md focus:border-primary focus:ring-[3px] focus:ring-primary/20 transition-all outline-none" placeholder="ค้นหาวัตถุดิบ, ไก่สด, ผัก, ร้านค้าในตลาด..." type="text"/>
+</div>
+</div>
+<!-- Main Canvas -->
+<main class="w-full max-w-[1200px] mx-auto px-4 md:px-6 pt-4 md:pt-24 flex flex-col gap-6 md:gap-10">
+<!-- Categories Slider -->
+<section class="-mx-4 px-4 overflow-hidden">
+<div class="flex gap-2 overflow-x-auto no-scrollbar snap-x pb-2">
+<button class="snap-start shrink-0 bg-primary text-on-primary px-4 py-2 rounded-full font-label-md text-label-md shadow-[0_2px_8px_rgba(0,108,73,0.2)] transition-transform active:scale-95 border border-primary">
+                    ทั้งหมด
+                </button>
+<button class="snap-start shrink-0 bg-white text-on-surface px-4 py-2 rounded-full font-label-md text-label-md shadow-sm border border-surface-variant hover:border-primary transition-all active:scale-95 flex items-center gap-1.5">
+                    🍗 ร้านไก่สดของเรา (Hub)
+                </button>
+<button class="snap-start shrink-0 bg-white text-on-surface px-4 py-2 rounded-full font-label-md text-label-md shadow-sm border border-surface-variant hover:border-primary transition-all active:scale-95 flex items-center gap-1.5">
+                    🥬 ผักสดป้าสมร
+                </button>
+<button class="snap-start shrink-0 bg-white text-on-surface px-4 py-2 rounded-full font-label-md text-label-md shadow-sm border border-surface-variant hover:border-primary transition-all active:scale-95 flex items-center gap-1.5">
+                    🥩 หมูสดเจ๊พร
+                </button>
+<button class="snap-start shrink-0 bg-white text-on-surface px-4 py-2 rounded-full font-label-md text-label-md shadow-sm border border-surface-variant hover:border-primary transition-all active:scale-95 flex items-center gap-1.5">
+                    🦐 อาหารทะเลลุงหวัง
+                </button>
+<button class="snap-start shrink-0 bg-white text-on-surface px-4 py-2 rounded-full font-label-md text-label-md shadow-sm border border-surface-variant hover:border-primary transition-all active:scale-95 flex items-center gap-1.5">
+                    🌶️ เครื่องแกง-ของแห้ง
+                </button>
+</div>
+</section>
+<!-- Featured Banner -->
+<section class="relative rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(15,23,42,0.05)] aspect-[2/1] md:aspect-[3/1]">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="A vibrant, bustling authentic Thai fresh market scene viewed from slightly above. The market is filled with colorful stalls selling fresh green vegetables, bright red chilies, and various fresh produce. The lighting is bright and natural morning light, creating a fresh, hygienic, and energetic atmosphere. The style is modern, high-quality mobile app photography, vibrant but clean, with a clear focus area in the center for overlay text. Colors lean towards fresh greens and natural light tones." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCwQyb43wUv-XDcw2NPgTjXiwvq0z4kSp6qHz6L8pHp0r7NFXcMK-R9T8LAXF9RW6Xzaa-JeTOL0_MoMyW8lFPL0YfnF-3QvtkTQvy24HfZKsomFkxWBFNCTope6vW3vcCVK0WnFBObFkp-hDIktaqDwziDF1ptCqEwk09V95hxFBBLqJRc2Q4EZvYT5TrqkrUiG89rCRgg1VAEZeckdhrywEHWhME6s3nAmYAO6CKOx2pjlr54VvGW')"></div>
+<div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent"></div>
+<div class="absolute inset-0 p-4 md:p-8 flex flex-col justify-center max-w-[80%] md:max-w-[50%]">
+<span class="inline-block bg-primary-container/20 text-primary-fixed border border-primary-fixed/30 rounded-md px-2 py-1 text-[10px] font-bold tracking-wider mb-2 w-max uppercase">TalatHub Fresh</span>
+<h2 class="text-white font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg mb-2 leading-tight">ตลาดสดรวมใจ ส่งตรงถึงครัว</h2>
+<p class="text-surface-variant font-body-md text-sm md:text-base line-clamp-2">รวมหลายร้าน จ่ายค่าส่งรอบเดียว เริ่มต้น 20 บาท</p>
+</div>
+</section>
+<!-- Product Grid - Stall 1 -->
+<section>
+<div class="flex items-center gap-2 mb-4">
+<div class="bg-primary/10 p-1.5 rounded-lg text-primary">
+<span class="material-symbols-outlined">storefront</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface">แผง A12 - ไก่สดอนามัย (Hub)</h3>
+<span class="ml-auto text-primary font-label-md text-label-md hover:underline cursor-pointer">ดูทั้งหมด</span>
+</div>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+<!-- Product Card 1 -->
+<div class="bg-white rounded-xl shadow-[0_4px_20px_rgba(15,23,42,0.05)] overflow-hidden border border-surface-variant flex flex-col relative group">
+<div class="relative aspect-square overflow-hidden bg-surface-container-low">
+<img class="w-full h-full object-cover" data-alt="Close-up macro photography of fresh, raw skinless chicken breast on a clean, hygienic white surface. The lighting is bright, cool, and surgical to emphasize freshness and cleanliness. A few droplets of water are visible. The mood is sanitary and premium grocery store quality. The background is softly blurred." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKuVo7EgAAENmoExxvBXB-ew9rXlLIg74yO9BLwlFVp2v__4L6QfsO6abDSrG7s9Q_7CM1eHjogft_IJUhjYtK2sAmWO2hfgv3dZeO6E7f9PRvomTZjERQLtW_EpVqX_4jS9WEbK1cfnkg7BzrcARQOsd6BxAIfjk9sVks_lIT0rFRScqP179FnuAyHbLBjbyUXjn_5I83_5hvPWjWkCeJP3u-a2kKVQ_HH77oGjEIprRB3ZNt2wBM"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+<div class="absolute top-2 left-2 bg-primary-container text-on-primary-container text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">สดใหม่</div>
+</div>
+<div class="p-3 flex flex-col flex-grow">
+<h4 class="font-label-md text-label-md text-on-surface line-clamp-2 mb-1">อกไก่ลอกหนัง สดใหม่ เกรด A</h4>
+<div class="mt-auto flex items-center justify-between">
+<span class="font-headline-md text-primary font-bold">฿85 <span class="text-[10px] text-outline font-normal">/ กก.</span></span>
+<button class="bg-secondary-container text-on-secondary-container w-8 h-8 rounded-full flex items-center justify-center shadow-sm hover:bg-secondary hover:text-white transition-colors btn-pop">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Product Card 2 -->
+<div class="bg-white rounded-xl shadow-[0_4px_20px_rgba(15,23,42,0.05)] overflow-hidden border border-surface-variant flex flex-col relative group">
+<div class="relative aspect-square overflow-hidden bg-surface-container-low">
+<img class="w-full h-full object-cover" data-alt="High-quality close up of fresh raw chicken drumsticks on a pristine, hygienic light background. The meat looks plump and fresh, with bright natural lighting highlighting its quality. Small sprig of parsley for garnish. The style is modern e-commerce product photography, clean and appetizing." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGyfSsYtxhjzgUJIBvNb4qXx4q6kD095Cjv98cAsvUQAr0UScTkYwM_ZFjMG-3wiDRDlEydnSSAQF33gHKP3f2oHX2DRTk28lw4uzMayDa2-t-hs89VYkIs6ToWshDt_7xppeUfIm27tMDy-AwWZ13dzBOy8j6S_FjsSUqsU13WTDcOp_kaHlbhks-c26zaudnqFuY-OmDlbfRWVn4t4wkHjyEwUxNjuwcC0Ec_-JzFx6GzI1HChNE"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+</div>
+<div class="p-3 flex flex-col flex-grow">
+<h4 class="font-label-md text-label-md text-on-surface line-clamp-2 mb-1">น่องไก่ติดสะโพก (CP)</h4>
+<div class="mt-auto flex items-center justify-between">
+<span class="font-headline-md text-primary font-bold">฿75 <span class="text-[10px] text-outline font-normal">/ กก.</span></span>
+<button class="bg-secondary-container text-on-secondary-container w-8 h-8 rounded-full flex items-center justify-center shadow-sm hover:bg-secondary hover:text-white transition-colors btn-pop">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Product Grid - Stall 2 -->
+<section>
+<div class="flex items-center gap-2 mb-4">
+<div class="bg-tertiary-container/20 p-1.5 rounded-lg text-tertiary">
+<span class="material-symbols-outlined">local_florist</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface">แผง B05 - ผักสดป้าสมร</h3>
+<span class="ml-auto text-primary font-label-md text-label-md hover:underline cursor-pointer">ดูทั้งหมด</span>
+</div>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+<!-- Product Card 3 -->
+<div class="bg-white rounded-xl shadow-[0_4px_20px_rgba(15,23,42,0.05)] overflow-hidden border border-surface-variant flex flex-col relative group">
+<div class="relative aspect-square overflow-hidden bg-surface-container-low">
+<img class="w-full h-full object-cover" data-alt="A bunch of fresh, vibrant green morning glory (water spinach) tied loosely together, resting on a clean, light surface. The lighting is soft and natural, emphasizing the crisp texture and deep green color of the leaves. Water droplets are visible on the leaves indicating freshness. Minimalist, bright e-commerce style photography." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBKnolElZ0vgg0rAVEbGr3vJsCn2gTXIdtYUqEBSxEV73Nvs6D16Eqha0sDzflBG3g2QSdRZr9CMlW7c6qyVBSQlVK3GVEWBDbg6fdsWitPWQ19F0-8sGLZaCLE5U-A1eIDAgm66aZ1sii68Aam6syLBW_Th0tlRz7QvtYqrrgF2QVmHig-hIGMqsefoQAQh33LrFr0meH7bhGUm6Sj8WW70Kmd51h1mPL-9n7mKuVvP_btAJns7El"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+</div>
+<div class="p-3 flex flex-col flex-grow">
+<h4 class="font-label-md text-label-md text-on-surface line-clamp-2 mb-1">ผักบุ้งจีนปลอดสาร</h4>
+<div class="mt-auto flex items-center justify-between">
+<span class="font-headline-md text-primary font-bold">฿15 <span class="text-[10px] text-outline font-normal">/ กำ</span></span>
+<button class="bg-secondary-container text-on-secondary-container w-8 h-8 rounded-full flex items-center justify-center shadow-sm hover:bg-secondary hover:text-white transition-colors btn-pop">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Product Card 4 -->
+<div class="bg-white rounded-xl shadow-[0_4px_20px_rgba(15,23,42,0.05)] overflow-hidden border border-surface-variant flex flex-col relative group">
+<div class="relative aspect-square overflow-hidden bg-surface-container-low">
+<img class="w-full h-full object-cover" data-alt="Fresh, crisp green kale leaves arranged neatly. The leaves are vibrant, deeply textured, and slightly dewy with tiny water drops catching bright, clean lighting. The background is a stark, hygienic white, creating a premium fresh produce aesthetic. The mood is healthy and vibrant." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1fVcc2fAmiT02qmW2EeA5dBUbAoimI_eVFF5XttfnykIspKDgDiN9uhimtr_Umdkf7OD3TKkEUeGoXwRVp8oU4ubQhqqVxOaOJ-FYJFwdv21uCG7wChn2Ki5T0Q5eNhtIFY0txspFlKGN6ZU9BMpkjYBO2YCmvBb3gjmBWdS2WVxkp1R50ZPdUVCHjZI4OEFLTC_ttQMbGgpm2PWCf0dynp8T2A_7d8FKw0E0TEQZOdhNFGR3kZOw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+<div class="absolute top-2 left-2 bg-secondary/10 text-secondary border border-secondary/20 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">ขายดี</div>
+</div>
+<div class="p-3 flex flex-col flex-grow">
+<h4 class="font-label-md text-label-md text-on-surface line-clamp-2 mb-1">คะน้าต้นอ่อน หวานกรอบ</h4>
+<div class="mt-auto flex items-center justify-between">
+<span class="font-headline-md text-primary font-bold">฿25 <span class="text-[10px] text-outline font-normal">/ กำ</span></span>
+<button class="bg-secondary-container text-on-secondary-container w-8 h-8 rounded-full flex items-center justify-center shadow-sm hover:bg-secondary hover:text-white transition-colors btn-pop">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar (Mobile Only) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 py-3 pb-safe bg-white/80 dark:bg-inverse-surface/80 backdrop-blur-xl border-t border-white/50 dark:border-outline/20 shadow-lg rounded-t-xl md:hidden">
+<button class="flex flex-col items-center justify-center text-primary dark:text-inverse-primary relative after:content-[''] after:w-1 after:h-1 after:bg-primary after:rounded-full after:mt-1 hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors btn-pop duration-150 p-2 rounded-lg">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="text-[10px] font-label-sm mt-1 whitespace-nowrap">หน้าแรก (Home)</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors btn-pop duration-150 p-2 rounded-lg">
+<span class="material-symbols-outlined">storefront</span>
+<span class="text-[10px] font-label-sm mt-1 whitespace-nowrap">ตลาด/แผงค้า (Market Stalls)</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors btn-pop duration-150 p-2 rounded-lg relative">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="text-[10px] font-label-sm mt-1 whitespace-nowrap">คำสั่งซื้อของฉัน (Orders)</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors btn-pop duration-150 p-2 rounded-lg">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-label-sm mt-1 whitespace-nowrap">โปรไฟล์ (Profile)</span>
+</button>
+</nav>
+</body></html>

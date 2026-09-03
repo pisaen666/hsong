@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+
+<html class="light" lang="th"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>คำสั่งซื้อ - TalatHub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Be+Vietnam+Pro:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-surface": "#2d3133",
+                        "on-error": "#ffffff",
+                        "on-surface-variant": "#3c4a42",
+                        "on-tertiary-fixed": "#001a42",
+                        "surface-container-lowest": "#ffffff",
+                        "primary": "#006c49",
+                        "error": "#ba1a1a",
+                        "secondary-fixed": "#ffdbca",
+                        "secondary-container": "#fd761a",
+                        "inverse-primary": "#4edea3",
+                        "outline": "#6c7a71",
+                        "surface-container": "#eceef0",
+                        "tertiary-fixed-dim": "#adc6ff",
+                        "secondary": "#9d4300",
+                        "on-tertiary-container": "#00367a",
+                        "tertiary-fixed": "#d8e2ff",
+                        "on-background": "#191c1e",
+                        "on-primary-container": "#00422b",
+                        "background": "#f7f9fb",
+                        "on-error-container": "#93000a",
+                        "surface-container-highest": "#e0e3e5",
+                        "surface-bright": "#f7f9fb",
+                        "surface-tint": "#006c49",
+                        "error-container": "#ffdad6",
+                        "surface-dim": "#d8dadc",
+                        "inverse-on-surface": "#eff1f3",
+                        "on-primary-fixed": "#002113",
+                        "on-primary-fixed-variant": "#005236",
+                        "secondary-fixed-dim": "#ffb690",
+                        "on-secondary-fixed": "#341100",
+                        "on-secondary": "#ffffff",
+                        "tertiary-container": "#71a1ff",
+                        "on-primary": "#ffffff",
+                        "surface-container-low": "#f2f4f6",
+                        "on-tertiary-fixed-variant": "#004395",
+                        "primary-container": "#10b981",
+                        "tertiary": "#005ac2",
+                        "surface-container-high": "#e6e8ea",
+                        "surface": "#f7f9fb",
+                        "on-tertiary": "#ffffff",
+                        "outline-variant": "#bbcabf",
+                        "on-secondary-fixed-variant": "#783200",
+                        "primary-fixed": "#6ffbbe",
+                        "on-surface": "#191c1e",
+                        "primary-fixed-dim": "#4edea3",
+                        "on-secondary-container": "#5c2400",
+                        "surface-variant": "#e0e3e5"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "base": "4px",
+                        "container-margin": "16px",
+                        "xl": "32px",
+                        "gutter": "12px",
+                        "lg": "24px",
+                        "xs": "4px",
+                        "md": "16px",
+                        "sm": "8px"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"],
+                        "body-md": ["Be Vietnam Pro"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "label-sm": ["Be Vietnam Pro"],
+                        "body-lg": ["Be Vietnam Pro"],
+                        "display-lg": ["Plus Jakarta Sans"],
+                        "label-md": ["Be Vietnam Pro"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["24px", { "lineHeight": "1.3", "fontWeight": "700" }],
+                        "headline-md": ["20px", { "lineHeight": "1.4", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "headline-lg": ["28px", { "lineHeight": "1.3", "fontWeight": "700" }],
+                        "label-sm": ["12px", { "lineHeight": "1.4", "fontWeight": "500" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "display-lg": ["36px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "label-md": ["14px", { "lineHeight": "1.4", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>body {
+    background-color: #F8FAFC;
+    -webkit-tap-highlight-color: transparent
+    }
+.glass-panel {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05)
+    }
+.pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 20px)
+    }
+.pt-safe {
+    padding-top: env(safe-area-inset-top, 0)
+    }
+/* Map specific classes to avoid data-alt warnings if we use a placeholder image for map */
+.map-bg {
+    background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuBvEJToKfuIYalKF_0Riex0_dvwowUPsMieozJfE-9jo19ao6cG9XbioJYG9JrDuu_B6KE_pAHGIW15MC_Yjh0WhLAZQLREeLIVGjj_CbbdS43T72uZsvSeuPnDUzdpHIUeXXqbNA1SS5cAmL-d0BhkTwC8g8ntvo-UvixPvQKwMhJ6vEscD_3aewbGB9XrJ0nSQP_tHXnVrmWrTz8ljmGxwaE2noQWUntvb4ucuzhlmI6hkUpaV4im);
+    background-size: cover;
+    background-position: center
+    }</style>
+</head>
+<body class="text-on-background font-body-md antialiased pb-24 md:pb-0 pt-16">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-margin h-16 bg-white/80 dark:bg-inverse-surface/80 backdrop-blur-xl border-b border-white/50 dark:border-outline/20 shadow-sm pt-safe">
+<div class="flex items-center gap-sm">
+<button class="text-on-surface-variant dark:text-outline-variant hover:opacity-80 transition-transform duration-200">
+<span class="material-symbols-outlined" data-icon="storefront" data-weight="regular">storefront</span>
+</button>
+<h1 class="text-headline-lg-mobile font-headline-lg-mobile font-bold text-primary dark:text-inverse-primary">TalatHub</h1>
+</div>
+<button class="text-on-surface-variant dark:text-outline-variant hover:opacity-80 transition-transform duration-200">
+<span class="material-symbols-outlined" data-icon="search" data-weight="regular">search</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="w-full max-w-[1200px] mx-auto px-container-margin py-lg md:grid md:grid-cols-12 md:gap-lg md:mt-lg">
+<!-- Page Title Desktop (Hidden on mobile) -->
+<div class="hidden md:block col-span-12 mb-md">
+<h2 class="text-headline-lg font-headline-lg text-on-surface">คำสั่งซื้อของฉัน</h2>
+</div>
+<!-- Active Order Tracking (Live Map Focus) -->
+<section class="col-span-12 lg:col-span-8 mb-xl">
+<div class="glass-panel rounded-xl overflow-hidden flex flex-col relative h-[400px] md:h-[500px]">
+<!-- Map Area -->
+<div class="w-full flex-grow relative bg-surface-container-low" data-alt="A detailed, bright, high-resolution overhead digital map of a modern city center in Bangkok, Thailand. The map features a clean, light-mode UI aesthetic with subtle green route lines indicating delivery paths. The color palette emphasizes fresh emerald greens against crisp whites and light grays, avoiding heavy contrast. Soft, diffused lighting gives a premium glassmorphic feel to the map rendering, evoking a sense of efficiency, hygiene, and modern logistics suitable for a fresh food delivery platform." data-location="Bangkok, Thailand" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD4hdfhMcEgZLYiFBQTK_ddwybAIuG2WqZElzq4gH0Pjz500H-0l4Lkh6aqVnmLYVYXiAZJVMXcZgZ7UByFFdz_3IiMOap3juSfJfJ9CKF2Fc5xOZ-EWeb_-AHitn9yI7dxTLhpih2fiaaubaHSEjMVMZ7jyKIOB89IHjngoqhMkhfW4dP3ZU4A6wrMVAWUocPmYqHBMSBAyyLFp0tSdM39tpH_BnE0ozLC5JilZbdlgRDuzZcbv9F4')">
+<!-- Floating Map Controls -->
+<div class="absolute right-md top-md flex flex-col gap-sm">
+<button class="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-primary hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="my_location">my_location</span>
+</button>
+</div>
+<!-- Rider Marker (Simulated) -->
+<div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+<div class="bg-primary text-white text-label-sm font-label-sm px-3 py-1 rounded-full shadow-md mb-1 whitespace-nowrap animate-pulse">
+                            กำลังจัดส่ง • อีก 15 นาที
+                        </div>
+<div class="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg border-2 border-primary">
+<span class="material-symbols-outlined text-primary" data-icon="two_wheeler" data-weight="fill" style="font-variation-settings: 'FILL' 1;">two_wheeler</span>
+</div>
+</div>
+</div>
+<!-- Order Status Panel (Bottom of Map) -->
+<div class="absolute bottom-0 left-0 w-full bg-white/95 backdrop-blur-md border-t border-surface-variant p-md shadow-[0_-4px_20px_rgba(15,23,42,0.05)]">
+<div class="flex justify-between items-start mb-md">
+<div>
+<p class="text-label-md font-label-md text-on-surface-variant mb-xs">หมายเลขคำสั่งซื้อ: #TH-89012</p>
+<h3 class="text-headline-md font-headline-md text-on-surface">กำลังเดินทางไปหาคุณ</h3>
+</div>
+<div class="text-right">
+<p class="text-label-sm font-label-sm text-on-surface-variant mb-xs">เวลาที่คาดว่าจะถึง</p>
+<p class="text-headline-md font-headline-md text-primary">14:30 น.</p>
+</div>
+</div>
+<!-- Progress Tracker -->
+<div class="flex items-center justify-between relative mt-sm">
+<!-- Connecting Line Background -->
+<div class="absolute left-[10%] right-[10%] top-[40%] h-1 bg-surface-container-high -z-10 rounded-full transform -translate-y-1/2"></div>
+<!-- Active Connecting Line -->
+<div class="absolute left-[10%] w-[40%] top-[40%] h-1 bg-primary -z-10 rounded-full transform -translate-y-1/2"></div>
+<!-- Step 1: Received -->
+<div class="flex flex-col items-center gap-xs z-10 w-[20%]">
+<div class="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]" data-icon="check" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<span class="text-[10px] md:text-label-sm font-label-sm text-on-surface">รับออเดอร์</span>
+</div>
+<!-- Step 2: Preparing -->
+<div class="flex flex-col items-center gap-xs z-10 w-[20%]">
+<div class="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]" data-icon="inventory_2" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+</div>
+<span class="text-[10px] md:text-label-sm font-label-sm text-on-surface">จัดเตรียม</span>
+</div>
+<!-- Step 3: In Delivery -->
+<div class="flex flex-col items-center gap-xs z-10 w-[20%]">
+<div class="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center shadow-[0_0_0_4px_rgba(16,185,129,0.2)]">
+<span class="material-symbols-outlined text-[14px]" data-icon="directions_bike" style="font-variation-settings: 'FILL' 1;">directions_bike</span>
+</div>
+<span class="text-[10px] md:text-label-sm font-label-sm text-primary font-bold">กำลังจัดส่ง</span>
+</div>
+<!-- Step 4: Completed -->
+<div class="flex flex-col items-center gap-xs z-10 w-[20%]">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-outline-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]" data-icon="home">home</span>
+</div>
+<span class="text-[10px] md:text-label-sm font-label-sm text-on-surface-variant">สำเร็จ</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Sidebar / Previous Orders -->
+<section class="col-span-12 lg:col-span-4 flex flex-col gap-md">
+<h3 class="text-headline-md font-headline-md text-on-surface px-sm md:px-0">ประวัติการสั่งซื้อ</h3>
+<!-- Completed Order Card 1 -->
+<div class="glass-panel p-md rounded-xl hover:shadow-[0_8px_30px_rgba(15,23,42,0.08)] transition-shadow">
+<div class="flex justify-between items-start mb-sm border-b border-surface-container-high pb-sm">
+<div>
+<div class="flex items-center gap-xs mb-xs">
+<span class="bg-surface-container-low text-on-surface-variant px-2 py-0.5 rounded text-[10px] font-label-sm uppercase">สำเร็จ</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">24 พ.ย. 66</span>
+</div>
+<p class="text-label-md font-label-md text-on-surface">Talat Kaset (ตลาดเกษตร)</p>
+</div>
+<span class="text-label-md font-label-md font-bold text-on-surface">฿450</span>
+</div>
+<div class="flex items-center gap-md mb-md">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container" data-alt="A beautiful overhead flat-lay shot of fresh organic vegetables arranged neatly on a pristine white marble countertop. The assortment includes bright green crisp lettuce, vibrant red tomatoes, and fresh herbs. The lighting is soft, high-key, and diffused, creating a clean, hygienic, modern light-mode aesthetic. The color palette emphasizes fresh, natural greens and crisp whites, evoking premium quality fresh market produce." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCptypNThpq2_wCao1CA9xc1lIkRhZzygnsv-riw8ATCyOyNvK6VrsTmPvceb6oIyQnXGciU9i_iPcg-9i3x-QliMVDSyIKCNetEK66mE66DZYY7GPRYKOk7tcX4C2dBVcuXNxNAZT64uswbhoVNi1mzqN5vWh4TYE4y2SH5D-SiLmRnRI5eQ_RaDeIYj-_9qM-EarlyQOO9HdIXFeGl283q9_BhaGBW2anG8bqU6pX6JCpjBRFW7VD"/>
+<div class="flex-grow">
+<p class="text-label-sm font-label-sm text-on-surface line-clamp-2">ผักกาดหอมออร์แกนิค, มะเขือเทศราชินี, และอีก 4 รายการ</p>
+</div>
+</div>
+<button class="w-full py-2 px-4 rounded-lg bg-surface-container-low text-primary text-label-md font-label-md hover:bg-surface-container transition-colors flex items-center justify-center gap-xs">
+<span class="material-symbols-outlined text-[18px]" data-icon="replay">replay</span>
+                    สั่งซื้ออีกครั้ง
+                </button>
+</div>
+<!-- Completed Order Card 2 -->
+<div class="glass-panel p-md rounded-xl hover:shadow-[0_8px_30px_rgba(15,23,42,0.08)] transition-shadow">
+<div class="flex justify-between items-start mb-sm border-b border-surface-container-high pb-sm">
+<div>
+<div class="flex items-center gap-xs mb-xs">
+<span class="bg-surface-container-low text-on-surface-variant px-2 py-0.5 rounded text-[10px] font-label-sm uppercase">สำเร็จ</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant">20 พ.ย. 66</span>
+</div>
+<p class="text-label-md font-label-md text-on-surface">Fresh Seafood Hub</p>
+</div>
+<span class="text-label-md font-label-md font-bold text-on-surface">฿890</span>
+</div>
+<div class="flex items-center gap-md mb-md">
+<img class="w-16 h-16 rounded-lg object-cover bg-surface-container" data-alt="A high-quality close-up photograph of premium fresh salmon fillets laid on a bed of crushed ice. The scene is brightly lit with a clean, cool white light, emphasizing the vibrant orange of the fish and the sparkling clear ice. The setting is minimal, reflecting a high-end, hygienic digital marketplace aesthetic. The mood is fresh, crisp, and appetizing, avoiding dark shadows or heavy contrast." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCiMm2kN-1itzgMSyba6wc09rbegqMfAzdbQA9w4vaszpPsyxOiw5mbpar2slH0TEhFvcpKIoi7gMF3B8uNf-XZfMB0jwkD0cxtVhosyFQrpNusMAoIHhLNdmYnxn19gaj0lNG4Dzv2xvV3WTqR7kCNULw5An4-3Ycmrcg6fhMTsfBMDfH-HsUslUtGCSc6qhwMSKMxSUOVhRos5EhunmyKd5ayARTlimQWohMvPLXwMiC0Y1n_VU1B"/>
+<div class="flex-grow">
+<p class="text-label-sm font-label-sm text-on-surface line-clamp-2">ปลาแซลมอนสด (500g), กุ้งขาวใหญ่, และอีก 1 รายการ</p>
+</div>
+</div>
+<button class="w-full py-2 px-4 rounded-lg bg-surface-container-low text-primary text-label-md font-label-md hover:bg-surface-container transition-colors flex items-center justify-center gap-xs">
+<span class="material-symbols-outlined text-[18px]" data-icon="replay">replay</span>
+                    สั่งซื้ออีกครั้ง
+                </button>
+</div>
+</section>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 py-3 pb-safe bg-white/80 dark:bg-inverse-surface/80 backdrop-blur-xl border-t border-white/50 dark:border-outline/20 shadow-lg rounded-t-xl">
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors rounded-lg p-2 w-16 h-14">
+<span class="material-symbols-outlined text-2xl mb-1" data-icon="home" data-weight="regular">home</span>
+<span class="text-label-sm font-label-sm">หน้าแรก</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors rounded-lg p-2 w-16 h-14">
+<span class="material-symbols-outlined text-2xl mb-1" data-icon="search" data-weight="regular">search</span>
+<span class="text-label-sm font-label-sm">ค้นหา</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors rounded-lg p-2 w-16 h-14">
+<span class="material-symbols-outlined text-2xl mb-1" data-icon="shopping_cart" data-weight="regular">shopping_cart</span>
+<span class="text-label-sm font-label-sm">ตะกร้า</span>
+</button>
+<button class="flex flex-col items-center justify-center text-primary dark:text-inverse-primary relative after:content-[''] after:w-1 after:h-1 after:bg-primary after:rounded-full after:mt-1 hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors scale-90 duration-150 rounded-lg p-2 w-16 h-14">
+<span class="material-symbols-outlined text-2xl mb-1" data-icon="receipt_long" data-weight="fill" style="font-variation-settings: 'FILL' 1;">receipt_long</span>
+<span class="text-label-sm font-label-sm">คำสั่งซื้อ</span>
+</button>
+</nav>
+</body></html>
