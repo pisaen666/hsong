@@ -213,10 +213,55 @@ function loadSavedActiveOrder() {
         const saved = localStorage.getItem("talathub_active_order");
         if (saved) {
             const parsed = JSON.parse(saved);
-            if (parsed && parsed.orderId) return parsed;
+            if (parsed && parsed.orderId) {
+                // ✅ ทิ้งออเดอร์ที่ delivered แล้ว หรือนานเกิน 24 ชม. (ไม่ใช่ข้อมูลจริง)
+                if (parsed.status === "delivered") {
+                    localStorage.removeItem("talathub_active_order");
+                    return null;
+                }
+                // ทิ้งออเดอร์ที่เก่าเกิน 24 ชั่วโมง
+                if (parsed.savedAt && (Date.now() - parsed.savedAt) > 86400000) {
+                    localStorage.removeItem("talathub_active_order");
+                    return null;
+                }
+                return parsed;
+            }
         }
     } catch (e) { }
     return null;
+}
+
+// ✅ ล้างข้อมูลทดสอบทั้งหมด (cart + order) สำหรับเริ่มต้นใหม่
+
+function clearAllTestData() {
+    // ล้าง localStorage
+    localStorage.removeItem("talathub_active_order");
+    localStorage.removeItem("talathub_cart");
+
+    // ล้าง Firebase orders ทั้งหมด
+    if (isFirebaseReady()) {
+        db.ref("orders").remove().catch(e => console.warn("Firebase clear failed:", e));
+        // ล้าง cart ของ customer ปัจจุบัน
+        if (state.customer && state.customer.isLoggedIn) {
+            const cid = toFirebaseKey(state.customer.identifier);
+            db.ref(`carts/${cid}`).remove().catch(() => {});
+        }
+    }
+
+    // ล้าง state
+    state.activeOrder = null;
+    state.cart = [];
+
+    // อัปเดต UI
+    const hubBadge = document.getElementById("hub-badge-count");
+    if (hubBadge) { hubBadge.classList.add("hidden"); hubBadge.textContent = ""; }
+    updateCartUI();
+    renderCatalog();
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
+    if (typeof renderHubSettlement === "function") renderHubSettlement();
+    renderTrackingScreen();
+
+    showToast("🗑️ ล้างข้อมูลทดสอบเรียบร้อยแล้ว! พร้อมทดสอบใหม่");
 }
 
 // ── ORDER: บันทึกทั้ง localStorage และ Firebase
@@ -3681,6 +3726,10 @@ function renderHubPickingList() {
                     <button onclick="createSampleCustomerOrder()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all">
                         <span class="material-symbols-outlined text-base">add_shopping_cart</span>
                         <span>สร้างออเดอร์ทดสอบ (เพื่อทดลองจัดของ & ปล่อยไรเดอร์)</span>
+                    </button>
+                    <button onclick="clearAllTestData()" class="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold py-2 rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-1">
+                        <span class="material-symbols-outlined text-sm">delete_sweep</span>
+                        <span>ล้างข้อมูลทดสอบ เริ่มต้นใหม่</span>
                     </button>
                     <button onclick="goToHomePage()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs active:scale-95 transition-all">
                         กลับไปหน้าตลาดสด
