@@ -463,8 +463,12 @@ async function fallbackToIPLocation(callback) {
     const radar = document.getElementById("gps-searching-indicator");
     const btnLabel = document.getElementById("gps-button-label");
 
+    // Provider 1: ipwho.is
     try {
-        const response = await fetch("https://ipwho.is/", { cache: "no-cache" });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+        const response = await fetch("https://ipwho.is/", { cache: "no-cache", signal: controller.signal });
+        clearTimeout(timeoutId);
         if (response.ok) {
             const data = await response.json();
             if (data && data.success && data.latitude && data.longitude) {
@@ -474,11 +478,15 @@ async function fallbackToIPLocation(callback) {
             }
         }
     } catch (e) {
-        console.warn("IP Provider 1 error, trying Provider 2...", e);
+        console.warn("IP Provider 1 notice, trying Provider 2...", e);
     }
 
+    // Provider 2: freeipapi.com
     try {
-        const response2 = await fetch("https://freeipapi.com/api/json", { cache: "no-cache" });
+        const controller2 = new AbortController();
+        const timeoutId2 = setTimeout(() => controller2.abort(), 2500);
+        const response2 = await fetch("https://freeipapi.com/api/json", { cache: "no-cache", signal: controller2.signal });
+        clearTimeout(timeoutId2);
         if (response2.ok) {
             const data2 = await response2.json();
             if (data2 && data2.latitude && data2.longitude) {
@@ -488,7 +496,25 @@ async function fallbackToIPLocation(callback) {
             }
         }
     } catch (e2) {
-        console.warn("IP Provider 2 error, using default market zone coords...", e2);
+        console.warn("IP Provider 2 notice, trying Provider 3...", e2);
+    }
+
+    // Provider 3: ipapi.co
+    try {
+        const controller3 = new AbortController();
+        const timeoutId3 = setTimeout(() => controller3.abort(), 2500);
+        const response3 = await fetch("https://ipapi.co/json/", { cache: "no-cache", signal: controller3.signal });
+        clearTimeout(timeoutId3);
+        if (response3.ok) {
+            const data3 = await response3.json();
+            if (data3 && data3.latitude && data3.longitude) {
+                const cityName3 = data3.city || data3.region || "กรุงเทพฯ";
+                callback(data3.latitude, data3.longitude, 1000, `IP เครือข่าย: ${cityName3}`);
+                return;
+            }
+        }
+    } catch (e3) {
+        console.warn("IP Provider 3 notice, using default market zone...", e3);
     }
 
     // Default Fallback
@@ -2949,79 +2975,7 @@ function getNextDeliverySlotInfo() {
     }
 }
 
-function updateDeliveryLocationUI() {
-    const loc = state.deliveryLocation || {
-        title: "หมู่บ้านพฤกษา 3 ซอย 5",
-        distance: "1.8 กม.",
-        fee: 25
-    };
-
-    const slotInfo = getNextDeliverySlotInfo();
-
-    // Top Header previews
-    const topAddressPreview = document.getElementById("selected-address-preview");
-    const topSlotText = document.getElementById("top-delivery-slot-text");
-    if (topAddressPreview) {
-        topAddressPreview.textContent = `${loc.title}`;
-    }
-    if (topSlotText) {
-        topSlotText.textContent = slotInfo.slot;
-    }
-
-    // Welcome Card previews
-    const welcomeLocTitle = document.getElementById("welcome-location-title");
-    const welcomeDistText = document.getElementById("welcome-distance-text");
-    const welcomeFeeText = document.getElementById("welcome-fee-text");
-    const welcomeSlotText = document.getElementById("welcome-next-slot-text");
-
-    if (welcomeLocTitle) welcomeLocTitle.textContent = loc.title;
-    if (welcomeDistText) welcomeDistText.textContent = loc.distance;
-    if (welcomeFeeText) welcomeFeeText.textContent = `฿${loc.fee}`;
-    if (welcomeSlotText) welcomeSlotText.textContent = slotInfo.desc;
-}
-
-function openLocationModal() {
-    document.getElementById("location-modal").classList.remove("hidden");
-}
-
-function closeLocationModal() {
-    document.getElementById("location-modal").classList.add("hidden");
-}
-
-function selectSavedLocation(title, distance, fee) {
-    state.deliveryLocation = {
-        title: title,
-        detail: `ห่างจากตลาดสด ${distance}`,
-        distance: distance,
-        fee: fee
-    };
-    updateDeliveryLocationUI();
-    closeLocationModal();
-    updateCartUI();
-    if (state.currentScreen === "checkout") {
-        renderCheckoutPage();
-    }
-    showToast(`📍 เปลี่ยนจุดจัดส่ง: ${title} (${distance} • ฿${fee})`);
-}
-
-function detectCurrentLocationGPS() {
-    showToast("📍 กำลังตรวจจับพิกัด GPS ของคุณ...");
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                selectSavedLocation("ตำแหน่งปัจจุบันของคุณ (GPS)", "1.5 กม.", 25);
-                showToast("📍 ตรวจพบพิกัดของคุณสำเร็จ! ห่างจากตลาด 1.5 กม. (ค่าส่ง ฿25)");
-            },
-            (err) => {
-                selectSavedLocation("หมู่บ้านพฤกษา 3 (ซอย 5)", "1.8 กม.", 25);
-                showToast("📍 ตรวจพบพิกัดจาก QR Code เรียบร้อยแล้ว");
-            },
-            { timeout: 4000 }
-        );
-    } else {
-        selectSavedLocation("หมู่บ้านพฤกษา 3 (ซอย 5)", "1.8 กม.", 25);
-    }
-}
+// (Duplicate location and GPS block removed - unified at top of app.js)
 
 // ==========================================
 // TOAST NOTIFICATIONS
