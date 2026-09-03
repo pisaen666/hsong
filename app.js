@@ -163,6 +163,94 @@ function saveRiderToStorage(rider) {
     } catch (e) { }
 }
 
+// ==========================================
+// CART & ORDER PERSISTENCE — Firebase Realtime Database + localStorage fallback
+// ==========================================
+
+// ── Helper: sanitize phone/id เพื่อใช้เป็น Firebase key (ห้ามมี . # $ [ ])
+function toFirebaseKey(str) {
+    return (str || "guest").replace(/[.#$\[\]]/g, "_");
+}
+
+// ── ตรวจสอบว่า Firebase พร้อมใช้งานหรือไม่
+function isFirebaseReady() {
+    return typeof db !== "undefined" && db !== null;
+}
+
+// ── CART: โหลดจาก localStorage (initial load; Firebase listener จะ update ทีหลัง)
+function loadSavedCart() {
+    try {
+        const saved = localStorage.getItem("talathub_cart");
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) return parsed;
+        }
+    } catch (e) { }
+    return [];
+}
+
+// ── CART: บันทึกทั้ง localStorage (instant) และ Firebase (cross-device)
+function saveCartToStorage(cart) {
+    // 1. localStorage — ทำให้ UI ไม่กระตุก (ทันที)
+    try {
+        localStorage.setItem("talathub_cart", JSON.stringify(cart || []));
+    } catch (e) { }
+
+    // 2. Firebase — sync ข้ามอุปกรณ์
+    if (isFirebaseReady() && state.customer && state.customer.isLoggedIn) {
+        const customerId = toFirebaseKey(state.customer.identifier);
+        db.ref(`carts/${customerId}`).set({
+            items: cart || [],
+            updatedAt: Date.now(),
+            customerName: state.customer.identifier
+        }).catch(e => console.warn("Firebase cart save failed:", e));
+    }
+}
+
+// ── ORDER: โหลดจาก localStorage (initial load)
+function loadSavedActiveOrder() {
+    try {
+        const saved = localStorage.getItem("talathub_active_order");
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed && parsed.orderId) return parsed;
+        }
+    } catch (e) { }
+    return null;
+}
+
+// ── ORDER: บันทึกทั้ง localStorage และ Firebase
+function saveActiveOrderToStorage(order) {
+    // 1. localStorage
+    try {
+        if (order) localStorage.setItem("talathub_active_order", JSON.stringify(order));
+        else localStorage.removeItem("talathub_active_order");
+    } catch (e) { }
+
+    // 2. Firebase — push order เพื่อให้ Hub/PC เห็นทันที
+    if (isFirebaseReady() && order) {
+        const orderKey = toFirebaseKey(order.orderId);
+        db.ref(`orders/${orderKey}`).set({
+            ...order,
+            savedAt: Date.now(),
+            status: order.status || "picking"
+        }).catch(e => console.warn("Firebase order save failed:", e));
+    } else if (isFirebaseReady() && !order) {
+        // ลบออเดอร์ที่ส่งสำเร็จแล้วออกจาก Firebase (optional)
+        // ไม่ลบ เพื่อให้ประวัติยังอยู่
+    }
+}
+
+// ── ORDER STATUS: อัปเดต status ใน Firebase (Hub อัปเดตเพื่อให้มือถือเห็น)
+function updateOrderStatusInFirebase(orderId, newStatus) {
+    if (!isFirebaseReady() || !orderId) return;
+    const orderKey = toFirebaseKey(orderId);
+    db.ref(`orders/${orderKey}/status`).set(newStatus)
+      .catch(e => console.warn("Firebase status update failed:", e));
+}
+
+
+
 function loadSavedMarketData() {
     try {
         const saved = localStorage.getItem("talathub_custom_market_stalls");
@@ -664,12 +752,12 @@ const state = {
     currentSingleStall: null,     // null or stallId
     currentDirectoryZone: "all",
     searchQuery: "",
-    favorites: loadSavedFavorites(), // Persistent favorite stalls list
-    customer: loadSavedCustomer(),   // Logged in customer session
+    favorites: loadSavedFavorites(),     // Persistent favorite stalls list
+    customer: loadSavedCustomer(),       // Logged in customer session
     activeMerchant: loadSavedMerchant(), // Logged in merchant session
     deliveryLocation: loadSavedLocation(), // Active delivery location
-    cart: [],                        // Initialized to 0 items
-    activeOrder: null                // No active order initially
+    cart: loadSavedCart(),               // ✅ โหลดตะกร้าจาก localStorage
+    activeOrder: loadSavedActiveOrder()  // ✅ โหลด active order จาก localStorage
 };
 
 // 3. Initialization
@@ -681,7 +769,82 @@ document.addEventListener("DOMContentLoaded", () => {
     updateCartUI();
     renderTrackingScreen();
     renderDirectoryList();
+
+    // ✅ Cross-tab sync (same browser): ฟัง storage event
+    window.addEventListener("storage", (event) => {
+        if (event.key === "talathub_cart" && event.newValue !== null) {
+            try {
+                const newCart = JSON.parse(event.newValue);
+                if (Array.isArray(newCart)) {
+                    state.cart = newCart;
+                    updateCartUI();
+                    renderCatalog();
+                    if (state.currentScreen === "checkout") renderCheckoutPage();
+                }
+            } catch (e) { }
+        }
+        if (event.key === "talathub_logged_in_customer" && event.newValue !== null) {
+            try {
+                const newCust = JSON.parse(event.newValue);
+                if (newCust) { state.customer = newCust; renderAuthHeaderButtons(); }
+            } catch (e) { }
+        }
+    });
+
+    // ✅ Firebase Real-time Listeners — sync ข้ามเครือข่ายและอุปกรณ์
+    if (isFirebaseReady()) {
+
+        // 1. ฟังออเดอร์ใหม่ทั้งหมด (Hub/PC จะเห็นทันทีที่มือถือสั่งซื้อ)
+        db.ref("orders").on("child_added", (snapshot) => {
+            const newOrder = snapshot.val();
+            if (!newOrder || !newOrder.orderId) return;
+
+            // รับเฉพาะออเดอร์ใหม่ (ภายใน 30 วินาที) เพื่อไม่ให้ trigger ตอน page load
+            const isRecent = newOrder.savedAt && (Date.now() - newOrder.savedAt) < 30000;
+            if (!isRecent) return;
+
+            // อัปเดต state
+            state.activeOrder = newOrder;
+            try { localStorage.setItem("talathub_active_order", JSON.stringify(newOrder)); } catch(e) {}
+
+            // อัปเดต UI (Hub badge + เสียง + picking list)
+            const hubBadge = document.getElementById("hub-badge-count");
+            if (hubBadge) { hubBadge.classList.remove("hidden"); hubBadge.textContent = "NEW"; }
+            if (typeof renderHubPickingList === "function") renderHubPickingList();
+            if (typeof renderHubDeliveryView === "function") renderHubDeliveryView();
+            renderTrackingScreen();
+            playOrderAlertSound();
+            showToast(`🔔 ออเดอร์ใหม่ ${newOrder.orderId} เข้ามา! ฿${newOrder.grandTotal || newOrder.total}`);
+        });
+
+        // 2. ฟัง order status update (มือถือลูกค้าจะเห็นสถานะ picking→delivering→delivered ทันที)
+        db.ref("orders").on("child_changed", (snapshot) => {
+            const updatedOrder = snapshot.val();
+            if (!updatedOrder || !updatedOrder.orderId) return;
+
+            // ถ้า order นี้คือ order ที่กำลัง active อยู่
+            if (state.activeOrder && state.activeOrder.orderId === updatedOrder.orderId) {
+                const oldStatus = state.activeOrder.status;
+                state.activeOrder = { ...state.activeOrder, ...updatedOrder };
+                try { localStorage.setItem("talathub_active_order", JSON.stringify(state.activeOrder)); } catch(e) {}
+
+                // แสดงสถานะใหม่บน tracking screen
+                if (state.currentScreen === "tracking") renderTrackingScreen();
+
+                if (updatedOrder.status === "delivering" && oldStatus !== "delivering") {
+                    showToast("🛵 ไรเดอร์ออกเดินทางแล้ว! กำลังมาส่งของที่บ้านคุณ");
+                } else if (updatedOrder.status === "delivered" && oldStatus !== "delivered") {
+                    showToast("✅ จัดส่งสำเร็จแล้ว! ขอบคุณที่ใช้บริการเฮียส่ง 🙏");
+                }
+            }
+        });
+
+        console.log("🔥 Firebase real-time listeners active");
+    } else {
+        console.warn("⚠️ Firebase not ready, using localStorage only");
+    }
 });
+
 
 
 
@@ -1806,6 +1969,7 @@ function addToCartFromModal(stallId, productId, name, price, unit) {
     }
 
     showToast(`🛒 เพิ่ม "${name}" ลงตะกร้าแล้ว!`);
+    saveCartToStorage(state.cart); // ✅ บันทึกตะกร้าลง localStorage
     updateCartUI();
     renderCatalog();
     renderStallCatalogModal();
@@ -1888,6 +2052,7 @@ function addToCart(stallId, productId) {
     }
 
     showToast(`🛒 เพิ่ม "${product.name}" ลงตะกร้าแล้ว!`);
+    saveCartToStorage(state.cart); // ✅ บันทึกตะกร้าลง localStorage
     updateCartUI();
     renderCatalog();
     if (typeof currentModalStallId !== "undefined" && currentModalStallId) {
@@ -1912,6 +2077,7 @@ function changeCartQty(productId, delta) {
             showToast(`นำ "${removedName}" ออกจากตะกร้าแล้ว`);
         }
     }
+    saveCartToStorage(state.cart); // ✅ บันทึกตะกร้าลง localStorage
     updateCartUI();
     renderCatalog();
     if (typeof currentModalStallId !== "undefined" && currentModalStallId) {
@@ -1924,6 +2090,7 @@ function changeCartQty(productId, delta) {
 
 function clearCart() {
     state.cart = [];
+    saveCartToStorage(state.cart); // ✅ ล้างตะกร้าใน localStorage ด้วย
     updateCartUI();
     renderCatalog();
     if (state.currentScreen === "checkout") {
@@ -2332,12 +2499,16 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
 
     // Clear cart
     state.cart = [];
+    saveCartToStorage(state.cart); // ✅ ล้างตะกร้าใน localStorage
     updateCartUI();
+
+    // ✅ บันทึก active order ลง localStorage เพื่อ sync กับ tab อื่น
+    saveActiveOrderToStorage(state.activeOrder);
 
     // 1. Play Sound Alert (กระดิ่งเตือนออเดอร์ใหม่)
     playOrderAlertSound();
 
-    // 2. Send LINE Notification (ส่งแจ้งเตือนเข้า LINE)
+    // 2. Send LINE Notification (ส่งแจ้งเตือนเข้า LINE - เปิด LINE จริง)
     sendLineOrderNotification(state.activeOrder);
 
     // 3. Update Hub Badge
@@ -3463,6 +3634,17 @@ function sendLineOrderNotification(order) {
 
     state.latestLineMessage = msg;
     state.latestLineUrl = lineUrl;
+
+    // ✅ เปิด LINE จริงเพื่อส่งแจ้งเตือน (เปิดในหน้าต่างใหม่เพื่อไม่รบกวน checkout flow)
+    try {
+        const lineWin = window.open(lineUrl, '_blank', 'noopener,noreferrer');
+        // ถ้าเบราว์เซอร์บล็อก popup ให้แสดง toast แนะนำ
+        if (!lineWin || lineWin.closed || typeof lineWin.closed === 'undefined') {
+            showToast("⚠️ กรุณาอนุญาต Popup เพื่อส่งแจ้งเตือน LINE หรือแตะปุ่ม 'แชร์ LINE' ในหน้า Tracking");
+        }
+    } catch (e) {
+        console.warn("LINE open failed:", e);
+    }
 }
 
 function openLineShareApp() {

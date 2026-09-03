@@ -43,6 +43,18 @@ const server = http.createServer((req, res) => {
     });
 });
 
-server.listen(PORT, () => {
-    console.log(`🚀 TalatHub Local Server running at http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+    const { networkInterfaces } = require('os');
+    const nets = networkInterfaces();
+    let localIP = 'localhost';
+    for (const name of Object.keys(nets)) {
+        for (const net of nets[name]) {
+            if (net.family === 'IPv4' && !net.internal) {
+                localIP = net.address;
+            }
+        }
+    }
+    console.log(`🚀 TalatHub Local Server running at:`);
+    console.log(`   PC  : http://localhost:${PORT}`);
+    console.log(`   มือถือ: http://${localIP}:${PORT}`);
 });
