@@ -3253,27 +3253,27 @@ function handleHubLoginSubmit() {
     }
     state.activeHub = {
         isLoggedIn: true,
-        name: "คุณเอกชัย (หัวหน้า Hub กลาง)",
+        name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง",
         role: "hub_admin"
     };
     saveHubToStorage(state.activeHub);
     closeHubLoginModal();
     setActiveRoleView("hub");
     renderAuthHeaderButtons();
-    showToast("🎉 เข้าสู่ระบบร้าน Hub กลางสำเร็จ! ยินดีต้อนรับคุณเอกชัย");
+    showToast("🎉 ล็อกอินเข้าสู่ระบบการจัดเตรียมสินค้าสำเร็จ!");
 }
 
 function quickLoginHub() {
     state.activeHub = {
         isLoggedIn: true,
-        name: "คุณเอกชัย (หัวหน้า Hub กลาง)",
+        name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง",
         role: "hub_admin"
     };
     saveHubToStorage(state.activeHub);
     closeHubLoginModal();
     setActiveRoleView("hub");
     renderAuthHeaderButtons();
-    showToast("🎉 เข้าสู่ระบบร้าน Hub กลางสำเร็จ! ยินดีต้อนรับคุณเอกชัย");
+    showToast("🎉 ล็อกอินเข้าสู่ระบบการจัดเตรียมสินค้าสำเร็จ!");
 }
 
 function logoutHub() {
@@ -3281,7 +3281,7 @@ function logoutHub() {
     saveHubToStorage(null);
     setActiveRoleView("customer");
     renderAuthHeaderButtons();
-    showToast("🚪 ออกจากระบบร้าน Hub กลางเรียบร้อยแล้ว");
+    showToast("🚪 ออกจากระบบการจัดเตรียมสินค้าเรียบร้อยแล้ว");
 }
 
 // Rider Login & Logout
