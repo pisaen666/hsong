@@ -728,29 +728,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderDirectoryList();
 });
 
-// ==========================================
-// ROLE & SCREEN NAVIGATION
-// ==========================================
-function switchRole(role) {
-    state.currentRole = role;
 
-    document.querySelectorAll(".role-btn").forEach(btn => btn.classList.remove("active", "text-white", "bg-emerald-500"));
-    const activeBtn = document.getElementById(`role-btn-${role}`);
-    if (activeBtn) activeBtn.classList.add("active");
-
-    document.querySelectorAll(".view-section").forEach(sec => sec.classList.add("hidden"));
-
-    if (role === "customer") {
-        document.getElementById("customer-view-container").classList.remove("hidden");
-    } else if (role === "hub") {
-        document.getElementById("hub-view-container").classList.remove("hidden");
-    } else if (role === "merchant") {
-        document.getElementById("merchant-view-container").classList.remove("hidden");
-    } else if (role === "rider") {
-        const rvc = document.getElementById("rider-view-container");
-        if (rvc) rvc.classList.remove("hidden");
-    }
-}
 
 function goToHomePage() {
     switchRole("customer");
@@ -3043,29 +3021,7 @@ function submitMerchantCall() {
     }, 1200);
 }
 
-// ==========================================
-// LOCATION & DELIVERY SCHEDULE ENGINE
-// ==========================================
-function getNextDeliverySlotInfo() {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const totalMinutes = hours * 60 + minutes;
 
-    if (totalMinutes < 8 * 60) {
-        return { slot: "รอบเช้า 08:30 น.", desc: "รอบเช้า 08:30 น. (Rider รวมของส่งถึงหน้าบ้าน)" };
-    } else if (totalMinutes < 11 * 60) {
-        return { slot: "รอบสาย 11:30 น.", desc: "รอบสาย 11:30 น. (ทันเตรียมอาหารกลางวัน)" };
-    } else if (totalMinutes < 14 * 60 + 30) {
-        return { slot: "รอบบ่าย 15:00 น.", desc: "รอบบ่าย 15:00 น. (วัตถุดิบสดรอบบ่าย)" };
-    } else if (totalMinutes < 17 * 60) {
-        return { slot: "รอบเย็น 17:30 น.", desc: "รอบเย็น 17:30 น. (ทันเตรียมอาหารเย็น)" };
-    } else {
-        return { slot: "รอบเช้าพรุ่งนี้ 07:30 น.", desc: "รอบเช้าพรุ่งนี้ 07:30 น. (ของสดใหม่รอบแรก)" };
-    }
-}
-
-// (Duplicate location and GPS block removed - unified at top of app.js)
 
 // ==========================================
 // TOAST NOTIFICATIONS
@@ -4003,7 +3959,7 @@ function initTalatHubApp() {
     updateCustomerLoyaltyBanner();
     renderFavoriteStallsBar();
     renderCatalog();
-    renderCart();
+    updateCartUI();
 }
 
 if (document.readyState === 'loading') {
