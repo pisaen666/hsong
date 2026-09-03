@@ -192,20 +192,20 @@
                                 </div>
                             </div>
 
-                            <!-- 2. Next Delivery Schedule Slot -->
-                            <div class="bg-white/5 hover:bg-white/10 rounded-xl p-2.5 border border-white/10 flex items-center justify-between gap-2 transition-colors" id="welcome-slot-card">
-                                <div class="flex items-center gap-2">
-                                    <div class="w-7 h-7 rounded-lg bg-amber-400/20 text-amber-300 flex items-center justify-center shrink-0" id="welcome-slot-icon-box">
-                                        <span class="material-symbols-outlined text-base" id="welcome-slot-icon">alarm_on</span>
+                            <!-- 2. Next Delivery Schedule Slot (กล่องรอบจัดส่ง 30 นาที) -->
+                            <div class="bg-black/35 hover:bg-black/45 rounded-2xl p-2.5 sm:p-3 border border-emerald-500/40 flex items-center justify-between gap-2.5 transition-all shadow-inner" id="welcome-slot-card">
+                                <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                                    <div class="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30 flex items-center justify-center shrink-0" id="welcome-slot-icon-box">
+                                        <span class="material-symbols-outlined text-lg" id="welcome-slot-icon">alarm_on</span>
                                     </div>
-                                    <div class="text-[11px] leading-tight">
-                                        <div class="text-slate-300 text-[9px]" id="welcome-slot-sublabel">สั่งซื้อตอนนี้ จะได้รับสินค้ารอบ:</div>
-                                        <div class="font-extrabold text-amber-300 text-xs mt-0.5" id="welcome-next-slot-text">
-                                            รอบ 15:30 น. (อีก 13 นาที • ไรเดอร์ส่งของทุก 30 นาที)
+                                    <div class="leading-tight min-w-0 flex-1">
+                                        <div class="text-slate-300 text-[10px] font-medium" id="welcome-slot-sublabel">สั่งซื้อตอนนี้ จะได้รับสินค้ารอบ:</div>
+                                        <div class="font-black text-amber-300 text-xs mt-0.5" id="welcome-next-slot-text">
+                                            รอบ 15:30 น. (อีก 5 นาที • ไรเดอร์ส่งของทุก 30 นาที)
                                         </div>
                                     </div>
                                 </div>
-                                <span id="welcome-slot-status-badge" class="text-[9px] bg-emerald-600 text-white font-extrabold px-2 py-1 rounded-md shrink-0 whitespace-nowrap shadow-xs">
+                                <span id="welcome-slot-status-badge" class="text-[10px] bg-emerald-600 text-white font-black px-2.5 py-1 rounded-lg shrink-0 whitespace-nowrap shadow-xs">
                                     ⚡ เปิดรับออเดอร์
                                 </span>
                             </div>
@@ -2690,6 +2690,6 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=2.2"></script>
 </body>
 </html>
