@@ -2217,57 +2217,8 @@
                     <span class="material-symbols-outlined text-emerald-600 text-sm">login</span>
                     <span>1. เลือกร้านค้าของคุณเพื่อเข้าแก้ไขข้อมูล:</span>
                 </label>
-                <div class="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1">
-                    <button onclick="loginAsMerchantStall('stall_chicken')" class="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 flex items-center justify-between text-xs text-slate-800 transition-all text-left group">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">🍗</span>
-                            <div>
-                                <div class="font-bold text-slate-800 group-hover:text-emerald-700">ร้านไก่สดของเรา (Hub กลาง)</div>
-                                <div class="text-[10px] text-slate-400">แผง A01 • โซน A • คุณเอกชัย</div>
-                            </div>
-                        </div>
-                        <span class="text-[11px] text-emerald-600 font-bold group-hover:translate-x-0.5 transition-transform">เข้าสู่ระบบ ></span>
-                    </button>
-                    <button onclick="loginAsMerchantStall('stall_veggie')" class="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 flex items-center justify-between text-xs text-slate-800 transition-all text-left group">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">🥬</span>
-                            <div>
-                                <div class="font-bold text-slate-800 group-hover:text-emerald-700">แผงผักสดป้าสมร</div>
-                                <div class="text-[10px] text-slate-400">แผง B04 • โซน B • ป้าสมร</div>
-                            </div>
-                        </div>
-                        <span class="text-[11px] text-emerald-600 font-bold group-hover:translate-x-0.5 transition-transform">เข้าสู่ระบบ ></span>
-                    </button>
-                    <button onclick="loginAsMerchantStall('stall_pork')" class="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 flex items-center justify-between text-xs text-slate-800 transition-all text-left group">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">🥩</span>
-                            <div>
-                                <div class="font-bold text-slate-800 group-hover:text-emerald-700">หมูสดเจ๊พรอนามัย</div>
-                                <div class="text-[10px] text-slate-400">แผง A08 • โซน A • เจ๊พร</div>
-                            </div>
-                        </div>
-                        <span class="text-[11px] text-emerald-600 font-bold group-hover:translate-x-0.5 transition-transform">เข้าสู่ระบบ ></span>
-                    </button>
-                    <button onclick="loginAsMerchantStall('stall_curry')" class="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 flex items-center justify-between text-xs text-slate-800 transition-all text-left group">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">🌶️</span>
-                            <div>
-                                <div class="font-bold text-slate-800 group-hover:text-emerald-700">เครื่องแกงเจ๊ณี (สูตรใต้)</div>
-                                <div class="text-[10px] text-slate-400">แผง C02 • โซน C • เจ๊ณี</div>
-                            </div>
-                        </div>
-                        <span class="text-[11px] text-emerald-600 font-bold group-hover:translate-x-0.5 transition-transform">เข้าสู่ระบบ ></span>
-                    </button>
-                    <button onclick="loginAsMerchantStall('stall_seafood')" class="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 flex items-center justify-between text-xs text-slate-800 transition-all text-left group">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">🦐</span>
-                            <div>
-                                <div class="font-bold text-slate-800 group-hover:text-emerald-700">กุ้งสดลุงหมานอาหารทะเล</div>
-                                <div class="text-[10px] text-slate-400">แผง E01 • โซน E • ลุงหมาน</div>
-                            </div>
-                        </div>
-                        <span class="text-[11px] text-emerald-600 font-bold group-hover:translate-x-0.5 transition-transform">เข้าสู่ระบบ ></span>
-                    </button>
+                <div id="merchant-stalls-login-list" class="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    <!-- Populated dynamically by openMerchantLoginModal() -->
                 </div>
             </div>
 

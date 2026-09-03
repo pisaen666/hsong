@@ -126,6 +126,32 @@ function saveMerchantToStorage(merch) {
     } catch (e) {}
 }
 
+function loadSavedMarketData() {
+    try {
+        const saved = localStorage.getItem("talathub_custom_market_stalls");
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed;
+            }
+        }
+    } catch (e) {}
+    return null;
+}
+
+function saveMarketDataToStorage() {
+    try {
+        localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(MARKET_DATA));
+    } catch (e) {}
+}
+
+// Restore saved custom stalls if available
+const _savedStalls = loadSavedMarketData();
+if (_savedStalls && Array.isArray(_savedStalls) && _savedStalls.length > 0) {
+    MARKET_DATA.length = 0;
+    _savedStalls.forEach(s => MARKET_DATA.push(s));
+}
+
 // ==========================================
 // REAL GPS & DELIVERY LOCATION ENGINE
 // ==========================================
@@ -3185,6 +3211,30 @@ function renderAuthHeaderButtons() {
 }
 
 function openMerchantLoginModal() {
+    const listEl = document.getElementById("merchant-stalls-login-list");
+    if (listEl) {
+        let html = "";
+        MARKET_DATA.forEach(stall => {
+            const emoji = stall.stallTag ? stall.stallTag.split(" ")[0] : "🏪";
+            const owner = stall.ownerName || "เจ้าของแผงค้า";
+            html += `
+                <button onclick="loginAsMerchantStall('${stall.stallId}')" class="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 flex items-center justify-between text-xs text-slate-800 transition-all text-left group">
+                    <div class="flex items-center gap-2">
+                        <span class="text-base">${emoji}</span>
+                        <div>
+                            <div class="font-bold text-slate-800 group-hover:text-emerald-700">${stall.stallName}</div>
+                            <div class="text-[10px] text-slate-400">${stall.stallNumber} • โซน ${stall.zone} • ${owner}</div>
+                        </div>
+                    </div>
+                    <span class="text-[11px] text-emerald-600 font-bold group-hover:translate-x-0.5 transition-transform">เข้าสู่ระบบ ></span>
+                </button>
+            `;
+        });
+        if (html === "") {
+            html = `<div class="text-slate-400 text-center py-3 text-xs italic">ยังไม่มีร้านค้าในระบบ กดปุ่มด้านล่างเพื่อเปิดแผงค้าใหม่</div>`;
+        }
+        listEl.innerHTML = html;
+    }
     document.getElementById("merchant-login-modal").classList.remove("hidden");
 }
 
@@ -3611,6 +3661,8 @@ function saveMerchantStallData() {
     } else {
         ALL_100_STALLS.unshift(stallObj);
     }
+
+    saveMarketDataToStorage();
 
     closeMerchantPortalModal();
     renderCatalog();
