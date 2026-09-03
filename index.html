@@ -812,13 +812,16 @@
                         <h2 class="font-extrabold text-sm">ใบจัดของสด & ปล่อยไรเดอร์</h2>
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <span class="text-[11px] bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-lg font-bold">
-                        คิวรอส่ง: <strong class="text-amber-400" id="hub-queue-count">0</strong>
+                <div class="flex items-center gap-1.5">
+                    <button onclick="syncLatestOrderFromCloud(); showToast('☁️ กำลังตรวจสอบออเดอร์ล่าสุดจากคลาวด์...');" class="text-[10px] bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 active:scale-95 shadow-2xs" title="กดเพื่อตรวจสอบออเดอร์ใหม่จากคลาวด์">
+                        <span class="material-symbols-outlined text-xs animate-spin-slow">sync</span>
+                        <span>ซิงค์สด</span>
+                    </button>
+                    <span class="text-[11px] bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded-lg font-bold">
+                        คิว: <strong class="text-amber-400" id="hub-queue-count">0</strong>
                     </span>
                     <button onclick="logoutHub()" class="text-[10px] bg-rose-950/80 hover:bg-rose-800 text-rose-300 hover:text-white border border-rose-700/60 px-2 py-1 rounded-lg font-bold transition-all flex items-center gap-1 active:scale-95" title="ออกจากระบบจัดส่ง">
                         <span class="material-symbols-outlined text-xs">logout</span>
-                        <span>ออกจากระบบ</span>
                     </button>
                 </div>
             </div>
@@ -2678,6 +2681,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=3.0"></script>
+    <script src="app.js?v=3.1"></script>
 </body>
 </html>

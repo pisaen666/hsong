@@ -2757,7 +2757,7 @@ function setRatingStars(score) {
             s.className = "material-symbols-outlined fill-1 text-amber-400 hover:scale-110 transition-transform";
         } else {
             s.className = "material-symbols-outlined text-slate-300 hover:scale-110 transition-transform";
-        } 1
+        } 111
     });
 
     const labels = [
