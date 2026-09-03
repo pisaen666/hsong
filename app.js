@@ -100,7 +100,14 @@ function saveFavoritesToStorage(favs) {
 function loadSavedCustomer() {
     try {
         const saved = localStorage.getItem("talathub_logged_in_customer");
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed && (parsed.phone === "081-234-5678" || parsed.identifier === "081-234-5678" || (parsed.identifier && (parsed.identifier.includes("สุรีย์") || parsed.identifier.includes("สมมุติ"))))) {
+                localStorage.removeItem("talathub_logged_in_customer");
+                return { isLoggedIn: false, phone: "" };
+            }
+            return parsed;
+        }
     } catch (e) {}
     return { isLoggedIn: false, phone: "" };
 }
@@ -164,7 +171,14 @@ const MARKET_ORIGIN = {
 function loadSavedLocation() {
     try {
         const saved = localStorage.getItem("talathub_delivery_location");
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed && parsed.title && (parsed.title.includes("เจ๊เอี่ยม") || parsed.title.includes("สุรีย์") || parsed.title.includes("เชิดน้อย") || parsed.title.includes("เปิดน้อย") || parsed.title.includes("พฤกษา 3 (ซอย 5)"))) {
+                localStorage.removeItem("talathub_delivery_location");
+            } else if (parsed && parsed.title) {
+                return parsed;
+            }
+        }
     } catch (e) {}
     return {
         title: "ระบุที่อยู่จัดส่งของคุณ",
