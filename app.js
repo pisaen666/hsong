@@ -3887,7 +3887,30 @@ function handleCustomerLoginSubmit() {
     updateDeliveryLocationUI();
     updateCustomerLoyaltyBanner();
     renderCatalog();
-    updateHomeActiveOrderBanner();
+
+    // ✅ ตรวจสอบและดึงออเดอร์ที่กำลังจัดส่งของลูกค้ารายนี้กลับมาแสดง (ถ้ามี)
+    if (isFirebaseReady()) {
+        db.ref("orders").limitToLast(15).once("value").then(snap => {
+            const data = snap.val();
+            if (data) {
+                const myOrders = Object.values(data).filter(o => 
+                    o && o.orderId && o.status !== "delivered" && 
+                    (o.customerName === displayVal || o.customerPhone === displayVal || toFirebaseKey(o.customerName) === toFirebaseKey(displayVal))
+                );
+                if (myOrders.length > 0) {
+                    myOrders.sort((a,b) => (b.savedAt||0) - (a.savedAt||0));
+                    state.activeOrder = myOrders[0];
+                    try { localStorage.setItem("talathub_active_order", JSON.stringify(state.activeOrder)); } catch(e) {}
+                    updateHomeActiveOrderBanner();
+                    renderTrackingScreen();
+                } else {
+                    updateHomeActiveOrderBanner();
+                }
+            }
+        }).catch(() => updateHomeActiveOrderBanner());
+    } else {
+        updateHomeActiveOrderBanner();
+    }
 
     // Auto-fulfill pending add to cart if customer clicked before logging in
     if (pendingAddToCart) {
