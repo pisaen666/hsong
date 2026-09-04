@@ -2894,6 +2894,38 @@ function callRiderPhone(event, phone = "0815887400") {
     }
 }
 
+// Rider LINE Message (ส่งข้อความผ่าน LINE ฟรี 100%)
+function sendRiderLineMessage(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const orderId = (state.activeOrder && state.activeOrder.orderId) ? state.activeOrder.orderId : "TH-6114";
+    const riderPhone = "081-588-7400";
+    const msg = `สวัสดีครับ พี่สมชาย (ไรเดอร์เบอร์ ${riderPhone}) ขอสอบถามเรื่องออเดอร์ ${orderId} (เฮียส่ง) ครับ`;
+    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
+
+    showToast("💬 กำลังเปิด LINE ส่งข้อความถึงไรเดอร์ (ฟรี 100%)...");
+
+    if (isMobileDevice()) {
+        // บนมือถือ: เปิดแอป LINE โดยตรงผ่าน Universal Link
+        try {
+            window.location.href = lineUrl;
+        } catch (e) {
+            window.open(lineUrl, '_blank');
+        }
+    } else {
+        // บน PC/Desktop: คัดลอกข้อความ + ลองเปิด LINE PC
+        copyTextToClipboard(msg);
+        showToast("📋 คัดลอกข้อความออเดอร์แล้ว! สามารถวาง (Ctrl+V) ใน LINE เพื่อส่งได้ทันที");
+        try {
+            window.location.href = `line://msg/text/?${encodeURIComponent(msg)}`;
+        } catch (e) {
+            window.open(lineUrl, '_blank');
+        }
+    }
+}
+
 // Rider SMS Message (ส่งข้อความ SMS ติดต่อเบอร์ 081-588-7400)
 function sendRiderSMS(event, phone = "0815887400") {
     const cleanPhone = (phone || "0815887400").toString().replace(/[^\d]/g, '') || "0815887400";

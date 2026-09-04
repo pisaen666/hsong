@@ -687,7 +687,7 @@
                                 </div>
                                 <div class="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
                                     <span>มอเตอร์ไซค์ ทะเบียน 1กข 8902</span>
-                                    <span class="text-emerald-600 font-semibold">• แชทสดได้</span>
+                                    <span class="text-[#06C755] font-bold">• แชท LINE ฟรี</span>
                                 </div>
                             </div>
                         </div>
@@ -695,9 +695,9 @@
                             <a href="tel:0815887400" id="rider-call-btn" onclick="callRiderPhone(event, '0815887400')" class="w-9 h-9 bg-emerald-50 text-emerald-800 rounded-xl hover:bg-emerald-100 active:scale-95 flex items-center justify-center transition-all border border-emerald-200 shadow-2xs" title="โทรหาไรเดอร์ 081-588-7400">
                                 <span class="material-symbols-outlined text-lg">call</span>
                             </a>
-                            <a href="sms:0815887400?body=%E0%B8%AA%E0%B8%A7%E0%B8%B1%E0%B8%AA%E0%B8%94%E0%B8%B5%E0%B8%84%E0%B8%A3%E0%B8%B1%E0%B8%92%20%E0%B8%AA%E0%B8%AD%E0%B8%9A%E0%B8%96%E0%B8%B2%E0%B8%A1%E0%B9%80%E0%B8%A3%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%87%E0%B8%AD%E0%B8%AD%E0%B9%80%E0%B8%94%E0%B8%AD%E0%B8%A3%E0%B9%8C%E0%B9%80%E0%B8%AE%E0%B8%B5%E0%B8%A2%E0%B8%AA%E0%B9%88%E0%B8%87" id="rider-sms-btn" onclick="sendRiderSMS(event, '0815887400')" class="w-9 h-9 bg-[#004D40] text-white rounded-xl hover:bg-emerald-900 active:scale-95 flex items-center justify-center transition-all shadow-xs" title="ส่งข้อความ SMS ถึง 081-588-7400">
+                            <button type="button" id="rider-line-btn" onclick="sendRiderLineMessage(event)" class="w-9 h-9 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl active:scale-95 flex items-center justify-center transition-all shadow-xs" title="ส่งข้อความผ่าน LINE (ฟรี 100%)">
                                 <span class="material-symbols-outlined text-lg">chat</span>
-                            </a>
+                            </button>
                         </div>
                     </div>
 
@@ -1426,9 +1426,9 @@
                     <a href="tel:0815887400" onclick="callRiderPhone(event, '0815887400')" class="w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-all" title="โทรหาไรเดอร์ 081-588-7400">
                         <span class="material-symbols-outlined text-sm">call</span>
                     </a>
-                    <a href="sms:0815887400?body=%E0%B8%AA%E0%B8%A7%E0%B8%B1%E0%B8%AA%E0%B8%94%E0%B8%B5%E0%B8%84%E0%B8%A3%E0%B8%B1%E0%B8%92%20%E0%B8%AA%E0%B8%AD%E0%B8%9A%E0%B8%96%E0%B8%B2%E0%B8%A1%E0%B9%80%E0%B8%A3%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%87%E0%B8%AD%E0%B8%AD%E0%B9%80%E0%B8%94%E0%B8%AD%E0%B8%A3%E0%B9%8C%E0%B9%80%E0%B8%AE%E0%B8%B5%E0%B8%A2%E0%B8%AA%E0%B9%88%E0%B8%87" onclick="sendRiderSMS(event, '0815887400')" class="w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-all" title="ส่ง SMS ถึง 081-588-7400">
-                        <span class="material-symbols-outlined text-sm">sms</span>
-                    </a>
+                    <button onclick="sendRiderLineMessage(event)" class="w-7 h-7 rounded-full bg-[#06C755] hover:bg-[#05b34c] text-white flex items-center justify-center transition-all shadow-2xs" title="ส่งข้อความผ่าน LINE (ฟรี 100%)">
+                        <span class="material-symbols-outlined text-sm">chat</span>
+                    </button>
                     <button onclick="closeRiderChatModal()" class="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all ml-1" title="ปิดหน้าต่างแชท">
                         <span class="material-symbols-outlined text-base">close</span>
                     </button>
@@ -1460,9 +1460,9 @@
 
             <!-- Quick Reply Chips -->
             <div class="px-2.5 py-1.5 bg-white border-t border-slate-100 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                <button type="button" onclick="sendRiderSMS(event, '0815887400')" class="shrink-0 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold border border-emerald-300 transition-colors active:scale-95 flex items-center gap-1">
-                    <span class="material-symbols-outlined text-xs">sms</span>
-                    <span>ส่ง SMS ถึง 081-588-7400</span>
+                <button type="button" onclick="sendRiderLineMessage(event)" class="shrink-0 px-2.5 py-1 bg-[#06C755]/10 hover:bg-[#06C755]/20 text-[#06C755] rounded-full text-[10px] font-bold border border-[#06C755]/30 transition-colors active:scale-95 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs">chat</span>
+                    <span>ส่ง LINE ถึงไรเดอร์ (ฟรี)</span>
                 </button>
                 <button type="button" onclick="sendQuickRiderMessage('📍 อยู่ติดกับ 7-11 ครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
                     📍 อยู่ติดกับ 7-11
