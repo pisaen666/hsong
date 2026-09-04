@@ -706,8 +706,9 @@ function detectCurrentLocationGPS() {
             return parts.length > 0 ? parts.join(", ") : null;
         }
 
-        // 1. Primary: OpenStreetMap Nominatim (รู้จักถนน/ซอย/อาคาร/สถานที่สำคัญในไทยดีที่สุด)
+        // 1. Primary: OpenStreetMap Nominatim
         try {
+            console.log(`[Geocode] 🗺️ Trying Nominatim for (${lat}, ${lng})...`);
             const controller1 = new AbortController();
             const timeoutId1 = setTimeout(() => controller1.abort(), 5000);
             const res1 = await fetch(
@@ -715,23 +716,31 @@ function detectCurrentLocationGPS() {
                 { headers: { "Accept-Language": "th,en" }, signal: controller1.signal }
             );
             clearTimeout(timeoutId1);
+            console.log(`[Geocode] Nominatim HTTP status: ${res1.status}`);
 
             if (res1.ok) {
                 const data1 = await res1.json();
+                console.log("[Geocode] Nominatim raw response:", JSON.stringify(data1));
                 if (data1 && data1.address) {
-                    // ✅ ส่ง full data1 object (ไม่ใช่แค่ data1.address)
                     const built = buildAddressFromNominatim(data1);
+                    console.log("[Geocode] buildAddressFromNominatim result:", built);
                     if (built) {
                         addressTitle = built;
+                        console.log("[Geocode] ✅ addressTitle set from Nominatim:", addressTitle);
+                    } else {
+                        console.warn("[Geocode] ⚠️ Nominatim returned data but buildAddress gave null — will try BigDataCloud");
                     }
                 }
+            } else {
+                console.warn(`[Geocode] ⚠️ Nominatim returned non-OK status: ${res1.status}`);
             }
         } catch (e1) {
-            console.warn("Nominatim reverse geocode failed, trying BigDataCloud...", e1);
+            console.warn("[Geocode] ❌ Nominatim fetch error:", e1.message || e1);
         }
 
         // 2. Fallback: BigDataCloud — ใช้เมื่อ Nominatim ยังคง fallback หรือ error
         if (addressTitle.startsWith("พิกัดปัจจุบัน")) {
+            console.log("[Geocode] 🔄 Trying BigDataCloud fallback...");
             try {
                 const controller2 = new AbortController();
                 const timeoutId2 = setTimeout(() => controller2.abort(), 3500);
@@ -740,9 +749,11 @@ function detectCurrentLocationGPS() {
                     { signal: controller2.signal }
                 );
                 clearTimeout(timeoutId2);
+                console.log(`[Geocode] BigDataCloud HTTP status: ${res2.status}`);
 
                 if (res2.ok) {
                     const data2 = await res2.json();
+                    console.log("[Geocode] BigDataCloud raw response:", JSON.stringify(data2));
                     const parts = [];
                     if (data2.localityInfo && data2.localityInfo.informative) {
                         const infoParts = data2.localityInfo.informative
@@ -759,12 +770,17 @@ function detectCurrentLocationGPS() {
                     const uniqueParts = [...new Set(parts)];
                     if (uniqueParts.length > 0) {
                         addressTitle = uniqueParts.join(", ");
+                        console.log("[Geocode] ✅ addressTitle set from BigDataCloud:", addressTitle);
+                    } else {
+                        console.warn("[Geocode] ⚠️ BigDataCloud gave no usable parts");
                     }
                 }
             } catch (e2) {
-                console.warn("BigDataCloud reverse geocode notice:", e2);
+                console.warn("[Geocode] ❌ BigDataCloud error:", e2.message || e2);
             }
         }
+
+        console.log("[Geocode] 🏁 Final addressTitle:", addressTitle);
 
         // Compute clear distance description
         let distanceText = `${distKm.toFixed(1)} กม.`;
