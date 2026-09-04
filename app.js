@@ -308,6 +308,63 @@ function updateOrderStatusInFirebase(orderId, newStatus) {
       .catch(e => console.warn("Firebase status update failed:", e));
 }
 
+// ✅ ปุ่ม "ซิงค์สด" — ดึงออเดอร์ล่าสุดจาก Firebase Cloud หรือ LocalStorage มาอัปเดตหน้าจอ Hub ทันที
+async function syncLatestOrderFromCloud() {
+    try {
+        let syncedOrder = null;
+
+        // 1. ตรวจสอบและดึงข้อมูลจาก Firebase Realtime Database (Cloud)
+        if (isFirebaseReady()) {
+            const snapshot = await db.ref("orders").limitToLast(10).once("value");
+            const data = snapshot.val();
+            if (data) {
+                // หา order ล่าสุดที่ยังไม่ delivered และมี savedAt
+                const ordersList = Object.values(data).filter(o => o && o.orderId && o.status !== "delivered");
+                if (ordersList.length > 0) {
+                    ordersList.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+                    syncedOrder = ordersList[0];
+                }
+            }
+        }
+
+        // 2. ถ้าคลาวด์ไม่มี หรือออฟไลน์ ให้ fallback มาดูที่ localStorage ของเครื่อง
+        if (!syncedOrder) {
+            syncedOrder = loadSavedActiveOrder();
+        }
+
+        // 3. นำข้อมูลมาอัปเดตลง State และอัปเดตหน้าจอ Hub
+        if (syncedOrder && syncedOrder.orderId) {
+            state.activeOrder = syncedOrder;
+            try { localStorage.setItem("talathub_active_order", JSON.stringify(syncedOrder)); } catch (e) {}
+
+            // อัปเดตหน้าจอ Hub ทันที
+            if (typeof renderHubPickingList === "function") renderHubPickingList();
+            if (typeof renderHubSettlement === "function") renderHubSettlement();
+            
+            const hubBadge = document.getElementById("hub-badge-count");
+            if (hubBadge) {
+                hubBadge.classList.remove("hidden");
+                hubBadge.textContent = "SYNCED";
+            }
+            
+            showToast(`✅ ซิงค์สำเร็จ! ดึงออเดอร์ ${syncedOrder.orderId} เข้าสู่ใบจัดของแล้ว`);
+        } else {
+            showToast("ℹ️ ระบบคลาวด์ปกติ: ยังไม่มีออเดอร์ใหม่ที่ค้างจัด");
+        }
+    } catch (err) {
+        console.error("syncLatestOrderFromCloud error:", err);
+        const localOrder = loadSavedActiveOrder();
+        if (localOrder) {
+            state.activeOrder = localOrder;
+            if (typeof renderHubPickingList === "function") renderHubPickingList();
+            if (typeof renderHubSettlement === "function") renderHubSettlement();
+            showToast(`⚠️ ซิงค์ออฟไลน์: โหลดออเดอร์ ${localOrder.orderId} จากเครื่องแล้ว`);
+        } else {
+            showToast("⚠️ ไม่พบออเดอร์ค้างในระบบ");
+        }
+    }
+}
+
 
 
 function loadSavedMarketData() {
