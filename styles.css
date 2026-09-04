@@ -99,3 +99,32 @@ button, input, select, span, div {
     transform: scale(1.1);
 }
 
+/* Print Styles for Hub Daily Report */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #hub-content-report,
+    #hub-content-report * {
+        visibility: visible;
+    }
+    #hub-content-report {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 12px;
+        background: #ffffff !important;
+        color: #000000 !important;
+        display: block !important;
+        overflow: visible !important;
+    }
+    .no-print,
+    button,
+    #role-selector,
+    #toast-message {
+        display: none !important;
+    }
+}
+

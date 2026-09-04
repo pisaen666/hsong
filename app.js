@@ -278,12 +278,36 @@ function clearAllTestData() {
     showToast("🗑️ ล้างข้อมูลทดสอบเรียบร้อยแล้ว! พร้อมทดสอบใหม่");
 }
 
+// ── ORDER ARCHIVE: บันทึกออเดอร์ลง talathub_order_history สำหรับคำนวณรายงานประจำวัน
+function archiveOrderToHistory(order) {
+    if (!order || !order.orderId) return;
+    try {
+        let hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+        const idx = hist.findIndex(o => o.orderId === order.orderId);
+        const orderToSave = { ...order, savedAt: order.savedAt || Date.now() };
+        if (idx >= 0) {
+            hist[idx] = { ...hist[idx], ...orderToSave };
+        } else {
+            hist.push(orderToSave);
+        }
+        if (hist.length > 300) hist = hist.slice(-300);
+        localStorage.setItem("talathub_order_history", JSON.stringify(hist));
+    } catch (e) {
+        console.warn("archiveOrderToHistory error:", e);
+    }
+}
+
 // ── ORDER: บันทึกทั้ง localStorage และ Firebase
 function saveActiveOrderToStorage(order) {
     // 1. localStorage
     try {
-        if (order) localStorage.setItem("talathub_active_order", JSON.stringify(order));
-        else localStorage.removeItem("talathub_active_order");
+        if (order) {
+            if (!order.savedAt) order.savedAt = Date.now();
+            localStorage.setItem("talathub_active_order", JSON.stringify(order));
+            archiveOrderToHistory(order);
+        } else {
+            localStorage.removeItem("talathub_active_order");
+        }
     } catch (e) { }
 
     // 2. Firebase — push order เพื่อให้ Hub/PC เห็นทันที
@@ -291,11 +315,10 @@ function saveActiveOrderToStorage(order) {
         const orderKey = toFirebaseKey(order.orderId);
         db.ref(`orders/${orderKey}`).set({
             ...order,
-            savedAt: Date.now(),
+            savedAt: order.savedAt || Date.now(),
             status: order.status || "picking"
         }).catch(e => console.warn("Firebase order save failed:", e));
     } else if (isFirebaseReady() && !order) {
-        // ลบออเดอร์ที่ส่งสำเร็จแล้วออกจาก Firebase (optional)
         // ไม่ลบ เพื่อให้ประวัติยังอยู่
     }
 }
@@ -1368,7 +1391,7 @@ function goToTrackingScreen() {
 }
 
 function switchHubTab(tabName) {
-    const tabs = ["picking", "settlement", "monitor"];
+    const tabs = ["picking", "settlement", "monitor", "report"];
     tabs.forEach(t => {
         const btn = document.getElementById(`hub-tab-${t}`);
         const content = document.getElementById(`hub-content-${t}`);
@@ -1389,6 +1412,10 @@ function switchHubTab(tabName) {
         startMonitorAutoRefresh();
     } else {
         stopMonitorAutoRefresh();
+    }
+
+    if (tabName === "report") {
+        renderHubDailyReport();
     }
 }
 
@@ -1551,6 +1578,16 @@ function _collectAllOrders() {
         }
     } catch (e) {}
 
+    // 4. Memory cache from Firebase Realtime DB
+    if (window._cachedFirebaseOrders && Array.isArray(window._cachedFirebaseOrders)) {
+        window._cachedFirebaseOrders.forEach(o => {
+            if (o && o.orderId && !seen.has(o.orderId)) {
+                orders.push(o);
+                seen.add(o.orderId);
+            }
+        });
+    }
+
     return orders;
 }
 
@@ -1683,6 +1720,1047 @@ function reassignRiderForOrder(orderId) {
     saveActiveOrderToStorage(state.activeOrder);
     renderHubMonitorBoard();
     showToast(`🔁 รีเซ็ตออเดอร์ ${orderId} — พร้อม assign ไรเดอร์ใหม่`);
+}
+
+// ==========================================
+// WISIT CHAI HUB: DAILY OPERATIONS & SETTLEMENTS DATABASE REPORT
+// ระบบฐานข้อมูลรายงานสรุปยอดขาย เคลียร์เงินไรเดอร์ และเคลียร์แผงค้าประจำวัน
+// ==========================================
+
+let _activeReportDateKey = null;
+let _currentPayoutStall = null;
+
+// ── Helper: ดึง YYYY-MM-DD จาก timestamp (ใช้วันที่ตามเวลาท้องถิ่น)
+function getReportDateKey(timestamp) {
+    if (!timestamp) timestamp = Date.now();
+    const d = new Date(timestamp);
+    if (isNaN(d.getTime())) {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+// ── Helper: แปลง Date Key (YYYY-MM-DD) เป็นรูปแบบภาษาไทย
+function formatThaiDateDisplay(dateKey) {
+    if (!dateKey) return "";
+    const parts = dateKey.split("-");
+    if (parts.length !== 3) return dateKey;
+    const year = parseInt(parts[0], 10);
+    const monthIdx = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const thaiYear = year > 2500 ? year : year + 543;
+    return `${day} ${thaiMonths[monthIdx] || ""} ${thaiYear}`;
+}
+
+// ── Helper: ค้นหาข้อมูลร้านค้า / แผงค้า
+function findStallInfo(stallId, stallName) {
+    let stall = ALL_100_STALLS.find(s => s.stallId === stallId || s.stallName === stallName);
+    if (!stall) {
+        stall = MARKET_DATA.find(s => s.stallId === stallId || s.stallName === stallName);
+    }
+    if (!stall && stallName) {
+        stall = ALL_100_STALLS.find(s => s.stallName && s.stallName.includes(stallName));
+    }
+    return stall || {
+        stallId: stallId || "stall_general",
+        stallName: stallName || "แผงค้าทั่วไป",
+        stallNumber: stallName && stallName.includes("(") ? stallName.split("(")[1].replace(")", "") : "แผงทั่วไป",
+        zone: "ตลาดสด",
+        ownerName: "แม่ค้าประจำแผง",
+        phone: "089-123-4567"
+    };
+}
+
+// ── Persistence Helpers for Rider & Vendor Settlements
+function _loadRiderSettlementState(dateKey) {
+    try {
+        return JSON.parse(localStorage.getItem(`talathub_settled_riders_${dateKey}`) || "{}");
+    } catch (e) {
+        return {};
+    }
+}
+
+function _saveRiderSettlementState(dateKey, stateObj) {
+    try {
+        localStorage.setItem(`talathub_settled_riders_${dateKey}`, JSON.stringify(stateObj));
+        if (isFirebaseReady()) {
+            db.ref(`daily_reports/${dateKey}/riderSettlement/settledRiders`).set(stateObj).catch(() => {});
+        }
+    } catch (e) {}
+}
+
+function _loadVendorSettlementState(dateKey) {
+    try {
+        return JSON.parse(localStorage.getItem(`talathub_settled_vendors_${dateKey}`) || "{}");
+    } catch (e) {
+        return {};
+    }
+}
+
+function _saveVendorSettlementState(dateKey, stateObj) {
+    try {
+        localStorage.setItem(`talathub_settled_vendors_${dateKey}`, JSON.stringify(stateObj));
+        if (isFirebaseReady()) {
+            db.ref(`daily_reports/${dateKey}/vendorSettlement/settledVendors`).set(stateObj).catch(() => {});
+        }
+    } catch (e) {}
+}
+
+// ── Aggregation Engine: รวบรวมข้อมูลออเดอร์ ไรเดอร์ และร้านค้า ประจำวัน
+function aggregateDailyOperations(targetDateKey) {
+    if (!targetDateKey) targetDateKey = getReportDateKey(Date.now());
+
+    // 1. ดึงออเดอร์ทั้งหมด
+    const allOrders = _collectAllOrders();
+    const dateOrders = allOrders.filter(o => {
+        const orderDate = getReportDateKey(o.savedAt || o.createdAt || o.orderTime || Date.now());
+        return orderDate === targetDateKey;
+    });
+
+    // 2. โหลดสถานะการเคลียร์เงินที่เคยบันทึกไว้
+    const settledRiders = _loadRiderSettlementState(targetDateKey);
+    const settledVendors = _loadVendorSettlementState(targetDateKey);
+
+    // 3. ยอดรวมลูกค้า & สรุปสถานะออเดอร์
+    const summary = {
+        dateKey: targetDateKey,
+        totalOrders: dateOrders.length,
+        completedOrders: 0,
+        pendingOrders: 0,
+        totalCustomerGMV: 0,
+        totalDeliveryFees: 0,
+        totalDiscounts: 0,
+        netCustomerPaid: 0,
+        totalRefundCash: 0,
+        paymentBreakdown: {
+            promptpay: { count: 0, amount: 0, label: "พร้อมเพย์" },
+            bank_transfer: { count: 0, amount: 0, label: "โอนผ่าน SCB" },
+            cod: { count: 0, amount: 0, label: "เงินสดปลายทาง (COD)" }
+        }
+    };
+
+    const ridersMap = {};
+    const stallsMap = {};
+
+    dateOrders.forEach(o => {
+        const isDelivered = o.status === "delivered";
+        if (isDelivered) summary.completedOrders++;
+        else summary.pendingOrders++;
+
+        const orderTotal = Number(o.grandTotal || o.total || o.netTotal || 0);
+        const delFee = Number(o.deliveryFee || 20);
+        const discount = Number(o.discount || 0);
+        const refundAmt = Number(o.refundCashTotal || o.cashRefund || 0);
+
+        summary.totalCustomerGMV += orderTotal;
+        summary.totalDeliveryFees += delFee;
+        summary.totalDiscounts += discount;
+        summary.totalRefundCash += refundAmt;
+
+        // ช่องทางชำระเงิน
+        const pType = (o.paymentType || "promptpay").toLowerCase();
+        if (pType === "cod" || pType === "cash") {
+            summary.paymentBreakdown.cod.count++;
+            summary.paymentBreakdown.cod.amount += orderTotal;
+        } else if (pType === "bank_transfer" || pType === "bank" || pType === "scb") {
+            summary.paymentBreakdown.bank_transfer.count++;
+            summary.paymentBreakdown.bank_transfer.amount += orderTotal;
+        } else {
+            summary.paymentBreakdown.promptpay.count++;
+            summary.paymentBreakdown.promptpay.amount += orderTotal;
+        }
+
+        // จัดกลุ่มไรเดอร์
+        const rName = o.riderName || (o.status === "delivered" || o.status === "dispatched" || o.status === "on_the_way" ? "พี่สมชาย (1กข 8902)" : "รอไรเดอร์รับงาน");
+        const rPhone = o.riderPhone || "081-588-7400";
+        if (!ridersMap[rName]) {
+            const isRiderSettled = Boolean(settledRiders[rName]?.isSettled);
+            ridersMap[rName] = {
+                riderName: rName,
+                riderPhone: rPhone,
+                tripsCount: 0,
+                riderFeeEarned: 0,
+                codCollected: 0,
+                refundHanded: 0,
+                netCashToHub: 0,
+                isSettled: isRiderSettled,
+                settledAt: settledRiders[rName]?.settledAt || null
+            };
+        }
+        if (o.status === "delivered" || o.status === "on_the_way" || o.status === "dispatched") {
+            ridersMap[rName].tripsCount++;
+            ridersMap[rName].riderFeeEarned += 40; // ค่ารอบ ฿40
+            if (pType === "cod" || pType === "cash") {
+                ridersMap[rName].codCollected += orderTotal;
+            }
+            ridersMap[rName].refundHanded += refundAmt;
+        }
+
+        // จัดกลุ่มแผงค้า (Vendor)
+        if (o.stalls && Array.isArray(o.stalls)) {
+            o.stalls.forEach(st => {
+                const sKey = st.stallId || st.name;
+                const meta = findStallInfo(st.stallId, st.name);
+                if (!stallsMap[sKey]) {
+                    const isStallSettled = Boolean(settledVendors[sKey]?.isSettled);
+                    stallsMap[sKey] = {
+                        stallId: st.stallId || meta.stallId,
+                        stallName: meta.stallName || st.name,
+                        stallNumber: meta.stallNumber || "แผงตลาด",
+                        zone: meta.zone || "กลาง",
+                        ownerName: meta.ownerName || "เจ้าของแผง",
+                        phone: meta.phone || "089-123-4567",
+                        promptPayPhone: (meta.phone || "0891234567").replace(/[^0-9]/g, ""),
+                        orderCount: 0,
+                        itemsCount: 0,
+                        totalAmount: 0,
+                        isSettled: isStallSettled,
+                        settledAt: settledVendors[sKey]?.settledAt || null
+                    };
+                }
+                stallsMap[sKey].orderCount++;
+
+                const activeItems = (st.items || []).filter(it => !it.outOfStock);
+                activeItems.forEach(it => {
+                    const itemPrice = (it.actualPrice !== undefined ? it.actualPrice : it.price) || 0;
+                    const itemQty = it.qty || it.quantity || 1;
+                    stallsMap[sKey].totalAmount += (itemPrice * itemQty);
+                    stallsMap[sKey].itemsCount += itemQty;
+                });
+            });
+        }
+    });
+
+    summary.netCustomerPaid = summary.totalCustomerGMV;
+
+    // คำนวณยอดเงินสุทธิที่ไรเดอร์ต้องส่งมอบฮับ
+    const ridersList = Object.values(ridersMap);
+    let totalTrips = 0;
+    let totalRiderFees = 0;
+    let totalCodCollected = 0;
+    let totalRefundHanded = 0;
+    let netCashToHub = 0;
+
+    ridersList.forEach(r => {
+        r.netCashToHub = r.codCollected - r.riderFeeEarned - r.refundHanded;
+        totalTrips += r.tripsCount;
+        totalRiderFees += r.riderFeeEarned;
+        totalCodCollected += r.codCollected;
+        totalRefundHanded += r.refundHanded;
+        netCashToHub += r.netCashToHub;
+    });
+
+    const riderSettlement = {
+        totalTrips,
+        totalRiderFees,
+        totalCodCollected,
+        totalRefundHanded,
+        netCashToHub,
+        riders: ridersList,
+        settledRiders
+    };
+
+    // คำนวณยอดรวมแผงค้า
+    const stallsList = Object.values(stallsMap);
+    let totalVendorAmount = 0;
+    let totalSettledAmount = 0;
+    let settledCount = 0;
+    let pendingCount = 0;
+
+    stallsList.forEach(s => {
+        totalVendorAmount += s.totalAmount;
+        if (s.isSettled) {
+            totalSettledAmount += s.totalAmount;
+            settledCount++;
+        } else {
+            pendingCount++;
+        }
+    });
+
+    const vendorSettlement = {
+        totalVendorAmount,
+        totalSettledAmount,
+        totalPendingAmount: totalVendorAmount - totalSettledAmount,
+        settledCount,
+        pendingCount,
+        stalls: stallsList,
+        settledVendors
+    };
+
+    const report = {
+        dateKey: targetDateKey,
+        generatedAt: Date.now(),
+        summary,
+        riderSettlement,
+        vendorSettlement,
+        ordersList: dateOrders
+    };
+
+    // จัดเก็บใน LocalStorage
+    try {
+        localStorage.setItem(`talathub_daily_report_${targetDateKey}`, JSON.stringify(report));
+    } catch (e) {}
+
+    // จัดเก็บใน Firebase Realtime Database
+    if (isFirebaseReady()) {
+        db.ref(`daily_reports/${targetDateKey}`).set({
+            dateKey: report.dateKey,
+            generatedAt: report.generatedAt,
+            summary: report.summary,
+            riderSettlement: {
+                totalTrips: report.riderSettlement.totalTrips,
+                totalRiderFees: report.riderSettlement.totalRiderFees,
+                totalCodCollected: report.riderSettlement.totalCodCollected,
+                totalRefundHanded: report.riderSettlement.totalRefundHanded,
+                netCashToHub: report.riderSettlement.netCashToHub,
+                riders: report.riderSettlement.riders
+            },
+            vendorSettlement: {
+                totalVendorAmount: report.vendorSettlement.totalVendorAmount,
+                totalSettledAmount: report.vendorSettlement.totalSettledAmount,
+                totalPendingAmount: report.vendorSettlement.totalPendingAmount,
+                settledCount: report.vendorSettlement.settledCount,
+                pendingCount: report.vendorSettlement.pendingCount,
+                stalls: report.vendorSettlement.stalls
+            },
+            ordersCount: dateOrders.length
+        }).catch(e => console.warn("Firebase daily report write failed:", e));
+    }
+
+    return report;
+}
+
+// ── เปลี่ยนวันที่รายงาน
+function changeReportDate(newDate) {
+    if (!newDate) return;
+    _activeReportDateKey = newDate;
+    renderHubDailyReport(newDate);
+}
+
+function setReportDateQuick(offsetDays) {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    const dateKey = getReportDateKey(d.getTime());
+    changeReportDate(dateKey);
+}
+
+// ── UI Renderer สำหรับแท็บรายงานประจำวัน (#hub-content-report)
+function renderHubDailyReport(targetDateKey) {
+    const container = document.getElementById("hub-content-report");
+    if (!container) return;
+
+    if (!targetDateKey) {
+        targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    }
+    _activeReportDateKey = targetDateKey;
+
+    const report = aggregateDailyOperations(targetDateKey);
+    const thaiDateText = formatThaiDateDisplay(targetDateKey);
+    const isToday = targetDateKey === getReportDateKey(Date.now());
+
+    let html = `
+    <!-- Top Filter Bar & Controls -->
+    <div class="bg-white rounded-3xl p-3 sm:p-4 border border-slate-200 shadow-sm space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
+            <div class="flex items-center gap-2">
+                <span class="w-8 h-8 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black text-sm shadow-xs">
+                    📑
+                </span>
+                <div>
+                    <h3 class="font-extrabold text-slate-800 text-sm sm:text-base flex items-center gap-1.5">
+                        <span>รายงานสรุปรายวัน ตลาดฮับวิศิษฐ์ชัย</span>
+                        <span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">Cloud DB</span>
+                    </h3>
+                    <p class="text-[10px] text-slate-500">ประจำวันที่ ${thaiDateText} ${isToday ? '<strong class="text-emerald-600">(วันนี้)</strong>' : ''}</p>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <button onclick="renderHubDailyReport('${targetDateKey}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs">
+                    <span class="material-symbols-outlined text-sm">refresh</span>
+                    <span>รีเฟรช</span>
+                </button>
+                <button onclick="exportDailyReportCSV('${targetDateKey}')" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs">
+                    <span class="material-symbols-outlined text-sm">download</span>
+                    <span>ส่งออก CSV</span>
+                </button>
+                <button onclick="printDailyReport()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs">
+                    <span class="material-symbols-outlined text-sm">print</span>
+                    <span>พิมพ์รายงาน A4</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Date selector toolbar -->
+        <div class="flex items-center justify-between gap-2 flex-wrap text-[11px]">
+            <div class="flex items-center gap-2">
+                <span class="font-bold text-slate-600 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm text-slate-400">calendar_today</span>
+                    <span>เลือกวันที่:</span>
+                </span>
+                <input type="date" id="hub-report-date-input" value="${targetDateKey}" onchange="changeReportDate(this.value)" class="border border-slate-300 rounded-xl px-2.5 py-1 bg-slate-50 font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-500 outline-none">
+            </div>
+            <div class="flex items-center gap-1">
+                <button onclick="setReportDateQuick(0)" class="px-2 py-1 rounded-lg font-bold ${isToday ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-all">วันนี้</button>
+                <button onclick="setReportDateQuick(-1)" class="px-2 py-1 rounded-lg font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">เมื่อวาน</button>
+                ${report.summary.totalOrders === 0 ? `
+                <button onclick="generateSampleDailyOrders()" class="px-2.5 py-1 rounded-lg font-extrabold bg-amber-500 hover:bg-amber-600 text-white shadow-2xs transition-all flex items-center gap-1">
+                    <span>➕ สร้างออเดอร์ตัวอย่าง</span>
+                </button>` : ''}
+            </div>
+        </div>
+    </div>
+
+    <!-- 3 Big Primary KPI Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <!-- Card 1: GMV ลูกค้า -->
+        <div class="bg-gradient-to-br from-emerald-600 to-teal-800 text-white rounded-3xl p-4 shadow-md space-y-2 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+                <span class="text-[11px] font-bold text-emerald-200 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">shopping_bag</span>
+                    <span>ยอดขายรวมลูกค้า (GMV)</span>
+                </span>
+                <span class="text-[10px] bg-white/20 font-bold px-2 py-0.5 rounded-full">${report.summary.totalOrders} ใบ</span>
+            </div>
+            <div class="text-2xl sm:text-3xl font-black tracking-tight">฿${report.summary.totalCustomerGMV.toLocaleString()}</div>
+            <div class="text-[10px] text-emerald-100/90 pt-1 border-t border-white/15 space-y-0.5">
+                <div class="flex justify-between">
+                    <span>สำเร็จ: <strong class="text-white">${report.summary.completedOrders}</strong> | รอส่ง: <strong class="text-amber-200">${report.summary.pendingOrders}</strong></span>
+                    <span>ค่าส่งรวม: <strong class="text-white">฿${report.summary.totalDeliveryFees.toLocaleString()}</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 2: เคลียร์เงินไรเดอร์ -->
+        <div class="bg-gradient-to-br from-sky-600 to-blue-800 text-white rounded-3xl p-4 shadow-md space-y-2 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+                <span class="text-[11px] font-bold text-sky-200 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">two_wheeler</span>
+                    <span>เงินสดสุทธิต้องส่งมอบฮับ</span>
+                </span>
+                <span class="text-[10px] bg-white/20 font-bold px-2 py-0.5 rounded-full">${report.riderSettlement.totalTrips} เที่ยว</span>
+            </div>
+            <div class="text-2xl sm:text-3xl font-black tracking-tight">฿${report.riderSettlement.netCashToHub.toLocaleString()}</div>
+            <div class="text-[10px] text-sky-100/90 pt-1 border-t border-white/15 space-y-0.5">
+                <div class="flex justify-between">
+                    <span>เงินสด COD ถืออยู่: <strong>฿${report.riderSettlement.totalCodCollected.toLocaleString()}</strong></span>
+                    <span>ค่ารอบสะสม: <strong>-฿${report.riderSettlement.totalRiderFees.toLocaleString()}</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 3: เคลียร์เงินร้านค้า/แผงค้า -->
+        <div class="bg-gradient-to-br from-amber-600 to-orange-700 text-white rounded-3xl p-4 shadow-md space-y-2 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+                <span class="text-[11px] font-bold text-amber-200 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">storefront</span>
+                    <span>ยอดเคลียร์เงินแผงค้าในตลาด</span>
+                </span>
+                <span class="text-[10px] bg-white/20 font-bold px-2 py-0.5 rounded-full">${report.vendorSettlement.stalls.length} แผง</span>
+            </div>
+            <div class="text-2xl sm:text-3xl font-black tracking-tight">฿${report.vendorSettlement.totalVendorAmount.toLocaleString()}</div>
+            <div class="text-[10px] text-amber-100/90 pt-1 border-t border-white/15 space-y-0.5">
+                <div class="flex justify-between">
+                    <span>โอนแล้ว: <strong class="text-white">฿${report.vendorSettlement.totalSettledAmount.toLocaleString()}</strong> (${report.vendorSettlement.settledCount})</span>
+                    <span>รอโอน: <strong class="text-amber-200">฿${report.vendorSettlement.totalPendingAmount.toLocaleString()}</strong> (${report.vendorSettlement.pendingCount})</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 1: Customer Revenue & Payment Method Breakdown -->
+    <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <h4 class="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-emerald-600 text-base">payments</span>
+                <span>1. รายรับลูกค้า & ช่องทางชำระเงิน (Customer Payment Breakdown)</span>
+            </h4>
+            <span class="text-[10px] text-slate-500 font-bold">รวม ${report.summary.totalOrders} ออเดอร์</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <!-- PromptPay -->
+            <div class="p-3 bg-blue-50/70 border border-blue-200/80 rounded-2xl flex items-center justify-between">
+                <div>
+                    <div class="text-[11px] font-bold text-blue-900 flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                        <span>พร้อมเพย์ (QR PromptPay)</span>
+                    </div>
+                    <div class="text-[10px] text-blue-700 font-medium">${report.summary.paymentBreakdown.promptpay.count} ออเดอร์</div>
+                </div>
+                <div class="text-right">
+                    <div class="font-extrabold text-blue-950 text-sm">฿${report.summary.paymentBreakdown.promptpay.amount.toLocaleString()}</div>
+                    <span class="text-[9px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded">เข้าบัญชีฮับ</span>
+                </div>
+            </div>
+
+            <!-- SCB Bank Transfer -->
+            <div class="p-3 bg-purple-50/70 border border-purple-200/80 rounded-2xl flex items-center justify-between">
+                <div>
+                    <div class="text-[11px] font-bold text-purple-900 flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-purple-600"></span>
+                        <span>โอนธนาคาร SCB</span>
+                    </div>
+                    <div class="text-[10px] text-purple-700 font-medium">${report.summary.paymentBreakdown.bank_transfer.count} ออเดอร์</div>
+                </div>
+                <div class="text-right">
+                    <div class="font-extrabold text-purple-950 text-sm">฿${report.summary.paymentBreakdown.bank_transfer.amount.toLocaleString()}</div>
+                    <span class="text-[9px] bg-purple-100 text-purple-800 font-bold px-1.5 py-0.2 rounded">แนบสลิป</span>
+                </div>
+            </div>
+
+            <!-- Cash on Delivery -->
+            <div class="p-3 bg-amber-50/70 border border-amber-200/80 rounded-2xl flex items-center justify-between">
+                <div>
+                    <div class="text-[11px] font-bold text-amber-900 flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-amber-600"></span>
+                        <span>เงินสดปลายทาง (COD)</span>
+                    </div>
+                    <div class="text-[10px] text-amber-700 font-medium">${report.summary.paymentBreakdown.cod.count} ออเดอร์</div>
+                </div>
+                <div class="text-right">
+                    <div class="font-extrabold text-amber-950 text-sm">฿${report.summary.paymentBreakdown.cod.amount.toLocaleString()}</div>
+                    <span class="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">ไรเดอร์ถืออยู่</span>
+                </div>
+            </div>
+        </div>
+
+        ${report.summary.totalRefundCash > 0 ? `
+        <div class="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-[11px] text-rose-800">
+            <div class="flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-rose-600 text-base">price_check</span>
+                <span><strong>เงินทอนคืนลูกค้ากรณีสินค้าขาด (Cash Refund):</strong> หักคืนเงินสดใส่ถุงให้ลูกค้า</span>
+            </div>
+            <div class="font-black text-rose-700">฿${report.summary.totalRefundCash.toLocaleString()}</div>
+        </div>` : ''}
+    </div>
+
+    <!-- Section 2: Rider Settlement Summary Table -->
+    <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div>
+                <h4 class="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-sky-600 text-base">sports_motorsports</span>
+                    <span>2. เคลียร์เงินไรเดอร์ (Rider Compensation & COD Clearance)</span>
+                </h4>
+                <p class="text-[10px] text-slate-500">ค่ารอบ ฿40/เที่ยว | หักเงินสด COD และเงินทอน | ยอดสุทธิส่งมอบฮับ</p>
+            </div>
+            <div class="text-right">
+                <div class="text-[10px] text-slate-500">ยอดสุทธิรวมที่ฮับต้องรับมอบ:</div>
+                <div class="font-extrabold text-sky-700 text-sm">฿${report.riderSettlement.netCashToHub.toLocaleString()}</div>
+            </div>
+        </div>
+
+        ${report.riderSettlement.riders.length === 0 ? `
+        <div class="p-6 text-center text-slate-400 bg-slate-50 rounded-2xl">
+            <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">moped</span>
+            <div>ยังไม่มีรอบการจัดส่งของไรเดอร์ในวันที่เลือก</div>
+        </div>` : `
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-[11px]">
+                <thead>
+                    <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                        <th class="p-2.5 rounded-l-xl">ไรเดอร์</th>
+                        <th class="p-2.5 text-center">เที่ยวส่ง</th>
+                        <th class="p-2.5 text-right">ค่ารอบสะสม</th>
+                        <th class="p-2.5 text-right">เงินสด COD เก็บมา</th>
+                        <th class="p-2.5 text-right">เงินทอนคืนลูกค้า</th>
+                        <th class="p-2.5 text-right">ยอดสุทธิส่งฮับ</th>
+                        <th class="p-2.5 text-center">สถานะ</th>
+                        <th class="p-2.5 text-center rounded-r-xl">จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    ${report.riderSettlement.riders.map(r => `
+                    <tr class="hover:bg-slate-50/70 transition-colors">
+                        <td class="p-2.5">
+                            <div class="font-extrabold text-slate-800 text-xs">${r.riderName}</div>
+                            <div class="text-[10px] text-slate-400 font-mono">${r.riderPhone}</div>
+                        </td>
+                        <td class="p-2.5 text-center font-bold text-slate-700">${r.tripsCount} เที่ยว</td>
+                        <td class="p-2.5 text-right font-bold text-sky-700">฿${r.riderFeeEarned.toLocaleString()}</td>
+                        <td class="p-2.5 text-right font-bold text-amber-700">฿${r.codCollected.toLocaleString()}</td>
+                        <td class="p-2.5 text-right font-bold text-rose-600">${r.refundHanded > 0 ? `-฿${r.refundHanded.toLocaleString()}` : '฿0'}</td>
+                        <td class="p-2.5 text-right">
+                            <span class="font-black text-xs ${r.netCashToHub >= 0 ? 'text-emerald-700' : 'text-rose-700'}">
+                                ${r.netCashToHub >= 0 ? `฿${r.netCashToHub.toLocaleString()}` : `-฿${Math.abs(r.netCashToHub).toLocaleString()}`}
+                            </span>
+                            <div class="text-[9px] text-slate-400 font-medium">
+                                ${r.netCashToHub >= 0 ? '(ไรเดอร์ส่งฮับ)' : '(ฮับจ่ายเพิ่ม)'}
+                            </div>
+                        </td>
+                        <td class="p-2.5 text-center">
+                            ${r.isSettled ? `
+                            <span class="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full text-[10px] inline-flex items-center gap-0.5">
+                                <span class="material-symbols-outlined text-xs">check</span>
+                                <span>เคลียร์แล้ว</span>
+                            </span>` : `
+                            <span class="bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full text-[10px] inline-flex items-center gap-0.5">
+                                <span class="material-symbols-outlined text-xs">pending</span>
+                                <span>รอเคลียร์</span>
+                            </span>`}
+                        </td>
+                        <td class="p-2.5 text-center">
+                            <button onclick="settleRiderBalance('${r.riderName.replace(/'/g, "\\'")}', '${targetDateKey}')" class="px-2.5 py-1 ${r.isSettled ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} font-bold rounded-lg text-[10px] active:scale-95 transition-all shadow-2xs">
+                                ${r.isSettled ? 'ยกเลิก' : 'ยืนยันรับเงิน'}
+                            </button>
+                        </td>
+                    </tr>`).join("")}
+                </tbody>
+            </table>
+        </div>`}
+    </div>
+
+    <!-- Section 3: Vendor / Stall Settlement Summary Table -->
+    <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+            <div>
+                <h4 class="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-amber-600 text-base">store</span>
+                    <span>3. เคลียร์เงินร้านค้า/แผงค้า (Vendor Settlements)</span>
+                </h4>
+                <p class="text-[10px] text-slate-500">ยอดรวมสินค้าที่หยิบจริง | โอนตรงด้วยระบบ PromptPay QR รายแผง</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="text-right hidden sm:block">
+                    <span class="text-[10px] text-slate-500">รอโอนเคลียร์:</span>
+                    <span class="font-black text-rose-600 text-sm ml-1">฿${report.vendorSettlement.totalPendingAmount.toLocaleString()}</span>
+                </div>
+                ${report.vendorSettlement.pendingCount > 0 ? `
+                <button onclick="settleAllVendors('${targetDateKey}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 text-white font-extrabold rounded-xl text-[10px] shadow-2xs active:scale-95 transition-all flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs">done_all</span>
+                    <span>โอนเคลียร์ทุกแผงที่เหลือ</span>
+                </button>` : ''}
+            </div>
+        </div>
+
+        ${report.vendorSettlement.stalls.length === 0 ? `
+        <div class="p-6 text-center text-slate-400 bg-slate-50 rounded-2xl">
+            <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">storefront</span>
+            <div>ยังไม่มีรายการสินค้าจากแผงค้าในวันที่เลือก</div>
+        </div>` : `
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-[11px]">
+                <thead>
+                    <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                        <th class="p-2.5 rounded-l-xl">แผงค้า / ร้านค้า</th>
+                        <th class="p-2.5">เจ้าของ / เบอร์พร้อมเพย์</th>
+                        <th class="p-2.5 text-center">จำนวนที่ขาย</th>
+                        <th class="p-2.5 text-right">ยอดเงินที่ต้องโอน</th>
+                        <th class="p-2.5 text-center">สถานะ</th>
+                        <th class="p-2.5 text-center rounded-r-xl">โอนเคลียร์</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    ${report.vendorSettlement.stalls.map(s => `
+                    <tr class="hover:bg-slate-50/70 transition-colors">
+                        <td class="p-2.5">
+                            <div class="font-extrabold text-slate-800 text-xs">${s.stallName}</div>
+                            <span class="text-[9px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.2 rounded">${s.stallNumber} (โซน ${s.zone})</span>
+                        </td>
+                        <td class="p-2.5">
+                            <div class="font-bold text-slate-700">${s.ownerName}</div>
+                            <div class="text-[10px] text-emerald-700 font-mono font-bold flex items-center gap-1">
+                                <span>📱 ${s.phone}</span>
+                            </div>
+                        </td>
+                        <td class="p-2.5 text-center">
+                            <div class="font-bold text-slate-700">${s.itemsCount} ชิ้น</div>
+                            <div class="text-[9px] text-slate-400 font-medium">(${s.orderCount} ออเดอร์)</div>
+                        </td>
+                        <td class="p-2.5 text-right">
+                            <div class="font-black text-sm text-emerald-800">฿${s.totalAmount.toLocaleString()}</div>
+                        </td>
+                        <td class="p-2.5 text-center">
+                            ${s.isSettled ? `
+                            <span class="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full text-[10px] inline-flex items-center gap-0.5">
+                                <span class="material-symbols-outlined text-xs">check_circle</span>
+                                <span>โอนแล้ว</span>
+                            </span>` : `
+                            <span class="bg-rose-100 text-rose-800 font-bold px-2 py-0.5 rounded-full text-[10px] inline-flex items-center gap-0.5">
+                                <span class="material-symbols-outlined text-xs">schedule</span>
+                                <span>รอโอน</span>
+                            </span>`}
+                        </td>
+                        <td class="p-2.5 text-center">
+                            <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', ${s.totalAmount}, '${s.phone}', '${s.ownerName.replace(/'/g, "\\'")}', '${s.stallNumber}')" class="px-2.5 py-1.5 ${s.isSettled ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'} font-bold rounded-xl text-[10px] active:scale-95 transition-all flex items-center gap-1 mx-auto">
+                                <span class="material-symbols-outlined text-xs">qr_code_2</span>
+                                <span>${s.isSettled ? 'ดู QR / โอนซ้ำ' : '💳 โอนพร้อมเพย์'}</span>
+                            </button>
+                        </td>
+                    </tr>`).join("")}
+                </tbody>
+            </table>
+        </div>`}
+    </div>
+
+    <!-- Section 4: Daily Orders Audit Ledger -->
+    <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div>
+                <h4 class="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-slate-600 text-base">receipt_long</span>
+                    <span>4. บัญชีแยกประเภทออเดอร์ประจำวัน (Daily Orders Audit Ledger)</span>
+                </h4>
+                <p class="text-[10px] text-slate-500">บันทึกประวัติออเดอร์ทั้งหมดในระบบของวันที่ ${thaiDateText}</p>
+            </div>
+            <span class="text-[10px] bg-slate-100 text-slate-700 font-bold px-2.5 py-1 rounded-full">
+                ทั้งหมด ${report.ordersList.length} ใบ
+            </span>
+        </div>
+
+        ${report.ordersList.length === 0 ? `
+        <div class="p-6 text-center text-slate-400 bg-slate-50 rounded-2xl">
+            <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">inbox</span>
+            <div>ไม่มีประวัติคำสั่งซื้อในวันที่นี้</div>
+        </div>` : `
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-[11px]">
+                <thead>
+                    <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                        <th class="p-2.5 rounded-l-xl">เลขที่ออเดอร์ / เวลา</th>
+                        <th class="p-2.5">ลูกค้า</th>
+                        <th class="p-2.5">ช่องทางชำระเงิน</th>
+                        <th class="p-2.5 text-right">ยอดรวม</th>
+                        <th class="p-2.5">ไรเดอร์นำส่ง</th>
+                        <th class="p-2.5 text-center rounded-r-xl">สถานะ</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    ${report.ordersList.map(o => {
+                        const timeStr = o.savedAt ? new Date(o.savedAt).toLocaleTimeString("th-TH", { hour: '2-digit', minute: '2-digit' }) : (o.orderTime || "--:--");
+                        const cfg = ORDER_STATUS_CONFIG[o.status] || ORDER_STATUS_CONFIG.picking;
+                        return `
+                        <tr class="hover:bg-slate-50/70 transition-colors">
+                            <td class="p-2.5">
+                                <div class="font-mono font-black text-slate-900 text-xs">${o.orderId}</div>
+                                <div class="text-[10px] text-slate-400">${timeStr} น.</div>
+                            </td>
+                            <td class="p-2.5">
+                                <div class="font-bold text-slate-800">${o.customerName || "ลูกค้าทั่วไป"}</div>
+                                <div class="text-[10px] text-slate-500 font-mono">${o.customerPhone || "-"}</div>
+                            </td>
+                            <td class="p-2.5">
+                                <span class="font-bold text-slate-700">${o.paymentType === 'cod' ? '💵 เงินสด COD' : (o.paymentType === 'bank_transfer' ? '🏦 โอน SCB' : '📱 พร้อมเพย์')}</span>
+                            </td>
+                            <td class="p-2.5 text-right">
+                                <div class="font-black text-xs text-emerald-700">฿${(o.grandTotal || o.total || 0).toLocaleString()}</div>
+                                <div class="text-[9px] text-slate-400">(ค่าส่ง ฿${o.deliveryFee || 20})</div>
+                            </td>
+                            <td class="p-2.5">
+                                <div class="font-bold text-sky-700">${o.riderName || "ยังไม่ได้ assign"}</div>
+                            </td>
+                            <td class="p-2.5 text-center">
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.color}">
+                                    ${cfg.icon} ${cfg.label}
+                                </span>
+                            </td>
+                        </tr>`;
+                    }).join("")}
+                </tbody>
+            </table>
+        </div>`}
+    </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+// ── Modal Controllers: Vendor PromptPay Payout Modal
+function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, stallNumber) {
+    _currentPayoutStall = {
+        stallId,
+        stallName,
+        amount,
+        phone: phone || "089-123-4567",
+        cleanPhone: (phone || "0891234567").replace(/[^0-9]/g, ""),
+        ownerName: ownerName || "แม่ค้าประจำแผง",
+        stallNumber: stallNumber || "แผงตลาด"
+    };
+
+    const modal = document.getElementById("vendor-payout-modal");
+    if (!modal) return;
+
+    const nameEl = document.getElementById("payout-stall-name");
+    const zoneEl = document.getElementById("payout-stall-zone");
+    const ownerEl = document.getElementById("payout-owner-name");
+    const phoneEl = document.getElementById("payout-phone");
+    const amountEl = document.getElementById("payout-amount-text");
+    const qrImg = document.getElementById("payout-qr-image");
+    const ppNumEl = document.getElementById("payout-promptpay-number");
+
+    if (nameEl) nameEl.textContent = _currentPayoutStall.stallName;
+    if (zoneEl) zoneEl.textContent = _currentPayoutStall.stallNumber;
+    if (ownerEl) ownerEl.textContent = _currentPayoutStall.ownerName;
+    if (phoneEl) phoneEl.textContent = _currentPayoutStall.phone;
+    if (amountEl) amountEl.textContent = `฿${_currentPayoutStall.amount.toLocaleString()}`;
+    if (ppNumEl) ppNumEl.textContent = _currentPayoutStall.phone;
+
+    // PromptPay QR image via standard promptpay.io API
+    if (qrImg) {
+        qrImg.src = `https://promptpay.io/${_currentPayoutStall.cleanPhone}/${_currentPayoutStall.amount}.png`;
+    }
+
+    modal.classList.remove("hidden");
+}
+
+function closeVendorPayoutModal() {
+    const modal = document.getElementById("vendor-payout-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function confirmVendorPayoutSettled() {
+    if (!_currentPayoutStall) {
+        closeVendorPayoutModal();
+        return;
+    }
+
+    const dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const settledVendors = _loadVendorSettlementState(dateKey);
+
+    const sKey = _currentPayoutStall.stallId || _currentPayoutStall.stallName;
+    settledVendors[sKey] = {
+        isSettled: true,
+        settledAt: Date.now(),
+        amount: _currentPayoutStall.amount,
+        stallName: _currentPayoutStall.stallName,
+        phone: _currentPayoutStall.phone
+    };
+
+    _saveVendorSettlementState(dateKey, settledVendors);
+    closeVendorPayoutModal();
+    showToast(`🎉 บันทึกการโอนเงินให้ ${_currentPayoutStall.stallName} (฿${_currentPayoutStall.amount.toLocaleString()}) สำเร็จ!`);
+    renderHubDailyReport(dateKey);
+}
+
+function copyPayoutPromptPayNumber() {
+    if (!_currentPayoutStall) return;
+    const phoneNum = _currentPayoutStall.cleanPhone;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(phoneNum).then(() => {
+            showToast(`📋 คัดลอกหมายเลขพร้อมเพย์ ${phoneNum} เรียบร้อยแล้ว`);
+        }).catch(() => {
+            showToast(`📱 หมายเลขพร้อมเพย์: ${phoneNum}`);
+        });
+    } else {
+        showToast(`📱 หมายเลขพร้อมเพย์: ${phoneNum}`);
+    }
+}
+
+// ── Rider Settlement Toggle
+function settleRiderBalance(riderName, dateKey) {
+    if (!riderName) return;
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+
+    const settledRiders = _loadRiderSettlementState(dateKey);
+    const current = Boolean(settledRiders[riderName]?.isSettled);
+    const next = !current;
+
+    settledRiders[riderName] = {
+        isSettled: next,
+        settledAt: next ? Date.now() : null
+    };
+
+    _saveRiderSettlementState(dateKey, settledRiders);
+    showToast(next ? `✅ เคลียร์ยอดเงินสดกับ ${riderName} เรียบร้อยแล้ว` : `↩️ ยกเลิกสถานะเคลียร์เงินของ ${riderName}`);
+    renderHubDailyReport(dateKey);
+}
+
+// ── Batch Settle All Stalls
+function settleAllVendors(dateKey) {
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(dateKey);
+    const settledVendors = _loadVendorSettlementState(dateKey);
+
+    report.vendorSettlement.stalls.forEach(s => {
+        const sKey = s.stallId || s.stallName;
+        settledVendors[sKey] = {
+            isSettled: true,
+            settledAt: Date.now(),
+            amount: s.totalAmount,
+            stallName: s.stallName
+        };
+    });
+
+    _saveVendorSettlementState(dateKey, settledVendors);
+    showToast(`🎉 บันทึกการโอนเคลียร์เงินให้แผงค้าทั้งหมด (${report.vendorSettlement.stalls.length} แผง) เรียบร้อย!`);
+    renderHubDailyReport(dateKey);
+}
+
+// ── CSV Export Function
+function exportDailyReportCSV(dateKey) {
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(dateKey);
+
+    let csv = "\uFEFF"; // UTF-8 BOM for Microsoft Excel Thai display
+    csv += `รายงานสรุปรายวัน ตลาดฮับวิศิษฐ์ชัย ประจำวันที่,${dateKey}\n`;
+    csv += `สร้างรายงานเมื่อ,${new Date().toLocaleString("th-TH")}\n\n`;
+
+    // 1. สรุปภาพรวม
+    csv += "--- 1. สรุปภาพรวมยอดขาย (GMV) ---\n";
+    csv += "หัวข้อ,จำนวน\n";
+    csv += `จำนวนออเดอร์ทั้งหมด,${report.summary.totalOrders} ใบ\n`;
+    csv += `ส่งสำเร็จ,${report.summary.completedOrders} ใบ\n`;
+    csv += `รอดำเนินการ,${report.summary.pendingOrders} ใบ\n`;
+    csv += `ยอดขายรวมลูกค้า (GMV),${report.summary.totalCustomerGMV} บาท\n`;
+    csv += `ค่าบริการจัดส่งรวม,${report.summary.totalDeliveryFees} บาท\n`;
+    csv += `ยอดรับชำระผ่าน PromptPay,${report.summary.paymentBreakdown.promptpay.amount} บาท (${report.summary.paymentBreakdown.promptpay.count} ใบ)\n`;
+    csv += `ยอดรับชำระผ่าน SCB Bank,${report.summary.paymentBreakdown.bank_transfer.amount} บาท (${report.summary.paymentBreakdown.bank_transfer.count} ใบ)\n`;
+    csv += `ยอดรับชำระผ่าน COD (เงินสด),${report.summary.paymentBreakdown.cod.amount} บาท (${report.summary.paymentBreakdown.cod.count} ใบ)\n`;
+    csv += `เงินทอนคืนลูกค้ากรณีของขาด,${report.summary.totalRefundCash} บาท\n\n`;
+
+    // 2. เคลียร์เงินไรเดอร์
+    csv += "--- 2. เคลียร์เงินไรเดอร์ ---\n";
+    csv += "ชื่อไรเดอร์,เบอร์โทร,เที่ยววิ่ง,ค่ารอบสะสม(บาท),เงินสดCODเก็บมา(บาท),เงินทอนคืน(บาท),ยอดสุทธิส่งมอบฮับ(บาท),สถานะเคลียร์\n";
+    report.riderSettlement.riders.forEach(r => {
+        csv += `"${r.riderName}","${r.riderPhone}",${r.tripsCount},${r.riderFeeEarned},${r.codCollected},${r.refundHanded},${r.netCashToHub},"${r.isSettled ? 'เคลียร์แล้ว' : 'รอเคลียร์'}"\n`;
+    });
+    csv += `\n`;
+
+    // 3. เคลียร์เงินร้านค้า
+    csv += "--- 3. เคลียร์เงินร้านค้า/แผงค้า ---\n";
+    csv += "แผงค้า,เลขแผง/โซน,เจ้าของ,เบอร์พร้อมเพย์,จำนวนชิ้น,จำนวนออเดอร์,ยอดเงินที่ต้องโอน(บาท),สถานะโอน\n";
+    report.vendorSettlement.stalls.forEach(s => {
+        csv += `"${s.stallName}","${s.stallNumber}",${s.ownerName},"${s.phone}",${s.itemsCount},${s.orderCount},${s.totalAmount},"${s.isSettled ? 'โอนแล้ว' : 'รอโอน'}"\n`;
+    });
+    csv += `\n`;
+
+    // 4. บัญชีออเดอร์ทั้งหมด
+    csv += "--- 4. รายการออเดอร์ทั้งหมด ---\n";
+    csv += "รหัสออเดอร์,เวลา,ชื่อลูกค้า,เบอร์โทรลูกค้า,วิธีชำระเงิน,ยอดรวม(บาท),ค่าส่ง(บาท),ไรเดอร์,สถานะออเดอร์\n";
+    report.ordersList.forEach(o => {
+        const time = o.savedAt ? new Date(o.savedAt).toLocaleTimeString("th-TH") : (o.orderTime || "");
+        csv += `"${o.orderId}","${time}","${o.customerName || ''}","${o.customerPhone || ''}","${o.paymentType || ''}",${o.grandTotal || o.total || 0},${o.deliveryFee || 20},"${o.riderName || ''}","${o.status || ''}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `talathub_daily_report_${dateKey}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`📥 ดาวน์โหลดรายงาน CSV วันที่ ${dateKey} เรียบร้อยแล้ว`);
+}
+
+// ── Print Function
+function printDailyReport() {
+    window.print();
+}
+
+// ── Sample Generator: สำหรับทดสอบรายงานทันทีในกรณีที่วันนั้นยังไม่มีออเดอร์
+function generateSampleDailyOrders() {
+    const today = getReportDateKey(Date.now());
+    const now = Date.now();
+
+    const sampleOrders = [
+        {
+            orderId: "#TH-8101",
+            status: "delivered",
+            total: 310,
+            grandTotal: 310,
+            deliveryFee: 20,
+            paymentType: "cod",
+            paymentDesc: "เก็บเงินสดปลายทาง (COD)",
+            customerName: "คุณวิภาวรรณ (หมู่บ้านศุภาลัย)",
+            customerPhone: "081-445-8899",
+            riderName: "พี่สมชาย (1กข 8902)",
+            riderPhone: "081-588-7400",
+            savedAt: now - 3600000 * 3,
+            deliveredAt: "08:15 น.",
+            stalls: [
+                {
+                    stallId: "stall_chicken",
+                    name: "ร้านไก่สดเฮียส่ง (แผง A01)",
+                    items: [
+                        { name: "อกไก่สดลอกหนัง (อนามัย)", price: 85, actualPrice: 85, qty: 2, outOfStock: false }
+                    ]
+                },
+                {
+                    stallId: "stall_b01_extra",
+                    name: "ผักสวนครัวลุงสนั่น",
+                    items: [
+                        { name: "ผักบุ้งจีนสด 1 กำ", price: 20, actualPrice: 20, qty: 1, outOfStock: false },
+                        { name: "คะน้าฮ่องกง 1 ถุง", price: 35, actualPrice: 35, qty: 1, outOfStock: false }
+                    ]
+                }
+            ]
+        },
+        {
+            orderId: "#TH-8102",
+            status: "delivered",
+            total: 540,
+            grandTotal: 540,
+            deliveryFee: 20,
+            paymentType: "promptpay",
+            paymentDesc: "ชำระผ่าน PromptPay แล้ว",
+            customerName: "คุณอนุชา (ซอยเทศบาล 4)",
+            customerPhone: "089-778-1122",
+            riderName: "พี่สมชาย (1กข 8902)",
+            riderPhone: "081-588-7400",
+            savedAt: now - 3600000 * 2,
+            deliveredAt: "09:30 น.",
+            stalls: [
+                {
+                    stallId: "stall_chicken",
+                    name: "ร้านไก่สดเฮียส่ง (แผง A01)",
+                    items: [
+                        { name: "น่องติดสะโพกไก่สด", price: 45, actualPrice: 45, qty: 2, outOfStock: false },
+                        { name: "ปีกกลางไก่สดคัดเกรด", price: 75, actualPrice: 75, qty: 2, outOfStock: false }
+                    ]
+                },
+                {
+                    stallId: "stall_e05_extra",
+                    name: "ปลาหมึกย่าง & ซีฟู้ดมหาชัย",
+                    items: [
+                        { name: "ปลาหมึกกล้วยสด 1 กก.", price: 220, actualPrice: 220, qty: 1, outOfStock: false }
+                    ]
+                }
+            ]
+        },
+        {
+            orderId: "#TH-8103",
+            status: "on_the_way",
+            total: 285,
+            grandTotal: 285,
+            deliveryFee: 20,
+            paymentType: "bank_transfer",
+            paymentDesc: "โอน SCB แล้ว (4111305737)",
+            customerName: "ป้าสมใจ (ร้านก๋วยเตี๋ยวหน้าอำเภอ)",
+            customerPhone: "086-332-9900",
+            riderName: "พี่สมชาย (1กข 8902)",
+            riderPhone: "081-588-7400",
+            savedAt: now - 3600000 * 1,
+            stalls: [
+                {
+                    stallId: "stall_chicken",
+                    name: "ร้านไก่สดเฮียส่ง (แผง A01)",
+                    items: [
+                        { name: "สันในไก่สดเส้นสวย", price: 50, actualPrice: 50, qty: 1, outOfStock: false }
+                    ]
+                },
+                {
+                    stallId: "stall_c03_extra",
+                    name: "หอมแดง กระเทียม กะปิระนอง ป้าแจ๋ว",
+                    items: [
+                        { name: "กระเทียมไทยคัดพิเศษ 1 กก.", price: 95, actualPrice: 95, qty: 1, outOfStock: false }
+                    ]
+                }
+            ]
+        }
+    ];
+
+    sampleOrders.forEach(o => archiveOrderToHistory(o));
+    showToast("🎉 สร้าง 3 ออเดอร์ตัวอย่างเรียบร้อยแล้ว! พร้อมตรวจดูรายงานประจำวัน");
+    renderHubDailyReport(today);
 }
 
 
