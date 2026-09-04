@@ -5087,6 +5087,11 @@ function completePickingAndDispatchOrder(orderId) {
 function closeDispatchSuccessModal() {
     const modal = document.getElementById("dispatch-success-modal");
     if (modal) modal.classList.add("hidden");
+
+    // ✅ หลังปิด modal → สลับไป Tab "ติดตามออเดอร์" ทันที
+    // เพื่อให้ฮับเห็นสถานะออเดอร์ที่เพิ่ง dispatch และ monitor ไรเดอร์ได้
+    switchHubTab("monitor");
+    showToast("📊 ตรวจสอบสถานะออเดอร์ได้ที่แท็บ 'ติดตามออเดอร์'");
 }
 
 // ── ปุ่ม 1: ไปหน้าจอไรเดอร์รับงาน ───────────────────────────────────────────
