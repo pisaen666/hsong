@@ -1207,23 +1207,323 @@ function goToTrackingScreen() {
 }
 
 function switchHubTab(tabName) {
-    const pickingTab = document.getElementById("hub-tab-picking");
-    const settlementTab = document.getElementById("hub-tab-settlement");
-    const pickingContent = document.getElementById("hub-content-picking");
-    const settlementContent = document.getElementById("hub-content-settlement");
+    const tabs = ["picking", "settlement", "monitor"];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`hub-tab-${t}`);
+        const content = document.getElementById(`hub-content-${t}`);
+        const isActive = t === tabName;
+        if (btn) {
+            btn.className = isActive
+                ? "font-bold text-emerald-700 border-b-2 border-emerald-600 pb-1 whitespace-nowrap px-1 flex items-center gap-1"
+                : "font-medium text-slate-500 pb-1 hover:text-slate-800 whitespace-nowrap px-1 flex items-center gap-1";
+        }
+        if (content) {
+            if (isActive) content.classList.remove("hidden");
+            else content.classList.add("hidden");
+        }
+    });
 
-    if (tabName === "picking") {
-        pickingTab.className = "font-bold text-emerald-700 border-b-2 border-emerald-600 pb-1";
-        settlementTab.className = "font-medium text-slate-500 pb-1 hover:text-slate-800";
-        pickingContent.classList.remove("hidden");
-        settlementContent.classList.add("hidden");
+    if (tabName === "monitor") {
+        renderHubMonitorBoard();
+        startMonitorAutoRefresh();
     } else {
-        settlementTab.className = "font-bold text-emerald-700 border-b-2 border-emerald-600 pb-1";
-        pickingTab.className = "font-medium text-slate-500 pb-1 hover:text-slate-800";
-        settlementContent.classList.remove("hidden");
-        pickingContent.classList.add("hidden");
+        stopMonitorAutoRefresh();
     }
 }
+
+// ==========================================
+// HUB ORDER STATUS MONITOR BOARD
+// ==========================================
+
+// Status config: สี / ไอคอน / label / ลำดับความสำคัญ
+const ORDER_STATUS_CONFIG = {
+    picking:    { label: "รอจัดของ",      icon: "📋", color: "bg-amber-100 text-amber-800 border-amber-300",   dot: "bg-amber-400",   priority: 1 },
+    delivering: { label: "กำลัง dispatch", icon: "📦", color: "bg-blue-100 text-blue-800 border-blue-300",     dot: "bg-blue-500",    priority: 2 },
+    dispatched: { label: "รอไรเดอร์รับ",   icon: "⚠️", color: "bg-rose-100 text-rose-800 border-rose-300",    dot: "bg-rose-500",    priority: 3 },
+    on_the_way: { label: "กำลังนำส่ง",    icon: "🛵", color: "bg-sky-100 text-sky-800 border-sky-300",        dot: "bg-sky-500",     priority: 4 },
+    delivered:  { label: "ส่งสำเร็จ",     icon: "✅", color: "bg-emerald-100 text-emerald-800 border-emerald-300", dot: "bg-emerald-500", priority: 5 },
+};
+
+const DISPATCH_TIMEOUT_MS = 5 * 60 * 1000; // ⚠️ alert ถ้า dispatched นานเกิน 5 นาที
+let _monitorRefreshTimer = null;
+let _monitorLastRefresh = null;
+
+function renderHubMonitorBoard() {
+    const container = document.getElementById("hub-content-monitor");
+    if (!container) return;
+
+    // รวบรวม orders จากทุกแหล่ง (localStorage + state)
+    const allOrders = _collectAllOrders();
+    const now = Date.now();
+
+    // ── KPI Summary ───────────────────────────────────────────────────────────
+    const counts = { picking: 0, delivering: 0, dispatched: 0, on_the_way: 0, delivered: 0 };
+    allOrders.forEach(o => {
+        const s = o.status || "picking";
+        if (counts[s] !== undefined) counts[s]++;
+    });
+
+    const stuckOrders = allOrders.filter(o =>
+        o.status === "dispatched" &&
+        o.dispatchedAt &&
+        (now - o.dispatchedAt) > DISPATCH_TIMEOUT_MS
+    );
+
+    // อัปเดต alert badge บนแท็บ
+    updateMonitorAlertBadge(stuckOrders.length);
+
+    // ── Render HTML ───────────────────────────────────────────────────────────
+    const lastRefreshStr = _monitorLastRefresh
+        ? new Date(_monitorLastRefresh).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })
+        : "--:--";
+
+    let html = `
+    <div class="p-3 space-y-3 text-xs">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="font-extrabold text-slate-800 text-sm">📊 ติดตามออเดอร์วันนี้</h3>
+                <p class="text-slate-400 text-[10px]">อัปเดตล่าสุด: ${lastRefreshStr} น.</p>
+            </div>
+            <button onclick="renderHubMonitorBoard()" class="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1.5 rounded-xl active:scale-95 transition-all shadow-sm">
+                <span class="material-symbols-outlined text-sm">refresh</span>
+                <span>Refresh</span>
+            </button>
+        </div>
+
+        <!-- KPI Bar -->
+        <div class="grid grid-cols-5 gap-1.5">
+            ${_renderKpiCard("รอจัดของ", counts.picking, "bg-amber-50 border-amber-200 text-amber-700", "📋")}
+            ${_renderKpiCard("กำลังส่ง", counts.delivering, "bg-blue-50 border-blue-200 text-blue-700", "📦")}
+            ${_renderKpiCard("รอไรเดอร์", counts.dispatched, counts.dispatched > 0 ? "bg-rose-50 border-rose-300 text-rose-700 animate-pulse" : "bg-slate-50 border-slate-200 text-slate-500", "⚠️")}
+            ${_renderKpiCard("นำส่ง", counts.on_the_way, "bg-sky-50 border-sky-200 text-sky-700", "🛵")}
+            ${_renderKpiCard("สำเร็จ", counts.delivered, "bg-emerald-50 border-emerald-200 text-emerald-700", "✅")}
+        </div>`;
+
+    // ── Stuck Orders Warning ──────────────────────────────────────────────────
+    if (stuckOrders.length > 0) {
+        html += `
+        <div class="bg-rose-50 border border-rose-300 rounded-2xl p-3 space-y-2">
+            <div class="flex items-center gap-2 text-rose-800 font-extrabold">
+                <span class="text-base animate-bounce">🚨</span>
+                <span>ไรเดอร์ยังไม่รับงาน! (${stuckOrders.length} ออเดอร์)</span>
+            </div>
+            ${stuckOrders.map(o => _renderStuckOrderCard(o, now)).join("")}
+        </div>`;
+    }
+
+    // ── Active Orders ─────────────────────────────────────────────────────────
+    const activeOrders = allOrders.filter(o => o.status !== "delivered").sort((a, b) => {
+        const pa = ORDER_STATUS_CONFIG[a.status]?.priority || 9;
+        const pb = ORDER_STATUS_CONFIG[b.status]?.priority || 9;
+        return pa - pb;
+    });
+
+    if (activeOrders.length > 0) {
+        html += `<div class="space-y-2">
+            <p class="font-bold text-slate-700 text-[11px] uppercase tracking-wider">🔄 ออเดอร์ที่กำลังดำเนินการ</p>
+            ${activeOrders.map(o => _renderOrderCard(o, now)).join("")}
+        </div>`;
+    } else {
+        html += `
+        <div class="flex flex-col items-center justify-center py-10 text-slate-400 gap-2">
+            <span class="text-4xl">🎉</span>
+            <p class="font-bold text-slate-600">ไม่มีออเดอร์ค้างอยู่!</p>
+            <p class="text-[11px]">ทุกออเดอร์ส่งสำเร็จแล้ว</p>
+        </div>`;
+    }
+
+    // ── Completed Orders Today ────────────────────────────────────────────────
+    const completedOrders = allOrders.filter(o => o.status === "delivered");
+    if (completedOrders.length > 0) {
+        html += `
+        <div class="space-y-1.5">
+            <p class="font-bold text-slate-500 text-[11px] uppercase tracking-wider">✅ ส่งสำเร็จวันนี้ (${completedOrders.length} ออเดอร์)</p>
+            ${completedOrders.map(o => `
+            <div class="bg-white border border-slate-100 rounded-xl p-2.5 flex items-center justify-between opacity-70">
+                <div class="flex items-center gap-2">
+                    <span class="text-emerald-500 font-black text-sm">✅</span>
+                    <div>
+                        <span class="font-bold text-slate-700">${o.orderId}</span>
+                        <span class="text-slate-400 ml-1">${o.customerName || o.customerPhone || "ลูกค้า"}</span>
+                    </div>
+                </div>
+                <span class="text-emerald-600 font-black">฿${o.grandTotal || o.total || 0}</span>
+            </div>`).join("")}
+        </div>`;
+    }
+
+    html += `</div>`; // end p-3
+    container.innerHTML = html;
+    _monitorLastRefresh = now;
+}
+
+// ── Helper: รวบรวม orders จากทุกแหล่ง ────────────────────────────────────────
+function _collectAllOrders() {
+    const orders = [];
+    const seen = new Set();
+
+    // 1. state.activeOrder
+    if (state.activeOrder && state.activeOrder.orderId) {
+        orders.push(state.activeOrder);
+        seen.add(state.activeOrder.orderId);
+    }
+
+    // 2. localStorage: talathub_order_history
+    try {
+        const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+        hist.forEach(o => {
+            if (o && o.orderId && !seen.has(o.orderId)) {
+                orders.push(o);
+                seen.add(o.orderId);
+            }
+        });
+    } catch (e) {}
+
+    // 3. localStorage: talathub_active_order (backup)
+    try {
+        const saved = JSON.parse(localStorage.getItem("talathub_active_order") || "null");
+        if (saved && saved.orderId && !seen.has(saved.orderId)) {
+            orders.push(saved);
+            seen.add(saved.orderId);
+        }
+    } catch (e) {}
+
+    return orders;
+}
+
+// ── Helper: KPI Card ──────────────────────────────────────────────────────────
+function _renderKpiCard(label, count, colorClass, icon) {
+    return `
+    <div class="border rounded-xl p-2 text-center ${colorClass}">
+        <div class="text-base leading-none">${icon}</div>
+        <div class="font-black text-lg leading-tight">${count}</div>
+        <div class="text-[9px] font-bold leading-tight mt-0.5">${label}</div>
+    </div>`;
+}
+
+// ── Helper: Order Card ────────────────────────────────────────────────────────
+function _renderOrderCard(order, now) {
+    const cfg = ORDER_STATUS_CONFIG[order.status] || ORDER_STATUS_CONFIG.picking;
+    const isDispatched = order.status === "dispatched";
+    const dispatchedMs = isDispatched && order.dispatchedAt ? now - order.dispatchedAt : 0;
+    const isStuck = isDispatched && dispatchedMs > DISPATCH_TIMEOUT_MS;
+    const minutesAgo = Math.floor(dispatchedMs / 60000);
+
+    const cardBorder = isStuck ? "border-rose-300 bg-rose-50" : "border-slate-200 bg-white";
+
+    return `
+    <div class="border rounded-2xl p-3 space-y-2 shadow-xs ${cardBorder}">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full ${cfg.dot} shrink-0"></span>
+                <span class="font-extrabold text-slate-800">${order.orderId}</span>
+                <span class="text-slate-500">${order.customerName || order.customerPhone || "ลูกค้า"}</span>
+            </div>
+            <span class="border px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.color}">${cfg.icon} ${cfg.label}</span>
+        </div>
+
+        <div class="flex items-center justify-between text-slate-500">
+            <span>฿${order.grandTotal || order.total || 0} • ${order.address || "ที่อยู่ยังไม่ระบุ"}</span>
+            ${order.riderName ? `<span class="text-sky-600 font-bold">🛵 ${order.riderName}</span>` : ""}
+        </div>
+
+        ${isDispatched ? `
+        <div class="flex items-center justify-between bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+            <span class="${isStuck ? "text-rose-700 font-extrabold animate-pulse" : "text-amber-600 font-bold"}">
+                ${isStuck ? `🚨 ไม่มีไรเดอร์รับงาน! (${minutesAgo} นาทีแล้ว)` : `⏳ รอไรเดอร์รับงาน (${minutesAgo} นาที)`}
+            </span>
+            <div class="flex gap-1.5">
+                <button onclick="callRiderPhone(event, '${order.riderPhone || '0815887400'}')"
+                    class="bg-sky-600 hover:bg-sky-700 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs">call</span>
+                    <span>โทร</span>
+                </button>
+                <button onclick="reassignRiderForOrder('${order.orderId}')"
+                    class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs">swap_horiz</span>
+                    <span>Assign</span>
+                </button>
+            </div>
+        </div>` : ""}
+
+        ${order.status === "on_the_way" ? `
+        <div class="flex items-center gap-1.5 text-sky-600 font-bold bg-sky-50 border border-sky-200 rounded-xl px-3 py-2">
+            <span class="material-symbols-outlined text-sm animate-bounce">near_me</span>
+            <span>ไรเดอร์กำลังเดินทางไปส่ง</span>
+            ${order.riderPhone ? `<button onclick="callRiderPhone(event, '${order.riderPhone}')" class="ml-auto bg-sky-600 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all text-[10px]">📞 โทรสอบถาม</button>` : ""}
+        </div>` : ""}
+    </div>`;
+}
+
+// ── Helper: Stuck Order Card (ใน warning box) ─────────────────────────────────
+function _renderStuckOrderCard(order, now) {
+    const minutesAgo = Math.floor((now - order.dispatchedAt) / 60000);
+    return `
+    <div class="flex items-center justify-between bg-white border border-rose-200 rounded-xl px-3 py-2">
+        <div>
+            <span class="font-extrabold text-rose-800">${order.orderId}</span>
+            <span class="text-rose-600 ml-1">(${minutesAgo} นาทีที่แล้ว)</span>
+        </div>
+        <div class="flex gap-1.5">
+            <button onclick="callRiderPhone(event, '${order.riderPhone || '0815887400'}')"
+                class="bg-sky-600 text-white font-bold px-2 py-1 rounded-lg text-[10px] active:scale-95 transition-all">
+                📞 โทร
+            </button>
+            <button onclick="reassignRiderForOrder('${order.orderId}')"
+                class="bg-amber-500 text-white font-bold px-2 py-1 rounded-lg text-[10px] active:scale-95 transition-all">
+                🔁 Assign
+            </button>
+        </div>
+    </div>`;
+}
+
+// ── Alert Badge บน Tab ────────────────────────────────────────────────────────
+function updateMonitorAlertBadge(stuckCount) {
+    const badge = document.getElementById("hub-monitor-alert-badge");
+    if (!badge) return;
+    if (stuckCount > 0) {
+        badge.textContent = stuckCount;
+        badge.classList.remove("hidden");
+    } else {
+        badge.classList.add("hidden");
+    }
+}
+
+// ── Auto Refresh ──────────────────────────────────────────────────────────────
+function startMonitorAutoRefresh() {
+    stopMonitorAutoRefresh();
+    _monitorRefreshTimer = setInterval(() => {
+        if (!document.getElementById("hub-content-monitor")?.classList.contains("hidden")) {
+            renderHubMonitorBoard();
+        }
+    }, 30000); // refresh ทุก 30 วินาที
+}
+
+function stopMonitorAutoRefresh() {
+    if (_monitorRefreshTimer) {
+        clearInterval(_monitorRefreshTimer);
+        _monitorRefreshTimer = null;
+    }
+}
+
+// ── Reassign Rider ────────────────────────────────────────────────────────────
+function reassignRiderForOrder(orderId) {
+    if (!state.activeOrder || state.activeOrder.orderId !== orderId) {
+        showToast("⚠️ ไม่พบออเดอร์นี้ในระบบปัจจุบัน");
+        return;
+    }
+    // Reset status กลับไป delivering เพื่อให้ฮับ assign ไรเดอร์ใหม่ได้
+    state.activeOrder.status = "delivering";
+    state.activeOrder.riderName = null;
+    state.activeOrder.riderPhone = null;
+    state.activeOrder.dispatchedAt = null;
+    saveActiveOrderToStorage(state.activeOrder);
+    renderHubMonitorBoard();
+    showToast(`🔁 รีเซ็ตออเดอร์ ${orderId} — พร้อม assign ไรเดอร์ใหม่`);
+}
+
 
 // ==========================================
 // CATALOG FILTERING & RENDERING (SUPER-GROUPS)
@@ -4810,6 +5110,7 @@ function goToRiderTrackingScreen() {
     // 2) อัปเดต order status → "dispatched" (ฮับส่งมอบให้ไรเดอร์แล้ว)
     if (state.activeOrder) {
         state.activeOrder.status = "dispatched";
+        state.activeOrder.dispatchedAt = Date.now(); // ⏱️ timestamp สำหรับ timeout warning ใน Monitor Board
         state.activeOrder.riderName  = state.activeRider.name;
         state.activeOrder.riderPhone = state.activeRider.phone;
 

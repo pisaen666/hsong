@@ -821,12 +821,18 @@
                 </div>
             </div>
 
-            <div class="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between text-xs">
-                <button onclick="switchHubTab('picking')" id="hub-tab-picking" class="font-bold text-emerald-700 border-b-2 border-emerald-600 pb-1">
-                    📋 รายการหยิบของ (Picking List)
+            <div class="bg-white border-b border-slate-200 px-3 py-2 flex items-center gap-1 text-[11px] overflow-x-auto">
+                <button onclick="switchHubTab('picking')" id="hub-tab-picking" class="font-bold text-emerald-700 border-b-2 border-emerald-600 pb-1 whitespace-nowrap px-1">
+                    📋 จัดของ
                 </button>
-                <button onclick="switchHubTab('settlement')" id="hub-tab-settlement" class="font-medium text-slate-500 pb-1 hover:text-slate-800">
-                    💰 สรุปเคลียร์เงินแผงค้า (Settlement)
+                <span class="text-slate-300 shrink-0">|</span>
+                <button onclick="switchHubTab('settlement')" id="hub-tab-settlement" class="font-medium text-slate-500 pb-1 hover:text-slate-800 whitespace-nowrap px-1">
+                    💰 เคลียร์เงิน
+                </button>
+                <span class="text-slate-300 shrink-0">|</span>
+                <button onclick="switchHubTab('monitor')" id="hub-tab-monitor" class="font-medium text-slate-500 pb-1 hover:text-slate-800 whitespace-nowrap px-1 flex items-center gap-1">
+                    📊 ติดตามออเดอร์
+                    <span id="hub-monitor-alert-badge" class="hidden bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse">!</span>
                 </button>
             </div>
 
@@ -838,6 +844,11 @@
             <!-- Tab 2: Vendor Settlement Summary (Dynamic) -->
             <div id="hub-content-settlement" class="p-4 flex-1 overflow-y-auto space-y-4 hidden text-xs">
                 <!-- Dynamically populated via renderHubSettlement() -->
+            </div>
+
+            <!-- Tab 3: Order Status Monitor Board (Dynamic) -->
+            <div id="hub-content-monitor" class="flex-1 overflow-y-auto hidden">
+                <!-- Dynamically populated via renderHubMonitorBoard() -->
             </div>
         </section>
 
