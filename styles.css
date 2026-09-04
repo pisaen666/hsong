@@ -81,3 +81,21 @@ button, input, select, span, div {
     text-overflow: ellipsis;
 }
 
+/* Leaflet Map in Modal */
+#location-leaflet-map {
+    z-index: 10 !important;
+}
+.leaflet-pane {
+    z-index: 10 !important;
+}
+.leaflet-top, .leaflet-bottom {
+    z-index: 15 !important;
+}
+.custom-map-pin {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35));
+    transition: transform 0.15s ease-out;
+}
+.custom-map-pin:hover {
+    transform: scale(1.1);
+}
+

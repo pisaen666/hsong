@@ -550,7 +550,13 @@ function updateDeliveryLocationUI() {
     const topAddressPreview = document.getElementById("selected-address-preview");
     if (topAddressPreview) {
         if (loc && loc.isSet) {
-            topAddressPreview.textContent = loc.title;
+            if (loc.houseNumber) {
+                const shortSoi = loc.soiRoad ? ` ${loc.soiRoad}` : "";
+                const shortSub = loc.subdistrict ? ` (${loc.subdistrict.split(" ")[0]})` : "";
+                topAddressPreview.textContent = `${loc.houseNumber}${shortSoi}${shortSub}`;
+            } else {
+                topAddressPreview.textContent = loc.title;
+            }
         } else {
             topAddressPreview.textContent = "แตะระบุที่อยู่จัดส่ง";
         }
@@ -568,8 +574,8 @@ function updateDeliveryLocationUI() {
     const welcomeSublabel = document.getElementById("welcome-location-sublabel");
 
     if (loc && loc.isSet) {
-        if (modeBadge) modeBadge.textContent = loc.isRealGPS ? "🛰️ พิกัดจริงของคุณ (GPS / แผนที่)" : "📍 พิกัดจัดส่งที่เลือกไว้";
-        if (welcomeSublabel) welcomeSublabel.textContent = "ขณะนี้คุณอยู่ที่นี่:";
+        if (modeBadge) modeBadge.textContent = loc.isRealGPS ? "🛰️ พิกัดจริงของคุณ (GPS / หมุดแผนที่)" : "📍 พิกัดจัดส่งที่ระบุไว้";
+        if (welcomeSublabel) welcomeSublabel.textContent = loc.landmark ? `จุดสังเกต: ${loc.landmark}` : "ที่อยู่จัดส่งของคุณ:";
         if (welcomeLocTitle) welcomeLocTitle.textContent = loc.title;
         if (welcomeDistText) welcomeDistText.textContent = loc.distance || "0.8 กม.";
         if (welcomeFeeText) welcomeFeeText.textContent = `฿${loc.fee || 20}`;
@@ -594,33 +600,35 @@ function updateDeliveryLocationUI() {
         welcomeBadge.className = `text-[9px] font-extrabold px-2 py-1 rounded-md shrink-0 whitespace-nowrap shadow-xs ${slotInfo.badgeClass}`;
     }
 
-    // 4. Update Checkout View Delivery Fee if present
+    // 4. Update Checkout View Delivery Fee & Address
     const checkoutFeeElem = document.getElementById("checkout-delivery-fee");
     if (checkoutFeeElem) checkoutFeeElem.textContent = `฿${(loc && loc.fee) ? loc.fee : 20}`;
 
-    // 5. Update Location Modal Live GPS details box
-    const gpsBox = document.getElementById("real-gps-details-box");
-    if (gpsBox) {
+    const checkoutAddrTitle = document.getElementById("checkout-address-title");
+    const checkoutAddrDetail = document.getElementById("checkout-address-detail");
+    if (checkoutAddrTitle) {
         if (loc && loc.isSet) {
-            gpsBox.classList.remove("hidden");
-            const addrText = document.getElementById("modal-gps-address-text");
-            if (addrText) addrText.textContent = loc.title;
-            const subText = document.getElementById("modal-gps-detail-subtext");
-            if (subText) subText.textContent = loc.detail || "พร้อมคำนวณระยะทางและรอบจัดส่ง";
-            const latText = document.getElementById("modal-gps-lat");
-            if (latText) latText.textContent = loc.lat ? Number(loc.lat).toFixed(4) : "13.3080";
-            const lngText = document.getElementById("modal-gps-lng");
-            if (lngText) lngText.textContent = loc.lng ? Number(loc.lng).toFixed(4) : "101.1214";
-            const distText = document.getElementById("modal-gps-dist");
-            if (distText) distText.textContent = loc.distance;
-            const feeText = document.getElementById("modal-gps-fee");
-            if (feeText) feeText.textContent = `฿${loc.fee}`;
-            const sourceBadge = document.getElementById("modal-gps-source-badge");
-            if (sourceBadge) sourceBadge.textContent = loc.isRealGPS ? "🛰️ พิกัดจริงของคุณ (ตรวจพบแล้ว):" : "📍 พิกัดที่เลือกไว้:";
+            checkoutAddrTitle.textContent = loc.houseNumber ? `${loc.houseNumber} ${loc.soiRoad || ''}`.trim() : loc.title;
         } else {
-            gpsBox.classList.add("hidden");
+            checkoutAddrTitle.textContent = "กรุณาระบุที่อยู่จัดส่งของคุณ";
         }
     }
+    if (checkoutAddrDetail) {
+        if (loc && loc.isSet) {
+            const landmarkPart = loc.landmark ? ` • จุดสังเกต: ${loc.landmark}` : "";
+            checkoutAddrDetail.textContent = `${loc.subdistrict ? loc.subdistrict + ' • ' : ''}ห่างจากตลาดวิศิษฐ์ชัย ${loc.distance}${landmarkPart}`;
+        } else {
+            checkoutAddrDetail.textContent = "แตะเพื่อเลือกหรือระบุพิกัดจัดส่ง";
+        }
+    }
+
+    const deliveryNoteInput = document.getElementById("delivery-note-input");
+    if (deliveryNoteInput && (!deliveryNoteInput.value || deliveryNoteInput.value.trim() === "") && loc && loc.landmark) {
+        deliveryNoteInput.value = loc.landmark;
+    }
+
+    // 5. Update Location Modal Summary Preview if modal exists
+    updateModalAddressPreview();
 }
 
 // Real-time clock update for delivery slots every 30 seconds
@@ -629,9 +637,268 @@ if (typeof window !== "undefined") {
     window._deliverySlotTimer = setInterval(updateDeliveryLocationUI, 30000);
 }
 
+// ==========================================
+// LEAFLET MAP & PINPOINT LOCATION ENGINE (แบบ Grab / LINE MAN / 7-11)
+// ==========================================
+let locationPickerMap = null;
+let locationPickerMarker = null;
+let currentPickerCoords = {
+    lat: MARKET_ORIGIN.lat,
+    lng: MARKET_ORIGIN.lng
+};
+
+function initLocationPickerMap(lat, lng) {
+    currentPickerCoords.lat = lat;
+    currentPickerCoords.lng = lng;
+
+    const mapContainer = document.getElementById("location-leaflet-map");
+    if (!mapContainer) return;
+
+    if (typeof L === "undefined") {
+        console.warn("Leaflet library not loaded yet.");
+        return;
+    }
+
+    if (!locationPickerMap) {
+        try {
+            locationPickerMap = L.map("location-leaflet-map", {
+                zoomControl: true,
+                attributionControl: false
+            }).setView([lat, lng], 16);
+
+            L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 19
+            }).addTo(locationPickerMap);
+
+            // Custom Leaflet Red/Emerald Pin Marker
+            const markerIcon = L.divIcon({
+                className: "custom-map-pin",
+                html: `<div style="background-color:#006c49;color:#fff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);border:2px solid #fff;font-size:18px;transform:translate(-50%,-100%);">📍</div>`,
+                iconSize: [34, 34],
+                iconAnchor: [17, 34]
+            });
+
+            locationPickerMarker = L.marker([lat, lng], {
+                draggable: true,
+                icon: markerIcon
+            }).addTo(locationPickerMap);
+
+            // On pin dragged by user (Just like Grab pin adjustment)
+            locationPickerMarker.on("dragend", function (e) {
+                const pos = locationPickerMarker.getLatLng();
+                onMapCoordinatesChanged(pos.lat, pos.lng, true);
+            });
+
+            // On map clicked by user
+            locationPickerMap.on("click", function (e) {
+                locationPickerMarker.setLatLng(e.latlng);
+                onMapCoordinatesChanged(e.latlng.lat, e.latlng.lng, true);
+            });
+        } catch (e) {
+            console.error("Leaflet init error:", e);
+        }
+    } else {
+        try {
+            locationPickerMap.setView([lat, lng], 16);
+            if (locationPickerMarker) locationPickerMarker.setLatLng([lat, lng]);
+            setTimeout(() => {
+                if (locationPickerMap) locationPickerMap.invalidateSize();
+            }, 200);
+        } catch (e) { }
+    }
+
+    onMapCoordinatesChanged(lat, lng, false);
+}
+
+// Called whenever coordinates change (via drag, click, GPS, or shortcut)
+async function onMapCoordinatesChanged(lat, lng, shouldReverseGeocode) {
+    currentPickerCoords.lat = lat;
+    currentPickerCoords.lng = lng;
+
+    const latEl = document.getElementById("modal-map-lat");
+    const lngEl = document.getElementById("modal-map-lng");
+    if (latEl) latEl.textContent = lat.toFixed(4);
+    if (lngEl) lngEl.textContent = lng.toFixed(4);
+
+    const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+    const fee = calculateDeliveryFee(distKm);
+
+    const distEl = document.getElementById("modal-gps-dist");
+    const feeEl = document.getElementById("modal-gps-fee");
+    if (distEl) distEl.textContent = `${distKm.toFixed(1)} กม.`;
+    if (feeEl) feeEl.textContent = `฿${fee}`;
+
+    const testMapsBtn = document.getElementById("modal-test-maps-btn");
+    if (testMapsBtn) {
+        testMapsBtn.href = `https://maps.google.com/?q=${lat.toFixed(6)},${lng.toFixed(6)}`;
+    }
+
+    updateModalAddressPreview();
+
+    if (shouldReverseGeocode) {
+        await reverseGeocodeCoordinates(lat, lng);
+    }
+}
+
+// Reverse Geocode to auto-fill subdistrict, district, province, and road
+async function reverseGeocodeCoordinates(lat, lng) {
+    let subdistrictStr = "";
+    let roadStr = "";
+    let landmarkStr = "";
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+            { headers: { "Accept-Language": "th,en" }, signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.address) {
+                const addr = data.address;
+
+                const isLandmark = data.class && !["highway", "boundary", "place", "landuse"].includes(data.class);
+                landmarkStr = isLandmark ? (data.name || "") : (addr.amenity || addr.shop || addr.office || "");
+
+                const roadFromRoot = (data.class === "highway" && data.name) ? data.name : "";
+                const soi = addr.alley || addr.lane || "";
+                const road = roadFromRoot || addr.road || addr.pedestrian || addr.footway || "";
+                roadStr = soi && road ? `ซอย${soi.replace(/^ซอย/i, "")} ${road}` : (soi || road);
+
+                const subdistrict = addr.subdistrict || addr.quarter || addr.neighbourhood || addr.suburb || addr.village || addr.town || "";
+                const district = addr.district || addr.county || addr.city || addr.municipality || "";
+                const province = addr.province || addr.state || "";
+
+                const parts = [];
+                if (subdistrict) parts.push(`ต.${subdistrict.replace(/^ต\./, "").replace(/^ตำบล/, "")}`);
+                if (district) parts.push(`อ.${district.replace(/^อ\./, "").replace(/^อำเภอ/, "")}`);
+                if (province) parts.push(`จ.${province.replace(/^จ\./, "").replace(/^จังหวัด/, "")}`);
+                subdistrictStr = parts.join(", ");
+            }
+        }
+    } catch (e) {
+        console.warn("Nominatim reverse geocode error:", e);
+    }
+
+    // Fallback: BigDataCloud
+    if (!subdistrictStr) {
+        try {
+            const controller2 = new AbortController();
+            const timeoutId2 = setTimeout(() => controller2.abort(), 3000);
+            const res2 = await fetch(
+                `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=th`,
+                { signal: controller2.signal }
+            );
+            clearTimeout(timeoutId2);
+            if (res2.ok) {
+                const data2 = await res2.json();
+                let sub = data2.locality || "";
+                let dis = data2.city || "";
+                let prov = data2.principalSubdivision || "";
+                if (data2.localityInfo && data2.localityInfo.informative) {
+                    data2.localityInfo.informative.forEach(item => {
+                        if (item.name && item.name.includes("ตำบล")) sub = item.name;
+                        else if (item.name && item.name.includes("อำเภอ")) dis = item.name;
+                        else if (item.name && item.name.includes("จังหวัด")) prov = item.name;
+                    });
+                }
+                const parts = [];
+                if (sub) parts.push(sub);
+                if (dis) parts.push(dis);
+                if (prov) parts.push(prov);
+                subdistrictStr = parts.join(", ");
+            }
+        } catch (e2) {
+            console.warn("BigDataCloud fallback error:", e2);
+        }
+    }
+
+    // Update Input Fields if user hasn't typed custom values yet
+    const subInput = document.getElementById("input-addr-subdistrict");
+    if (subInput && subdistrictStr) {
+        subInput.value = subdistrictStr;
+    }
+
+    const soiInput = document.getElementById("input-addr-soi");
+    if (soiInput && roadStr && (!soiInput.value || soiInput.value.trim() === "")) {
+        soiInput.value = roadStr;
+    }
+
+    const landmarkInput = document.getElementById("input-addr-landmark");
+    if (landmarkInput && landmarkStr && (!landmarkInput.value || landmarkInput.value.trim() === "")) {
+        landmarkInput.value = landmarkStr;
+    }
+
+    updateModalAddressPreview();
+}
+
+// Live update address preview text inside modal
+function updateModalAddressPreview() {
+    const houseVal = (document.getElementById("input-addr-house")?.value || "").trim();
+    const soiVal = (document.getElementById("input-addr-soi")?.value || "").trim();
+    const subVal = (document.getElementById("input-addr-subdistrict")?.value || "").trim();
+    const landVal = (document.getElementById("input-addr-landmark")?.value || "").trim();
+
+    const parts = [];
+    if (houseVal) parts.push(houseVal);
+    if (soiVal) parts.push(soiVal);
+    if (subVal) parts.push(subVal);
+
+    const fullStr = parts.length > 0 ? parts.join(", ") : (state.deliveryLocation?.title || "ตลาดวิศิษฐ์ชัย อ.บ้านบึง จ.ชลบุรี");
+
+    const addrText = document.getElementById("modal-gps-address-text");
+    if (addrText) addrText.textContent = fullStr;
+
+    const landPreview = document.getElementById("modal-gps-landmark-preview");
+    if (landPreview) {
+        landPreview.textContent = landVal ? `จุดสังเกต: ${landVal}` : "จุดสังเกต: -";
+    }
+}
+
+// Attach live input listeners so user typing reflects immediately
+if (typeof document !== "undefined") {
+    document.addEventListener("DOMContentLoaded", function () {
+        ["input-addr-house", "input-addr-soi", "input-addr-subdistrict", "input-addr-landmark"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener("input", updateModalAddressPreview);
+        });
+    });
+}
+
 function openLocationModal() {
     updateDeliveryLocationUI();
     document.getElementById("location-modal").classList.remove("hidden");
+
+    const loc = state.deliveryLocation;
+    const initialLat = (loc && loc.lat) ? Number(loc.lat) : MARKET_ORIGIN.lat;
+    const initialLng = (loc && loc.lng) ? Number(loc.lng) : MARKET_ORIGIN.lng;
+
+    // Populate existing values into form fields
+    const houseInput = document.getElementById("input-addr-house");
+    const soiInput = document.getElementById("input-addr-soi");
+    const subInput = document.getElementById("input-addr-subdistrict");
+    const landInput = document.getElementById("input-addr-landmark");
+
+    if (loc && loc.isSet) {
+        if (houseInput) houseInput.value = loc.houseNumber || "";
+        if (soiInput) soiInput.value = loc.soiRoad || "";
+        if (subInput) subInput.value = loc.subdistrict || "";
+        if (landInput) landInput.value = loc.landmark || "";
+    } else {
+        if (subInput && (!subInput.value || subInput.value === "")) {
+            subInput.value = "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี";
+        }
+    }
+
+    // Initialize or resize Leaflet Map
+    setTimeout(() => {
+        initLocationPickerMap(initialLat, initialLng);
+    }, 150);
+
+    updateModalAddressPreview();
 }
 
 function closeLocationModal() {
@@ -639,187 +906,39 @@ function closeLocationModal() {
 }
 
 function detectCurrentLocationGPS() {
-    // Open modal immediately so user sees the radar scanner instantly!
     openLocationModal();
 
     const radar = document.getElementById("gps-searching-indicator");
-    const gpsBox = document.getElementById("real-gps-details-box");
     const btnLabel = document.getElementById("gps-button-label");
 
     if (radar) radar.classList.remove("hidden");
-    if (btnLabel) btnLabel.textContent = "🛰️ กำลังค้นหาสัญญาณดาวเทียม GPS / เครือข่าย...";
+    if (btnLabel) btnLabel.textContent = "🛰️ กำลังค้นหาสัญญาณดาวเทียม GPS ละเอียด...";
 
-    showToast("🛰️ กำลังค้นหาพิกัดจริงของคุณจากดาวเทียม GPS...");
+    showToast("🛰️ กำลังค้นหาพิกัด GPS จริงจากชิปมือถือ/คอมพิวเตอร์...");
 
-    // Helper to apply and save detected coordinates
-    async function applyDetectedCoords(lat, lng, accuracy, sourceName) {
-        if (radar) radar.classList.add("hidden");
-        if (btnLabel) btnLabel.textContent = "🛰️ หาพิกัด GPS จริงจากอุปกรณ์ปัจจุบัน";
-
-        const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
-        const fee = calculateDeliveryFee(distKm);
-
-        let addressTitle = `พิกัดปัจจุบัน (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-
-        // ── Helper: สร้างชื่อที่อยู่จาก Nominatim full response object ──────────────
-        // ⚠️ ต้องรับ full response (data) ไม่ใช่แค่ data.address
-        // เพราะ name/amenity/class อยู่ที่ ROOT ของ response ไม่ใช่ใน address{}
-        function buildAddressFromNominatim(data) {
-            const addr = data.address || {};
-
-            // ระดับ 1: สถานที่สำคัญ / อาคาร
-            // data.name = ชื่อหลักของสถานที่ (ถนน/ร้านค้า/วัด ฯลฯ) อยู่ที่ ROOT
-            // data.class + data.type บอกประเภท เช่น class="amenity" type="market"
-            const isLandmark = data.class && !["highway", "boundary", "place", "landuse"].includes(data.class);
-            const landmark = isLandmark ? (data.name || "") : "";
-
-            // addr.amenity/tourism/shop ก็อาจมีใน address บางครั้ง
-            const addrLandmark = addr.amenity || addr.tourism || addr.shop || addr.office ||
-                addr.leisure || addr.historic || "";
-
-            const bestLandmark = landmark || addrLandmark;
-
-            // ระดับ 2: ซอย / ถนน
-            // data.name คือชื่อถนน ถ้า class="highway"
-            const roadFromRoot = (data.class === "highway" && data.name) ? data.name : "";
-            const soi = addr.alley || addr.lane || "";
-            const road = roadFromRoot || addr.road || addr.pedestrian || addr.footway || addr.path || "";
-            const roadPart = soi && road
-                ? `ซอย${soi.replace(/^ซอย/i, "")} ${road}`
-                : (soi || road);
-
-            // ระดับ 3: แขวง / ตำบล / ชุมชน / หมู่บ้าน
-            // addr.town = ตำบล/เมืองเล็ก (อยู่ระดับเดียวกับตำบล ไม่ใช่อำเภอ)
-            const subdistrict = addr.quarter || addr.neighbourhood || addr.suburb ||
-                addr.subdistrict || addr.village || addr.city_district || addr.town || "";
-
-            // ระดับ 4: เขต / อำเภอ / เมือง (county = อำเภอ, municipality = เทศบาล)
-            const district = addr.district || addr.county || addr.city || addr.municipality || "";
-
-            // ระดับ 5: จังหวัด
-            const province = addr.province || addr.state || "";
-
-            const parts = [bestLandmark, roadPart, subdistrict, district, province]
-                .map(p => (p || "").trim())
-                .filter((p, i, arr) => p && arr.indexOf(p) === i); // unique & non-empty
-
-            return parts.length > 0 ? parts.join(", ") : null;
-        }
-
-        // 1. Primary: OpenStreetMap Nominatim
-        try {
-            console.log(`[Geocode] 🗺️ Trying Nominatim for (${lat}, ${lng})...`);
-            const controller1 = new AbortController();
-            const timeoutId1 = setTimeout(() => controller1.abort(), 5000);
-            const res1 = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-                { headers: { "Accept-Language": "th,en" }, signal: controller1.signal }
-            );
-            clearTimeout(timeoutId1);
-            console.log(`[Geocode] Nominatim HTTP status: ${res1.status}`);
-
-            if (res1.ok) {
-                const data1 = await res1.json();
-                console.log("[Geocode] Nominatim raw response:", JSON.stringify(data1));
-                if (data1 && data1.address) {
-                    const built = buildAddressFromNominatim(data1);
-                    console.log("[Geocode] buildAddressFromNominatim result:", built);
-                    if (built) {
-                        addressTitle = built;
-                        console.log("[Geocode] ✅ addressTitle set from Nominatim:", addressTitle);
-                    } else {
-                        console.warn("[Geocode] ⚠️ Nominatim returned data but buildAddress gave null — will try BigDataCloud");
-                    }
-                }
-            } else {
-                console.warn(`[Geocode] ⚠️ Nominatim returned non-OK status: ${res1.status}`);
-            }
-        } catch (e1) {
-            console.warn("[Geocode] ❌ Nominatim fetch error:", e1.message || e1);
-        }
-
-        // 2. Fallback: BigDataCloud — ใช้เมื่อ Nominatim ยังคง fallback หรือ error
-        if (addressTitle.startsWith("พิกัดปัจจุบัน")) {
-            console.log("[Geocode] 🔄 Trying BigDataCloud fallback...");
-            try {
-                const controller2 = new AbortController();
-                const timeoutId2 = setTimeout(() => controller2.abort(), 3500);
-                const res2 = await fetch(
-                    `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=th`,
-                    { signal: controller2.signal }
-                );
-                clearTimeout(timeoutId2);
-                console.log(`[Geocode] BigDataCloud HTTP status: ${res2.status}`);
-
-                if (res2.ok) {
-                    const data2 = await res2.json();
-                    console.log("[Geocode] BigDataCloud raw response:", JSON.stringify(data2));
-                    const parts = [];
-                    if (data2.localityInfo && data2.localityInfo.informative) {
-                        const infoParts = data2.localityInfo.informative
-                            .filter(i => i.description && i.order <= 5)
-                            .map(i => i.name || "")
-                            .filter(Boolean);
-                        parts.push(...infoParts);
-                    }
-                    if (parts.length === 0) {
-                        [data2.locality, data2.city, data2.principalSubdivision]
-                            .filter(p => p && p.trim())
-                            .forEach(p => parts.push(p));
-                    }
-                    const uniqueParts = [...new Set(parts)];
-                    if (uniqueParts.length > 0) {
-                        addressTitle = uniqueParts.join(", ");
-                        console.log("[Geocode] ✅ addressTitle set from BigDataCloud:", addressTitle);
-                    } else {
-                        console.warn("[Geocode] ⚠️ BigDataCloud gave no usable parts");
-                    }
-                }
-            } catch (e2) {
-                console.warn("[Geocode] ❌ BigDataCloud error:", e2.message || e2);
-            }
-        }
-
-        console.log("[Geocode] 🏁 Final addressTitle:", addressTitle);
-
-        // Compute clear distance description
-        let distanceText = `${distKm.toFixed(1)} กม.`;
-        if (distKm < 0.1) {
-            distanceText = "อยู่ที่ตลาดวิศิษฐ์ชัย (0.0 กม.)";
-        }
-
-        // Update State
-        state.deliveryLocation = {
-            title: addressTitle,
-            detail: `ห่างจากตลาดวิศิษฐ์ชัย ${distKm.toFixed(1)} กม. • ${sourceName}`,
-            distance: `${distKm.toFixed(1)} กม.`,
-            distFromMarketText: `ห่างจากตลาดวิศิษฐ์ชัย ${distKm.toFixed(1)} กม.`,
-            fee: fee,
-            lat: lat,
-            lng: lng,
-            isRealGPS: true,
-            isSet: true
-        };
-
-        saveLocationToStorage(state.deliveryLocation);
-        updateDeliveryLocationUI();
-
-        // Update Badge Text
-        const modeBadge = document.getElementById("location-detection-mode-badge");
-        if (modeBadge) modeBadge.textContent = `พิกัดจริงของคุณ (${sourceName})`;
-
-        showToast(`📍 ตรวจพบพิกัดสำเร็จ! คุณอยู่ห่างจากตลาดวิศิษฐ์ชัย ${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee}`);
-    }
-
-    // Attempt 1: Browser Geolocation API
     if (navigator.geolocation) {
         let hasResolved = false;
         const timer = setTimeout(() => {
             if (!hasResolved) {
                 hasResolved = true;
-                fallbackToIPLocation(applyDetectedCoords);
+                fallbackToIPLocation(onGPSResolved);
             }
-        }, 8000); // 8s timeout for mobile GPS chip
+        }, 9000);
+
+        function onGPSResolved(lat, lng, accuracy, sourceName) {
+            if (radar) radar.classList.add("hidden");
+            if (btnLabel) btnLabel.textContent = "🛰️ เลื่อนหมุดมาที่ GPS จริงของอุปกรณ์ปัจจุบัน";
+
+            if (locationPickerMap && locationPickerMarker) {
+                locationPickerMap.setView([lat, lng], 17);
+                locationPickerMarker.setLatLng([lat, lng]);
+            }
+            onMapCoordinatesChanged(lat, lng, true);
+
+            const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+            const fee = calculateDeliveryFee(distKm);
+            showToast(`📍 พบพิกัด GPS สำเร็จ! (${sourceName}) ห่างจากตลาด ${distKm.toFixed(1)} กม. • โปรดระบุบ้านเลขที่/ซอย`);
+        }
 
         navigator.geolocation.getCurrentPosition(
             function (position) {
@@ -828,28 +947,33 @@ function detectCurrentLocationGPS() {
                 clearTimeout(timer);
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
-                const acc = position.coords.accuracy || 15;
-                applyDetectedCoords(lat, lng, acc, "GPS ดาวเทียมมือถือ");
+                const acc = position.coords.accuracy || 10;
+                onGPSResolved(lat, lng, acc, "GPS ดาวเทียมมือถือ");
             },
             function (geoError) {
                 if (hasResolved) return;
                 hasResolved = true;
                 clearTimeout(timer);
-                console.warn("Browser GPS unavailable/denied, falling back to IP Geolocation...", geoError);
-                fallbackToIPLocation(applyDetectedCoords);
+                console.warn("Browser GPS unavailable/denied, trying IP Geolocation...", geoError);
+                fallbackToIPLocation(onGPSResolved);
             },
             {
                 enableHighAccuracy: true,
-                timeout: 8000,
-                maximumAge: 30000
+                timeout: 9000,
+                maximumAge: 15000
             }
         );
     } else {
-        fallbackToIPLocation(applyDetectedCoords);
+        fallbackToIPLocation((lat, lng, acc, src) => {
+            if (locationPickerMap && locationPickerMarker) {
+                locationPickerMap.setView([lat, lng], 16);
+                locationPickerMarker.setLatLng([lat, lng]);
+            }
+            onMapCoordinatesChanged(lat, lng, true);
+        });
     }
 }
 
-// Attempt 2: IP-based Real Geolocation for Devices without hardware GPS
 async function fallbackToIPLocation(callback) {
     const radar = document.getElementById("gps-searching-indicator");
     const btnLabel = document.getElementById("gps-button-label");
@@ -863,14 +987,12 @@ async function fallbackToIPLocation(callback) {
         if (response.ok) {
             const data = await response.json();
             if (data && data.success && data.latitude && data.longitude) {
-                const cityName = data.city || data.region || "กรุงเทพฯ / ปริมณฑล";
+                const cityName = data.city || data.region || "ชลบุรี";
                 callback(data.latitude, data.longitude, 500, `IP เครือข่าย: ${cityName}`);
                 return;
             }
         }
-    } catch (e) {
-        console.warn("IP Provider 1 notice, trying Provider 2...", e);
-    }
+    } catch (e) { }
 
     // Provider 2: freeipapi.com
     try {
@@ -881,77 +1003,116 @@ async function fallbackToIPLocation(callback) {
         if (response2.ok) {
             const data2 = await response2.json();
             if (data2 && data2.latitude && data2.longitude) {
-                const cityName2 = data2.cityName || data2.regionName || "กรุงเทพฯ";
-                callback(data2.latitude, data2.longitude, 1000, `IP เครือข่าย: ${cityName2}`);
+                callback(data2.latitude, data2.longitude, 1000, "IP เครือข่าย");
                 return;
             }
         }
-    } catch (e2) {
-        console.warn("IP Provider 2 notice, trying Provider 3...", e2);
-    }
+    } catch (e2) { }
 
-    // Provider 3: ipapi.co
-    try {
-        const controller3 = new AbortController();
-        const timeoutId3 = setTimeout(() => controller3.abort(), 2500);
-        const response3 = await fetch("https://ipapi.co/json/", { cache: "no-cache", signal: controller3.signal });
-        clearTimeout(timeoutId3);
-        if (response3.ok) {
-            const data3 = await response3.json();
-            if (data3 && data3.latitude && data3.longitude) {
-                const cityName3 = data3.city || data3.region || "กรุงเทพฯ";
-                callback(data3.latitude, data3.longitude, 1000, `IP เครือข่าย: ${cityName3}`);
-                return;
-            }
-        }
-    } catch (e3) {
-        console.warn("IP Provider 3 notice, using default market zone...", e3);
-    }
-
-    // Default Fallback
+    // Default Fallback to Market Area
     if (radar) radar.classList.add("hidden");
-    if (btnLabel) btnLabel.textContent = "🛰️ หาพิกัด GPS จริงจากอุปกรณ์ปัจจุบัน";
-    callback(13.3105, 101.1150, 50, "พิกัดย่านตลาดสดบ้านบึง");
+    if (btnLabel) btnLabel.textContent = "🛰️ เลื่อนหมุดมาที่ GPS จริงของอุปกรณ์ปัจจุบัน";
+    callback(13.3105, 101.1150, 50, "พิกัดย่านชุมชนบ้านบึง");
 }
 
-function selectSavedLocation(title, distance, fee, lat, lng) {
-    state.deliveryLocation = {
-        title: title,
-        detail: `ชุมชนรอบตลาด • ห่างจากตลาดสด ${distance}`,
-        distance: distance,
-        fee: fee,
-        lat: lat || 13.3105,
-        lng: lng || 101.1150,
-        isRealGPS: false,
-        isSet: true
-    };
-    saveLocationToStorage(state.deliveryLocation);
-    updateDeliveryLocationUI();
-    showToast(`📍 เปลี่ยนที่อยู่จัดส่งเป็น "${title}" แล้ว`);
-}
+// Confirm and save granular delivery address (แบบ Grab / LINE MAN / 7-11)
+function saveGranularDeliveryAddress() {
+    const houseInput = document.getElementById("input-addr-house");
+    const soiInput = document.getElementById("input-addr-soi");
+    const subInput = document.getElementById("input-addr-subdistrict");
+    const landInput = document.getElementById("input-addr-landmark");
 
-function applyManualCustomLocation() {
-    const input = document.getElementById("manual-location-input");
-    const val = input ? input.value.trim() : "";
-    if (!val) {
-        alert("กรุณาพิมพ์ระบุที่อยู่หรือชื่อสถานที่ของคุณ");
-        return;
+    const house = houseInput ? houseInput.value.trim() : "";
+    const soi = soiInput ? soiInput.value.trim() : "";
+    const subdistrict = subInput ? subInput.value.trim() : "";
+    const landmark = landInput ? landInput.value.trim() : "";
+
+    const lat = currentPickerCoords.lat || MARKET_ORIGIN.lat;
+    const lng = currentPickerCoords.lng || MARKET_ORIGIN.lng;
+    const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+    const fee = calculateDeliveryFee(distKm);
+
+    // Build comprehensive deliverable address string
+    const parts = [];
+    if (house) parts.push(house);
+    if (soi) parts.push(soi);
+    if (subdistrict) parts.push(subdistrict);
+
+    let fullTitle = parts.join(", ");
+    if (!fullTitle) {
+        fullTitle = `พิกัด GPS (${lat.toFixed(4)}, ${lng.toFixed(4)}) อ.บ้านบึง`;
     }
 
     state.deliveryLocation = {
-        title: val,
-        detail: `ที่อยู่ระบุเอง • จัดส่งถึงบ้านคุณ`,
-        distance: "2.0 กม.",
-        fee: 20,
-        lat: 13.912,
-        lng: 100.340,
-        isRealGPS: false,
+        title: fullTitle,
+        fullAddress: fullTitle,
+        houseNumber: house,
+        soiRoad: soi,
+        subdistrict: subdistrict,
+        landmark: landmark,
+        detail: `ห่างจากตลาดวิศิษฐ์ชัย ${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee}`,
+        distance: `${distKm.toFixed(1)} กม.`,
+        distFromMarketText: `ห่างจากตลาดวิศิษฐ์ชัย ${distKm.toFixed(1)} กม.`,
+        fee: fee,
+        lat: lat,
+        lng: lng,
+        isRealGPS: true,
         isSet: true
     };
+
     saveLocationToStorage(state.deliveryLocation);
     updateDeliveryLocationUI();
     closeLocationModal();
-    showToast(`📍 บันทึกที่อยู่จัดส่ง "${val}" เรียบร้อยแล้ว`);
+
+    showToast(`✅ บันทึกที่อยู่สำเร็จ! ไรเดอร์จะนำทาง GPS ถึงหน้าบ้านคุณได้ทันที (ค่าส่ง ฿${fee})`);
+}
+
+// Quick neighborhood shortcut selector
+function selectQuickLocation(name, soi, subdistrict, lat, lng) {
+    const houseInput = document.getElementById("input-addr-house");
+    const soiInput = document.getElementById("input-addr-soi");
+    const subInput = document.getElementById("input-addr-subdistrict");
+    const landInput = document.getElementById("input-addr-landmark");
+
+    if (soiInput) soiInput.value = soi || "";
+    if (subInput) subInput.value = subdistrict || "";
+    if (landInput) landInput.value = `ใกล้${name}`;
+
+    if (locationPickerMap && locationPickerMarker) {
+        locationPickerMap.setView([lat, lng], 16);
+        locationPickerMarker.setLatLng([lat, lng]);
+    }
+
+    onMapCoordinatesChanged(lat, lng, false);
+    showToast(`📍 ปักหมุดย่าน "${name}" แล้ว - โปรดระบุบ้านเลขที่เพื่อความแม่นยำ`);
+
+    if (houseInput && !houseInput.value) {
+        houseInput.focus();
+    }
+}
+
+// Backward-compatible selectSavedLocation
+function selectSavedLocation(title, distance, fee, lat, lng) {
+    selectQuickLocation(title, "", "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี", lat || 13.3080, lng || 101.1214);
+}
+
+function applyManualCustomLocation() {
+    saveGranularDeliveryAddress();
+}
+
+// Copy GPS Coordinates for Rider
+function copyRiderGPSCoords() {
+    const coordsEl = document.getElementById("rider-gps-coords");
+    const text = coordsEl ? coordsEl.textContent.trim() : "";
+    if (navigator.clipboard && text) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast(`📋 คัดลอกพิกัด GPS "${text}" สำเร็จ`);
+        }).catch(() => {
+            showToast(`📍 พิกัด: ${text}`);
+        });
+    } else {
+        showToast(`📍 พิกัด: ${text}`);
+    }
 }
 
 // 2. Application Reactive State
@@ -3116,6 +3277,15 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         });
     });
 
+    const loc = state.deliveryLocation;
+    const orderLat = (loc && loc.lat) ? loc.lat : MARKET_ORIGIN.lat;
+    const orderLng = (loc && loc.lng) ? loc.lng : MARKET_ORIGIN.lng;
+    const orderHouse = (loc && loc.houseNumber) ? loc.houseNumber : "";
+    const orderSoi = (loc && loc.soiRoad) ? loc.soiRoad : "";
+    const orderSub = (loc && loc.subdistrict) ? loc.subdistrict : "";
+    const orderLandmark = noteVal || (loc && loc.landmark) || "";
+    const orderAddress = (loc && loc.fullAddress) ? loc.fullAddress : (loc && loc.title ? loc.title : "ตามพิกัดที่ลูกค้าระบุ");
+
     state.activeOrder = {
         orderId: "#TH-" + Math.floor(1000 + Math.random() * 9000),
         status: "picking",
@@ -3123,10 +3293,16 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         grandTotal: totals.grandTotal,
         paymentType: paymentType,
         paymentDesc: paymentDesc,
-        deliveryNote: noteVal,
+        deliveryNote: orderLandmark,
         customerName: (state.customer && state.customer.isLoggedIn) ? state.customer.identifier : "ลูกค้าทั่วไป",
-        customerPhone: (state.customer && state.customer.phone) ? state.customer.phone : "-",
-        address: (state.deliveryLocation && state.deliveryLocation.title) ? state.deliveryLocation.title : "ตามพิกัดที่ลูกค้าระบุ",
+        customerPhone: (state.customer && state.customer.phone) ? state.customer.phone : "080-568-7733",
+        address: orderAddress,
+        houseNumber: orderHouse,
+        soiRoad: orderSoi,
+        subdistrict: orderSub,
+        landmark: orderLandmark,
+        lat: orderLat,
+        lng: orderLng,
         stalls: Object.values(stallsMap)
     };
 
@@ -5339,18 +5515,39 @@ function renderRiderScreen() {
         return;
     }
 
+    const destHouse = document.getElementById("rider-dest-house");
+    const destSubdistrict = document.getElementById("rider-dest-subdistrict");
+    const phoneBadge = document.getElementById("rider-phone-badge");
+    const gpsCoords = document.getElementById("rider-gps-coords");
+    const callBtnText = document.getElementById("rider-call-btn-text");
+
+    const orderLat = order.lat || (state.deliveryLocation && state.deliveryLocation.lat) || MARKET_ORIGIN.lat;
+    const orderLng = order.lng || (state.deliveryLocation && state.deliveryLocation.lng) || MARKET_ORIGIN.lng;
+    const orderPhone = order.customerPhone || (state.customer && state.customer.phone) || "080-568-7733";
+
     if (badge) badge.textContent = `ออเดอร์ ${order.orderId}`;
     if (totalBadge) totalBadge.textContent = `฿${order.grandTotal || order.total || 0} (${order.paymentDesc || 'ชำระแล้ว'})`;
-    if (destName) destName.textContent = order.customerName || order.customerPhone || "080-568-7733";
-    if (destDetail) destDetail.textContent = `ที่อยู่: ${order.address || 'ตามพิกัดที่ลูกค้าระบุ'}`;
-    if (noteText) noteText.textContent = order.deliveryNote || "-";
+    if (destName) destName.textContent = order.customerName || "ลูกค้าประจำ";
+    if (phoneBadge) phoneBadge.textContent = orderPhone;
+    if (callBtnText) callBtnText.textContent = `โทรหาลูกค้า (${orderPhone})`;
 
-    if (mapsLink) {
-        if (order.address && order.address !== "ตามพิกัดที่ลูกค้าระบุ") {
-            mapsLink.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`;
+    if (destHouse) {
+        if (order.houseNumber) {
+            destHouse.textContent = `${order.houseNumber} ${order.soiRoad || ''}`.trim();
         } else {
-            mapsLink.href = "https://maps.google.com/?q=13.9120,100.3400";
+            destHouse.textContent = order.address || "ตามพิกัดดาวเทียม";
         }
+    }
+    if (destSubdistrict) {
+        destSubdistrict.textContent = order.subdistrict || "อำเภอบ้านบึง จังหวัดชลบุรี";
+    }
+    if (destDetail) destDetail.textContent = `ที่อยู่: ${order.address || 'ตามพิกัดที่ลูกค้าระบุ'}`;
+    if (noteText) noteText.textContent = order.landmark || order.deliveryNote || "-";
+    if (gpsCoords) gpsCoords.textContent = `${Number(orderLat).toFixed(6)}, ${Number(orderLng).toFixed(6)}`;
+
+    // Direct Turn-by-Turn GPS navigation link into Google Maps
+    if (mapsLink) {
+        mapsLink.href = `https://www.google.com/maps/dir/?api=1&destination=${orderLat},${orderLng}`;
     }
 
     // Check Refund Amount (กรณีมีสินค้าขาด)
