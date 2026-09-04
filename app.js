@@ -2748,7 +2748,7 @@ function renderTrackingScreen() {
         }
 
         html += `
-            <div onclick="toggleStallPicking(${idx})" class="flex items-center justify-between p-3 bg-white hover:bg-slate-50 rounded-2xl border border-slate-200/90 shadow-2xs text-xs cursor-pointer transition-all active:scale-[0.99]" title="คลิกเพื่อเปลี่ยนสถานะการหยิบสินค้าของแผงนี้">
+            <div class="flex items-center justify-between p-3 bg-white rounded-2xl border border-slate-200/90 shadow-2xs text-xs">
                 <div class="flex items-center gap-2.5">
                     <div class="w-7 h-7 rounded-xl ${isReady ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'} flex items-center justify-center font-bold text-sm shrink-0">
                         ${isReady ? '✓' : '⏳'}
@@ -2767,7 +2767,7 @@ function renderTrackingScreen() {
     setVal("picking-progress-badge", `หยิบแล้ว ${totalPicked}/${order.stalls.length} แผง`);
 }
 
-// Toggle Stall Picking Status interactively
+// Toggle Stall Picking Status (ใช้กรณีจำลองหรือฝั่งจัดการ)
 function toggleStallPicking(stallIndex) {
     if (!state.activeOrder || !state.activeOrder.stalls[stallIndex]) return;
     const stall = state.activeOrder.stalls[stallIndex];
@@ -2779,18 +2779,11 @@ function toggleStallPicking(stallIndex) {
         showToast(`✓ แผง "${stall.name}" จัดของสดครบเรียบร้อยแล้ว!`);
     }
 
-    // Check if all are picked
-    const allPicked = state.activeOrder.stalls.every(s => s.pickedCount >= s.itemsCount);
-    if (allPicked && state.activeOrder.status === "picking") {
-        setTimeout(() => {
-            simulateOrderStatus("delivering");
-        }, 600);
-    } else {
-        renderTrackingScreen();
-    }
+    saveActiveOrderToStorage(state.activeOrder);
+    renderTrackingScreen();
 }
 
-// Interactive Simulation Controller
+// Interactive Simulation Controller (ซิงค์สถานะเข้า Firebase และ Storage)
 function simulateOrderStatus(targetStatus) {
     if (!state.activeOrder) return;
     state.activeOrder.status = targetStatus;
@@ -2800,28 +2793,48 @@ function simulateOrderStatus(targetStatus) {
         showToast("📦 ขั้นตอนที่ 1-2: ทีมงานกำลังเดินหยิบของสดในตลาด");
     } else if (targetStatus === "delivering") {
         state.activeOrder.stalls.forEach(s => s.pickedCount = s.itemsCount);
-        showToast("🛵 ขั้นตอนที่ 3: รวมของครบแล้ว! ไรเดอร์พี่สมชาย กำลังออกเดินทาง");
+        showToast("🛵 ขั้นตอนที่ 3: รวมของครบแล้ว! ไรเดอร์กำลังออกเดินทาง");
     } else if (targetStatus === "delivered") {
         state.activeOrder.stalls.forEach(s => s.pickedCount = s.itemsCount);
         showToast("🎉 ขั้นตอนที่ 4: จัดส่งสำเร็จถึงมือคุณเรียบร้อยแล้ว!");
     }
+    saveActiveOrderToStorage(state.activeOrder);
     renderTrackingScreen();
 }
 
-// Step 2 Link Handler: Connects to Hub Preparation & Rider Delivery
-function handleTrackingStep2Link() {
-    simulateOrderStatus("delivering");
-    openTrackingStep2Modal();
+// Rider Operation Handlers (ส่งมอบหน้าที่ระหว่าง Hub -> Rider -> Customer)
+function handleRiderStartDelivery() {
+    if (!state.activeOrder) {
+        showToast("⚠️ ไม่พบออเดอร์ที่กำลังรอดำเนินการ");
+        return;
+    }
+    state.activeOrder.status = "delivering";
+    if (state.activeOrder.stalls) {
+        state.activeOrder.stalls.forEach(s => {
+            s.pickedCount = s.itemsCount;
+            if (s.items) s.items.forEach(i => i.picked = true);
+        });
+    }
+    saveActiveOrderToStorage(state.activeOrder);
+    renderRiderScreen();
+    showToast("🛵 ไรเดอร์รับของแล้ว ออกเดินทางนำส่งลูกค้า!");
 }
 
-function openTrackingStep2Modal() {
-    const modal = document.getElementById("tracking-step2-link-modal");
-    if (modal) modal.classList.remove("hidden");
-}
-
-function closeTrackingStep2Modal() {
-    const modal = document.getElementById("tracking-step2-link-modal");
-    if (modal) modal.classList.add("hidden");
+function handleRiderCompleteDelivery() {
+    if (!state.activeOrder) {
+        showToast("⚠️ ไม่พบออเดอร์ที่กำลังรอดำเนินการ");
+        return;
+    }
+    state.activeOrder.status = "delivered";
+    if (state.activeOrder.stalls) {
+        state.activeOrder.stalls.forEach(s => {
+            s.pickedCount = s.itemsCount;
+            if (s.items) s.items.forEach(i => i.picked = true);
+        });
+    }
+    saveActiveOrderToStorage(state.activeOrder);
+    renderRiderScreen();
+    showToast("🎉 ไรเดอร์ส่งมอบของสดถึงมือลูกค้าเรียบร้อยแล้ว!");
 }
 
 function switchToHubFromTracking() {
@@ -2852,16 +2865,15 @@ function switchToRiderFromTracking() {
     showToast("🛵 สลับไปยังหน้าจอ '4. ไรเดอร์' (ระบบการจัดส่งโดยไรเดอร์) เรียบร้อย");
 }
 
-// Refresh status button cycles through workflow
+// Refresh status button: โหลดข้อมูลสถานะจริงจาก Storage
 function refreshOrderStatus() {
-    if (!state.activeOrder) return;
-    const current = state.activeOrder.status || "picking";
-    if (current === "picking") {
-        simulateOrderStatus("delivering");
-    } else if (current === "delivering") {
-        simulateOrderStatus("delivered");
+    const saved = loadSavedActiveOrder();
+    if (saved) {
+        state.activeOrder = saved;
+        renderTrackingScreen();
+        showToast("🔄 อัปเดตสถานะออเดอร์ล่าสุดเรียบร้อยแล้ว");
     } else {
-        simulateOrderStatus("picking");
+        showToast("ℹ️ ไม่พบข้อมูลออเดอร์ที่กำลังดำเนินการ");
     }
 }
 
@@ -3921,9 +3933,12 @@ function renderHubPickingList() {
 
 function toggleHubPickedItem(stallIndex, itemIndex) {
     if (!state.activeOrder || !state.activeOrder.stalls[stallIndex]) return;
-    const item = state.activeOrder.stalls[stallIndex].items[itemIndex];
+    const stall = state.activeOrder.stalls[stallIndex];
+    const item = stall.items[itemIndex];
     if (item) {
         item.picked = !item.picked;
+        stall.pickedCount = stall.items.filter(i => i.picked).length;
+        saveActiveOrderToStorage(state.activeOrder);
         renderHubPickingList();
         renderTrackingScreen();
     }
@@ -3955,8 +3970,13 @@ function completePickingAndDispatchOrder(orderId) {
     state.activeRider = state.activeRider || {
         isLoggedIn: true,
         name: "พี่สมชาย (1กข 8902)",
-        phone: "081-234-5678"
+        phone: "081-234-5678",
+        license: "1กข 8902"
     };
+    saveRiderToStorage(state.activeRider);
+
+    // ✅ ซิงค์สถานะใหม่ไปยัง Firebase & localStorage
+    saveActiveOrderToStorage(state.activeOrder);
 
     // Open Success Next Step Modal
     const modal = document.getElementById("dispatch-success-modal");
