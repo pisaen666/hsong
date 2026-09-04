@@ -242,6 +242,7 @@ function clearAllTestData() {
     // ล้าง localStorage
     localStorage.removeItem("talathub_active_order");
     localStorage.removeItem("talathub_cart");
+    localStorage.removeItem("talathub_delivery_location");
 
     // ล้าง Firebase orders ทั้งหมด
     if (isFirebaseReady()) {
@@ -256,10 +257,12 @@ function clearAllTestData() {
     // ล้าง state
     state.activeOrder = null;
     state.cart = [];
+    state.deliveryLocation = null;
 
     // อัปเดต UI
     const hubBadge = document.getElementById("hub-badge-count");
     if (hubBadge) { hubBadge.classList.add("hidden"); hubBadge.textContent = ""; }
+    updateDeliveryLocationUI();
     updateCartUI();
     renderCatalog();
     if (typeof renderHubPickingList === "function") renderHubPickingList();
@@ -340,9 +343,27 @@ const MARKET_ORIGIN = {
 
 function loadSavedLocation() {
     try {
+        const cust = loadSavedCustomer();
+        // ถ้าผู้ใช้ยังไม่ได้ล็อกอินเป็นสมาชิก ให้เริ่มที่สถานะ "ยังไม่ได้ระบุตำแหน่งจัดส่ง" เสมอ และล้างข้อมูลพิกัดตัวอย่างเก่าออก
+        if (!cust || !cust.isLoggedIn) {
+            localStorage.removeItem("talathub_delivery_location");
+            return null;
+        }
+
         const saved = localStorage.getItem("talathub_delivery_location");
         if (saved) {
             const parsed = JSON.parse(saved);
+            // ล้างข้อมูลตัวอย่าง/ทดสอบเดิม เช่น เทศบาลเมืองบ้านบึง หรือ คุณสุรีย์ หรือ 0.0 กม.
+            if (parsed && (
+                !parsed.isSet ||
+                !parsed.title ||
+                parsed.title.includes("เทศบาลเมืองบ้านบึง") ||
+                parsed.title.includes("สุรีย์") ||
+                parsed.distance === "0.0 กม."
+            )) {
+                localStorage.removeItem("talathub_delivery_location");
+                return null;
+            }
             if (parsed && parsed.isSet && parsed.title) {
                 return parsed;
             }
@@ -589,8 +610,9 @@ function detectCurrentLocationGPS() {
             if (res.ok) {
                 const data = await res.json();
                 const parts = [data.locality, data.city, data.principalSubdivision].filter(p => p && p.trim());
-                if (parts.length > 0) {
-                    addressTitle = parts.join(", ");
+                const uniqueParts = [...new Set(parts)];
+                if (uniqueParts.length > 0) {
+                    addressTitle = uniqueParts.join(", ");
                 }
             }
         } catch (e1) {
@@ -612,8 +634,9 @@ function detectCurrentLocationGPS() {
                         const district = data2.address.district || data2.address.city || "";
                         const province = data2.address.province || data2.address.state || "";
                         const parts = [road, subdistrict, district, province].filter(p => p && p.trim());
-                        if (parts.length > 0) {
-                            addressTitle = parts.join(", ");
+                        const uniqueParts = [...new Set(parts)];
+                        if (uniqueParts.length > 0) {
+                            addressTitle = uniqueParts.join(", ");
                         }
                     }
                 }
@@ -2302,6 +2325,18 @@ function renderCheckoutPage() {
 
     container.innerHTML = html;
 
+    // ✅ Sync state.activeCoupon จาก radio ที่ถูกเลือกอยู่จริงใน DOM
+    // เพื่อให้ badge และ summary ตรงกับที่ผู้ใช้เห็น
+    const checkedCouponRadio = document.querySelector('input[name="checkout_coupon"]:checked');
+    if (checkedCouponRadio) {
+        const selectedVal = checkedCouponRadio.value;
+        if (selectedVal === "none") {
+            state.activeCoupon = null;
+        } else if (selectedVal === "FRESH20" && !state.activeCoupon) {
+            state.activeCoupon = { code: "FRESH20", discount: 20, desc: "ส่วนลด ฿20 สั่งของสดรอบถัดไป" };
+        }
+    }
+
     const totals = calculateCartTotals();
     const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     setVal("summary-items-count", totals.itemsCount);
@@ -2340,8 +2375,8 @@ function renderCheckoutPage() {
     // Update Address and Location card
     const addrTitle = document.getElementById("checkout-address-title");
     const addrDetail = document.getElementById("checkout-address-detail");
-    if (addrTitle) addrTitle.textContent = state.deliveryLocation ? state.deliveryLocation.title : "บ้านคุณสุรีย์ (ร้านเจ๊เจียบ ซ.เปิดน้อย)";
-    if (addrDetail) addrDetail.textContent = state.deliveryLocation ? state.deliveryLocation.detail : "ที่อยู่บ้านสุรีย์ - ติดต่อที่บ้านคุณ";
+    if (addrTitle) addrTitle.textContent = (state.deliveryLocation && state.deliveryLocation.title) ? state.deliveryLocation.title : "กรุณาระบุที่อยู่จัดส่งของคุณ";
+    if (addrDetail) addrDetail.textContent = (state.deliveryLocation && state.deliveryLocation.detail) ? state.deliveryLocation.detail : "แตะเพื่อระบุพิกัดหรือเลือกที่อยู่จัดส่ง";
 }
 
 // Payment Method Selector
@@ -2541,9 +2576,9 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         paymentType: paymentType,
         paymentDesc: paymentDesc,
         deliveryNote: noteVal,
-        customerName: (state.customer && state.customer.isLoggedIn) ? state.customer.identifier : "คุณสุรีย์ (บ้านบึง)",
-        customerPhone: "089-xxx-4211",
-        address: (state.deliveryLocation && state.deliveryLocation.title) ? state.deliveryLocation.title : "เทศบาลเมืองบ้านบึง ชลบุรี",
+        customerName: (state.customer && state.customer.isLoggedIn) ? state.customer.identifier : "ลูกค้าทั่วไป",
+        customerPhone: (state.customer && state.customer.phone) ? state.customer.phone : "-",
+        address: (state.deliveryLocation && state.deliveryLocation.title) ? state.deliveryLocation.title : "ตามพิกัดที่ลูกค้าระบุ",
         stalls: Object.values(stallsMap)
     };
 
@@ -2604,7 +2639,7 @@ function renderTrackingScreen() {
         setVal("tracking-step2-stalls", stallNames);
     }
 
-    const destTitle = state.deliveryLocation ? state.deliveryLocation.title : "บ้านคุณสุรีย์ (ร้านเจ๊เจียบ ซ.เปิดน้อย)";
+    const destTitle = (state.deliveryLocation && state.deliveryLocation.title) ? state.deliveryLocation.title : (order.address || "ที่อยู่ปลายทาง");
     setVal("tracking-step3-dest", `มุ่งหน้า ${destTitle}`);
 
     // Update Status Hero Banner based on current status
@@ -3091,8 +3126,8 @@ function openCustomerWalletModal() {
 
     const idEl = document.getElementById("wallet-customer-id");
     if (idEl) {
-        const id = state.customer && state.customer.isLoggedIn ? state.customer.identifier : "@pisaen6666";
-        idEl.textContent = `คุณสุรีย์ (${id})`;
+        const id = state.customer && state.customer.isLoggedIn ? state.customer.identifier : "ผู้ใช้งานทั่วไป";
+        idEl.textContent = state.customer && state.customer.isLoggedIn ? `สมาชิก (${id})` : id;
     }
 }
 
@@ -3438,24 +3473,10 @@ function handleCustomerLoginSubmit() {
     };
     saveCustomerToStorage(state.customer);
 
-    // Auto-load member saved address if no location was picked
-    if (!state.deliveryLocation || !state.deliveryLocation.isSet) {
-        state.deliveryLocation = {
-            title: "บ้านคุณสุรีย์ (ร้านเจ๊เจียบ ซอยเปิดน้อย)",
-            detail: "ห่างจากตลาดวิศิษฐ์ชัย 1.2 กม. • ที่อยู่สมาชิกหลัก",
-            distance: "1.2 กม.",
-            fee: 20,
-            lat: 13.3150,
-            lng: 101.1280,
-            isRealGPS: false,
-            isSet: true
-        };
-        saveLocationToStorage(state.deliveryLocation);
-    }
-
     closeCustomerLoginModal();
     renderAuthHeaderButtons();
     updateDeliveryLocationUI();
+    updateCustomerLoyaltyBanner();
     renderCatalog();
 
     // Auto-fulfill pending add to cart if customer clicked before logging in
@@ -3476,7 +3497,11 @@ function handleCustomerLoginSubmit() {
 function logoutCustomer() {
     state.customer = { isLoggedIn: false, identifier: "", type: "phone" };
     saveCustomerToStorage(state.customer);
+    state.deliveryLocation = null;
+    saveLocationToStorage(null);
     renderAuthHeaderButtons();
+    updateDeliveryLocationUI();
+    updateCustomerLoyaltyBanner();
     showToast("🚪 ออกจากระบบลูกค้าเรียบร้อยแล้ว");
 }
 
@@ -3665,9 +3690,9 @@ function generateLineOrderMessage(order) {
 ━━━━━━━━━━━━━━━━━━
 📦 รหัสออเดอร์: ${order.orderId}
 ⏰ เวลาสั่งซื้อ: ${timeStr} น. (${slot.slotText})
-👤 ผู้สั่ง: ${order.customerName || 'คุณสุรีย์'} (${order.customerPhone || '089-xxx-4211'})
-📍 ที่อยู่จัดส่ง: ${order.address || 'เทศบาลเมืองบ้านบึง'}
-📝 โน้ตถึงไรเดอร์: ${order.deliveryNote || order.note || 'แขวนไว้ที่รั้วสีขาว'}
+👤 ผู้สั่ง: ${order.customerName || 'ลูกค้าทั่วไป'} (${order.customerPhone || '-'})
+📍 ที่อยู่จัดส่ง: ${order.address || 'ตามพิกัดจัดส่ง'}
+📝 โน้ตถึงไรเดอร์: ${order.deliveryNote || order.note || '-'}
 ━━━━━━━━━━━━━━━━━━
 🛒 รายการสินค้าที่ต้องจัด:${itemsList}
 ━━━━━━━━━━━━━━━━━━
@@ -3747,10 +3772,10 @@ function renderHubPickingList() {
 
     if (queueBadge) queueBadge.textContent = "1";
 
-    const customerName = order.customerName || "คุณสุรีย์ (บ้านบึง)";
-    const customerPhone = order.customerPhone || "089-xxx-4211";
-    const address = order.address || "เทศบาลเมืองบ้านบึง ชลบุรี";
-    const note = order.deliveryNote || order.note || "แขวนไว้ที่รั้วสีขาว";
+    const customerName = order.customerName || "ลูกค้าทั่วไป";
+    const customerPhone = order.customerPhone || "-";
+    const address = order.address || "ตามพิกัดจัดส่ง";
+    const note = order.deliveryNote || order.note || "-";
     const paymentDesc = order.paymentDesc || "จ่ายผ่านพร้อมเพย์แล้ว";
     const total = order.grandTotal || order.total || 0;
 
@@ -3934,11 +3959,10 @@ function createSampleCustomerOrder() {
         grandTotal: 185,
         total: 185,
         paymentType: "promptpay",
-        paymentDesc: "PromptPay (จ่ายแล้ว)",
-        deliveryNote: "แขวนไว้ที่รั้วสีขาว อยู่ติด 7-11",
-        customerName: (state.customer && state.customer.isLoggedIn) ? state.customer.identifier : "คุณสุรีย์ (ม.พฤกษา 3)",
-        customerPhone: "089-xxx-4211",
-        address: (state.deliveryLocation && state.deliveryLocation.title) ? state.deliveryLocation.title : "เทศบาลเมืองบ้านบึง จังหวัดชลบุรี",
+        deliveryNote: "โน้ต: แขวนไว้ที่รั้วบ้าน",
+        customerName: (state.customer && state.customer.isLoggedIn) ? state.customer.identifier : "ลูกค้า (ทดสอบระบบ)",
+        customerPhone: (state.customer && state.customer.phone) ? state.customer.phone : "08x-xxx-xxxx",
+        address: (state.deliveryLocation && state.deliveryLocation.title) ? state.deliveryLocation.title : "อ.บ้านบึง จ.ชลบุรี",
         stalls: [
             {
                 stallId: "stall_a01",
@@ -4060,8 +4084,8 @@ function renderRiderScreen() {
     if (order) {
         if (badge) badge.textContent = `ออเดอร์ ${order.orderId}`;
         if (totalBadge) totalBadge.textContent = `฿${order.grandTotal || order.total || 0} (${order.paymentDesc || 'ชำระแล้ว'})`;
-        if (destName) destName.textContent = order.customerName || "คุณสุรีย์ (บ้านบึง)";
-        if (destDetail) destDetail.textContent = `ที่อยู่: ${order.address || 'เทศบาลเมืองบ้านบึง'} • โน้ต: ${order.deliveryNote || order.note || 'อยู่ติด 7-11'}`;
+        if (destName) destName.textContent = order.customerName || "ลูกค้าทั่วไป";
+        if (destDetail) destDetail.textContent = `ที่อยู่: ${order.address || 'ตามพิกัดจัดส่ง'}` + (order.deliveryNote ? ` • โน้ต: ${order.deliveryNote}` : '');
     }
 }
 
