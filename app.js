@@ -661,31 +661,46 @@ function detectCurrentLocationGPS() {
 
         let addressTitle = `พิกัดปัจจุบัน (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
 
-        // ── Helper: สร้างชื่อที่อยู่จาก Nominatim address object ──────────────────
-        function buildAddressFromNominatim(addr) {
+        // ── Helper: สร้างชื่อที่อยู่จาก Nominatim full response object ──────────────
+        // ⚠️ ต้องรับ full response (data) ไม่ใช่แค่ data.address
+        // เพราะ name/amenity/class อยู่ที่ ROOT ของ response ไม่ใช่ใน address{}
+        function buildAddressFromNominatim(data) {
+            const addr = data.address || {};
+
             // ระดับ 1: สถานที่สำคัญ / อาคาร
-            const landmark =
-                addr.amenity || addr.tourism || addr.shop || addr.office ||
-                addr.building || addr.leisure || addr.historic || addr.name || "";
+            // data.name = ชื่อหลักของสถานที่ (ถนน/ร้านค้า/วัด ฯลฯ) อยู่ที่ ROOT
+            // data.class + data.type บอกประเภท เช่น class="amenity" type="market"
+            const isLandmark = data.class && !["highway", "boundary", "place", "landuse"].includes(data.class);
+            const landmark = isLandmark ? (data.name || "") : "";
+
+            // addr.amenity/tourism/shop ก็อาจมีใน address บางครั้ง
+            const addrLandmark = addr.amenity || addr.tourism || addr.shop || addr.office ||
+                addr.leisure || addr.historic || "";
+
+            const bestLandmark = landmark || addrLandmark;
 
             // ระดับ 2: ซอย / ถนน
+            // data.name คือชื่อถนน ถ้า class="highway"
+            const roadFromRoot = (data.class === "highway" && data.name) ? data.name : "";
             const soi = addr.alley || addr.lane || "";
-            const road = addr.road || addr.pedestrian || addr.footway || addr.path || "";
-            const roadPart = soi && road ? `ซอย${soi.replace(/^ซอย/i, "")} (${road})` : (soi || road);
+            const road = roadFromRoot || addr.road || addr.pedestrian || addr.footway || addr.path || "";
+            const roadPart = soi && road
+                ? `ซอย${soi.replace(/^ซอย/i, "")} ${road}`
+                : (soi || road);
 
-            // ระดับ 3: แขวง / ตำบล / หมู่บ้าน
-            const subdistrict =
-                addr.quarter || addr.neighbourhood || addr.suburb ||
+            // ระดับ 3: แขวง / ตำบล / ชุมชน
+            const subdistrict = addr.quarter || addr.neighbourhood || addr.suburb ||
                 addr.subdistrict || addr.village || addr.city_district || "";
 
-            // ระดับ 4: เขต / อำเภอ
-            const district = addr.district || addr.county || addr.city || addr.town || addr.municipality || "";
+            // ระดับ 4: เขต / อำเภอ / เมือง
+            const district = addr.district || addr.county || addr.city ||
+                addr.town || addr.municipality || "";
 
-            // ระดับ 5: จังหวัด / รัฐ
+            // ระดับ 5: จังหวัด
             const province = addr.province || addr.state || "";
 
-            const parts = [landmark, roadPart, subdistrict, district, province]
-                .map(p => p ? p.trim() : "")
+            const parts = [bestLandmark, roadPart, subdistrict, district, province]
+                .map(p => (p || "").trim())
                 .filter((p, i, arr) => p && arr.indexOf(p) === i); // unique & non-empty
 
             return parts.length > 0 ? parts.join(", ") : null;
@@ -704,18 +719,19 @@ function detectCurrentLocationGPS() {
             if (res1.ok) {
                 const data1 = await res1.json();
                 if (data1 && data1.address) {
-                    const built = buildAddressFromNominatim(data1.address);
+                    // ✅ ส่ง full data1 object (ไม่ใช่แค่ data1.address)
+                    const built = buildAddressFromNominatim(data1);
                     if (built) {
                         addressTitle = built;
-                        // บันทึก display_name ไว้ debug ถ้าต้องการ
-                        // console.log("Nominatim display_name:", data1.display_name);
                     }
                 }
             }
         } catch (e1) {
             console.warn("Nominatim reverse geocode failed, trying BigDataCloud...", e1);
+        }
 
-            // 2. Fallback: BigDataCloud (locality level)
+        // 2. Fallback: BigDataCloud — ใช้เมื่อ Nominatim ยังคง fallback หรือ error
+        if (addressTitle.startsWith("พิกัดปัจจุบัน")) {
             try {
                 const controller2 = new AbortController();
                 const timeoutId2 = setTimeout(() => controller2.abort(), 3500);
@@ -727,7 +743,6 @@ function detectCurrentLocationGPS() {
 
                 if (res2.ok) {
                     const data2 = await res2.json();
-                    // BigDataCloud locality info — ใช้ localityInfo ถ้ามี เพื่อได้ถนน/ชุมชน
                     const parts = [];
                     if (data2.localityInfo && data2.localityInfo.informative) {
                         const infoParts = data2.localityInfo.informative
