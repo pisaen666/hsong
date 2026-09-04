@@ -3702,6 +3702,36 @@ function generateLineOrderMessage(order) {
 👉 ดูใบจัดของสด: https://pisaen666.github.io/hsong/`;
 }
 
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+        || (window.matchMedia && window.matchMedia("(max-width: 768px)").matches && ('ontouchstart' in window));
+}
+
+function copyTextToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+    }
+    fallbackCopy(text);
+}
+
+function fallbackCopy(text) {
+    try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.top = "0";
+        ta.style.left = "-9999px";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+    } catch (e) {
+        console.warn("Fallback copy failed:", e);
+    }
+}
+
 function sendLineOrderNotification(order) {
     if (!order) return;
     const msg = generateLineOrderMessage(order);
@@ -3710,15 +3740,19 @@ function sendLineOrderNotification(order) {
     state.latestLineMessage = msg;
     state.latestLineUrl = lineUrl;
 
-    // ✅ เปิด LINE จริงเพื่อส่งแจ้งเตือน (เปิดในหน้าต่างใหม่เพื่อไม่รบกวน checkout flow)
-    try {
-        const lineWin = window.open(lineUrl, '_blank', 'noopener,noreferrer');
-        // ถ้าเบราว์เซอร์บล็อก popup ให้แสดง toast แนะนำ
-        if (!lineWin || lineWin.closed || typeof lineWin.closed === 'undefined') {
-            showToast("⚠️ กรุณาอนุญาต Popup เพื่อส่งแจ้งเตือน LINE หรือแตะปุ่ม 'แชร์ LINE' ในหน้า Tracking");
+    // สำหรับมือถือ: สามารถเปิดแอป LINE ได้ผ่าน Deep Link เพื่อส่งข้อความออเดอร์
+    // สำหรับ PC/Desktop: ห้ามเปิด window.open อัตโนมัติ เพราะ desktop browser จะ redirect ไปที่ social-plugins.line.me ซึ่งติด HTTP 400 Bad Request จากความยาวข้อความ และรบกวนหน้าต่างสั่งซื้อ
+    if (isMobileDevice()) {
+        try {
+            const lineWin = window.open(lineUrl, '_blank', 'noopener,noreferrer');
+            if (!lineWin || lineWin.closed || typeof lineWin.closed === 'undefined') {
+                console.log("Mobile popup was handled or blocked");
+            }
+        } catch (e) {
+            console.warn("LINE mobile open failed:", e);
         }
-    } catch (e) {
-        console.warn("LINE open failed:", e);
+    } else {
+        console.log("PC Order created: Saved LINE notification for manual share/copy without breaking desktop view.");
     }
 }
 
@@ -3728,8 +3762,20 @@ function openLineShareApp() {
         return;
     }
     const msg = state.latestLineMessage || generateLineOrderMessage(state.activeOrder);
-    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
-    window.open(lineUrl, '_blank');
+
+    if (isMobileDevice()) {
+        const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
+        window.open(lineUrl, '_blank');
+    } else {
+        copyTextToClipboard(msg);
+        showToast("📋 คัดลอกข้อความออเดอร์แล้ว! สามารถกด Ctrl+V วางใน LINE บน PC ได้ทันที");
+        try {
+            // ลองเรียก LINE PC Protocol หากติดตั้งแอป LINE บน Windows ไว้
+            window.location.href = `line://msg/text/?${encodeURIComponent(msg)}`;
+        } catch (e) {
+            console.warn("LINE desktop protocol failed:", e);
+        }
+    }
 }
 
 // ==========================================
