@@ -976,13 +976,13 @@
                         <div class="text-[11px] text-slate-500 pl-5" id="rider-dest-detail">รอข้อมูลจัดส่ง</div>
                         <div class="bg-amber-50 text-amber-900 border border-amber-200 rounded-xl p-2 ml-5 text-[11px] font-medium flex items-center gap-1">
                             <span class="material-symbols-outlined text-xs text-amber-600">info</span>
-                            <span>โน้ตถึงไรเดอร์: <strong>-</strong></span>
+                            <span>โน้ตถึงไรเดอร์: <strong id="rider-note-text">-</strong></span>
                         </div>
                     </div>
 
                     <!-- Action Contact & Google Maps Navigation -->
                     <div class="grid grid-cols-2 gap-2 pt-1">
-                        <a href="https://maps.google.com/?q=13.9120,100.3400" target="_blank" class="p-2.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl font-bold flex items-center justify-center gap-1 border border-blue-200 active:scale-95 transition-all text-center">
+                        <a id="rider-maps-link" href="https://maps.google.com/?q=13.9120,100.3400" target="_blank" class="p-2.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl font-bold flex items-center justify-center gap-1 border border-blue-200 active:scale-95 transition-all text-center">
                             <span class="material-symbols-outlined text-base">navigation</span>
                             <span>เปิด Google Maps</span>
                         </a>
@@ -992,19 +992,51 @@
                         </button>
                     </div>
 
+                    <!-- Refund envelope alert for rider (if any out-of-stock items) -->
+                    <div id="rider-refund-alert" class="hidden bg-rose-50 border border-rose-300 text-rose-800 rounded-xl p-3 text-xs font-bold space-y-1 animate-fade-in">
+                        <div class="flex items-center gap-1.5 text-rose-700">
+                            <span class="material-symbols-outlined text-base">payments</span>
+                            <span>⚠️ มีซองเงินทอนคืนลูกค้า: <span id="rider-refund-alert-amount" class="text-rose-950 font-black">฿0</span></span>
+                        </div>
+                        <p class="text-[11px] text-rose-600 font-normal">มีสินค้าขาดและฮับได้แพ็คเงินทอนใส่ซองแนบมากับถุงของสด กรุณาส่งมอบให้ลูกค้าด้วย</p>
+                    </div>
+
                     <!-- Delivery Step Actions for Rider -->
                     <div class="pt-3 border-t border-slate-100 space-y-2">
-                        <div class="font-bold text-slate-700 text-[11px]">สถานะการทำงานของไรเดอร์:</div>
+                        <div class="flex items-center justify-between">
+                            <div class="font-bold text-slate-700 text-[11px]">สถานะการทำงานของไรเดอร์:</div>
+                            <span id="rider-current-status-badge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                                รอดำเนินการ
+                            </span>
+                        </div>
                         
-                        <div class="grid grid-cols-2 gap-2">
-                            <button type="button" onclick="handleRiderStartDelivery()" class="p-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 text-xs active:scale-95 transition-all">
-                                <span class="material-symbols-outlined text-base">two_wheeler</span>
-                                <span>1. รับของแล้ว ออกส่ง</span>
+                        <div class="grid grid-cols-2 gap-2" id="rider-action-buttons-grid">
+                            <button type="button" id="btn-rider-start-delivery" onclick="handleRiderStartDelivery()" class="p-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 text-xs active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-base" id="rider-btn-start-icon">two_wheeler</span>
+                                <span id="rider-btn-start-text">1. รับของแล้ว ออกส่ง</span>
                             </button>
-                            <button type="button" onclick="handleRiderCompleteDelivery()" class="p-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 text-xs active:scale-95 transition-all">
-                                <span class="material-symbols-outlined text-base">check_circle</span>
-                                <span>2. ส่งมอบสำเร็จ</span>
+                            <button type="button" id="btn-rider-complete-delivery" onclick="handleRiderCompleteDelivery()" class="p-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 text-xs active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-base" id="rider-btn-complete-icon">check_circle</span>
+                                <span id="rider-btn-complete-text">2. ส่งมอบสำเร็จ</span>
                             </button>
+                        </div>
+
+                        <!-- Post Delivery Completion Banner for Rider -->
+                        <div id="rider-completed-banner" class="hidden bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl p-3.5 space-y-2.5 text-center shadow-md animate-fade-in">
+                            <div class="flex items-center justify-center gap-1.5 font-black text-sm">
+                                <span class="material-symbols-outlined text-base text-amber-300">verified</span>
+                                <span>จัดส่งมอบสำเร็จเรียบร้อย (+฿40 ค่ารอบ)</span>
+                            </div>
+                            <p class="text-xs text-emerald-100 font-medium">ลูกค้าตรวจรับของสดและเปิดให้รีวิวความสดสะสมแต้มแล้ว</p>
+                            <div class="flex items-center gap-2 pt-1">
+                                <button type="button" onclick="goToCustomerTrackingFromRiderComplete()" class="flex-1 py-2.5 px-3 bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all">
+                                    <span class="material-symbols-outlined text-base text-emerald-600">visibility</span>
+                                    <span>ดูหน้าจอลูกค้า (Customer Tracking)</span>
+                                </button>
+                                <button type="button" onclick="resetRiderOrderForNextJob()" class="py-2.5 px-3 bg-emerald-950/50 hover:bg-emerald-950/70 text-white font-bold rounded-xl text-xs border border-white/30 active:scale-95 transition-all">
+                                    <span>รับงานถัดไป</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2635,6 +2667,66 @@
     </div>
 
     <!-- ========================================== -->
+    <!-- RIDER DELIVERY COMPLETE MODAL              -->
+    <!-- ========================================== -->
+    <div id="rider-delivery-complete-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 border border-slate-100 text-center animate-scale-up">
+            <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-3xl shadow-sm">
+                🎉
+            </div>
+            <div>
+                <span class="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1">
+                    จัดส่งสำเร็จแล้ว
+                </span>
+                <h3 class="font-extrabold text-base text-slate-900" id="rider-complete-modal-title">ส่งมอบของสดถึงมือลูกค้าเรียบร้อย!</h3>
+                <p class="text-xs text-slate-500 mt-1" id="rider-complete-modal-desc">
+                    ออเดอร์ถูกบันทึกสถานะจัดส่งสำเร็จบนระบบแล้ว
+                </p>
+            </div>
+
+            <!-- Summary Box -->
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-xs text-left space-y-2">
+                <div class="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
+                    <span>เลขออเดอร์:</span>
+                    <strong id="rider-complete-order-id" class="text-slate-900 font-black">#TH-9568</strong>
+                </div>
+                <div class="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
+                    <span>ลูกค้าผู้รับ:</span>
+                    <strong id="rider-complete-customer-name" class="text-slate-900">080-568-7733</strong>
+                </div>
+                <div class="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
+                    <span>ยอดเงิน & การชำระ:</span>
+                    <strong id="rider-complete-payment-info" class="text-emerald-700 font-bold">฿317 (ชำระแล้ว)</strong>
+                </div>
+                <!-- Refund note if any -->
+                <div id="rider-complete-refund-row" class="hidden bg-rose-50 p-2 rounded-xl border border-rose-200 text-rose-800 flex items-center justify-between">
+                    <span class="flex items-center gap-1 font-bold">
+                        <span class="material-symbols-outlined text-sm text-rose-600">payments</span>
+                        <span>ส่งมอบซองเงินทอน:</span>
+                    </span>
+                    <strong id="rider-complete-refund-amount" class="text-rose-950 font-black">฿0</strong>
+                </div>
+                <!-- Earnings -->
+                <div class="bg-emerald-50 p-2.5 rounded-xl border border-emerald-200 text-emerald-900 flex items-center justify-between font-bold">
+                    <span>🛵 รายได้ค่ารอบไรเดอร์:</span>
+                    <span class="text-emerald-700 text-sm font-black">+฿40</span>
+                </div>
+            </div>
+
+            <!-- Action Buttons leading to next step -->
+            <div class="space-y-2 pt-1 text-xs">
+                <button onclick="goToCustomerTrackingFromRiderComplete()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-base">visibility</span>
+                    <span>1. สลับไปดูหน้าจอลูกค้า (Customer Tracking)</span>
+                </button>
+                <button onclick="closeRiderDeliveryCompleteModal()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl active:scale-95 transition-all">
+                    ปิดหน้าต่าง / สแตนด์บายที่หน้าไรเดอร์
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
     <!-- DISPATCH SUCCESS & NEXT STEP MODAL         -->
     <!-- ========================================== -->
     <div id="dispatch-success-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
@@ -2742,6 +2834,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=5.3"></script>
+    <script src="app.js?v=5.4"></script>
 </body>
 </html>

@@ -3115,15 +3115,26 @@ function handleRiderStartDelivery() {
         showToast("⚠️ ไม่พบออเดอร์ที่กำลังรอดำเนินการ");
         return;
     }
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} น.`;
     state.activeOrder.status = "delivering";
+    state.activeOrder.startedDeliveryAt = timeStr;
+
     if (state.activeOrder.stalls) {
         state.activeOrder.stalls.forEach(s => {
             s.pickedCount = s.itemsCount;
             if (s.items) s.items.forEach(i => i.picked = true);
         });
     }
+
     saveActiveOrderToStorage(state.activeOrder);
+    updateOrderStatusInFirebase(state.activeOrder.orderId, "delivering");
+
     renderRiderScreen();
+    if (typeof renderTrackingScreen === "function") renderTrackingScreen();
+    if (typeof updateHomeActiveOrderBanner === "function") updateHomeActiveOrderBanner();
+    if (typeof playOrderAlertSound === "function") playOrderAlertSound();
+
     showToast("🛵 ไรเดอร์รับของแล้ว ออกเดินทางนำส่งลูกค้า!");
 }
 
@@ -3132,16 +3143,70 @@ function handleRiderCompleteDelivery() {
         showToast("⚠️ ไม่พบออเดอร์ที่กำลังรอดำเนินการ");
         return;
     }
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} น.`;
     state.activeOrder.status = "delivered";
+    state.activeOrder.deliveredAt = timeStr;
+
     if (state.activeOrder.stalls) {
         state.activeOrder.stalls.forEach(s => {
             s.pickedCount = s.itemsCount;
             if (s.items) s.items.forEach(i => i.picked = true);
         });
     }
+
     saveActiveOrderToStorage(state.activeOrder);
+    updateOrderStatusInFirebase(state.activeOrder.orderId, "delivered");
+
     renderRiderScreen();
-    showToast("🎉 ไรเดอร์ส่งมอบของสดถึงมือลูกค้าเรียบร้อยแล้ว!");
+    if (typeof renderTrackingScreen === "function") renderTrackingScreen();
+    if (typeof updateHomeActiveOrderBanner === "function") updateHomeActiveOrderBanner();
+    if (typeof playOrderAlertSound === "function") playOrderAlertSound();
+
+    openRiderDeliveryCompleteModal();
+    showToast("🎉 ไรเดอร์ส่งมอบของสดถึงมือลูกค้าเรียบร้อยแล้ว! (+฿40 ค่ารอบ)");
+}
+
+function openRiderDeliveryCompleteModal() {
+    const modal = document.getElementById("rider-delivery-complete-modal");
+    if (!modal) return;
+    const order = state.activeOrder;
+    if (order) {
+        const setVal = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+        setVal("rider-complete-order-id", `ออเดอร์ ${order.orderId}`);
+        setVal("rider-complete-customer-name", order.customerName || order.customerPhone || "ลูกค้าทั่วไป");
+
+        const payDesc = order.paymentDesc || (order.paymentType === "bank_transfer" ? "โอน SCB แล้ว" : (order.paymentType === "cod" ? "เก็บเงินสด COD" : "จ่ายผ่านพร้อมเพย์แล้ว"));
+        setVal("rider-complete-payment-info", `฿${order.grandTotal || order.total || 0} (${payDesc})`);
+
+        const refundRow = document.getElementById("rider-complete-refund-row");
+        const refundAmt = document.getElementById("rider-complete-refund-amount");
+        if (order.refundCashTotal && order.refundCashTotal > 0) {
+            if (refundRow) refundRow.classList.remove("hidden");
+            if (refundAmt) refundAmt.textContent = `฿${order.refundCashTotal}`;
+        } else {
+            if (refundRow) refundRow.classList.add("hidden");
+        }
+    }
+    modal.classList.remove("hidden");
+}
+
+function closeRiderDeliveryCompleteModal() {
+    const modal = document.getElementById("rider-delivery-complete-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function goToCustomerTrackingFromRiderComplete() {
+    closeRiderDeliveryCompleteModal();
+    switchRole("customer");
+    goToTrackingScreen();
+    showToast("📱 สลับมาหน้าจอติดตามของลูกค้าแล้ว (แสดงสถานะจัดส่งสำเร็จ)");
+}
+
+function resetRiderOrderForNextJob() {
+    showToast("🔄 ไรเดอร์พร้อมรับออเดอร์ใหม่แล้ว (Standby)");
+    const completedBanner = document.getElementById("rider-completed-banner");
+    if (completedBanner) completedBanner.classList.add("hidden");
 }
 
 function switchToHubFromTracking() {
@@ -4805,12 +4870,130 @@ function renderRiderScreen() {
     const totalBadge = document.getElementById("rider-order-total-badge");
     const destName = document.getElementById("rider-dest-name");
     const destDetail = document.getElementById("rider-dest-detail");
+    const noteText = document.getElementById("rider-note-text");
+    const mapsLink = document.getElementById("rider-maps-link");
+    const statusBadge = document.getElementById("rider-current-status-badge");
+    const refundAlert = document.getElementById("rider-refund-alert");
+    const refundAmount = document.getElementById("rider-refund-alert-amount");
+    const btnStart = document.getElementById("btn-rider-start-delivery");
+    const btnStartText = document.getElementById("rider-btn-start-text");
+    const btnStartIcon = document.getElementById("rider-btn-start-icon");
+    const btnComplete = document.getElementById("btn-rider-complete-delivery");
+    const btnCompleteText = document.getElementById("rider-btn-complete-text");
+    const btnCompleteIcon = document.getElementById("rider-btn-complete-icon");
+    const completedBanner = document.getElementById("rider-completed-banner");
 
-    if (order) {
-        if (badge) badge.textContent = `ออเดอร์ ${order.orderId}`;
-        if (totalBadge) totalBadge.textContent = `฿${order.grandTotal || order.total || 0} (${order.paymentDesc || 'ชำระแล้ว'})`;
-        if (destName) destName.textContent = order.customerName || "ลูกค้าทั่วไป";
-        if (destDetail) destDetail.textContent = `ที่อยู่: ${order.address || 'ตามพิกัดจัดส่ง'}` + (order.deliveryNote ? ` • โน้ต: ${order.deliveryNote}` : '');
+    if (!order) {
+        if (badge) badge.textContent = "ไม่มีงานค้าง";
+        if (totalBadge) totalBadge.textContent = "฿0";
+        if (destName) destName.textContent = "รอรับออเดอร์ใหม่จากฮับ";
+        if (destDetail) destDetail.textContent = "ขณะนี้ไม่มีคิวจัดส่งที่มอบหมายให้คุณ";
+        if (noteText) noteText.textContent = "-";
+        if (statusBadge) {
+            statusBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600";
+            statusBadge.textContent = "พร้อมรับงาน";
+        }
+        if (refundAlert) refundAlert.classList.add("hidden");
+        if (completedBanner) completedBanner.classList.add("hidden");
+        return;
+    }
+
+    if (badge) badge.textContent = `ออเดอร์ ${order.orderId}`;
+    if (totalBadge) totalBadge.textContent = `฿${order.grandTotal || order.total || 0} (${order.paymentDesc || 'ชำระแล้ว'})`;
+    if (destName) destName.textContent = order.customerName || order.customerPhone || "080-568-7733";
+    if (destDetail) destDetail.textContent = `ที่อยู่: ${order.address || 'ตามพิกัดที่ลูกค้าระบุ'}`;
+    if (noteText) noteText.textContent = order.deliveryNote || "-";
+
+    if (mapsLink) {
+        if (order.address && order.address !== "ตามพิกัดที่ลูกค้าระบุ") {
+            mapsLink.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`;
+        } else {
+            mapsLink.href = "https://maps.google.com/?q=13.9120,100.3400";
+        }
+    }
+
+    // Check Refund Amount (กรณีมีสินค้าขาด)
+    let refundCashTotal = order.refundCashTotal || 0;
+    if (refundCashTotal === 0 && order.stalls) {
+        order.stalls.forEach(s => {
+            (s.items || []).forEach(it => {
+                if (it.outOfStock) {
+                    refundCashTotal += (it.actualPrice !== undefined ? it.actualPrice : it.price);
+                }
+            });
+        });
+        order.refundCashTotal = refundCashTotal;
+    }
+
+    if (refundAlert) {
+        if (refundCashTotal > 0 && order.status !== "delivered") {
+            refundAlert.classList.remove("hidden");
+            if (refundAmount) refundAmount.textContent = `฿${refundCashTotal}`;
+        } else {
+            refundAlert.classList.add("hidden");
+        }
+    }
+
+    // Dynamic Button States based on order.status
+    const status = order.status || "picking";
+
+    if (status === "delivering") {
+        if (statusBadge) {
+            statusBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 animate-pulse";
+            statusBadge.textContent = "🛵 กำลังออกส่ง";
+        }
+        if (btnStart) {
+            btnStart.className = "p-3 bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 text-xs active:scale-95 transition-all";
+        }
+        if (btnStartText) btnStartText.textContent = `✓ รับของแล้ว (${order.startedDeliveryAt || 'กำลังส่ง'})`;
+        if (btnStartIcon) btnStartIcon.textContent = "check";
+
+        if (btnComplete) {
+            btnComplete.className = "p-3 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1 text-xs ring-2 ring-emerald-400 ring-offset-2 animate-pulse active:scale-95 transition-all";
+        }
+        if (btnCompleteText) btnCompleteText.textContent = "2. ส่งมอบสำเร็จ (แตะเมื่อถึง)";
+        if (btnCompleteIcon) btnCompleteIcon.textContent = "check_circle";
+
+        if (completedBanner) completedBanner.classList.add("hidden");
+
+    } else if (status === "delivered") {
+        if (statusBadge) {
+            statusBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800";
+            statusBadge.textContent = "🎉 จัดส่งสำเร็จแล้ว";
+        }
+        if (btnStart) {
+            btnStart.className = "p-3 bg-slate-100 text-slate-400 font-medium rounded-xl flex items-center justify-center gap-1 text-xs cursor-default";
+        }
+        if (btnStartText) btnStartText.textContent = "✓ รับของแล้ว";
+        if (btnStartIcon) btnStartIcon.textContent = "check";
+
+        if (btnComplete) {
+            btnComplete.className = "p-3 bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold rounded-xl flex items-center justify-center gap-1 text-xs cursor-default";
+        }
+        if (btnCompleteText) btnCompleteText.textContent = `✓ ส่งมอบสำเร็จแล้ว (${order.deliveredAt || '09:05 น.'})`;
+        if (btnCompleteIcon) btnCompleteIcon.textContent = "verified";
+
+        if (completedBanner) completedBanner.classList.remove("hidden");
+
+    } else {
+        // "picking" or initial status
+        if (statusBadge) {
+            statusBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800";
+            statusBadge.textContent = "📦 รอรับของสดจากฮับ";
+        }
+        if (btnStart) {
+            btnStart.className = "p-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 text-xs active:scale-95 transition-all";
+        }
+        if (btnStartText) btnStartText.textContent = "1. รับของแล้ว ออกส่ง";
+        if (btnStartIcon) btnStartIcon.textContent = "two_wheeler";
+
+        if (btnComplete) {
+            btnComplete.className = "p-3 bg-slate-100 text-slate-400 font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 text-xs active:scale-95 transition-all";
+        }
+        if (btnCompleteText) btnCompleteText.textContent = "2. ส่งมอบสำเร็จ";
+        if (btnCompleteIcon) btnCompleteIcon.textContent = "check_circle";
+
+        if (completedBanner) completedBanner.classList.add("hidden");
     }
 }
 
