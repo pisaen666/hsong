@@ -126,5 +126,16 @@ button, input, select, span, div {
     #toast-message {
         display: none !important;
     }
+    table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+    }
+    th, td {
+        border: 1px solid #cbd5e1 !important;
+        padding: 6px 8px !important;
+    }
+    tr {
+        break-inside: avoid !important;
+    }
 }
 

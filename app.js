@@ -2049,6 +2049,15 @@ function setReportDateQuick(offsetDays) {
     changeReportDate(dateKey);
 }
 
+function navigateReportDay(direction) {
+    const curDate = _activeReportDateKey || getReportDateKey(Date.now());
+    const parts = curDate.split("-");
+    if (parts.length !== 3) return;
+    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    d.setDate(d.getDate() + direction);
+    changeReportDate(getReportDateKey(d.getTime()));
+}
+
 // ── UI Renderer สำหรับแท็บรายงานประจำวัน (#hub-content-report)
 function renderHubDailyReport(targetDateKey) {
     const container = document.getElementById("hub-content-report");
@@ -2062,6 +2071,9 @@ function renderHubDailyReport(targetDateKey) {
     const report = aggregateDailyOperations(targetDateKey);
     const thaiDateText = formatThaiDateDisplay(targetDateKey);
     const isToday = targetDateKey === getReportDateKey(Date.now());
+
+    // คำนวณรายได้ค่าบริการสุทธิของฮับ (GMV - ยอดจ่ายแม่ค้า - ค่ารอบไรเดอร์)
+    const hubNetMargin = report.summary.totalCustomerGMV - report.vendorSettlement.totalVendorAmount - report.riderSettlement.totalRiderFees;
 
     let html = `
     <!-- Top Filter Bar & Controls -->
@@ -2097,18 +2109,24 @@ function renderHubDailyReport(targetDateKey) {
             </div>
         </div>
 
-        <!-- Date selector toolbar -->
+        <!-- Date selector toolbar with Prev/Next buttons -->
         <div class="flex items-center justify-between gap-2 flex-wrap text-[11px]">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5">
                 <span class="font-bold text-slate-600 flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm text-slate-400">calendar_today</span>
                     <span>เลือกวันที่:</span>
                 </span>
+                <button onclick="navigateReportDay(-1)" title="วันก่อนหน้า" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm">chevron_left</span>
+                </button>
                 <input type="date" id="hub-report-date-input" value="${targetDateKey}" onchange="changeReportDate(this.value)" class="border border-slate-300 rounded-xl px-2.5 py-1 bg-slate-50 font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-500 outline-none">
+                <button onclick="navigateReportDay(1)" title="วันถัดไป" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm">chevron_right</span>
+                </button>
             </div>
             <div class="flex items-center gap-1">
-                <button onclick="setReportDateQuick(0)" class="px-2 py-1 rounded-lg font-bold ${isToday ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-all">วันนี้</button>
-                <button onclick="setReportDateQuick(-1)" class="px-2 py-1 rounded-lg font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">เมื่อวาน</button>
+                <button onclick="setReportDateQuick(0)" class="px-2.5 py-1 rounded-lg font-bold ${isToday ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-all">วันนี้</button>
+                <button onclick="setReportDateQuick(-1)" class="px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">เมื่อวาน</button>
                 ${report.summary.totalOrders === 0 ? `
                 <button onclick="generateSampleDailyOrders()" class="px-2.5 py-1 rounded-lg font-extrabold bg-amber-500 hover:bg-amber-600 text-white shadow-2xs transition-all flex items-center gap-1">
                     <span>➕ สร้างออเดอร์ตัวอย่าง</span>
@@ -2117,59 +2135,67 @@ function renderHubDailyReport(targetDateKey) {
         </div>
     </div>
 
-    <!-- 3 Big Primary KPI Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <!-- 4 Primary KPI Cards (GMV, Vendor Cost, Rider Settlement & Hub Net Margin) -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
         <!-- Card 1: GMV ลูกค้า -->
-        <div class="bg-gradient-to-br from-emerald-600 to-teal-800 text-white rounded-3xl p-4 shadow-md space-y-2 relative overflow-hidden">
+        <div class="bg-gradient-to-br from-emerald-600 to-teal-800 text-white rounded-3xl p-3.5 sm:p-4 shadow-md space-y-1.5 relative overflow-hidden">
             <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold text-emerald-200 flex items-center gap-1">
+                <span class="text-[10px] sm:text-[11px] font-bold text-emerald-200 flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm">shopping_bag</span>
-                    <span>ยอดขายรวมลูกค้า (GMV)</span>
+                    <span>ยอดขายรวม (GMV)</span>
                 </span>
-                <span class="text-[10px] bg-white/20 font-bold px-2 py-0.5 rounded-full">${report.summary.totalOrders} ใบ</span>
+                <span class="text-[9px] bg-white/20 font-bold px-1.5 py-0.2 rounded-full">${report.summary.totalOrders} ใบ</span>
             </div>
-            <div class="text-2xl sm:text-3xl font-black tracking-tight">฿${report.summary.totalCustomerGMV.toLocaleString()}</div>
-            <div class="text-[10px] text-emerald-100/90 pt-1 border-t border-white/15 space-y-0.5">
-                <div class="flex justify-between">
-                    <span>สำเร็จ: <strong class="text-white">${report.summary.completedOrders}</strong> | รอส่ง: <strong class="text-amber-200">${report.summary.pendingOrders}</strong></span>
-                    <span>ค่าส่งรวม: <strong class="text-white">฿${report.summary.totalDeliveryFees.toLocaleString()}</strong></span>
-                </div>
+            <div class="text-xl sm:text-2xl font-black tracking-tight">฿${report.summary.totalCustomerGMV.toLocaleString()}</div>
+            <div class="text-[9px] sm:text-[10px] text-emerald-100/90 pt-1 border-t border-white/15">
+                <span>สำเร็จ ${report.summary.completedOrders} | ค่าส่ง ฿${report.summary.totalDeliveryFees.toLocaleString()}</span>
             </div>
         </div>
 
-        <!-- Card 2: เคลียร์เงินไรเดอร์ -->
-        <div class="bg-gradient-to-br from-sky-600 to-blue-800 text-white rounded-3xl p-4 shadow-md space-y-2 relative overflow-hidden">
+        <!-- Card 2: เคลียร์เงินร้านค้า/แผงค้า -->
+        <div class="bg-gradient-to-br from-amber-600 to-orange-700 text-white rounded-3xl p-3.5 sm:p-4 shadow-md space-y-1.5 relative overflow-hidden">
             <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold text-sky-200 flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sm">two_wheeler</span>
-                    <span>เงินสดสุทธิต้องส่งมอบฮับ</span>
-                </span>
-                <span class="text-[10px] bg-white/20 font-bold px-2 py-0.5 rounded-full">${report.riderSettlement.totalTrips} เที่ยว</span>
-            </div>
-            <div class="text-2xl sm:text-3xl font-black tracking-tight">฿${report.riderSettlement.netCashToHub.toLocaleString()}</div>
-            <div class="text-[10px] text-sky-100/90 pt-1 border-t border-white/15 space-y-0.5">
-                <div class="flex justify-between">
-                    <span>เงินสด COD ถืออยู่: <strong>฿${report.riderSettlement.totalCodCollected.toLocaleString()}</strong></span>
-                    <span>ค่ารอบสะสม: <strong>-฿${report.riderSettlement.totalRiderFees.toLocaleString()}</strong></span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Card 3: เคลียร์เงินร้านค้า/แผงค้า -->
-        <div class="bg-gradient-to-br from-amber-600 to-orange-700 text-white rounded-3xl p-4 shadow-md space-y-2 relative overflow-hidden">
-            <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold text-amber-200 flex items-center gap-1">
+                <span class="text-[10px] sm:text-[11px] font-bold text-amber-200 flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm">storefront</span>
-                    <span>ยอดเคลียร์เงินแผงค้าในตลาด</span>
+                    <span>ยอดเคลียร์แผงค้า</span>
                 </span>
-                <span class="text-[10px] bg-white/20 font-bold px-2 py-0.5 rounded-full">${report.vendorSettlement.stalls.length} แผง</span>
+                <span class="text-[9px] bg-white/20 font-bold px-1.5 py-0.2 rounded-full">${report.vendorSettlement.stalls.length} แผง</span>
             </div>
-            <div class="text-2xl sm:text-3xl font-black tracking-tight">฿${report.vendorSettlement.totalVendorAmount.toLocaleString()}</div>
-            <div class="text-[10px] text-amber-100/90 pt-1 border-t border-white/15 space-y-0.5">
-                <div class="flex justify-between">
-                    <span>โอนแล้ว: <strong class="text-white">฿${report.vendorSettlement.totalSettledAmount.toLocaleString()}</strong> (${report.vendorSettlement.settledCount})</span>
-                    <span>รอโอน: <strong class="text-amber-200">฿${report.vendorSettlement.totalPendingAmount.toLocaleString()}</strong> (${report.vendorSettlement.pendingCount})</span>
-                </div>
+            <div class="text-xl sm:text-2xl font-black tracking-tight">฿${report.vendorSettlement.totalVendorAmount.toLocaleString()}</div>
+            <div class="text-[9px] sm:text-[10px] text-amber-100/90 pt-1 border-t border-white/15">
+                <span>โอนแล้ว ฿${report.vendorSettlement.totalSettledAmount.toLocaleString()} | รอโอน ฿${report.vendorSettlement.totalPendingAmount.toLocaleString()}</span>
+            </div>
+        </div>
+
+        <!-- Card 3: เคลียร์เงินไรเดอร์ -->
+        <div class="bg-gradient-to-br from-sky-600 to-blue-800 text-white rounded-3xl p-3.5 sm:p-4 shadow-md space-y-1.5 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+                <span class="text-[10px] sm:text-[11px] font-bold text-sky-200 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">two_wheeler</span>
+                    <span>เงินสดสุทธิส่งฮับ</span>
+                </span>
+                <span class="text-[9px] bg-white/20 font-bold px-1.5 py-0.2 rounded-full">${report.riderSettlement.totalTrips} เที่ยว</span>
+            </div>
+            <div class="text-xl sm:text-2xl font-black tracking-tight">฿${report.riderSettlement.netCashToHub.toLocaleString()}</div>
+            <div class="text-[9px] sm:text-[10px] text-sky-100/90 pt-1 border-t border-white/15">
+                <span>COD ฿${report.riderSettlement.totalCodCollected.toLocaleString()} | ค่ารอบ -฿${report.riderSettlement.totalRiderFees.toLocaleString()}</span>
+            </div>
+        </div>
+
+        <!-- Card 4: รายรับค่าบริการสุทธิของฮับ (Hub Margin) -->
+        <div class="bg-gradient-to-br from-purple-700 to-indigo-900 text-white rounded-3xl p-3.5 sm:p-4 shadow-md space-y-1.5 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+                <span class="text-[10px] sm:text-[11px] font-bold text-purple-200 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">account_balance</span>
+                    <span>กำไรค่าบริการสุทธิฮับ</span>
+                </span>
+                <span class="text-[9px] bg-white/20 font-bold px-1.5 py-0.2 rounded-full">Net</span>
+            </div>
+            <div class="text-xl sm:text-2xl font-black tracking-tight ${hubNetMargin >= 0 ? 'text-emerald-300' : 'text-rose-300'}">
+                ฿${hubNetMargin.toLocaleString()}
+            </div>
+            <div class="text-[9px] sm:text-[10px] text-purple-100/90 pt-1 border-t border-white/15">
+                <span>(ยอดขาย - ต้นทุนแผงค้า - ค่ารอบ)</span>
             </div>
         </div>
     </div>
