@@ -4789,27 +4789,88 @@ function closeDispatchSuccessModal() {
     if (modal) modal.classList.add("hidden");
 }
 
+// ── ปุ่ม 1: ไปหน้าจอไรเดอร์รับงาน ───────────────────────────────────────────
+// เรียกหลังจาก Hub รวมถุงเสร็จและ dispatch ออเดอร์แล้ว
+// ทำหน้าที่: สลับมุมมองเป็น Rider + ตั้งค่า order ให้ไรเดอร์เห็นงานพร้อมรับ
 function goToRiderTrackingScreen() {
     closeDispatchSuccessModal();
+
+    // 1) Auto-login rider ถ้ายังไม่ได้ login
     if (!state.activeRider || !state.activeRider.isLoggedIn) {
         state.activeRider = {
             isLoggedIn: true,
             riderId: "rider_somchai",
             name: "พี่สมชาย (1กข 8902)",
-            phone: "081-588-7400"
+            phone: "081-588-7400",
+            license: "1กข 8902"
         };
         saveRiderToStorage(state.activeRider);
     }
+
+    // 2) อัปเดต order status → "dispatched" (ฮับส่งมอบให้ไรเดอร์แล้ว)
+    if (state.activeOrder) {
+        state.activeOrder.status = "dispatched";
+        state.activeOrder.riderName  = state.activeRider.name;
+        state.activeOrder.riderPhone = state.activeRider.phone;
+
+        // คำนวณเงินทอนที่ไรเดอร์ต้องคืนลูกค้า (กรณีสินค้าขาด)
+        let refundTotal = 0;
+        if (state.activeOrder.stalls) {
+            state.activeOrder.stalls.forEach(s => {
+                (s.items || []).forEach(it => {
+                    if (it.outOfStock) {
+                        refundTotal += (it.actualPrice !== undefined ? it.actualPrice : it.price);
+                    }
+                });
+            });
+        }
+        state.activeOrder.refundCashTotal = refundTotal;
+
+        // paymentDesc ให้ชัดเจนขึ้น
+        if (!state.activeOrder.paymentDesc) {
+            state.activeOrder.paymentDesc = state.activeOrder.paymentType === "cash" ? "เงินสด" : "ชำระแล้ว";
+        }
+
+        saveActiveOrderToStorage(state.activeOrder);
+    }
+
+    // 3) สลับมุมมองเป็น Rider และ render หน้างาน
     setActiveRoleView("rider");
+    renderRiderScreen();
     renderAuthHeaderButtons();
-    showToast("🛵 สลับมาที่หน้าจอไรเดอร์แล้ว! กำลังเปิดงานนำส่ง");
+
+    showToast("🛵 สลับมาหน้าจอไรเดอร์แล้ว! ออเดอร์พร้อมรับงานนำส่ง");
 }
 
+// ── ปุ่ม 2: ไปหน้าจอติดตามส่งของลูกค้า ─────────────────────────────────────
+// เรียกหลังจาก Hub dispatch ออเดอร์แล้ว
+// ทำหน้าที่: สลับมุมมองเป็น Customer + เปิดหน้า Tracking แสดงไรเดอร์กำลังนำส่ง
 function goToCustomerLiveTracking() {
     closeDispatchSuccessModal();
+
+    // อัปเดต order status → "on_the_way" (ไรเดอร์กำลังนำส่ง)
+    if (state.activeOrder) {
+        state.activeOrder.status = "on_the_way";
+
+        // ใส่ข้อมูลไรเดอร์ถ้ามี เพื่อให้หน้า Tracking แสดงชื่อ/ทะเบียน
+        if (state.activeRider && state.activeRider.isLoggedIn) {
+            state.activeOrder.riderName  = state.activeRider.name;
+            state.activeOrder.riderPhone = state.activeRider.phone;
+        } else {
+            // ใส่ข้อมูลไรเดอร์ default ถ้ายังไม่ได้ assign
+            state.activeOrder.riderName  = "พี่สมชาย (1กข 8902)";
+            state.activeOrder.riderPhone = "081-588-7400";
+        }
+
+        saveActiveOrderToStorage(state.activeOrder);
+    }
+
+    // สลับมุมมองเป็น Customer และเปิดหน้า Tracking
     setActiveRoleView("customer");
     goToTrackingScreen();
-    showToast("📱 สลับมาที่หน้าจอลูกค้าแล้ว! แสดงสถานะไรเดอร์กำลังนำส่ง");
+    if (typeof renderTrackingScreen === "function") renderTrackingScreen();
+
+    showToast("📱 สลับมาหน้าจอลูกค้าแล้ว! ไรเดอร์กำลังนำส่งของสดมาให้คุณ");
 }
 
 function createSampleCustomerOrder() {
