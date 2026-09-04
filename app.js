@@ -891,6 +891,7 @@ const state = {
     favorites: loadSavedFavorites(),     // Persistent favorite stalls list
     customer: loadSavedCustomer(),       // Logged in customer session
     activeMerchant: loadSavedMerchant(), // Logged in merchant session
+    activeCoupon: { code: "FRESH20", discount: 20, desc: "ส่วนลด ฿20 สั่งของสดรอบถัดไป" }, // ✅ เริ่มต้นตรงกับ radio FRESH20 ในหน้า checkout
     deliveryLocation: loadSavedLocation(), // Active delivery location
     cart: loadSavedCart(),               // ✅ โหลดตะกร้าจาก localStorage
     activeOrder: loadSavedActiveOrder()  // ✅ โหลด active order จาก localStorage
@@ -2394,7 +2395,7 @@ function updateCartUI() {
         if (floatingCart) {
             floatingCart.classList.add("visible");
             document.getElementById("cart-floating-count").textContent = `${totals.itemsCount} รายการ (จาก ${totals.stallsCount} แผงค้า)`;
-            document.getElementById("cart-floating-total").textContent = `฿${totals.grandTotal}`;
+            document.getElementById("cart-floating-total").textContent = `฿${totals.itemsSubtotal}`;
         }
         if (navCartBadge) {
             navCartBadge.textContent = totals.itemsCount;
