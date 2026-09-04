@@ -532,6 +532,26 @@
                         </div>
                     </div>
 
+                    <!-- Out of Stock Handling Policy in Checkout (ขั้นตอนที่ 1: นโยบายตัวเลือก C คืนเงินสดใส่ซอง) -->
+                    <div class="bg-amber-50/90 rounded-2xl p-3.5 border border-amber-200/90 space-y-2 text-xs">
+                        <div class="flex items-center justify-between">
+                            <span class="font-extrabold text-amber-950 flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-amber-700 text-base">inventory_2</span>
+                                <span>นโยบายกรณีสินค้าในตลาดหมด</span>
+                            </span>
+                            <span class="text-[10px] bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded-full shadow-2xs">รับประกันเงินคืน 100%</span>
+                        </div>
+                        <div class="bg-white p-2.5 rounded-xl border border-amber-300/80 shadow-2xs flex items-start gap-2.5">
+                            <div class="w-5 h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-black shrink-0 mt-0.5 shadow-2xs">✓</div>
+                            <div class="leading-snug">
+                                <span class="font-black text-slate-800 text-[11px]">ตัวเลือก C: ตัดรายการที่หมดออก & คืนเงินสดใส่ซองแนบไปกับถุง ✉️</span>
+                                <p class="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                                    หากสินค้าที่แผงหมด ทีมงานฮับจะตัดรายการนั้นออก คำนวณเงินทอนส่วนต่างอัตโนมัติ และให้ไรเดอร์นำเงินสดใส่ซองใสส่งมอบให้พร้อมถุงของสดทันที
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Price Breakdown Summary -->
                     <div class="bg-white rounded-2xl p-4 shadow-card border border-slate-200/80 space-y-2 text-xs">
                         <div class="font-bold text-slate-800 pb-1 border-b border-slate-100 flex items-center justify-between">
@@ -669,6 +689,9 @@
                             </span>
                             <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold" id="picking-progress-badge">หยิบแล้ว 0/3 แผง</span>
                         </div>
+
+                        <!-- Refund Envelope Banner (ปรากฏเมื่อมีสินค้าหมดและคืนเงินสดใส่ซอง) -->
+                        <div id="tracking-refund-banner" class="hidden"></div>
 
                         <!-- Clickable Stall List matching user screenshot -->
                         <div class="space-y-2" id="tracking-stalls-progress"></div>
@@ -2009,8 +2032,26 @@
                     <span class="font-medium text-slate-800" id="receipt-delivery-fee">฿25</span>
                 </div>
                 <div class="flex justify-between pt-1.5 border-t border-slate-200 text-sm font-black text-slate-900">
-                    <span>ยอดรวมสุทธิทั้งสิ้น:</span>
+                    <span>ยอดที่โอนชำระแล้ว:</span>
                     <span class="text-orange-600 text-base" id="receipt-grand-total">฿215</span>
+                </div>
+
+                <!-- Refund in Envelope Row (ปรากฏเมื่อมีสินค้าหมด) -->
+                <div id="receipt-refund-envelope-row" class="hidden p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-amber-950 font-bold space-y-1 animate-fade-in">
+                    <div class="flex justify-between text-xs text-rose-700">
+                        <span>หักรายการสินค้าหมด:</span>
+                        <span id="receipt-refund-deduct-amount">-฿0</span>
+                    </div>
+                    <div class="flex justify-between text-xs text-slate-800">
+                        <span>ยอดชำระจริงคงเหลือ:</span>
+                        <span id="receipt-final-paid-amount" class="font-extrabold text-emerald-800">฿0</span>
+                    </div>
+                    <div class="flex justify-between text-xs pt-1 border-t border-amber-200/80 text-amber-950">
+                        <span class="flex items-center gap-1 font-black">
+                            <span>✉️ คืนเงินสดใส่ซองแนบถุง:</span>
+                        </span>
+                        <span id="receipt-refund-envelope-amount" class="font-black text-rose-600 text-sm">฿0</span>
+                    </div>
                 </div>
             </div>
 

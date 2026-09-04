@@ -2738,6 +2738,47 @@ function renderTrackingScreen() {
         }
     }
 
+    // Calculate Out-of-Stock and Cash Refund
+    let refundCashTotal = 0;
+    let outOfStockCount = 0;
+    if (order.stalls) {
+        order.stalls.forEach(s => {
+            (s.items || []).forEach(item => {
+                if (item.outOfStock) {
+                    const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
+                    refundCashTotal += price;
+                    outOfStockCount++;
+                }
+            });
+        });
+    }
+    order.refundCashTotal = refundCashTotal;
+    order.finalPaidTotal = Math.max(0, (order.grandTotal || order.total || 0) - refundCashTotal);
+
+    // Update Tracking Refund Banner (ขั้นตอนที่ 3: แสดงเงินทอนใส่ซองให้ลูกค้าเห็น)
+    const refundBanner = document.getElementById("tracking-refund-banner");
+    if (refundBanner) {
+        if (refundCashTotal > 0) {
+            refundBanner.classList.remove("hidden");
+            refundBanner.innerHTML = `
+                <div class="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-2xl p-3 shadow-md border border-amber-300 space-y-1 animate-fade-in text-xs mb-2">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-1.5 font-black text-xs">
+                            <span class="text-base">✉️</span>
+                            <span>แจ้งคืนเงินสดใส่ซอง: ฿${refundCashTotal}</span>
+                        </div>
+                        <span class="bg-white/20 text-white font-bold text-[10px] px-2 py-0.5 rounded-full">แนบมากับถุงของสด</span>
+                    </div>
+                    <p class="text-[10px] text-amber-100 leading-snug">
+                        มีสินค้าหมด ${outOfStockCount} รายการ ระบบตัดออกและไรเดอร์จะนำเงินสดใส่ซองใสส่งมอบคืนให้พร้อมถุงของสดครับ
+                    </p>
+                </div>
+            `;
+        } else {
+            refundBanner.classList.add("hidden");
+        }
+    }
+
     // Render Stall Progress Checklist matching user screenshot
     const container = document.getElementById("tracking-stalls-progress");
     if (!container) return;
@@ -2745,26 +2786,48 @@ function renderTrackingScreen() {
     let totalPicked = 0;
     let html = "";
     order.stalls.forEach((stall, idx) => {
-        const isReady = stall.pickedCount >= stall.itemsCount;
+        const activeItems = (stall.items || []).filter(i => !i.outOfStock);
+        const oosItems = (stall.items || []).filter(i => i.outOfStock);
+        const isReady = activeItems.length > 0 ? (stall.pickedCount >= activeItems.length) : true;
         if (isReady) totalPicked++;
 
         let statusBadge = `<span class="text-[10px] text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs"><span>⏳</span><span>กำลังจัดเตรียม</span></span>`;
         if (isReady) {
             statusBadge = `<span class="text-[10px] text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs"><span>✓</span><span>หยิบครบแล้ว</span></span>`;
         }
+        if (activeItems.length === 0 && oosItems.length > 0) {
+            statusBadge = `<span class="text-[10px] text-rose-800 bg-rose-100 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs"><span>⚠️</span><span>สินค้าหมดทั้งแผง</span></span>`;
+        }
 
-        html += `
-            <div class="flex items-center justify-between p-3 bg-white rounded-2xl border border-slate-200/90 shadow-2xs text-xs">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-7 h-7 rounded-xl ${isReady ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'} flex items-center justify-center font-bold text-sm shrink-0">
-                        ${isReady ? '✓' : '⏳'}
-                    </div>
+        let oosDetailsHtml = "";
+        if (oosItems.length > 0) {
+            const oosRefund = oosItems.reduce((sum, i) => sum + (i.actualPrice !== undefined ? i.actualPrice : i.price), 0);
+            oosDetailsHtml = `
+                <div class="mt-2 pt-1.5 border-t border-slate-100 text-[10px] text-rose-700 bg-rose-50/60 p-2 rounded-xl flex items-start gap-1.5">
+                    <span class="material-symbols-outlined text-xs text-rose-600 mt-0.5">info</span>
                     <div>
-                        <div class="font-extrabold text-slate-800 text-xs leading-tight">${stall.name}</div>
-                        <div class="text-[10px] text-slate-400 mt-0.5 font-medium">จำนวน ${stall.itemsCount} รายการ</div>
+                        <span class="font-bold">สินค้าหมด:</span> ${oosItems.map(i => i.name).join(", ")}
+                        <div class="font-extrabold text-amber-800 mt-0.5">✉️ คืนเงินสดใส่ซอง: ฿${oosRefund}</div>
                     </div>
                 </div>
-                ${statusBadge}
+            `;
+        }
+
+        html += `
+            <div class="p-3 bg-white rounded-2xl border border-slate-200/90 shadow-2xs text-xs space-y-1">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-7 h-7 rounded-xl ${isReady ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'} flex items-center justify-center font-bold text-sm shrink-0">
+                            ${isReady ? '✓' : '⏳'}
+                        </div>
+                        <div>
+                            <div class="font-extrabold text-slate-800 text-xs leading-tight">${stall.name}</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5 font-medium">จำนวน ${stall.itemsCount} รายการ ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length})</span>` : ''}</div>
+                        </div>
+                    </div>
+                    ${statusBadge}
+                </div>
+                ${oosDetailsHtml}
             </div>
         `;
     });
@@ -3321,9 +3384,58 @@ function openReceiptModal() {
         if (order) {
             const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
             setVal("receipt-order-id", order.orderId);
-            setVal("receipt-grand-total", `฿${order.total}`);
+            setVal("receipt-customer-name", order.customerName || "ลูกค้า");
+
             const payText = order.paymentType === "bank_transfer" ? "โอนผ่านธนาคารไทยพาณิชย์ (SCB)" : (order.paymentType === "cod" ? "เก็บเงินสดปลายทาง (COD)" : "PromptPay (สแกนจ่ายสำเร็จ)");
             setVal("receipt-payment-method", payText);
+
+            // Render Dynamic Receipt Items from Active Order
+            const itemsContainer = document.getElementById("receipt-items-list");
+            if (itemsContainer && order.stalls && order.stalls.length > 0) {
+                let itemsHtml = "";
+                let subtotal = 0;
+                order.stalls.forEach(stall => {
+                    (stall.items || []).forEach(item => {
+                        const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
+                        subtotal += price;
+                        const isOOS = item.outOfStock || false;
+                        itemsHtml += `
+                            <div class="flex justify-between py-1.5 ${isOOS ? 'bg-rose-50/80 px-2 rounded-lg border border-rose-200' : ''}">
+                                <div>
+                                    <div class="font-bold ${isOOS ? 'text-rose-800 line-through' : 'text-slate-800'} text-xs">${item.name}</div>
+                                    <div class="text-[10px] ${isOOS ? 'text-rose-600 font-bold' : 'text-slate-400'}">
+                                        ${stall.name} • ${isOOS ? '⚠️ สินค้าหมด (คืนเงินสดใส่ซอง)' : `x${item.qty || 1}`}
+                                    </div>
+                                </div>
+                                <span class="font-bold ${isOOS ? 'text-rose-600' : 'text-slate-800'} text-xs">
+                                    ${isOOS ? `คืน ฿${price}` : `฿${price}`}
+                                </span>
+                            </div>
+                        `;
+                    });
+                });
+                itemsContainer.innerHTML = itemsHtml;
+                setVal("receipt-items-subtotal", `฿${subtotal}`);
+            }
+
+            const grandTotal = order.grandTotal || order.total || 0;
+            const refundCash = order.refundCashTotal || 0;
+            const finalPaid = Math.max(0, grandTotal - refundCash);
+
+            setVal("receipt-grand-total", `฿${grandTotal}`);
+
+            // Toggle Refund Envelope Breakdown in Receipt (ขั้นตอนที่ 3)
+            const refundEnvelopeRow = document.getElementById("receipt-refund-envelope-row");
+            if (refundEnvelopeRow) {
+                if (refundCash > 0) {
+                    refundEnvelopeRow.classList.remove("hidden");
+                    setVal("receipt-refund-deduct-amount", `-฿${refundCash}`);
+                    setVal("receipt-final-paid-amount", `฿${finalPaid}`);
+                    setVal("receipt-refund-envelope-amount", `฿${refundCash}`);
+                } else {
+                    refundEnvelopeRow.classList.add("hidden");
+                }
+            }
         }
     }
 }
@@ -3911,25 +4023,55 @@ function renderHubPickingList() {
     const total = order.grandTotal || order.total || 0;
 
     let stallsHtml = "";
+    let refundCashTotal = 0;
+    let outOfStockItems = [];
+
+    // Calculate out-of-stock items & total refund amount (วิธีที่ 1: คืนเงินสดใส่ซอง)
+    order.stalls.forEach(stall => {
+        (stall.items || []).forEach(item => {
+            if (item.outOfStock) {
+                const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
+                refundCashTotal += price;
+                outOfStockItems.push({ stallName: stall.name, itemName: item.name, price: price });
+            }
+        });
+    });
+    order.refundCashTotal = refundCashTotal;
+    order.finalPaidTotal = Math.max(0, (order.grandTotal || order.total || 0) - refundCashTotal);
+
     order.stalls.forEach((stall, sIdx) => {
         const items = stall.items || [];
         let itemsHtml = "";
 
         items.forEach((item, iIdx) => {
+            const isOutOfStock = item.outOfStock || false;
             const isPicked = item.picked || false;
             const hasScale = item.hasScale || false;
             const actualPrice = item.actualPrice !== undefined ? item.actualPrice : item.price;
 
             itemsHtml += `
-                <div class="bg-white p-2.5 rounded-xl border ${isPicked ? 'border-emerald-300 bg-emerald-50/40 ring-1 ring-emerald-400/50' : 'border-slate-200'} space-y-1.5 transition-all">
-                    <label class="flex items-center gap-2.5 cursor-pointer select-none">
-                        <input type="checkbox" ${isPicked ? 'checked' : ''} onchange="toggleHubPickedItem(${sIdx}, ${iIdx})" class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer">
-                        <span class="flex-1 font-bold ${isPicked ? 'text-emerald-900 line-through opacity-80' : 'text-slate-800'} text-xs">
-                            ${item.name} (฿${actualPrice})
-                        </span>
-                        ${isPicked ? '<span class="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full font-bold">✓ พร้อมแล้ว</span>' : '<span class="text-[10px] text-slate-400">รอหยิบ</span>'}
-                    </label>
-                    ${hasScale ? `
+                <div class="bg-white p-2.5 rounded-xl border ${isOutOfStock ? 'border-rose-300 bg-rose-50/50' : (isPicked ? 'border-emerald-300 bg-emerald-50/40 ring-1 ring-emerald-400/50' : 'border-slate-200')} space-y-1.5 transition-all">
+                    <div class="flex items-center justify-between gap-2">
+                        <label class="flex items-center gap-2.5 cursor-pointer select-none flex-1 min-w-0">
+                            <input type="checkbox" ${isPicked ? 'checked' : ''} ${isOutOfStock ? 'disabled' : ''} onchange="toggleHubPickedItem(${sIdx}, ${iIdx})" class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-40">
+                            <span class="font-bold ${isOutOfStock ? 'text-rose-700 line-through' : (isPicked ? 'text-emerald-900 line-through opacity-80' : 'text-slate-800')} text-xs truncate">
+                                ${item.name} (฿${actualPrice})
+                            </span>
+                        </label>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            ${isOutOfStock ? `
+                                <span class="text-[9px] text-rose-700 bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-full font-bold">⚠️ หมด คืน ฿${actualPrice}</span>
+                                <button type="button" onclick="toggleHubItemOutOfStock(${sIdx}, ${iIdx})" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold active:scale-95 transition-all">กู้คืน</button>
+                            ` : `
+                                ${isPicked ? '<span class="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full font-bold">✓ พร้อม</span>' : '<span class="text-[10px] text-slate-400">รอหยิบ</span>'}
+                                <button type="button" onclick="toggleHubItemOutOfStock(${sIdx}, ${iIdx})" class="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[10px] font-bold flex items-center gap-0.5 active:scale-95 transition-all" title="แจ้งสินค้าหมดและคำนวณเงินสดใส่ซอง">
+                                    <span class="material-symbols-outlined text-[11px]">cancel</span>
+                                    <span>ของหมด</span>
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                    ${hasScale && !isOutOfStock ? `
                         <div class="flex items-center gap-2 pl-6 pt-1 text-[11px] text-slate-600 border-t border-slate-100">
                             <span>ชั่งจริง:</span>
                             <input type="number" id="actual-weight-${sIdx}-${iIdx}" value="${actualPrice}" class="w-16 p-1 border border-slate-300 rounded text-center text-xs font-bold text-slate-800 focus:ring-1 focus:ring-emerald-500">
@@ -3955,6 +4097,35 @@ function renderHubPickingList() {
             </div>
         `;
     });
+
+    let refundAlertHtml = "";
+    if (refundCashTotal > 0) {
+        refundAlertHtml = `
+            <!-- Cash Refund in Envelope Alert (ขั้นตอนที่ 2: ฮับ/ไรเดอร์นำเงินสดใส่ซอง) -->
+            <div class="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-2xl p-3.5 shadow-md space-y-2 animate-fade-in text-left">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 font-black text-xs">
+                        <span class="text-base">✉️</span>
+                        <span>คำสั่งคืนเงินสดใส่ซอง: ฿${refundCashTotal}</span>
+                    </div>
+                    <span class="bg-white/25 text-white font-bold text-[10px] px-2 py-0.5 rounded-full">วิธีที่ 1: เงินสดใส่ซอง</span>
+                </div>
+                <div class="text-[11px] text-amber-100 leading-snug">
+                    พบสินค้าหมด ${outOfStockItems.length} รายการ ทีมงานฮับ/ไรเดอร์ต้องนำเงินสดจำนวน <strong>฿${refundCashTotal}</strong> ใส่ซองใสเย็บแนบไปกับถุงของสดส่งให้ลูกค้า
+                </div>
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button onclick="callCustomerPhone()" class="py-1.5 px-2 bg-white text-slate-800 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-sm text-emerald-600">call</span>
+                        <span>โทรแจ้งลูกค้า</span>
+                    </button>
+                    <button onclick="sendOutOfStockLineNotice()" class="py-1.5 px-2 bg-[#06C755] hover:bg-[#05a847] text-white font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-sm">chat</span>
+                        <span>ส่ง LINE แจ้งเงินทอน</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
 
     container.innerHTML = `
         <div class="bg-white rounded-3xl p-4 sm:p-5 shadow-card border border-slate-200 space-y-3.5 animate-fade-in text-left">
@@ -3985,6 +4156,8 @@ function renderHubPickingList() {
                 </button>
             </div>
 
+            ${refundAlertHtml}
+
             <div class="space-y-3 pt-1">
                 <div class="text-[11px] font-bold text-slate-600 flex items-center gap-1 uppercase tracking-wider">
                     <span class="material-symbols-outlined text-sm text-emerald-700">checklist</span>
@@ -4002,6 +4175,73 @@ function renderHubPickingList() {
             </div>
         </div>
     `;
+}
+
+// Out-of-Stock Toggle Handler (ขั้นตอนที่ 2: ฮับกดแจ้งของหมด)
+function toggleHubItemOutOfStock(stallIndex, itemIndex) {
+    if (!state.activeOrder || !state.activeOrder.stalls[stallIndex]) return;
+    const stall = state.activeOrder.stalls[stallIndex];
+    const item = stall.items[itemIndex];
+    if (!item) return;
+
+    item.outOfStock = !item.outOfStock;
+    const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
+
+    if (item.outOfStock) {
+        item.picked = false;
+        showToast(`⚠️ ปรับ "${item.name}" เป็นสินค้าหมด (คำนวณเงินสดทอน ฿${price} ใส่ซองแนบถุง)`);
+    } else {
+        showToast(`✓ กู้คืนรายการ "${item.name}" กลับเข้ารายการจัดเตรียมแล้ว`);
+    }
+
+    // Recalculate stall picked count based on non-out-of-stock items
+    stall.pickedCount = stall.items.filter(i => i.picked && !i.outOfStock).length;
+
+    // Recalculate order refund totals
+    let refundCashTotal = 0;
+    state.activeOrder.stalls.forEach(s => {
+        (s.items || []).forEach(it => {
+            if (it.outOfStock) {
+                const pr = it.actualPrice !== undefined ? it.actualPrice : it.price;
+                refundCashTotal += pr;
+            }
+        });
+    });
+    state.activeOrder.refundCashTotal = refundCashTotal;
+    state.activeOrder.finalPaidTotal = Math.max(0, (state.activeOrder.grandTotal || state.activeOrder.total || 0) - refundCashTotal);
+
+    saveActiveOrderToStorage(state.activeOrder);
+    renderHubPickingList();
+    renderTrackingScreen();
+    renderHubSettlement();
+}
+
+// Send Out-of-Stock Notice via LINE
+function sendOutOfStockLineNotice() {
+    const order = state.activeOrder;
+    if (!order) return;
+    const oosList = [];
+    if (order.stalls) {
+        order.stalls.forEach(s => {
+            (s.items || []).forEach(i => {
+                if (i.outOfStock) oosList.push(`${i.name} (฿${i.actualPrice !== undefined ? i.actualPrice : i.price})`);
+            });
+        });
+    }
+    const refund = order.refundCashTotal || 0;
+    const msg = `🔔【เฮียส่ง】แจ้งเตือนเรื่องสินค้าออเดอร์ ${order.orderId}:\nขออภัยครับ มีสินค้าที่แผงค้าหมด ได้แก่:\n${oosList.map(n => `• ${n}`).join('\n')}\n━━━━━━━━━━━━━━━━━━\n✉️ นโยบายตัวเลือก C: ทีมงานตัดรายการออก และไรเดอร์ได้นำเงินสดทอนจำนวน ฿${refund} ใส่ซองใสแนบไปกับถุงของสดเรียบร้อยแล้วครับ 🛵💨`;
+
+    if (isMobileDevice()) {
+        window.location.href = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
+    } else {
+        copyTextToClipboard(msg);
+        showToast("📋 คัดลอกข้อความแจ้งเงินทอนแล้ว! สามารถกด Ctrl+V วางใน LINE ได้ทันที");
+        try {
+            window.location.href = `line://msg/text/?${encodeURIComponent(msg)}`;
+        } catch (e) {
+            window.open(`https://line.me/R/msg/text/?${encodeURIComponent(msg)}`, '_blank');
+        }
+    }
 }
 
 function toggleHubPickedItem(stallIndex, itemIndex) {
@@ -4166,14 +4406,18 @@ function renderHubSettlement() {
     let vendorTotal = 0;
 
     order.stalls.forEach(stall => {
-        const stallItemsTotal = (stall.items || []).reduce((sum, item) => sum + (item.actualPrice !== undefined ? item.actualPrice : item.price), 0);
+        const activeItems = (stall.items || []).filter(item => !item.outOfStock);
+        const oosItems = (stall.items || []).filter(item => item.outOfStock);
+        const stallItemsTotal = activeItems.reduce((sum, item) => sum + (item.actualPrice !== undefined ? item.actualPrice : item.price), 0);
         vendorTotal += stallItemsTotal;
 
         vendorListHtml += `
             <div class="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
                 <div>
                     <div class="font-bold text-slate-800 text-xs">${stall.name}</div>
-                    <div class="text-[10px] text-slate-500">จำนวน ${(stall.items || []).length} รายการ</div>
+                    <div class="text-[10px] text-slate-500">
+                        หยิบจริง ${activeItems.length} รายการ ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length})</span>` : ''}
+                    </div>
                 </div>
                 <div class="text-right">
                     <div class="font-black text-emerald-700 text-xs">฿${stallItemsTotal}</div>
