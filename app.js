@@ -805,7 +805,7 @@ function applyManualCustomLocation() {
         title: val,
         detail: `ที่อยู่ระบุเอง • จัดส่งถึงบ้านคุณ`,
         distance: "2.0 กม.",
-        fee: 25,
+        fee: 20,
         lat: 13.912,
         lng: 100.340,
         isRealGPS: false,
@@ -2184,7 +2184,7 @@ function calculateCartTotals() {
     if (stallsCount >= 2) multiStallFee = 10;
     if (stallsCount >= 4) multiStallFee = 15;
 
-    const deliveryFee = (state.deliveryLocation && typeof state.deliveryLocation.fee === "number") ? state.deliveryLocation.fee : 25;
+    const deliveryFee = (state.deliveryLocation && typeof state.deliveryLocation.fee === "number") ? state.deliveryLocation.fee : 20;
 
     // Active coupon discount calculation
     let discountAmount = 0;
