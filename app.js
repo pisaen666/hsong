@@ -3035,14 +3035,8 @@ function sendRiderLineMessage(event) {
             window.open(lineUrl, '_blank');
         }
     } else {
-        // บน PC/Desktop: คัดลอกข้อความ + ลองเปิด LINE PC
-        copyTextToClipboard(msg);
-        showToast("📋 คัดลอกข้อความออเดอร์แล้ว! สามารถวาง (Ctrl+V) ใน LINE เพื่อส่งได้ทันที");
-        try {
-            window.location.href = `line://msg/text/?${encodeURIComponent(msg)}`;
-        } catch (e) {
-            window.open(lineUrl, '_blank');
-        }
+        // บน PC/Desktop: แสดง Helper Modal และเปิด LINE PC อย่างปลอดภัย
+        showLinePcModal(`ส่งข้อความหาไรเดอร์ (${riderPhone})`, msg);
     }
 }
 
@@ -3986,6 +3980,54 @@ function fallbackCopy(text) {
     }
 }
 
+// ── LINE PC HELPER: จัดการการส่งข้อความ LINE บนคอมพิวเตอร์ (PC) อย่างปลอดภัย ไม่ติด error mobile
+let currentLinePcMessage = "";
+
+function showLinePcModal(title, msg) {
+    currentLinePcMessage = msg;
+    copyTextToClipboard(msg);
+
+    const modal = document.getElementById("line-pc-modal");
+    const titleEl = document.getElementById("line-pc-modal-title");
+    const textEl = document.getElementById("line-pc-modal-text");
+
+    if (titleEl && title) titleEl.textContent = title;
+    if (textEl) textEl.value = msg;
+    if (modal) modal.classList.remove("hidden");
+
+    showToast("📋 คัดลอกข้อความแล้ว! พร้อมกด Ctrl+V วางใน LINE บน PC");
+
+    // เปิดแอป LINE บน Windows ผ่าน line:// โดยไม่ส่ง msg/text เพื่อป้องกันข้อความเตือนบน LINE Desktop
+    try {
+        window.location.href = "line://";
+    } catch (e) {
+        console.warn("Launch line:// failed", e);
+    }
+}
+
+function closeLinePcModal() {
+    const modal = document.getElementById("line-pc-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function copyLinePcModalText() {
+    const textEl = document.getElementById("line-pc-modal-text");
+    const text = textEl ? textEl.value : currentLinePcMessage;
+    if (text) {
+        copyTextToClipboard(text);
+        showToast("📋 คัดลอกข้อความสำเร็จ! กด Ctrl+V วางใน LINE ได้เลย");
+    }
+}
+
+function launchLinePcApp() {
+    try {
+        window.location.href = "line://";
+        showToast("🚀 กำลังสลับไปแอป LINE บนเครื่อง PC...");
+    } catch (e) {
+        showToast("⚠️ ไม่สามารถเปิดแอป LINE ได้ กรุณาเปิดจากทาสก์บาร์");
+    }
+}
+
 function sendLineOrderNotification(order) {
     if (!order) return;
     const msg = generateLineOrderMessage(order);
@@ -4021,14 +4063,7 @@ function openLineShareApp() {
         const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
         window.open(lineUrl, '_blank');
     } else {
-        copyTextToClipboard(msg);
-        showToast("📋 คัดลอกข้อความออเดอร์แล้ว! สามารถกด Ctrl+V วางใน LINE บน PC ได้ทันที");
-        try {
-            // ลองเรียก LINE PC Protocol หากติดตั้งแอป LINE บน Windows ไว้
-            window.location.href = `line://msg/text/?${encodeURIComponent(msg)}`;
-        } catch (e) {
-            console.warn("LINE desktop protocol failed:", e);
-        }
+        showLinePcModal("แชร์ใบจัดของสดเข้า LINE", msg);
     }
 }
 
@@ -4291,13 +4326,7 @@ function sendOutOfStockLineNotice() {
     if (isMobileDevice()) {
         window.location.href = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
     } else {
-        copyTextToClipboard(msg);
-        showToast("📋 คัดลอกข้อความแจ้งเงินทอนแล้ว! สามารถกด Ctrl+V วางใน LINE ได้ทันที");
-        try {
-            window.location.href = `line://msg/text/?${encodeURIComponent(msg)}`;
-        } catch (e) {
-            window.open(`https://line.me/R/msg/text/?${encodeURIComponent(msg)}`, '_blank');
-        }
+        showLinePcModal(`แจ้งเงินทอนสินค้าหมด (ออเดอร์ ${order.orderId})`, msg);
     }
 }
 
