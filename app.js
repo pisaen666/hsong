@@ -661,50 +661,93 @@ function detectCurrentLocationGPS() {
 
         let addressTitle = `พิกัดปัจจุบัน (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
 
-        // 1. Try Reverse Geocoding via BigDataCloud client API (Fast & Thai locality aware)
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3500);
-            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=th`, {
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
+        // ── Helper: สร้างชื่อที่อยู่จาก Nominatim address object ──────────────────
+        function buildAddressFromNominatim(addr) {
+            // ระดับ 1: สถานที่สำคัญ / อาคาร
+            const landmark =
+                addr.amenity || addr.tourism || addr.shop || addr.office ||
+                addr.building || addr.leisure || addr.historic || addr.name || "";
 
-            if (res.ok) {
-                const data = await res.json();
-                const parts = [data.locality, data.city, data.principalSubdivision].filter(p => p && p.trim());
-                const uniqueParts = [...new Set(parts)];
-                if (uniqueParts.length > 0) {
-                    addressTitle = uniqueParts.join(", ");
+            // ระดับ 2: ซอย / ถนน
+            const soi = addr.alley || addr.lane || "";
+            const road = addr.road || addr.pedestrian || addr.footway || addr.path || "";
+            const roadPart = soi && road ? `ซอย${soi.replace(/^ซอย/i, "")} (${road})` : (soi || road);
+
+            // ระดับ 3: แขวง / ตำบล / หมู่บ้าน
+            const subdistrict =
+                addr.quarter || addr.neighbourhood || addr.suburb ||
+                addr.subdistrict || addr.village || addr.city_district || "";
+
+            // ระดับ 4: เขต / อำเภอ
+            const district = addr.district || addr.county || addr.city || addr.town || addr.municipality || "";
+
+            // ระดับ 5: จังหวัด / รัฐ
+            const province = addr.province || addr.state || "";
+
+            const parts = [landmark, roadPart, subdistrict, district, province]
+                .map(p => p ? p.trim() : "")
+                .filter((p, i, arr) => p && arr.indexOf(p) === i); // unique & non-empty
+
+            return parts.length > 0 ? parts.join(", ") : null;
+        }
+
+        // 1. Primary: OpenStreetMap Nominatim (รู้จักถนน/ซอย/อาคาร/สถานที่สำคัญในไทยดีที่สุด)
+        try {
+            const controller1 = new AbortController();
+            const timeoutId1 = setTimeout(() => controller1.abort(), 5000);
+            const res1 = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+                { headers: { "Accept-Language": "th,en" }, signal: controller1.signal }
+            );
+            clearTimeout(timeoutId1);
+
+            if (res1.ok) {
+                const data1 = await res1.json();
+                if (data1 && data1.address) {
+                    const built = buildAddressFromNominatim(data1.address);
+                    if (built) {
+                        addressTitle = built;
+                        // บันทึก display_name ไว้ debug ถ้าต้องการ
+                        // console.log("Nominatim display_name:", data1.display_name);
+                    }
                 }
             }
         } catch (e1) {
-            // 2. Fallback to OpenStreetMap Nominatim
+            console.warn("Nominatim reverse geocode failed, trying BigDataCloud...", e1);
+
+            // 2. Fallback: BigDataCloud (locality level)
             try {
                 const controller2 = new AbortController();
                 const timeoutId2 = setTimeout(() => controller2.abort(), 3500);
-                const res2 = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
-                    headers: { 'Accept-Language': 'th,en' },
-                    signal: controller2.signal
-                });
+                const res2 = await fetch(
+                    `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=th`,
+                    { signal: controller2.signal }
+                );
                 clearTimeout(timeoutId2);
 
                 if (res2.ok) {
                     const data2 = await res2.json();
-                    if (data2 && data2.address) {
-                        const road = data2.address.road || data2.address.suburb || data2.address.neighbourhood || "";
-                        const subdistrict = data2.address.subdistrict || data2.address.village || data2.address.city_district || "";
-                        const district = data2.address.district || data2.address.city || "";
-                        const province = data2.address.province || data2.address.state || "";
-                        const parts = [road, subdistrict, district, province].filter(p => p && p.trim());
-                        const uniqueParts = [...new Set(parts)];
-                        if (uniqueParts.length > 0) {
-                            addressTitle = uniqueParts.join(", ");
-                        }
+                    // BigDataCloud locality info — ใช้ localityInfo ถ้ามี เพื่อได้ถนน/ชุมชน
+                    const parts = [];
+                    if (data2.localityInfo && data2.localityInfo.informative) {
+                        const infoParts = data2.localityInfo.informative
+                            .filter(i => i.description && i.order <= 5)
+                            .map(i => i.name || "")
+                            .filter(Boolean);
+                        parts.push(...infoParts);
+                    }
+                    if (parts.length === 0) {
+                        [data2.locality, data2.city, data2.principalSubdivision]
+                            .filter(p => p && p.trim())
+                            .forEach(p => parts.push(p));
+                    }
+                    const uniqueParts = [...new Set(parts)];
+                    if (uniqueParts.length > 0) {
+                        addressTitle = uniqueParts.join(", ");
                     }
                 }
             } catch (e2) {
-                console.warn("Reverse geocode notice:", e2);
+                console.warn("BigDataCloud reverse geocode notice:", e2);
             }
         }
 
