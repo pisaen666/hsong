@@ -902,8 +902,10 @@ function updateHomeActiveOrderBanner() {
     const banner = document.getElementById("home-active-order-banner");
     const navBadge = document.getElementById("nav-tracking-badge");
     const order = state.activeOrder;
+    const isCustomerLoggedIn = state.customer && state.customer.isLoggedIn;
 
-    if (!order || !order.orderId || order.status === "delivered") {
+    // ถ้าไม่มีออเดอร์ หรือออเดอร์ส่งเสร็จแล้ว หรือลูกค้าไม่ได้เข้าสู่ระบบ ให้ซ่อนแถบทันที
+    if (!order || !order.orderId || order.status === "delivered" || !isCustomerLoggedIn) {
         if (banner) banner.classList.add("hidden");
         if (navBadge) navBadge.classList.add("hidden");
         return;
@@ -2791,9 +2793,27 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
 // ==========================================
 function renderTrackingScreen() {
     const order = state.activeOrder;
-    if (!order) return;
+    const isCustomerLoggedIn = state.customer && state.customer.isLoggedIn;
 
     const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    // ถ้าไม่มีออเดอร์ หรือลูกค้าออกจากระบบแล้ว ให้เคลียร์หน้าจอติดตาม
+    if (!order || !isCustomerLoggedIn) {
+        setVal("tracking-order-id", "ไม่มีออเดอร์ค้างส่ง");
+        const statusTitle = document.getElementById("tracking-status-title");
+        const statusDesc = document.getElementById("tracking-status-desc");
+        const etaPill = document.getElementById("tracking-eta-pill");
+        if (statusTitle) statusTitle.textContent = "ยังไม่มีออเดอร์ที่กำลังจัดส่ง";
+        if (statusDesc) statusDesc.textContent = "กรุณาเข้าสู่ระบบหรือเลือกซื้อของสดในตลาดเพื่อเริ่มจัดส่ง";
+        if (etaPill) etaPill.innerHTML = `<span>ไม่มีคิวจัดส่งในขณะนี้</span>`;
+        const refundBanner = document.getElementById("tracking-refund-banner");
+        if (refundBanner) refundBanner.classList.add("hidden");
+        const container = document.getElementById("tracking-stalls-progress");
+        if (container) container.innerHTML = `<div class="p-6 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">ไม่มีรายการสินค้าที่กำลังจัดส่ง</div>`;
+        const completedBox = document.getElementById("tracking-completed-actions-box");
+        if (completedBox) completedBox.classList.add("hidden");
+        return;
+    }
 
     setVal("tracking-order-id", `ออเดอร์ ${order.orderId}`);
 
@@ -3867,6 +3887,7 @@ function handleCustomerLoginSubmit() {
     updateDeliveryLocationUI();
     updateCustomerLoyaltyBanner();
     renderCatalog();
+    updateHomeActiveOrderBanner();
 
     // Auto-fulfill pending add to cart if customer clicked before logging in
     if (pendingAddToCart) {
@@ -3888,9 +3909,29 @@ function logoutCustomer() {
     saveCustomerToStorage(state.customer);
     state.deliveryLocation = null;
     saveLocationToStorage(null);
+
+    // ✅ เคลียร์ activeOrder ของลูกค้าออกจาก state และ localStorage เพื่อไม่ให้ค้างแสดงสถานะการจัดส่ง
+    state.activeOrder = null;
+    try { localStorage.removeItem("talathub_active_order"); } catch (e) {}
+
+    // ✅ เคลียร์ตะกร้าสินค้า
+    state.cart = [];
+    try { localStorage.removeItem("talathub_cart"); } catch (e) {}
+
+    // ✅ อัปเดต UI ทั้งหมดให้กลับสู่สถานะผู้มาเยือน (Guest)
+    updateHomeActiveOrderBanner();
+    updateCartUI();
     renderAuthHeaderButtons();
     updateDeliveryLocationUI();
     updateCustomerLoyaltyBanner();
+    renderCatalog();
+    renderTrackingScreen();
+
+    // ✅ หากลูกค้าเปิดค้างอยู่ที่หน้า Tracking หรือ Checkout ให้สลับกลับมาหน้าตลาดสดทันที
+    if (state.currentScreen === "tracking" || state.currentScreen === "checkout") {
+        goToMarketScreen();
+    }
+
     showToast("🚪 ออกจากระบบลูกค้าเรียบร้อยแล้ว");
 }
 
