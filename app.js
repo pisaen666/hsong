@@ -2919,6 +2919,26 @@ function renderTrackingScreen() {
     if (completedActionsBox) {
         if (orderStatus === "delivered") {
             completedActionsBox.classList.remove("hidden");
+            const reorderBtnText = document.getElementById("tracking-reorder-btn-text");
+            if (reorderBtnText) {
+                let validCount = 0;
+                let validTotal = 0;
+                if (order.stalls) {
+                    order.stalls.forEach(s => {
+                        (s.items || []).forEach(it => {
+                            if (!it.outOfStock) {
+                                validCount++;
+                                validTotal += ((it.actualPrice !== undefined ? it.actualPrice : it.price) * (it.qty || 1));
+                            }
+                        });
+                    });
+                }
+                if (validCount > 0) {
+                    reorderBtnText.textContent = `สั่งซ้ำรายการเดิมทันที (${validCount} รายการ ฿${validTotal})`;
+                } else {
+                    reorderBtnText.textContent = "สั่งซ้ำรายการเดิมทันที";
+                }
+            }
         } else {
             completedActionsBox.classList.add("hidden");
         }
@@ -3373,7 +3393,7 @@ function setRatingStars(score) {
             s.className = "material-symbols-outlined fill-1 text-amber-400 hover:scale-110 transition-transform";
         } else {
             s.className = "material-symbols-outlined text-slate-300 hover:scale-110 transition-transform";
-        } 111
+        }
     });
 
     const labels = [
@@ -3668,15 +3688,44 @@ function downloadReceipt() {
 // 1-CLICK REORDER (สั่งซ้ำรายการเดิม)
 // ==========================================
 function reorderCurrentItems() {
-    // Add default products into cart
-    cart = [
-        { id: 1, name: "มะเขือเปราะกรอบหวาน", stall: "ผักสวนครัวลุงสนั่น (B01)", price: 15, qty: 1, image: "🥒" },
-        { id: 2, name: "ข่าอ่อน + ตะไคร้สด + ใบมะกรูด", stall: "ผักสวนครัวลุงสนั่น (B01)", price: 15, qty: 1, image: "🌿" },
-        { id: 3, name: "หัวกะทิสดคั้นแท้ 100%", stall: "กะทิสดชาวเกาะ ลุงสมหมาย (C01)", price: 40, qty: 1, image: "🥥" },
-        { id: 4, name: "ปลาหมึกกล้วยสดไซส์กลาง", stall: "อาหารทะเลสดลุงหวัง (E11)", price: 110, qty: 1, image: "🦑" }
+    // ดึงรายการของสดจริงจากออเดอร์ล่าสุดของลูกค้า (เฉพาะรายการที่มีของพร้อมส่ง)
+    if (state.activeOrder && state.activeOrder.stalls && state.activeOrder.stalls.length > 0) {
+        const reorderCart = [];
+        state.activeOrder.stalls.forEach(stall => {
+            (stall.items || []).forEach(item => {
+                if (!item.outOfStock) {
+                    reorderCart.push({
+                        stallId: stall.stallId || "skai_01",
+                        stallName: stall.name || "แผงค้าในตลาด",
+                        productId: item.productId || item.id || 1,
+                        name: item.name,
+                        price: item.price || 0,
+                        qty: item.qty || 1,
+                        unit: item.unit || "ชิ้น"
+                    });
+                }
+            });
+        });
+        if (reorderCart.length > 0) {
+            state.cart = reorderCart;
+            saveCartToStorage(state.cart);
+            updateCartUI();
+            showToast(`🔁 โหลดรายการของสดเดิม ${state.cart.length} รายการลงตะกร้าเรียบร้อยแล้ว!`);
+            goToCheckoutScreen();
+            return;
+        }
+    }
+
+    // กรณีไม่มีรายการเดิม ให้โหลดรายการแนะนำพื้นฐาน
+    state.cart = [
+        { stallId: "veggie_01", stallName: "ผักสวนครัวลุงสนั่น (B01)", productId: 1, name: "มะเขือเปราะกรอบหวาน", price: 15, qty: 1, unit: "กก." },
+        { stallId: "veggie_01", stallName: "ผักสวนครัวลุงสนั่น (B01)", productId: 2, name: "ข่าอ่อน + ตะไคร้สด + ใบมะกรูด", price: 15, qty: 1, unit: "ชุด" },
+        { stallId: "curry_01", stallName: "กะทิสดชาวเกาะ ลุงสมหมาย (C01)", productId: 3, name: "หัวกะทิสดคั้นแท้ 100%", price: 40, qty: 1, unit: "ถุง" },
+        { stallId: "seafood_01", stallName: "อาหารทะเลสดลุงหวัง (E11)", productId: 4, name: "ปลาหมึกกล้วยสดไซส์กลาง", price: 110, qty: 1, unit: "กก." }
     ];
+    saveCartToStorage(state.cart);
     updateCartUI();
-    showToast("🔁 โหลดรายการเดิม 4 รายการลงตะกร้าเรียบร้อยแล้ว!");
+    showToast("🔁 โหลดรายการของสดเดิม 4 รายการลงตะกร้าเรียบร้อยแล้ว!");
     goToCheckoutScreen();
 }
 
