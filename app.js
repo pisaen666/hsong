@@ -896,6 +896,106 @@ const state = {
     activeOrder: loadSavedActiveOrder()  // ✅ โหลด active order จาก localStorage
 };
 
+// ✅ อัปเดตแถบติดตามออเดอร์สดบนหน้าหลัก (Home Screen) และปุ่มเมนูด้านล่าง
+function updateHomeActiveOrderBanner() {
+    const banner = document.getElementById("home-active-order-banner");
+    const navBadge = document.getElementById("nav-tracking-badge");
+    const order = state.activeOrder;
+
+    if (!order || !order.orderId || order.status === "delivered") {
+        if (banner) banner.classList.add("hidden");
+        if (navBadge) navBadge.classList.add("hidden");
+        return;
+    }
+
+    // แสดง Badge สีแดง LIVE ที่ปุ่ม "ติดตามส่ง" เมนูด้านล่าง
+    if (navBadge) {
+        navBadge.classList.remove("hidden");
+        navBadge.textContent = "LIVE";
+    }
+
+    // แสดง Floating Banner บนหน้าตลาดสด
+    if (banner) {
+        banner.classList.remove("hidden");
+        const idEl = document.getElementById("home-active-order-id");
+        const statusEl = document.getElementById("home-active-order-status");
+
+        if (idEl) idEl.textContent = order.orderId;
+
+        const refund = order.refundCashTotal || 0;
+        let statusText = "📋 กำลังจัดเตรียมของสดในตลาด";
+        if (order.status === "delivering") statusText = "🛵 ไรเดอร์กำลังเดินทางนำส่ง";
+
+        let refundTag = "";
+        if (refund > 0) {
+            refundTag = ` • <strong class="text-amber-300 font-black">✉️ มีซองเงินทอน ฿${refund}</strong>`;
+        }
+
+        if (statusEl) {
+            statusEl.innerHTML = `${statusText}${refundTag}`;
+        }
+    }
+}
+
+// ✅ จัดการ Deep Link สำหรับการติดตามสถานะออเดอร์สด (เช่น ลิงก์ที่ส่งไปใน LINE)
+async function handleTrackingDeepLink() {
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        let trackId = urlParams.get("track") || urlParams.get("order");
+        if (!trackId && window.location.hash.startsWith("#track")) {
+            const parts = window.location.hash.split("=");
+            if (parts.length > 1) trackId = parts[1];
+        }
+
+        if (trackId) {
+            trackId = decodeURIComponent(trackId).trim();
+            const cleanKey = trackId.replace(/^#/, '');
+
+            // 1. ถ้ามีใน state.activeOrder อยู่แล้ว
+            if (state.activeOrder && state.activeOrder.orderId && 
+                (state.activeOrder.orderId === trackId || state.activeOrder.orderId.replace(/^#/, '') === cleanKey)) {
+                // ข้อมูลพร้อมแล้ว
+            } else if (isFirebaseReady()) {
+                // 2. ดึงจาก Firebase Cloud
+                try {
+                    const snap = await db.ref(`orders/${toFirebaseKey(trackId)}`).once("value");
+                    let orderData = snap.val();
+                    if (!orderData) {
+                        const snap2 = await db.ref(`orders/${toFirebaseKey("#" + cleanKey)}`).once("value");
+                        orderData = snap2.val();
+                    }
+                    if (orderData && orderData.orderId) {
+                        state.activeOrder = orderData;
+                        try { localStorage.setItem("talathub_active_order", JSON.stringify(orderData)); } catch(e) {}
+                    }
+                } catch(e) {
+                    console.warn("Firebase deep link load error:", e);
+                }
+            }
+
+            // นำลูกค้าไปที่หน้า Tracking ทันที
+            switchRole("customer");
+            goToTrackingScreen();
+            
+            // เลื่อนหน้าจอไปที่แบนเนอร์เงินทอนหรือสถานะ
+            setTimeout(() => {
+                const refundBanner = document.getElementById("tracking-refund-banner");
+                if (refundBanner && !refundBanner.classList.contains("hidden")) {
+                    refundBanner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 300);
+
+            showToast(`📦 เปิดหน้าติดตามออเดอร์ ${trackId} ให้เรียบร้อยแล้ว`);
+            return;
+        }
+    } catch (e) {
+        console.warn("handleTrackingDeepLink failed", e);
+    }
+
+    // ถ้าไม่มี trackId แต่มี active order ค้างอยู่ ให้อัปเดตแถบติดตามหน้าแรก
+    updateHomeActiveOrderBanner();
+}
+
 // 3. Initialization
 document.addEventListener("DOMContentLoaded", () => {
     updateDeliveryLocationUI();
@@ -905,6 +1005,8 @@ document.addEventListener("DOMContentLoaded", () => {
     updateCartUI();
     renderTrackingScreen();
     renderDirectoryList();
+    updateHomeActiveOrderBanner();
+    handleTrackingDeepLink();
 
     // ✅ Cross-tab sync (same browser): ฟัง storage event
     window.addEventListener("storage", (event) => {
@@ -949,6 +1051,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (typeof renderHubPickingList === "function") renderHubPickingList();
             if (typeof renderHubDeliveryView === "function") renderHubDeliveryView();
             renderTrackingScreen();
+            updateHomeActiveOrderBanner();
             playOrderAlertSound();
             showToast(`🔔 ออเดอร์ใหม่ ${newOrder.orderId} เข้ามา! ฿${newOrder.grandTotal || newOrder.total}`);
         });
@@ -961,13 +1064,17 @@ document.addEventListener("DOMContentLoaded", () => {
             // ถ้า order นี้คือ order ที่กำลัง active อยู่
             if (state.activeOrder && state.activeOrder.orderId === updatedOrder.orderId) {
                 const oldStatus = state.activeOrder.status;
+                const oldRefund = state.activeOrder.refundCashTotal || 0;
                 state.activeOrder = { ...state.activeOrder, ...updatedOrder };
                 try { localStorage.setItem("talathub_active_order", JSON.stringify(state.activeOrder)); } catch(e) {}
 
-                // แสดงสถานะใหม่บน tracking screen
+                // แสดงสถานะใหม่บน tracking screen และหน้าหลัก
                 if (state.currentScreen === "tracking") renderTrackingScreen();
+                updateHomeActiveOrderBanner();
 
-                if (updatedOrder.status === "delivering" && oldStatus !== "delivering") {
+                if ((updatedOrder.refundCashTotal || 0) > oldRefund) {
+                    showToast(`✉️ แจ้งเตือน: มีการคืนเงินสดใส่ซอง ฿${updatedOrder.refundCashTotal}! แตะดูสถานะจัดส่งได้เลย`);
+                } else if (updatedOrder.status === "delivering" && oldStatus !== "delivering") {
                     showToast("🛵 ไรเดอร์ออกเดินทางแล้ว! กำลังมาส่งของที่บ้านคุณ");
                 } else if (updatedOrder.status === "delivered" && oldStatus !== "delivered") {
                     showToast("✅ จัดส่งสำเร็จแล้ว! ขอบคุณที่ใช้บริการเฮียส่ง 🙏");
@@ -1003,6 +1110,7 @@ function goToMarketScreen() {
     document.getElementById("screen-market-home").classList.remove("hidden");
     document.getElementById("screen-checkout").classList.add("hidden");
     document.getElementById("screen-tracking").classList.add("hidden");
+    updateHomeActiveOrderBanner();
 }
 
 function goToCheckoutScreen() {
@@ -2812,23 +2920,46 @@ function renderTrackingScreen() {
     order.refundCashTotal = refundCashTotal;
     order.finalPaidTotal = Math.max(0, (order.grandTotal || order.total || 0) - refundCashTotal);
 
-    // Update Tracking Refund Banner (ขั้นตอนที่ 3: แสดงเงินทอนใส่ซองให้ลูกค้าเห็น)
+    // Update Tracking Refund Banner (ขั้นตอนที่ 3: แสดงเงินทอนใส่ซองให้ลูกค้าเห็นอย่างชัดเจน)
     const refundBanner = document.getElementById("tracking-refund-banner");
     if (refundBanner) {
         if (refundCashTotal > 0) {
             refundBanner.classList.remove("hidden");
             refundBanner.innerHTML = `
-                <div class="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-2xl p-3 shadow-md border border-amber-300 space-y-1 animate-fade-in text-xs mb-2">
+                <div class="bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 text-white rounded-2xl p-4 shadow-lg border border-amber-300 space-y-3 animate-fade-in text-xs mb-3">
                     <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-1.5 font-black text-xs">
-                            <span class="text-base">✉️</span>
-                            <span>แจ้งคืนเงินสดใส่ซอง: ฿${refundCashTotal}</span>
+                        <div class="flex items-center gap-2 font-black text-sm">
+                            <span class="text-xl">✉️</span>
+                            <span>สรุปเงินทอนใส่ซอง: ฿${refundCashTotal}</span>
                         </div>
-                        <span class="bg-white/20 text-white font-bold text-[10px] px-2 py-0.5 rounded-full">แนบมากับถุงของสด</span>
+                        <span class="bg-white/25 text-white font-extrabold text-[10px] px-2.5 py-0.5 rounded-full shadow-2xs">คืนเงินสดใส่ซอง</span>
                     </div>
-                    <p class="text-[10px] text-amber-100 leading-snug">
-                        มีสินค้าหมด ${outOfStockCount} รายการ ระบบตัดออกและไรเดอร์จะนำเงินสดใส่ซองใสส่งมอบคืนให้พร้อมถุงของสดครับ
+                    
+                    <p class="text-[11px] text-amber-50 leading-relaxed bg-black/10 p-2.5 rounded-xl border border-white/10">
+                        มีสินค้าที่แผงค้าหมด ${outOfStockCount} รายการ ทีมงานฮับได้นำเงินสดจำนวน <strong>฿${refundCashTotal}</strong> ใส่ซองใสและเย็บแนบติดไปกับถุงของสดเรียบร้อยแล้ว ไรเดอร์จะนำเงินสดมอบคืนให้พร้อมถุงของสดครับ
                     </p>
+
+                    <!-- การแจกแจงยอดเงิน 3 ช่องให้เข้าใจในแวบเดียว -->
+                    <div class="grid grid-cols-3 gap-1.5 pt-0.5 text-center">
+                        <div class="bg-white/15 rounded-xl p-2 border border-white/10">
+                            <div class="text-[9px] text-amber-100 font-medium">ยอดที่คุณโอนมา</div>
+                            <div class="font-black text-xs text-white mt-0.5">฿${order.grandTotal || order.total || 0}</div>
+                        </div>
+                        <div class="bg-white/25 rounded-xl p-2 border border-white/20">
+                            <div class="text-[9px] text-amber-100 font-bold">หักคืนเงินสดใส่ซอง</div>
+                            <div class="font-black text-xs text-amber-200 mt-0.5">-฿${refundCashTotal}</div>
+                        </div>
+                        <div class="bg-white/15 rounded-xl p-2 border border-white/10">
+                            <div class="text-[9px] text-amber-100 font-medium">ยอดของสดที่ได้รับ</div>
+                            <div class="font-black text-xs text-emerald-200 mt-0.5">=฿${order.finalPaidTotal || 0}</div>
+                        </div>
+                    </div>
+
+                    <!-- ปุ่มดู e-Receipt ทันที -->
+                    <button type="button" onclick="openReceiptModal()" class="w-full bg-white text-slate-900 hover:bg-amber-50 font-black py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-sm text-emerald-700">receipt_long</span>
+                        <span>ดูใบเสร็จรับเงิน e-Receipt ฉบับเต็ม (พร้อมรายการของหมด)</span>
+                    </button>
                 </div>
             `;
         } else {
@@ -2856,22 +2987,31 @@ function renderTrackingScreen() {
             statusBadge = `<span class="text-[10px] text-rose-800 bg-rose-100 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs"><span>⚠️</span><span>สินค้าหมดทั้งแผง</span></span>`;
         }
 
-        let oosDetailsHtml = "";
-        if (oosItems.length > 0) {
-            const oosRefund = oosItems.reduce((sum, i) => sum + (i.actualPrice !== undefined ? i.actualPrice : i.price), 0);
-            oosDetailsHtml = `
-                <div class="mt-2 pt-1.5 border-t border-slate-100 text-[10px] text-rose-700 bg-rose-50/60 p-2 rounded-xl flex items-start gap-1.5">
-                    <span class="material-symbols-outlined text-xs text-rose-600 mt-0.5">info</span>
-                    <div>
-                        <span class="font-bold">สินค้าหมด:</span> ${oosItems.map(i => i.name).join(", ")}
-                        <div class="font-extrabold text-amber-800 mt-0.5">✉️ คืนเงินสดใส่ซอง: ฿${oosRefund}</div>
+        // แสดงรายการสินค้าแยกย่อยใต้แผงค้า ให้ลูกค้าตรวจสอบได้โปร่งใส
+        let itemsListHtml = "";
+        if (stall.items && stall.items.length > 0) {
+            itemsListHtml = `<div class="mt-2 pt-2 border-t border-slate-100 space-y-1.5">`;
+            stall.items.forEach(item => {
+                const itemPrice = item.actualPrice !== undefined ? item.actualPrice : item.price;
+                const isOOS = item.outOfStock || false;
+                itemsListHtml += `
+                    <div class="flex items-center justify-between text-xs py-0.5 ${isOOS ? 'text-rose-700 bg-rose-50/50 px-2 py-1 rounded-lg' : 'text-slate-700'}">
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-xs ${isOOS ? 'text-rose-500 font-bold' : 'text-emerald-600'}">${isOOS ? '✕' : '✓'}</span>
+                            <span class="${isOOS ? 'line-through text-slate-400 font-medium' : 'font-semibold'}">${item.name}</span>
+                            ${isOOS ? '<span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.2 rounded font-black">ของหมด • คืนเงินสดใส่ซอง</span>' : ''}
+                        </div>
+                        <span class="font-bold ${isOOS ? 'text-rose-600' : 'text-slate-800'} text-xs">
+                            ${isOOS ? `คืน ฿${itemPrice}` : `฿${itemPrice}`}
+                        </span>
                     </div>
-                </div>
-            `;
+                `;
+            });
+            itemsListHtml += `</div>`;
         }
 
         html += `
-            <div class="p-3 bg-white rounded-2xl border border-slate-200/90 shadow-2xs text-xs space-y-1">
+            <div class="p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs text-xs space-y-1">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2.5">
                         <div class="w-7 h-7 rounded-xl ${isReady ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'} flex items-center justify-center font-bold text-sm shrink-0">
@@ -2879,12 +3019,12 @@ function renderTrackingScreen() {
                         </div>
                         <div>
                             <div class="font-extrabold text-slate-800 text-xs leading-tight">${stall.name}</div>
-                            <div class="text-[10px] text-slate-400 mt-0.5 font-medium">จำนวน ${stall.itemsCount} รายการ ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length})</span>` : ''}</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5 font-medium">จำนวน ${stall.itemsCount} รายการ ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length} คืน ฿${oosItems.reduce((s,i)=>s+(i.actualPrice||i.price),0)})</span>` : ''}</div>
                         </div>
                     </div>
                     ${statusBadge}
                 </div>
-                ${oosDetailsHtml}
+                ${itemsListHtml}
             </div>
         `;
     });
@@ -4321,7 +4461,9 @@ function sendOutOfStockLineNotice() {
         });
     }
     const refund = order.refundCashTotal || 0;
-    const msg = `🔔【เฮียส่ง】แจ้งเตือนเรื่องสินค้าออเดอร์ ${order.orderId}:\nขออภัยครับ มีสินค้าที่แผงค้าหมด ได้แก่:\n${oosList.map(n => `• ${n}`).join('\n')}\n━━━━━━━━━━━━━━━━━━\n✉️ นโยบายตัวเลือก C: ทีมงานตัดรายการออก และไรเดอร์ได้นำเงินสดทอนจำนวน ฿${refund} ใส่ซองใสแนบไปกับถุงของสดเรียบร้อยแล้วครับ 🛵💨`;
+    const cleanOrderId = (order.orderId || "TH-6114").replace(/#/g, '');
+    const trackUrl = `https://pisaen666.github.io/hsong/?track=${encodeURIComponent(cleanOrderId)}`;
+    const msg = `🔔【เฮียส่ง】แจ้งเตือนเรื่องสินค้าออเดอร์ ${order.orderId}:\nขออภัยครับ มีสินค้าที่แผงค้าหมด ได้แก่:\n${oosList.map(n => `• ${n}`).join('\n')}\n━━━━━━━━━━━━━━━━━━\n✉️ คืนเงินสดใส่ซอง: ฿${refund}\nทีมงานตัดรายการออก และไรเดอร์ได้นำเงินสดทอนจำนวน ฿${refund} ใส่ซองใสแนบไปกับถุงของสดเรียบร้อยแล้วครับ 🛵💨\n━━━━━━━━━━━━━━━━━━\n👉 แตะลิงก์นี้เพื่อดูสถานะจัดส่ง & ซองเงินทอนของคุณ:\n${trackUrl}`;
 
     if (isMobileDevice()) {
         window.location.href = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;

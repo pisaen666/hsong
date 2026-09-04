@@ -138,6 +138,32 @@
                     </div>
                 </div>
 
+                <!-- 🛵 STICKY ACTIVE ORDER LIVE TRACKER BANNER (แสดงเมื่อลูกค้ามีออเดอร์ค้างส่ง) -->
+                <div id="home-active-order-banner" class="hidden px-4 pt-2.5 pb-1 animate-fade-in cursor-pointer" onclick="goToTrackingScreen()">
+                    <div class="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-900 text-white rounded-2xl p-3 shadow-lg border border-emerald-400/50 flex items-center justify-between gap-2.5 active:scale-98 transition-all relative overflow-hidden">
+                        <div class="absolute -right-4 -top-4 w-16 h-16 bg-emerald-500/15 rounded-full blur-lg pointer-events-none"></div>
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <div class="relative w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-400/40 shadow-inner">
+                                <span class="material-symbols-outlined text-lg animate-bounce">local_shipping</span>
+                                <span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping"></span>
+                            </div>
+                            <div class="text-left min-w-0">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-[9px] font-black bg-emerald-500 text-slate-950 px-1.5 py-0.2 rounded uppercase">ออเดอร์สดของคุณ</span>
+                                    <span class="text-xs font-black text-emerald-200" id="home-active-order-id">#TH-XXXX</span>
+                                </div>
+                                <div class="text-[11px] text-slate-200 font-medium mt-0.5 truncate" id="home-active-order-status">
+                                    🛵 กำลังจัดเตรียมของสดในตลาด
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1 text-[10px] font-extrabold text-amber-300 bg-white/10 hover:bg-white/20 px-2.5 py-1.5 rounded-xl border border-white/15 shrink-0 shadow-xs">
+                            <span>ดูสถานะ</span>
+                            <span class="material-symbols-outlined text-xs">arrow_forward_ios</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 📍 QR SCAN / LOCATION & NEXT DELIVERY SLOT WELCOME CARD -->
                 <div class="px-4 -mt-1.5">
                     <div class="bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 text-white rounded-2xl p-3 shadow-md border border-emerald-500/30 relative overflow-hidden">
@@ -389,8 +415,9 @@
                         <span id="nav-cart-badge" class="absolute -top-1 right-2 bg-orange-500 text-white text-[9px] font-bold px-1 rounded-full hidden">0</span>
                         <span>ตะกร้า</span>
                     </button>
-                    <button onclick="goToTrackingScreen()" class="flex flex-col items-center gap-0.5 text-slate-500 hover:text-emerald-700 font-medium text-[11px]">
+                    <button onclick="goToTrackingScreen()" class="flex flex-col items-center gap-0.5 text-slate-500 hover:text-emerald-700 font-medium text-[11px] relative">
                         <span class="material-symbols-outlined text-xl">local_shipping</span>
+                        <span id="nav-tracking-badge" class="absolute -top-1 right-2 bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full hidden animate-pulse shadow-xs">LIVE</span>
                         <span>ติดตามส่ง</span>
                     </button>
                 </nav>
@@ -2715,6 +2742,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=4.8"></script>
+    <script src="app.js?v=4.9"></script>
 </body>
 </html>
