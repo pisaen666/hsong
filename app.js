@@ -688,13 +688,13 @@ function detectCurrentLocationGPS() {
                 ? `ซอย${soi.replace(/^ซอย/i, "")} ${road}`
                 : (soi || road);
 
-            // ระดับ 3: แขวง / ตำบล / ชุมชน
+            // ระดับ 3: แขวง / ตำบล / ชุมชน / หมู่บ้าน
+            // addr.town = ตำบล/เมืองเล็ก (อยู่ระดับเดียวกับตำบล ไม่ใช่อำเภอ)
             const subdistrict = addr.quarter || addr.neighbourhood || addr.suburb ||
-                addr.subdistrict || addr.village || addr.city_district || "";
+                addr.subdistrict || addr.village || addr.city_district || addr.town || "";
 
-            // ระดับ 4: เขต / อำเภอ / เมือง
-            const district = addr.district || addr.county || addr.city ||
-                addr.town || addr.municipality || "";
+            // ระดับ 4: เขต / อำเภอ / เมือง (county = อำเภอ, municipality = เทศบาล)
+            const district = addr.district || addr.county || addr.city || addr.municipality || "";
 
             // ระดับ 5: จังหวัด
             const province = addr.province || addr.state || "";
