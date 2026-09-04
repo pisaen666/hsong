@@ -151,7 +151,13 @@ function saveHubToStorage(hub) {
 function loadSavedRider() {
     try {
         const saved = localStorage.getItem("talathub_logged_in_rider");
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed && (parsed.riderId === "rider_somchai" || !parsed.riderId || parsed.phone === "081-234-5678")) {
+                parsed.phone = "081-588-7400";
+            }
+            return parsed;
+        }
     } catch (e) { }
     return null;
 }
@@ -2855,7 +2861,7 @@ function switchToRiderFromTracking() {
     state.activeRider = {
         isLoggedIn: true,
         name: "พี่สมชาย (1กข 8902)",
-        phone: "081-234-5678",
+        phone: "081-588-7400",
         license: "1กข 8902"
     };
     saveRiderToStorage(state.activeRider);
@@ -2877,12 +2883,47 @@ function refreshOrderStatus() {
     }
 }
 
-// Rider Phone Call
-function callRiderPhone() {
-    showToast("📞 กำลังโทรติดต่อ พี่สมชาย (Hub Rider) 081-234-5678...");
+// Rider Phone Call (โทรติดต่อเบอร์ 081-588-7400)
+function callRiderPhone(event, phone = "0815887400") {
+    const cleanPhone = (phone || "0815887400").toString().replace(/[^\d]/g, '') || "0815887400";
+    showToast("📞 กำลังโทรติดต่อ พี่สมชาย (Hub Rider) 081-588-7400...");
+    if (!event || !event.target || (event.target.tagName !== 'A' && !event.target.closest('a'))) {
+        setTimeout(() => {
+            window.location.href = `tel:${cleanPhone}`;
+        }, 300);
+    }
+}
+
+// Rider SMS Message (ส่งข้อความ SMS ติดต่อเบอร์ 081-588-7400)
+function sendRiderSMS(event, phone = "0815887400") {
+    const cleanPhone = (phone || "0815887400").toString().replace(/[^\d]/g, '') || "0815887400";
+    const orderId = (state.activeOrder && state.activeOrder.orderId) ? state.activeOrder.orderId : "TH-6114";
+    const msg = `สวัสดีครับ พี่สมชาย (ไรเดอร์) สอบถามเรื่องออเดอร์ ${orderId} ครับ`;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const separator = isIOS ? '&' : '?';
+    const smsUrl = `sms:${cleanPhone}${separator}body=${encodeURIComponent(msg)}`;
+
+    showToast("💬 กำลังเปิดระบบส่งข้อความ SMS ถึง 081-588-7400...");
+    if (!event || !event.target || (event.target.tagName !== 'A' && !event.target.closest('a'))) {
+        setTimeout(() => {
+            window.location.href = smsUrl;
+        }, 300);
+    }
+}
+
+// Call Customer Phone (สำหรับไรเดอร์ใช้โทรหาลูกค้า)
+function callCustomerPhone() {
+    let custPhone = "081-588-7400";
+    if (state.activeOrder && state.activeOrder.customerPhone && state.activeOrder.customerPhone !== "-") {
+        custPhone = state.activeOrder.customerPhone;
+    } else if (state.customer && state.customer.phone) {
+        custPhone = state.customer.phone;
+    }
+    const cleanPhone = custPhone.replace(/[^\d]/g, '') || "0815887400";
+    showToast(`📞 กำลังโทรติดต่อลูกค้า (${custPhone})...`);
     setTimeout(() => {
-        window.location.href = "tel:0812345678";
-    }, 400);
+        window.location.href = `tel:${cleanPhone}`;
+    }, 300);
 }
 
 // Rider Live Chat Modal Management
@@ -3970,7 +4011,7 @@ function completePickingAndDispatchOrder(orderId) {
     state.activeRider = state.activeRider || {
         isLoggedIn: true,
         name: "พี่สมชาย (1กข 8902)",
-        phone: "081-234-5678",
+        phone: "081-588-7400",
         license: "1กข 8902"
     };
     saveRiderToStorage(state.activeRider);
@@ -4002,7 +4043,7 @@ function goToRiderTrackingScreen() {
             isLoggedIn: true,
             riderId: "rider_somchai",
             name: "พี่สมชาย (1กข 8902)",
-            phone: "081-234-5678"
+            phone: "081-588-7400"
         };
         saveRiderToStorage(state.activeRider);
     }
@@ -4173,7 +4214,7 @@ function handleRiderLoginSubmit() {
         isLoggedIn: true,
         riderId: val,
         name: name,
-        phone: "081-234-5678"
+        phone: val === "rider_sombat" ? "082-999-8877" : "081-588-7400"
     };
     saveRiderToStorage(state.activeRider);
     closeRiderLoginModal();
