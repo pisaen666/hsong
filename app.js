@@ -5836,12 +5836,30 @@ function setActiveRoleView(role) {
         }
         if (btn) {
             if (r === role) {
-                btn.className = "role-btn active px-2.5 py-1.5 rounded-lg font-bold bg-emerald-600 text-white shadow-xs flex items-center gap-1 transition-all";
+                if (r === "admin") {
+                    btn.className = "role-btn active px-2.5 py-1.5 md:px-5 md:py-2.5 rounded-lg md:rounded-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md flex items-center gap-1.5 md:gap-2 text-xs md:text-sm transition-all duration-200";
+                } else {
+                    btn.className = "role-btn active px-2.5 py-1.5 md:px-5 md:py-2.5 rounded-lg md:rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center gap-1.5 md:gap-2 text-xs md:text-sm transition-all duration-200";
+                }
             } else {
-                btn.className = "role-btn px-2.5 py-1.5 rounded-lg font-medium text-slate-300 hover:text-white transition-all flex items-center gap-1";
+                if (r === "admin") {
+                    btn.className = "role-btn px-2.5 py-1.5 md:px-5 md:py-2.5 rounded-lg md:rounded-xl font-medium md:font-semibold text-purple-300 hover:text-white hover:bg-purple-900/40 flex items-center gap-1.5 md:gap-2 text-xs md:text-sm transition-all duration-200";
+                } else {
+                    btn.className = "role-btn px-2.5 py-1.5 md:px-5 md:py-2.5 rounded-lg md:rounded-xl font-medium md:font-semibold text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center gap-1.5 md:gap-2 text-xs md:text-sm transition-all duration-200";
+                }
             }
         }
     });
+
+    // Sync admin button in the role selector bar
+    const adminBtnInBar = document.getElementById("role-btn-admin");
+    if (adminBtnInBar) {
+        if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
+            adminBtnInBar.classList.remove("hidden");
+        } else {
+            adminBtnInBar.classList.add("hidden");
+        }
+    }
 
     if (role === "hub") {
         renderHubPickingList();
@@ -7233,20 +7251,20 @@ function renderAuthHeaderButtons() {
     if (state.customer && state.customer.isLoggedIn) {
         const iconName = state.customer.type === "line" ? "chat" : "smartphone";
         html += `
-            <div class="flex items-center gap-1.5 bg-emerald-950/90 border border-emerald-500/40 px-2.5 py-1 rounded-xl text-xs shadow-xs">
-                <span class="text-[11px] text-emerald-300 font-bold flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sm text-emerald-400">${iconName}</span>
+            <div class="flex items-center gap-1.5 bg-emerald-950/90 border border-emerald-500/40 px-2.5 md:px-3.5 py-1 md:py-1.5 rounded-xl text-xs md:text-sm shadow-xs">
+                <span class="text-[11px] md:text-xs text-emerald-300 font-bold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm md:text-base text-emerald-400">${iconName}</span>
                     <span>${state.customer.identifier}</span>
                 </span>
-                <button onclick="logoutCustomer()" class="text-[10px] text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบลูกค้า">
+                <button onclick="logoutCustomer()" class="text-[10px] md:text-xs text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบลูกค้า">
                     ออกจากระบบ
                 </button>
             </div>
         `;
     } else {
         html += `
-            <button onclick="openCustomerLoginModal()" id="btn-customer-login" class="px-2.5 sm:px-3 py-1.5 rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all">
-                <span class="material-symbols-outlined text-sm">person</span>
+            <button onclick="openCustomerLoginModal()" id="btn-customer-login" class="px-2.5 sm:px-3 md:px-4 py-1.5 md:py-2 rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs md:text-sm flex items-center gap-1 md:gap-1.5 shadow-xs active:scale-95 transition-all">
+                <span class="material-symbols-outlined text-sm md:text-base">person</span>
                 <span>ลูกค้า Log In</span>
             </button>
         `;
@@ -7255,23 +7273,23 @@ function renderAuthHeaderButtons() {
     // 2. Merchant Section
     if (state.activeMerchant && state.activeMerchant.isLoggedIn) {
         html += `
-            <div class="flex items-center gap-1.5 bg-amber-950/90 border border-amber-500/40 px-2.5 py-1 rounded-xl text-xs shadow-xs">
-                <span class="text-[11px] text-amber-300 font-bold flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sm text-amber-400">store</span>
+            <div class="flex items-center gap-1.5 bg-amber-950/90 border border-amber-500/40 px-2.5 md:px-3.5 py-1 md:py-1.5 rounded-xl text-xs md:text-sm shadow-xs">
+                <span class="text-[11px] md:text-xs text-amber-300 font-bold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm md:text-base text-amber-400">store</span>
                     <span>${state.activeMerchant.stallNumber || 'ร้านค้า'}</span>
                 </span>
-                <button onclick="loginAsMerchantStall('${state.activeMerchant.stallId}')" class="text-[10px] text-amber-200 bg-amber-800/80 hover:bg-amber-700 px-1.5 py-0.5 rounded-lg font-bold transition-all">
+                <button onclick="loginAsMerchantStall('${state.activeMerchant.stallId}')" class="text-[10px] md:text-xs text-amber-200 bg-amber-800/80 hover:bg-amber-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all">
                     จัดการแผง
                 </button>
-                <button onclick="logoutMerchant()" class="text-[10px] text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบร้านค้า">
+                <button onclick="logoutMerchant()" class="text-[10px] md:text-xs text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบร้านค้า">
                     ออก
                 </button>
             </div>
         `;
     } else {
         html += `
-            <button onclick="openMerchantLoginModal()" id="btn-merchant-login" class="px-2.5 sm:px-3 py-1.5 rounded-xl font-bold bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 text-xs flex items-center gap-1 shadow-md hover:shadow-orange-glow active:scale-95 transition-all">
-                <span class="material-symbols-outlined text-sm font-bold">store</span>
+            <button onclick="openMerchantLoginModal()" id="btn-merchant-login" class="px-2.5 sm:px-3 md:px-4 py-1.5 md:py-2 rounded-xl font-bold bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 text-xs md:text-sm flex items-center gap-1 md:gap-1.5 shadow-md hover:shadow-orange-glow active:scale-95 transition-all">
+                <span class="material-symbols-outlined text-sm md:text-base font-bold">store</span>
                 <span>ร้านค้า Log In</span>
             </button>
         `;
@@ -7280,29 +7298,40 @@ function renderAuthHeaderButtons() {
     // 3. Admin Section
     if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
         html += `
-            <div class="flex items-center gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2.5 py-1 rounded-xl text-xs shadow-xs">
-                <span class="text-[11px] text-purple-300 font-bold flex items-center gap-1 cursor-pointer" onclick="switchRole('admin')">
-                    <span class="material-symbols-outlined text-sm text-purple-400">admin_panel_settings</span>
+            <div class="flex items-center gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2.5 md:px-3.5 py-1 md:py-1.5 rounded-xl text-xs md:text-sm shadow-xs">
+                <span class="text-[11px] md:text-xs text-purple-300 font-bold flex items-center gap-1 cursor-pointer" onclick="switchRole('admin')">
+                    <span class="material-symbols-outlined text-sm md:text-base text-purple-400">admin_panel_settings</span>
                     <span>แอดมิน: ${state.activeAdmin.name || 'เฮียส่ง'}</span>
                 </span>
-                <button onclick="switchRole('admin')" class="text-[10px] text-purple-200 bg-purple-800/80 hover:bg-purple-700 px-1.5 py-0.5 rounded-lg font-bold transition-all">
+                <button onclick="switchRole('admin')" class="text-[10px] md:text-xs text-purple-200 bg-purple-800/80 hover:bg-purple-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all">
                     หน้าจอ Admin
                 </button>
-                <button onclick="logoutAdmin()" class="text-[10px] text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบแอดมิน">
+                <button onclick="logoutAdmin()" class="text-[10px] md:text-xs text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบแอดมิน">
                     ออก
                 </button>
             </div>
         `;
     } else {
         html += `
-            <button onclick="handleAdminButtonClick()" id="btn-admin-login" class="px-2.5 sm:px-3 py-1.5 rounded-xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all">
-                <span class="material-symbols-outlined text-sm font-bold">admin_panel_settings</span>
+            <button onclick="handleAdminButtonClick()" id="btn-admin-login" class="px-2.5 sm:px-3 md:px-4 py-1.5 md:py-2 rounded-xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white text-xs md:text-sm flex items-center gap-1 md:gap-1.5 shadow-md active:scale-95 transition-all">
+                <span class="material-symbols-outlined text-sm md:text-base font-bold">admin_panel_settings</span>
                 <span>Admin</span>
             </button>
         `;
     }
 
     container.innerHTML = html;
+
+    // Sync admin button in the role selector bar
+    const adminBtnInBar = document.getElementById("role-btn-admin");
+    if (adminBtnInBar) {
+        if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
+            adminBtnInBar.classList.remove("hidden");
+        } else {
+            adminBtnInBar.classList.add("hidden");
+        }
+    }
+
     updateCustomerLoyaltyBanner();
 }
 
