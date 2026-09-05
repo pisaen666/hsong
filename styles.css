@@ -169,3 +169,17 @@ button, input, select, span, div {
     }
 }
 
+/* =========================================================
+   Mobile Frame Mode Layout Protection (Simulated Phone on PC)
+   ========================================================= */
+#main-app-container.frame-mobile [class*="lg:grid-cols-6"],
+#main-app-container.frame-mobile [class*="md:grid-cols-4"],
+#main-app-container.frame-mobile [class*="sm:grid-cols-3"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+#main-app-container.frame-mobile [class*="lg:grid-cols-4"],
+#main-app-container.frame-mobile [class*="lg:grid-cols-3"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+

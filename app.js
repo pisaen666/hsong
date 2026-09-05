@@ -1235,7 +1235,7 @@ const state = {
         try {
             const saved = localStorage.getItem("hsong_screen_mode");
             if (saved) return saved;
-            return (typeof window !== "undefined" && window.innerWidth < 768) ? "mobile" : "pc";
+            return (typeof window !== "undefined" && window.innerWidth >= 1024) ? "pc" : "mobile";
         } catch (e) {
             return "pc";
         }
@@ -4112,8 +4112,8 @@ function renderCatalog() {
                     </button>
                 </div>
 
-                <!-- Products Grid (รองรับขนาด Responsive บนจอ PC และ มือถือ) -->
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 md:gap-3 px-3.5">
+                <!-- Products Grid (รองรับขนาด Responsive บนจอ PC และ มือถือ ป้องกันบีบอัดใน Mobile Frame) -->
+                <div class="${(state.screenMode === 'mobile') ? 'grid grid-cols-2 gap-2.5 px-3.5' : 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 md:gap-3 px-3.5'}">
                     ${stall.products.map(product => {
             const inCart = state.cart.find(item => item.productId === product.id);
             const qtyInCart = inCart ? inCart.qty : 0;
@@ -6803,11 +6803,18 @@ function setActiveRoleView(role) {
 
     // Toggle main container between mobile phone frame and full PC widescreen for all roles!
     const mainContainer = document.getElementById("main-app-container");
+    const footerContainer = document.getElementById("app-bottom-footer");
     if (mainContainer) {
         if (state.screenMode === "mobile") {
-            mainContainer.className = "w-full max-w-full md:max-w-[430px] mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300 min-w-0";
+            mainContainer.className = "w-full max-w-full md:max-w-[430px] mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300 min-w-0 frame-mobile";
+            if (footerContainer) {
+                footerContainer.className = "w-full max-w-full md:max-w-[430px] mx-auto mt-4 mb-8 px-4 flex flex-col items-center justify-center gap-2.5 text-xs text-slate-500 transition-all";
+            }
         } else {
-            mainContainer.className = "w-full max-w-full md:max-w-7xl mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300 min-w-0";
+            mainContainer.className = "w-full max-w-full md:max-w-7xl mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300 min-w-0 frame-pc";
+            if (footerContainer) {
+                footerContainer.className = "w-full max-w-7xl mx-auto mt-6 mb-8 px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 border-t border-slate-200/80 pt-6 transition-all";
+            }
         }
     }
 
@@ -6866,6 +6873,9 @@ function toggleScreenMode() {
     try { localStorage.setItem("hsong_screen_mode", state.screenMode); } catch (e) {}
     setActiveRoleView(state.currentRole || "customer");
     renderScreenModeButton();
+    if (typeof renderCatalog === "function") {
+        renderCatalog();
+    }
     showToast(state.screenMode === "mobile" ? "📱 สลับเป็นขนาดจำลองจอมือถือ (Mobile Frame)" : "💻 ขยายเต็มจอคอมพิวเตอร์ (PC Widescreen) สำหรับทุกหน้าจอเรียบร้อย!");
 }
 
