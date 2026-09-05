@@ -6246,51 +6246,516 @@ function renderAdminRiders() {
     `;
 }
 
-// ── Tab 5: Hub System Settings
+// ==========================================
+// ADMIN SETTINGS: 4 SUB-TABS (ลูกค้า / ระบบจัดส่ง / แผงค้า / ไรเดอร์)
+// ==========================================
+let _activeSettingsSubTab = "customer";
+
+function getDefaultSettingsNote(roleKey) {
+    if (roleKey === "customer") {
+        return "📢 ประกาศและเงื่อนไขถึงลูกค้าตลาดวิศิษฐ์ชัย:\n1. สินค้าสดทุกรายการคัดสรรจาก 100 แผงค้าในตลาดสด ชั่งน้ำหนักจริงก่อนส่งมอบ\n2. กรณีสินค้าเสียหาย ไม่สด หรือไม่ตรงตามที่สั่ง ยินดีคืนเงินหรือเปลี่ยนสินค้าให้ทันทีภายใน 24 ชั่วโมง\n3. จัดส่งรอบละ 30 นาที ตรงเวลา ค่าส่งเหมาจ่ายเริ่มต้น ฿20 รวมได้ทุกแผงค้า\n4. ติดต่อศูนย์บริการลูกค้า โทร. 089-123-4567 (เฮียส่ง)";
+    } else if (roleKey === "hub") {
+        return "📋 คู่มือและระเบียบปฏิบัติงานฝ่ายจัดเตรียมสินค้า (ฮับ):\n1. เมื่อมีออเดอร์เข้า ให้ตรวจสอบใบจัดของ (Picking List) แล้วแยกตะกร้าตามแผงค้าทันที\n2. สินค้าสดต้องชั่งน้ำหนักให้ตรงตามบิล และติดสติกเกอร์รหัสออเดอร์ให้ชัดเจน\n3. เนื้อสัตว์และอาหารทะเลสดต้องใส่น้ำแข็งหลอดในถุงเพื่อคงความสดก่อนส่งมอบให้ไรเดอร์\n4. ตรวจสอบสลิปโอนเงินทุกรายการ หากเป็นออเดอร์ COD ให้แจ้งไรเดอร์เก็บเงินสดให้ครบถ้วน";
+    } else if (roleKey === "merchant") {
+        return "🏪 ข้อตกลงและระเบียบสำหรับ 100 แผงค้าในตลาดสด:\n1. แผงค้าต้องจัดเตรียมของสดคุณภาพดี สะอาด และราคาต้องตรงกับราคาขายหน้าร้านจริง\n2. เมื่อได้รับแจ้งเตือนออเดอร์ กรุณาเตรียมสินค้าให้เสร็จภายใน 5-10 นาที\n3. ระบบตัดยอดและโอนเงินเข้าบัญชีพร้อมเพย์ของแผงค้าทุกวันเวลา 18:30 น. (ไม่มีหัก GP 0%)\n4. หากสินค้าตัวใดหมดชั่วคราว ให้แจ้งฝ่ายจัดของหรือปิดการขายในระบบทันที";
+    } else if (roleKey === "rider") {
+        return "🛵 ระเบียบวินัยและข้อปฏิบัติสำหรับไรเดอร์ประจำตลาด:\n1. ตรวจสอบจำนวนถุงและรหัสออเดอร์ให้ถูกต้องก่อนออกจากฮับทุกครั้ง\n2. สินค้าสดต้องบรรจุในกล่อง/กระเป๋าเก็บความเย็นที่มีถุงน้ำแข็งตลอดการเดินทาง\n3. โทรแจ้งลูกค้าล่วงหน้า 5 นาทีก่อนถึงบ้าน และพูดจาสุภาพเรียบร้อย\n4. ออเดอร์ COD ต้องเก็บเงินสดให้ครบ และนำส่งยอดเคลียร์เงินที่ฮับทุก 3 เที่ยวส่ง หรือก่อน 18:30 น.\n5. ขับขี่ปลอดภัย สวมหมวกกันน็อก ปฏิบัติตามกฎจราจรอย่างเคร่งครัด";
+    }
+    return "";
+}
+
+function getSettingsCustomNote(roleKey) {
+    try {
+        const saved = localStorage.getItem(`hsong_settings_note_${roleKey}`);
+        if (saved !== null && saved !== undefined && saved.trim() !== "") return saved;
+    } catch (e) {}
+    return getDefaultSettingsNote(roleKey);
+}
+
+function saveSettingsCustomNote(roleKey) {
+    const textarea = document.getElementById(`settings-note-${roleKey}`);
+    if (!textarea) return;
+    const text = textarea.value.trim();
+    try {
+        localStorage.setItem(`hsong_settings_note_${roleKey}`, text);
+    } catch (e) {}
+    const roleNames = { customer: "ลูกค้า", hub: "ระบบจัดส่ง", merchant: "แผงค้า", rider: "ไรเดอร์" };
+    showToast(`💾 บันทึกข้อความ & รายละเอียดของ ${roleNames[roleKey] || roleKey} สำเร็จแล้ว!`);
+}
+
+function resetSettingsCustomNote(roleKey) {
+    const defaultText = getDefaultSettingsNote(roleKey);
+    const textarea = document.getElementById(`settings-note-${roleKey}`);
+    if (textarea) textarea.value = defaultText;
+    try {
+        localStorage.setItem(`hsong_settings_note_${roleKey}`, defaultText);
+    } catch (e) {}
+    showToast(`🔄 รีเซ็ตข้อความเป็นค่าเริ่มต้นเรียบร้อยแล้ว`);
+}
+
+function loadSavedHubSettings() {
+    try {
+        const saved = localStorage.getItem("hsong_hub_settings");
+        if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+        minOrder: 50,
+        baseDeliveryFee: 20,
+        maxRadius: 5.0,
+        orderStart: "05:00",
+        orderCutoff: "18:00",
+        couponCode: "FRESH20",
+        couponDiscount: 20,
+        hubName: "ศูนย์กระจายสินค้าตลาดวิศิษฐ์ชัย (เฮียส่ง)",
+        hubPhone: "089-123-4567",
+        hubLocation: "ล็อคกลาง อาคาร 1 หน้าตลาดวิศิษฐ์ชัย",
+        targetPickingTime: 12,
+        staffPin: "8888",
+        merchantGP: 0,
+        merchantOpen: "04:30",
+        merchantClose: "17:30",
+        payoutTime: "18:30",
+        expressBaseFee: 20,
+        riderBaseFare: 40,
+        riderExtraKm: 5,
+        riderRainBonus: 10,
+        maxCodLimit: 3000,
+        riderCutoff: "18:30"
+    };
+}
+
+function saveAdminSettingsConfig(roleKey) {
+    const s = loadSavedHubSettings();
+    if (roleKey === "customer") {
+        s.minOrder = Number(document.getElementById("cfg-min-order")?.value || 50);
+        s.baseDeliveryFee = Number(document.getElementById("cfg-base-fee")?.value || 20);
+        s.maxRadius = Number(document.getElementById("cfg-max-radius")?.value || 5.0);
+        s.orderStart = document.getElementById("cfg-order-start")?.value || "05:00";
+        s.orderCutoff = document.getElementById("cfg-order-cutoff")?.value || "18:00";
+        s.couponCode = document.getElementById("cfg-coupon-code")?.value || "FRESH20";
+        s.couponDiscount = Number(document.getElementById("cfg-coupon-discount")?.value || 20);
+    } else if (roleKey === "hub") {
+        s.hubName = document.getElementById("cfg-hub-name")?.value || s.hubName;
+        s.hubPhone = document.getElementById("cfg-hub-phone")?.value || s.hubPhone;
+        s.hubLocation = document.getElementById("cfg-hub-location")?.value || s.hubLocation;
+        s.targetPickingTime = Number(document.getElementById("cfg-picking-time")?.value || 12);
+        s.staffPin = document.getElementById("cfg-staff-pin")?.value || "8888";
+    } else if (roleKey === "merchant") {
+        s.merchantGP = Number(document.getElementById("cfg-merchant-gp")?.value || 0);
+        s.merchantOpen = document.getElementById("cfg-merchant-open")?.value || "04:30";
+        s.merchantClose = document.getElementById("cfg-merchant-close")?.value || "17:30";
+        s.payoutTime = document.getElementById("cfg-payout-time")?.value || "18:30";
+        s.expressBaseFee = Number(document.getElementById("cfg-express-fee")?.value || 20);
+    } else if (roleKey === "rider") {
+        s.riderBaseFare = Number(document.getElementById("cfg-rider-base-fare")?.value || 40);
+        s.riderExtraKm = Number(document.getElementById("cfg-rider-extra-km")?.value || 5);
+        s.riderRainBonus = Number(document.getElementById("cfg-rider-rain-bonus")?.value || 10);
+        s.maxCodLimit = Number(document.getElementById("cfg-max-cod")?.value || 3000);
+        s.riderCutoff = document.getElementById("cfg-rider-cutoff")?.value || "18:30";
+    }
+    try {
+        localStorage.setItem("hsong_hub_settings", JSON.stringify(s));
+    } catch (e) {}
+    showToast("💾 บันทึกค่าการตั้งค่าระบบเรียบร้อยแล้ว!");
+}
+
+function switchAdminSettingsSubTab(subTab) {
+    _activeSettingsSubTab = subTab;
+    renderAdminSettings();
+}
+
+// ── Tab 5: Hub System Settings (รวม 4 แท็บย่อย: ลูกค้า / ระบบจัดส่ง / แผงค้า / ไรเดอร์)
 function renderAdminSettings() {
     const container = document.getElementById("admin-content-settings");
     if (!container) return;
 
+    const s = loadSavedHubSettings();
+    const currentNote = getSettingsCustomNote(_activeSettingsSubTab);
+
+    // Sub-tab metadata
+    const subTabConfigs = {
+        customer: {
+            title: "ตั้งค่าระบบตลาดฮับวิศิษฐ์ชัย (Hub Settings) • ส่วนลูกค้า",
+            desc: "กำหนดเงื่อนไขการสั่งซื้อ ยอดขั้นต่ำ รอบเวลาจัดส่ง และช่องทางการชำระเงิน",
+            badge: "แท็บ: 🛒 ลูกค้า",
+            badgeColor: "bg-emerald-100 text-emerald-800",
+            noteTitle: "📝 กล่องข้อความ/ประกาศ & เงื่อนไขการสั่งซื้อสำหรับลูกค้า",
+            noteHelp: "พิมพ์ประกาศ นโยบายการเคลมของสดหากชำรุดเสียหาย หรือข้อความต้อนรับสำหรับแสดงให้ลูกค้าทราบ:"
+        },
+        hub: {
+            title: "ตั้งค่าระบบตลาดฮับวิศิษฐ์ชัย (Hub Settings) • ส่วนระบบจัดส่ง & ฮับกลาง",
+            desc: "ข้อมูลศูนย์กลางฮับ การควบคุมมาตรฐานของสด และระบบแจ้งเตือนเจ้าหน้าที่",
+            badge: "แท็บ: 📦 ระบบจัดส่ง",
+            badgeColor: "bg-sky-100 text-sky-800",
+            noteTitle: "📝 กล่องข้อความ/คู่มือและระเบียบปฏิบัติงานระบบจัดส่ง (SOP)",
+            noteHelp: "พิมพ์ขั้นตอนการจัดของ การบรรจุของสด กฎระเบียบคนจัดของ หรือวิธีประสานงานของหมด:"
+        },
+        merchant: {
+            title: "ตั้งค่าระบบตลาดฮับวิศิษฐ์ชัย (Hub Settings) • ส่วนแผงค้าในตลาด",
+            desc: "ข้อกำหนดแผงค้า อัตราค่าบริการระบบ รอบโอนเงินเคลียร์ยอด และบริการเรียกรถด่วน",
+            badge: "แท็บ: 🏪 แผงค้า",
+            badgeColor: "bg-amber-100 text-amber-800",
+            noteTitle: "📝 กล่องข้อความ/ข้อตกลงและระเบียบสำหรับแผงค้าในตลาด",
+            noteHelp: "พิมพ์กฎระเบียบการชั่งน้ำหนัก มาตรฐานความสะอาด หรือข้อตกลงการจ่ายเงินถึงเจ้าของแผงค้า:"
+        },
+        rider: {
+            title: "ตั้งค่าระบบตลาดฮับวิศิษฐ์ชัย (Hub Settings) • ส่วนไรเดอร์ประจำตลาด",
+            desc: "โครงสร้างค่ารอบจัดส่ง การบริหารเงินสด COD มาตรฐานความปลอดภัย และกฎระเบียบไรเดอร์",
+            badge: "แท็บ: 🛵 ไรเดอร์",
+            badgeColor: "bg-emerald-100 text-emerald-800",
+            noteTitle: "📝 กล่องข้อความ/ระเบียบวินัยและคำสั่งการประจำวันของไรเดอร์",
+            noteHelp: "พิมพ์ข้อปฏิบัติการส่งมอบของสด กฎความปลอดภัย หรือเบอร์ติดต่อฉุกเฉินเมื่อเกิดอุบัติเหตุ:"
+        }
+    };
+
+    const curMeta = subTabConfigs[_activeSettingsSubTab] || subTabConfigs.customer;
+
+    // 4 Sub-Tabs placed above the heading (เหนือรูปที่สอง)
+    const subTabButtonsHtml = `
+        <div class="bg-white p-1.5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
+            <button onclick="switchAdminSettingsSubTab('customer')" id="admin-subtab-customer" class="settings-subtab-btn flex-1 min-w-[120px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${_activeSettingsSubTab === 'customer' ? 'bg-gradient-to-r from-purple-700 to-indigo-700 text-white shadow-md' : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700'}">
+                <span class="material-symbols-outlined text-base sm:text-lg">shopping_cart</span>
+                <span>1. ลูกค้า</span>
+            </button>
+            <button onclick="switchAdminSettingsSubTab('hub')" id="admin-subtab-hub" class="settings-subtab-btn flex-1 min-w-[120px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${_activeSettingsSubTab === 'hub' ? 'bg-gradient-to-r from-purple-700 to-indigo-700 text-white shadow-md' : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700'}">
+                <span class="material-symbols-outlined text-base sm:text-lg">inventory_2</span>
+                <span>2. ระบบจัดส่ง</span>
+            </button>
+            <button onclick="switchAdminSettingsSubTab('merchant')" id="admin-subtab-merchant" class="settings-subtab-btn flex-1 min-w-[120px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${_activeSettingsSubTab === 'merchant' ? 'bg-gradient-to-r from-purple-700 to-indigo-700 text-white shadow-md' : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700'}">
+                <span class="material-symbols-outlined text-base sm:text-lg">storefront</span>
+                <span>3. แผงค้า</span>
+            </button>
+            <button onclick="switchAdminSettingsSubTab('rider')" id="admin-subtab-rider" class="settings-subtab-btn flex-1 min-w-[120px] py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${_activeSettingsSubTab === 'rider' ? 'bg-gradient-to-r from-purple-700 to-indigo-700 text-white shadow-md' : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700'}">
+                <span class="material-symbols-outlined text-base sm:text-lg">two_wheeler</span>
+                <span>4. ไรเดอร์</span>
+            </button>
+        </div>
+    `;
+
+    let subTabContentHtml = "";
+
+    if (_activeSettingsSubTab === "customer") {
+        subTabContentHtml = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Card 1: ข้อกำหนดการสั่งซื้อ -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                    <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
+                        <span class="material-symbols-outlined text-emerald-600">tune</span>
+                        <span>1. ข้อกำหนดการสั่งซื้อ & ค่าบริการจัดส่ง</span>
+                    </h4>
+                    <div class="space-y-3 text-xs">
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">ยอดสั่งซื้อขั้นต่ำต่อบิล (บาท):</label>
+                            <input type="number" id="cfg-min-order" value="${s.minOrder}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-purple-600">
+                            <span class="text-[11px] text-slate-400">ใส่ 0 หากไม่มีกำหนดยอดขั้นต่ำ</span>
+                        </div>
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">ค่าบริการจัดส่งพื้นฐานเริ่มต้น (บาท):</label>
+                            <input type="number" id="cfg-base-fee" value="${s.baseDeliveryFee}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-purple-600">
+                            <span class="text-[11px] text-slate-400">รวมสินค้าจากทุกแผงค้าในตลาดสด ค่าส่งรอบเดียว</span>
+                        </div>
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">รัศมีจัดส่งสูงสุด (กิโลเมตร):</label>
+                            <input type="number" step="0.5" id="cfg-max-radius" value="${s.maxRadius}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-purple-600">
+                            <span class="text-[11px] text-slate-400">วัดระยะทางจากศูนย์กลางตลาดวิศิษฐ์ชัย</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: รอบเวลาจัดส่ง -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                    <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
+                        <span class="material-symbols-outlined text-blue-600">schedule</span>
+                        <span>2. รอบเวลาจัดส่ง & เวลาปิดรับออเดอร์</span>
+                    </h4>
+                    <div class="space-y-3 text-xs">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="font-bold text-slate-700 block mb-1">เวลาเริ่มเปิดรับออเดอร์:</label>
+                                <input type="text" id="cfg-order-start" value="${s.orderStart}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            </div>
+                            <div>
+                                <label class="font-bold text-slate-700 block mb-1">เวลาปิดรับออเดอร์ประจำวัน:</label>
+                                <input type="text" id="cfg-order-cutoff" value="${s.orderCutoff}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">ความถี่ของรอบจัดส่ง:</label>
+                            <input type="text" value="ส่งออกทุก 30 นาที (รอบเช้า 06:00-11:30 น. / รอบบ่าย 12:00-18:30 น.)" class="w-full p-2.5 rounded-xl border border-slate-200 font-medium text-slate-600 bg-slate-100" readonly>
+                        </div>
+                        <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
+                            <span class="font-bold text-emerald-900">🎟️ โปรโมชั่นคูปองต้อนรับลูกค้าใหม่:</span>
+                            <div class="flex items-center gap-2 mt-1">
+                                <input type="text" id="cfg-coupon-code" value="${s.couponCode}" class="w-1/2 p-2 rounded-lg border border-emerald-300 font-mono font-bold text-emerald-800 text-xs">
+                                <span class="text-xs">ลด ฿</span>
+                                <input type="number" id="cfg-coupon-discount" value="${s.couponDiscount}" class="w-20 p-2 rounded-lg border border-emerald-300 font-bold text-emerald-800 text-xs">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 3: ช่องทางชำระเงินที่เปิดรับ -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5 md:col-span-2">
+                    <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
+                        <span class="material-symbols-outlined text-purple-600">payments</span>
+                        <span>3. ช่องทางชำระเงินที่เปิดให้ลูกค้าใช้บริการ</span>
+                    </h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        <div class="p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-50/50 flex items-center gap-3">
+                            <span class="material-symbols-outlined text-emerald-600 text-2xl">qr_code_2</span>
+                            <div>
+                                <div class="font-bold text-slate-900">QR พร้อมเพย์ (PromptPay)</div>
+                                <div class="text-[11px] text-emerald-700 font-medium">✓ เปิดใช้งาน (ตรวจสลิปอัตโนมัติ)</div>
+                            </div>
+                        </div>
+                        <div class="p-3.5 rounded-xl border-2 border-purple-500 bg-purple-50/50 flex items-center gap-3">
+                            <span class="material-symbols-outlined text-purple-600 text-2xl">account_balance</span>
+                            <div>
+                                <div class="font-bold text-slate-900">บัญชีธนาคาร SCB</div>
+                                <div class="text-[11px] text-purple-700 font-medium">✓ 411-1-30573-7 (เฮียส่ง)</div>
+                            </div>
+                        </div>
+                        <div class="p-3.5 rounded-xl border-2 border-amber-500 bg-amber-50/50 flex items-center gap-3">
+                            <span class="material-symbols-outlined text-amber-600 text-2xl">local_atm</span>
+                            <div>
+                                <div class="font-bold text-slate-900">เก็บเงินปลายทาง (COD)</div>
+                                <div class="text-[11px] text-amber-700 font-medium">✓ จ่ายเงินสดกับไรเดอร์เมื่อได้รับของ</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-end pt-1">
+                        <button onclick="saveAdminSettingsConfig('customer')" class="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
+                            <span class="material-symbols-outlined text-sm">save</span>
+                            <span>บันทึกค่าการตั้งค่าลูกค้า</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else if (_activeSettingsSubTab === "hub") {
+        subTabContentHtml = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Card 1: ข้อมูลฮับ -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                    <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
+                        <span class="material-symbols-outlined text-sky-600">hub</span>
+                        <span>1. ข้อมูลศูนย์กลางฮับตลาดวิศิษฐ์ชัย</span>
+                    </h4>
+                    <div class="space-y-3 text-xs">
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">ชื่อศูนย์กลางฮับกระจายสินค้า:</label>
+                            <input type="text" id="cfg-hub-name" value="${s.hubName}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                        </div>
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">ตำแหน่งจุดรวมของ / แท่นจัดของ:</label>
+                            <input type="text" id="cfg-hub-location" value="${s.hubLocation}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                        </div>
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์ผู้จัดการฮับ / เบอร์ PromptPay ฮับ:</label>
+                            <input type="text" id="cfg-hub-phone" value="${s.hubPhone}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold font-mono text-emerald-700 bg-slate-50">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: มาตรฐานการจัดของ & ความปลอดภัย -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                    <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
+                        <span class="material-symbols-outlined text-indigo-600">inventory</span>
+                        <span>2. มาตรฐานการจัดเตรียมของ & ความปลอดภัย</span>
+                    </h4>
+                    <div class="space-y-3 text-xs">
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">เวลาเป้าหมายในการเตรียมของต่อบิล (นาที):</label>
+                            <input type="number" id="cfg-picking-time" value="${s.targetPickingTime}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            <span class="text-[11px] text-slate-400">เฉลี่ย 10-15 นาที สำหรับรวมสินค้าสดจากหลายแผง</span>
+                        </div>
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">รหัส PIN สำหรับเจ้าหน้าที่จัดของเข้าสู่ระบบ:</label>
+                            <input type="password" id="cfg-staff-pin" value="${s.staffPin}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            <span class="text-[11px] text-slate-400">ค่าเริ่มต้น: 8888</span>
+                        </div>
+                        <div class="p-3 bg-sky-50 border border-sky-200 rounded-xl flex items-center justify-between">
+                            <div>
+                                <div class="font-bold text-sky-950">🔔 เสียงแจ้งเตือนระฆัง (Bell Chime):</div>
+                                <div class="text-[11px] text-sky-700">ส่งเสียงเตือนอัตโนมัติเมื่อมีออเดอร์ใหม่เข้า</div>
+                            </div>
+                            <span class="bg-emerald-600 text-white font-bold text-[10px] px-2.5 py-1 rounded-full">เปิดใช้งาน</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="md:col-span-2 flex justify-end">
+                    <button onclick="saveAdminSettingsConfig('hub')" class="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-sm">save</span>
+                        <span>บันทึกค่าการตั้งค่าระบบจัดส่ง</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    } else if (_activeSettingsSubTab === "merchant") {
+        subTabContentHtml = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Card 1: ข้อกำหนดแผงค้า -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                    <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
+                        <span class="material-symbols-outlined text-amber-600">storefront</span>
+                        <span>1. ข้อกำหนดแผงค้า & ค่าธรรมเนียมระบบ</span>
+                    </h4>
+                    <div class="space-y-3 text-xs">
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">ค่าธรรมเนียมส่วนแบ่งระบบ (GP %):</label>
+                            <input type="number" id="cfg-merchant-gp" value="${s.merchantGP}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-emerald-700 bg-slate-50">
+                            <span class="text-[11px] text-slate-400">นโยบาย 0% ไม่หัก GP เพื่อส่งเสริมผู้ค้าชุมชน</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="font-bold text-slate-700 block mb-1">เวลาเริ่มรับบิลแผงค้า:</label>
+                                <input type="text" id="cfg-merchant-open" value="${s.merchantOpen}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            </div>
+                            <div>
+                                <label class="font-bold text-slate-700 block mb-1">เวลาปิดรับบิลแผงค้า:</label>
+                                <input type="text" id="cfg-merchant-close" value="${s.merchantClose}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: รอบการโอนเงิน & บริการเรียกรถด่วน -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                    <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
+                        <span class="material-symbols-outlined text-orange-600">paid</span>
+                        <span>2. รอบการโอนเงินเคลียร์ยอด & บริการเรียกรถด่วน</span>
+                    </h4>
+                    <div class="space-y-3 text-xs">
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">เวลาตัดรอบโอนเงินประจำวัน (Daily Settlement):</label>
+                            <input type="text" id="cfg-payout-time" value="${s.payoutTime}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            <span class="text-[11px] text-slate-400">โอนผ่าน PromptPay รายแผงทุกวันเวลา 18:30 น.</span>
+                        </div>
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">ค่าบริการเรียกไรเดอร์ด่วนของแผงค้าเริ่มต้น (บาท):</label>
+                            <input type="number" id="cfg-express-fee" value="${s.expressBaseFee}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            <span class="text-[11px] text-slate-400">สำหรับแผงค้าที่ต้องการเรียกรถส่งลูกค้าส่วนตัว</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="md:col-span-2 flex justify-end">
+                    <button onclick="saveAdminSettingsConfig('merchant')" class="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-sm">save</span>
+                        <span>บันทึกค่าการตั้งค่าแผงค้า</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    } else if (_activeSettingsSubTab === "rider") {
+        subTabContentHtml = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Card 1: โครงสร้างค่ารอบ -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                    <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
+                        <span class="material-symbols-outlined text-emerald-600">sports_motorsports</span>
+                        <span>1. โครงสร้างค่ารอบ & รายได้ไรเดอร์</span>
+                    </h4>
+                    <div class="space-y-3 text-xs">
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">ค่ารอบมาตรฐานต่อเที่ยว (บาท):</label>
+                            <input type="number" id="cfg-rider-base-fare" value="${s.riderBaseFare}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-emerald-700 bg-slate-50">
+                            <span class="text-[11px] text-slate-400">ระยะทางไม่เกิน 3.0 กิโลเมตร</span>
+                        </div>
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">ค่าระยะทางส่วนเกิน (บาท / กิโลเมตร):</label>
+                            <input type="number" id="cfg-rider-extra-km" value="${s.riderExtraKm}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            <span class="text-[11px] text-slate-400">คิดเพิ่มเมื่อเกิน 3 กิโลเมตร</span>
+                        </div>
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">โบนัสรอบพิเศษ (ฝนตก / เร่งด่วน) (บาท):</label>
+                            <input type="number" id="cfg-rider-rain-bonus" value="${s.riderRainBonus}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: เพดานเงินสด COD & การเคลียร์เงิน -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                    <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
+                        <span class="material-symbols-outlined text-amber-600">account_balance_wallet</span>
+                        <span>2. เพดานเงินสด COD & การเคลียร์เงิน</span>
+                    </h4>
+                    <div class="space-y-3 text-xs">
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">เพดานวงเงินสด COD สูงสุดที่ไรเดอร์ถือได้ (บาท):</label>
+                            <input type="number" id="cfg-max-cod" value="${s.maxCodLimit}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-amber-700 bg-slate-50">
+                            <span class="text-[11px] text-slate-400">หากเกินต้องเข้าเคลียร์เงินสดที่ฮับก่อนรับงานถัดไป</span>
+                        </div>
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">เวลาสิ้นสุดการส่งเงินสดประจำวัน:</label>
+                            <input type="text" id="cfg-rider-cutoff" value="${s.riderCutoff}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            <span class="text-[11px] text-slate-400">ส่งมอบเงินสดและเช็คยอดที่ฮับก่อน 18:30 น.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="md:col-span-2 flex justify-end">
+                    <button onclick="saveAdminSettingsConfig('rider')" class="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-sm">save</span>
+                        <span>บันทึกค่าการตั้งค่าไรเดอร์</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // Text Box at the bottom of the tab (กล่องข้อความสำหรับใส่ข้อความหรือรายละเอียดต่างๆ ลงไป ตามที่ผู้ใช้สั่ง)
+    const customNoteBoxHtml = `
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-purple-200/90 shadow-sm space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-purple-700 text-lg">edit_note</span>
+                    <h4 class="font-extrabold text-sm text-slate-900">${curMeta.noteTitle}</h4>
+                </div>
+                <button onclick="resetSettingsCustomNote('${_activeSettingsSubTab}')" class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors cursor-pointer" title="รีเซ็ตกลับเป็นข้อความตัวอย่างเริ่มต้น">
+                    รีเซ็ตข้อความเริ่มต้น
+                </button>
+            </div>
+            <p class="text-xs text-slate-500">${curMeta.noteHelp}</p>
+            <textarea id="settings-note-${_activeSettingsSubTab}" rows="5" class="w-full p-3.5 rounded-xl border border-slate-300 text-xs font-sans leading-relaxed text-slate-800 bg-slate-50/70 focus:bg-white focus:border-purple-600 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all shadow-inner" placeholder="พิมพ์ข้อความ ประกาศ กฎระเบียบ หรือรายละเอียดที่ต้องการบันทึกไว้ที่นี่...">${currentNote}</textarea>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                <span class="text-[11px] text-slate-400 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs text-emerald-600">check_circle</span>
+                    <span>บันทึกในระบบเรียลไทม์ (Local Database Persistence)</span>
+                </span>
+                <button onclick="saveSettingsCustomNote('${_activeSettingsSubTab}')" class="px-5 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-base">save</span>
+                    <span>💾 บันทึกข้อความหน้านี้</span>
+                </button>
+            </div>
+        </div>
+    `;
+
     container.innerHTML = `
-        <div class="space-y-4 max-w-2xl">
-            <div class="pb-2 border-b border-slate-200">
-                <h3 class="font-extrabold text-base text-slate-800 flex items-center gap-2">
-                    <span class="material-symbols-outlined text-purple-700">settings</span>
-                    <span>ตั้งค่าระบบตลาดฮับวิศิษฐ์ชัย (Hub Settings)</span>
-                </h3>
-                <p class="text-xs text-slate-500">ข้อมูลส่วนกลางของตลาดฮับและบัญชีรับชำระเงิน</p>
+        <div class="space-y-4 max-w-5xl mx-auto">
+            <!-- 4 Sub-Tabs placed above the heading (เหนือรูปที่สอง) -->
+            ${subTabButtonsHtml}
+
+            <!-- Title Section (รูปที่สอง): ตั้งค่าระบบตลาดฮับวิศิษฐ์ชัย -->
+            <div class="pb-2 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                    <h3 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-purple-700">settings</span>
+                        <span>${curMeta.title}</span>
+                    </h3>
+                    <p class="text-xs text-slate-500">${curMeta.desc}</p>
+                </div>
+                <span class="text-xs font-extrabold px-3 py-1 rounded-full ${curMeta.badgeColor} self-start sm:self-auto shadow-2xs">
+                    ${curMeta.badge}
+                </span>
             </div>
 
-            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-xs">
-                <div class="space-y-1.5">
-                    <label class="font-bold text-slate-700">ชื่อศูนย์กลางตลาดฮับ:</label>
-                    <input type="text" value="ศูนย์กระจายสินค้าตลาดวิศิษฐ์ชัย (เฮียส่ง)" class="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 font-bold text-slate-800" readonly>
-                </div>
+            <!-- Content of Active Sub-tab -->
+            ${subTabContentHtml}
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="space-y-1.5">
-                        <label class="font-bold text-slate-700">เวลาเปิดตลาด:</label>
-                        <input type="text" value="05:00 น." class="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 font-bold text-slate-800" readonly>
-                    </div>
-                    <div class="space-y-1.5">
-                        <label class="font-bold text-slate-700">เวลาปิดรับออเดอร์:</label>
-                        <input type="text" value="18:00 น." class="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 font-bold text-slate-800" readonly>
-                    </div>
-                </div>
-
-                <div class="space-y-1.5">
-                    <label class="font-bold text-slate-700">เบอร์โทรศัพท์ผู้จัดการฮับ (PromptPay ฮับ):</label>
-                    <input type="text" value="089-123-4567" class="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 font-bold font-mono text-emerald-700" readonly>
-                </div>
-
-                <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span class="text-slate-500 font-bold">ฐานข้อมูล Cloud Realtime:</span>
-                    <span class="text-emerald-700 font-bold flex items-center gap-1">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <span>hsong-1f342 Firebase Connected</span>
-                    </span>
-                </div>
-            </div>
+            <!-- Bottom Custom Text Box (กล่องข้อความสำหรับใส่ข้อความหรือรายละเอียดต่างๆ ลงไป) -->
+            ${customNoteBoxHtml}
         </div>
     `;
 }
