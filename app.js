@@ -3987,6 +3987,9 @@ function renderCatalog() {
         const highlightText = stall.highlight || 'สินค้าสดใหม่ คัดเกรดคุณภาพ สะอาด ถูกหลักอนามัย';
         const descriptionText = stall.shopDescription || 'จำหน่ายสินค้าสดคุณภาพดี คัดสรรวันต่อวัน ชั่งน้ำหนักแม่นยำ พร้อมบริการตัดแต่งตามสั่งและจัดส่งตรงถึงบ้านคุณ';
         const isFav = state.favorites && state.favorites.includes(stall.stallId);
+        const extraCatalog = getStallCatalogData(stall.stallId);
+        const extraItemsCount = extraCatalog.reduce((sum, g) => sum + (g.items ? g.items.length : 0), 0);
+        const hasExtraCatalog = extraItemsCount > 0;
 
         html += `
             <div class="bg-white rounded-2xl shadow-card border border-slate-200/80 overflow-hidden space-y-3 pb-3.5 transition-all">
@@ -4099,17 +4102,19 @@ function renderCatalog() {
                     </div>
                 </div>
 
-                <!-- Products Header Banner with "ดูเพิ่มเติม" Button -->
+                <!-- Products Header Banner with "ดูเพิ่มเติม" Button (แสดงเฉพาะเมื่อมีสินค้าเพิ่มเติมในข้อ 4) -->
                 <div class="px-3.5 pt-0.5 flex items-center justify-between">
                     <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                         <span class="material-symbols-outlined text-sm text-orange-500">grid_view</span>
                         สินค้าสดแนะนำ (${stall.products.length} รายการ)
                     </span>
-                    <button onclick="openStallCatalogModal('${stall.stallId}')" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-1 rounded-xl border border-emerald-300/80 flex items-center gap-1 transition-all active:scale-95 shadow-xs">
-                        <span class="material-symbols-outlined text-xs text-emerald-600">list_alt</span>
-                        <span>ดูเพิ่มเติม (ตารางสินค้าทั้งหมด)</span>
-                        <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    </button>
+                    ${hasExtraCatalog ? `
+                        <button onclick="openStallCatalogModal('${stall.stallId}')" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-1 rounded-xl border border-emerald-300/80 flex items-center gap-1 transition-all active:scale-95 shadow-xs">
+                            <span class="material-symbols-outlined text-xs text-emerald-600">list_alt</span>
+                            <span>ดูเพิ่มเติม (${extraItemsCount} รายการ)</span>
+                            <span class="material-symbols-outlined text-xs">chevron_right</span>
+                        </button>
+                    ` : ''}
                 </div>
 
                 <!-- Products Grid (รองรับขนาด Responsive บนจอ PC และ มือถือ ป้องกันบีบอัดใน Mobile Frame) -->
@@ -4166,14 +4171,16 @@ function renderCatalog() {
         }).join("")}
                 </div>
 
-                <!-- Bottom Full-Width "ดูเพิ่มเติม" Action Button -->
-                <div class="px-3.5 pt-1">
-                    <button onclick="openStallCatalogModal('${stall.stallId}')" class="w-full py-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/70 hover:from-emerald-100 hover:to-teal-100 border border-emerald-300/80 rounded-xl text-emerald-900 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs hover:shadow transition-all active:scale-[0.99]">
-                        <span class="material-symbols-outlined text-base text-emerald-700">menu_book</span>
-                        <span>ดูเพิ่มเติม: ตารางรายการสินค้าทั้งหมดของแผงนี้ (${stall.products.length} รายการ)</span>
-                        <span class="material-symbols-outlined text-sm text-emerald-600">chevron_right</span>
-                    </button>
-                </div>
+                ${hasExtraCatalog ? `
+                    <!-- Bottom Full-Width "ดูเพิ่มเติม" Action Button (แสดงเฉพาะเมื่อมีสินค้าเพิ่มเติมในข้อ 4) -->
+                    <div class="px-3.5 pt-1">
+                        <button onclick="openStallCatalogModal('${stall.stallId}')" class="w-full py-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/70 hover:from-emerald-100 hover:to-teal-100 border border-emerald-300/80 rounded-xl text-emerald-900 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs hover:shadow transition-all active:scale-[0.99]">
+                            <span class="material-symbols-outlined text-base text-emerald-700">menu_book</span>
+                            <span>ดูเพิ่มเติม: ตารางรายการสินค้าทั้งหมดของแผงนี้ (${extraItemsCount} รายการ)</span>
+                            <span class="material-symbols-outlined text-sm text-emerald-600">chevron_right</span>
+                        </button>
+                    </div>
+                ` : ''}
             </div>
         `;
     });
@@ -4427,33 +4434,53 @@ function renderDirectoryList() {
 }
 
 // =================================================================
-// Full Product Catalog Database (เก็บเฉพาะสินค้าจริงของร้านค้า / Merchant Custom Catalog)
-const STALL_CATALOG_DATABASE = {};
+// Full Product Catalog Database (เก็บเฉพาะสินค้าเพิ่มเติมจริงของร้านค้า / ข้อ 4 ตารางสินค้าทั้งหมด)
+function loadSavedStallCatalogDatabase() {
+    try {
+        const raw = localStorage.getItem("talathub_stall_catalog_database");
+        if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {};
+}
 
-// ดึงข้อมูลสินค้าของแผงค้า โดยใช้เฉพาะสินค้าจริงเท่านั้น (ไม่ใช้ข้อมูลตัวอย่าง/Mock Data)
+function saveStallCatalogDatabaseToStorage() {
+    try {
+        localStorage.setItem("talathub_stall_catalog_database", JSON.stringify(STALL_CATALOG_DATABASE));
+    } catch (e) {}
+}
+
+const STALL_CATALOG_DATABASE = loadSavedStallCatalogDatabase();
+
+// ดึงข้อมูลสินค้าเพิ่มเติมของแผงค้า (ข้อ 4. ตารางสินค้าทั้งหมด)
+// คืนค่าเฉพาะสินค้าเพิ่มเติมที่ร้านค้ากรอกไว้ และต้องไม่ซ้ำกับสินค้าไฮไลท์ 6 รายการในข้อ 3
 function getStallCatalogData(stallId) {
-    if (STALL_CATALOG_DATABASE[stallId] && STALL_CATALOG_DATABASE[stallId].length > 0) {
-        return STALL_CATALOG_DATABASE[stallId];
+    const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
+    const highlightNames = stall && stall.products ? stall.products.map(p => (p.name || "").trim().toLowerCase()).filter(Boolean) : [];
+
+    let rawGroups = [];
+    if (STALL_CATALOG_DATABASE[stallId] && Array.isArray(STALL_CATALOG_DATABASE[stallId]) && STALL_CATALOG_DATABASE[stallId].length > 0) {
+        rawGroups = STALL_CATALOG_DATABASE[stallId];
+    } else if (stall && stall.catalog && Array.isArray(stall.catalog) && stall.catalog.length > 0) {
+        rawGroups = stall.catalog;
     }
 
-    const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
-    if (!stall || !stall.products || stall.products.length === 0) {
+    if (!rawGroups || rawGroups.length === 0) {
         return [];
     }
 
-    const groupName = stall.stallTag ? `รายการสินค้า (${stall.stallTag})` : "รายการสินค้าทั้งหมด";
-    return [
-        {
-            groupName: groupName,
-            items: stall.products.map(p => ({
-                id: p.id,
-                name: p.name,
-                spec: p.desc || "สด สะอาด คัดสรรวันต่อวัน",
-                price: p.price,
-                unit: p.unit || "1 กก."
-            }))
-        }
-    ];
+    // กรองสินค้าที่ซ้ำกับสินค้าไฮไลท์ 6 อย่างออก และคืนเฉพาะกลุ่มที่มีสินค้า
+    const cleanGroups = rawGroups.map(group => {
+        const validItems = (group.items || []).filter(item => {
+            const name = (item.name || "").trim().toLowerCase();
+            return name && !highlightNames.includes(name);
+        });
+        return {
+            groupName: group.groupName || "หมวดทั่วไป",
+            items: validItems
+        };
+    }).filter(g => g.items.length > 0);
+
+    return cleanGroups;
 }
 
 // Modal State
@@ -9687,18 +9714,8 @@ function registerNewMerchantStall() {
     ];
     renderMerchantTop6ProductsForm(blankProducts);
 
-    // Blank Catalog Table template
-    const blankCatalog = [
-        {
-            groupName: "หมวดหมู่สินค้าหลัก",
-            items: [
-                { id: "item_1", name: "รายการสินค้า 1", spec: "สเปกมาตรฐาน คัดสด", price: 85, unit: "กก." },
-                { id: "item_2", name: "รายการสินค้า 2", spec: "แพ็กถุงสุญญากาศ", price: 50, unit: "500g" },
-                { id: "item_3", name: "รายการสินค้า 3", spec: "ตัดแต่งพร้อมปรุง", price: 60, unit: "แพ็ค" }
-            ]
-        }
-    ];
-    renderMerchantCatalogTable(blankCatalog);
+    // เริ่มต้นตารางสินค้าเพิ่มเติมแบบว่างเปล่า (ข้อ 4 ตารางสินค้าทั้งหมด)
+    renderMerchantCatalogTable([]);
 
     switchMerchantPortalTab("tab-info");
     document.getElementById("merchant-portal-modal").classList.remove("hidden");
@@ -9770,25 +9787,68 @@ function renderMerchantTop6ProductsForm(products) {
     container.innerHTML = html;
 }
 
+function getMerchantCurrentHighlightNames() {
+    const names = [];
+    for (let i = 0; i < 6; i++) {
+        const val = document.getElementById(`m-p-name-${i}`)?.value.trim();
+        if (val) names.push(val.toLowerCase());
+    }
+    return names;
+}
+
+function validateCatalogItemInput(input) {
+    const val = input.value.trim().toLowerCase();
+    const cell = input.closest("td");
+    const warn = cell ? cell.querySelector(".duplicate-warning") : null;
+    const highlightNames = getMerchantCurrentHighlightNames();
+
+    if (val && highlightNames.includes(val)) {
+        input.classList.add("border-rose-500", "bg-rose-50", "text-rose-700");
+        input.classList.remove("border-slate-200");
+        if (warn) warn.classList.remove("hidden");
+    } else {
+        input.classList.remove("border-rose-500", "bg-rose-50", "text-rose-700");
+        input.classList.add("border-slate-200");
+        if (warn) warn.classList.add("hidden");
+    }
+}
+
 function renderMerchantCatalogTable(groups) {
     const tbody = document.getElementById("merchant-catalog-table-body");
     if (!tbody) return;
 
     let rowsHtml = "";
     let rowIndex = 1;
+    const highlightNames = getMerchantCurrentHighlightNames();
 
     if (groups && groups.length > 0) {
         groups.forEach(g => {
             if (g.items) {
                 g.items.forEach(item => {
-                    rowsHtml += createMerchantTableRow(rowIndex++, g.groupName || "หมวดทั่วไป", item.name, item.spec, item.price, item.unit);
+                    const cleanName = (item.name || "").trim();
+                    // กรองสินค้าที่ซ้ำกับสินค้าไฮไลท์ 6 อย่างออก
+                    if (cleanName && !highlightNames.includes(cleanName.toLowerCase())) {
+                        rowsHtml += createMerchantTableRow(rowIndex++, g.groupName || "หมวดทั่วไป", cleanName, item.spec || "", item.price || 0, item.unit || "กก.");
+                    }
                 });
             }
         });
     }
 
     if (rowsHtml === "") {
-        rowsHtml = createMerchantTableRow(1, "หมวดทั่วไป", "รายการสินค้าตัวอย่าง", "สเปกมาตรฐาน", 50, "กก.");
+        tbody.innerHTML = `
+            <tr id="merchant-catalog-empty-row">
+                <td colspan="7" class="p-6 text-center text-slate-400 bg-slate-50/50">
+                    <span class="material-symbols-outlined text-3xl text-slate-300 block mb-1">playlist_add</span>
+                    <span class="font-bold text-xs text-slate-600 block">ยังไม่มีรายการสินค้าเพิ่มเติมในตารางข้อ 4</span>
+                    <p class="text-[11px] text-slate-400 mt-1">หากมีสินค้าอื่นๆ นอกเหนือจาก 6 รายการไฮไลท์ สามารถกดปุ่ม <strong>"เพิ่มรายการสินค้า"</strong> ด้านบนได้</p>
+                    <p class="text-[10px] text-amber-700 font-bold mt-1.5 bg-amber-50 p-1.5 rounded-lg inline-block border border-amber-200">
+                        ⚠️ ข้อกำหนด: ห้ามลงรายการสินค้าที่ซ้ำกับสินค้าไฮไลท์ 6 อย่างในข้อ 3 และหากไม่มีข้อมูลในข้อ 4 ระบบจะไม่แสดงปุ่ม "ดูเพิ่มเติม" บนหน้าร้าน
+                    </p>
+                </td>
+            </tr>
+        `;
+        return;
     }
 
     tbody.innerHTML = rowsHtml;
@@ -9799,7 +9859,13 @@ function createMerchantTableRow(index, groupName, name, spec, price, unit) {
         <tr class="hover:bg-slate-50 transition-colors">
             <td class="p-2 text-center text-slate-400 font-bold text-[10px]">${index}</td>
             <td class="p-1.5"><input type="text" value="${groupName || ''}" placeholder="หมวดหมู่ย่อย" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-medium"></td>
-            <td class="p-1.5"><input type="text" value="${name || ''}" placeholder="ชื่อสินค้า" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold"></td>
+            <td class="p-1.5 relative">
+                <input type="text" value="${name || ''}" placeholder="ชื่อสินค้า (ห้ามซ้ำไฮไลท์)" oninput="validateCatalogItemInput(this)" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold catalog-item-name-input">
+                <div class="duplicate-warning text-[10px] text-rose-500 font-bold hidden mt-0.5 flex items-center gap-0.5">
+                    <span class="material-symbols-outlined text-[12px]">warning</span>
+                    <span>ชื่อซ้ำกับสินค้าไฮไลท์ข้อ 3</span>
+                </div>
+            </td>
             <td class="p-1.5"><input type="text" value="${spec || ''}" placeholder="สเปก/ขนาด" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs text-slate-600"></td>
             <td class="p-1.5"><input type="number" value="${price || 0}" placeholder="ราคา" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold text-emerald-700"></td>
             <td class="p-1.5"><input type="text" value="${unit || 'กก.'}" placeholder="หน่วย" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs"></td>
@@ -9815,13 +9881,23 @@ function createMerchantTableRow(index, groupName, name, spec, price, unit) {
 function addMerchantCatalogRow() {
     const tbody = document.getElementById("merchant-catalog-table-body");
     if (!tbody) return;
-    const newIndex = tbody.children.length + 1;
+
+    const emptyRow = document.getElementById("merchant-catalog-empty-row");
+    if (emptyRow) emptyRow.remove();
+
+    const newIndex = tbody.querySelectorAll("tr:not(#merchant-catalog-empty-row)").length + 1;
     const newRow = document.createElement("tr");
     newRow.className = "hover:bg-slate-50 transition-colors";
     newRow.innerHTML = `
         <td class="p-2 text-center text-slate-400 font-bold text-[10px]">${newIndex}</td>
         <td class="p-1.5"><input type="text" value="หมวดใหม่" placeholder="หมวดหมู่ย่อย" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-medium"></td>
-        <td class="p-1.5"><input type="text" value="" placeholder="ชื่อสินค้า" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold"></td>
+        <td class="p-1.5 relative">
+            <input type="text" value="" placeholder="ชื่อสินค้า (ห้ามซ้ำไฮไลท์)" oninput="validateCatalogItemInput(this)" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold catalog-item-name-input">
+            <div class="duplicate-warning text-[10px] text-rose-500 font-bold hidden mt-0.5 flex items-center gap-0.5">
+                <span class="material-symbols-outlined text-[12px]">warning</span>
+                <span>ชื่อซ้ำกับสินค้าไฮไลท์ข้อ 3</span>
+            </div>
+        </td>
         <td class="p-1.5"><input type="text" value="" placeholder="สเปก/ขนาด" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs text-slate-600"></td>
         <td class="p-1.5"><input type="number" value="0" placeholder="ราคา" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold text-emerald-700"></td>
         <td class="p-1.5"><input type="text" value="กก." placeholder="หน่วย" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs"></td>
@@ -9838,12 +9914,18 @@ function deleteMerchantCatalogRow(btn) {
     const row = btn.closest("tr");
     if (row) {
         row.remove();
-        // Re-index rows
-        const rows = document.querySelectorAll("#merchant-catalog-table-body tr");
-        rows.forEach((r, idx) => {
-            const firstCell = r.querySelector("td");
-            if (firstCell) firstCell.textContent = idx + 1;
-        });
+        const tbody = document.getElementById("merchant-catalog-table-body");
+        if (tbody) {
+            const rows = tbody.querySelectorAll("tr:not(#merchant-catalog-empty-row)");
+            if (rows.length === 0) {
+                renderMerchantCatalogTable([]);
+            } else {
+                rows.forEach((r, idx) => {
+                    const firstCell = r.querySelector("td");
+                    if (firstCell) firstCell.textContent = idx + 1;
+                });
+            }
+        }
     }
 }
 
@@ -9867,8 +9949,9 @@ function saveMerchantStallData() {
         return;
     }
 
-    // Collect 6 products
+    // Collect 6 products (Highlight items)
     const products = [];
+    const highlightNames = [];
     for (let i = 0; i < 6; i++) {
         const name = document.getElementById(`m-p-name-${i}`)?.value.trim() || `สินค้า ${i + 1}`;
         const badge = document.getElementById(`m-p-badge-${i}`)?.value.trim() || "";
@@ -9887,12 +9970,37 @@ function saveMerchantStallData() {
             badge: badge,
             image: pImage
         });
+
+        if (name) {
+            highlightNames.push(name.toLowerCase());
+        }
+    }
+
+    // ตรวจสอบความถูกต้อง: ห้ามลงรายการสินค้าในข้อ 4 ซ้ำกับสินค้าไฮไลท์ 6 รายการในข้อ 3
+    const tableRows = document.querySelectorAll("#merchant-catalog-table-body tr:not(#merchant-catalog-empty-row)");
+    const duplicateErrors = [];
+
+    tableRows.forEach((r, idx) => {
+        const inputs = r.querySelectorAll("input");
+        if (inputs.length >= 2) {
+            const itemName = inputs[1].value.trim();
+            if (itemName && highlightNames.includes(itemName.toLowerCase())) {
+                duplicateErrors.push({ row: idx + 1, name: itemName, input: inputs[1] });
+            }
+        }
+    });
+
+    if (duplicateErrors.length > 0) {
+        const firstErr = duplicateErrors[0];
+        alert(`⚠️ ไม่สามารถบันทึกได้:\n\nรายการสินค้า "${firstErr.name}" ในข้อ 4 (ตารางสินค้าทั้งหมด) ซ้ำกับสินค้าไฮไลท์ 6 รายการในข้อ 3\n\n*ข้อกำหนด: ห้ามลงรายการสินค้าที่ซ้ำกับสินค้าไฮไลท์ 6 รายการ กรุณาลบหรือเปลี่ยนชื่อสินค้าครับ*`);
+        switchMerchantPortalTab("tab-catalog");
+        firstErr.input.focus();
+        firstErr.input.classList.add("border-rose-500", "ring-2", "ring-rose-400", "bg-rose-50");
+        return;
     }
 
     // Collect full catalog rows
-    const tableRows = document.querySelectorAll("#merchant-catalog-table-body tr");
     const groupMap = {};
-
     tableRows.forEach((r, idx) => {
         const inputs = r.querySelectorAll("input");
         if (inputs.length >= 5) {
@@ -9922,6 +10030,7 @@ function saveMerchantStallData() {
 
     // Update Extended Catalog Database
     STALL_CATALOG_DATABASE[activeMerchantStallId] = catalogGroups;
+    saveStallCatalogDatabaseToStorage();
 
     // Create or update stall object
     const stallObj = {
@@ -9938,7 +10047,8 @@ function saveMerchantStallData() {
         stallImage: stallImage,
         ownerImage: ownerImage,
         stallTag: `${stallName} ${ownerName} ${highlight}`,
-        products: products
+        products: products,
+        catalog: catalogGroups
     };
 
     // Update MARKET_DATA

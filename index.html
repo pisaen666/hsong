@@ -2799,11 +2799,13 @@
 
                 <!-- TAB 4: Full Catalog Table Template ("ดูเพิ่มเติม") -->
                 <div id="tab-catalog" class="merchant-tab-pane space-y-3.5 hidden">
-                    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-3 text-blue-950 flex items-start gap-2">
-                        <span class="material-symbols-outlined text-blue-700 text-base shrink-0 mt-0.5">list_alt</span>
+                    <div class="bg-amber-50 border border-amber-300 rounded-2xl p-3 text-amber-950 flex items-start gap-2.5 shadow-xs">
+                        <span class="material-symbols-outlined text-amber-600 text-lg shrink-0 mt-0.5">warning</span>
                         <div>
-                            <div class="font-bold">ตารางรายการสินค้าทั้งหมดของร้าน (สำหรับปุ่ม "ดูเพิ่มเติม")</div>
-                            <div class="text-[11px] text-blue-800">รายการสินค้าฉบับเต็มทั้งหมดในร้าน ลูกค้าสามารถค้นหาและคลิกใส่ตะกร้าได้ในหน้าต่างตารางสินค้า</div>
+                            <div class="font-extrabold text-xs text-amber-900">ข้อกำหนดสำคัญ: ห้ามลงรายการสินค้าที่ซ้ำกับสินค้าไฮไลท์ 6 รายการ</div>
+                            <div class="text-[11px] text-amber-800 leading-snug mt-0.5">
+                                ตารางข้อ 4 นี้สำหรับสินค้าเพิ่มเติมอื่นๆ เท่านั้น <strong>ห้ามลงรายการสินค้าที่ซ้ำกับสินค้าไฮไลท์ 6 อย่างในข้อ 3</strong> และหากไม่มีการใส่ข้อมูลในข้อ 4 นี้ ระบบจะไม่นำปุ่ม "ดูเพิ่มเติม" มาแสดงบนหน้าร้านค้า
+                            </div>
                         </div>
                     </div>
 
@@ -2821,7 +2823,7 @@
                                 <tr class="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                                     <th class="p-2 w-10 text-center">#</th>
                                     <th class="p-2">หมวดหมู่ย่อย</th>
-                                    <th class="p-2">ชื่อสินค้า</th>
+                                    <th class="p-2">ชื่อสินค้า <span class="text-rose-500 font-bold text-[10px]">*(ห้ามซ้ำไฮไลท์)*</span></th>
                                     <th class="p-2">สเปก / คุณลักษณะ</th>
                                     <th class="p-2 w-20">ราคา (฿)</th>
                                     <th class="p-2 w-20">หน่วย</th>
@@ -3304,6 +3306,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=7.3"></script>
+    <script src="app.js?v=7.4"></script>
 </body>
 </html>
