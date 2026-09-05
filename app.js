@@ -4063,18 +4063,28 @@ function renderCatalog() {
                                             <span class="material-symbols-outlined text-[12px] text-slate-500">person</span>
                                             ${ownerNm}
                                         </span>
-                                        <span class="text-slate-300">•</span>
-                                        <span class="text-slate-500 text-[10px] font-medium">${expText}</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Right: เบอร์โทรศัพท์ของร้านค้า (กดโทรได้ทันที) -->
-                            <div class="mt-1 shrink-0">
-                                <a href="tel:${phoneNum}" class="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-xl text-xs font-extrabold shadow-xs transition-all active:scale-95">
-                                    <span class="material-symbols-outlined text-sm text-emerald-600">call</span>
+                            <!-- Right: เบอร์โทรศัพท์ 2 เบอร์ & LINE (กดติดต่อได้ทันที) -->
+                            <div class="mt-1 shrink-0 flex flex-col gap-1 items-end">
+                                <a href="tel:${phoneNum}" class="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-1 rounded-xl text-xs font-extrabold shadow-xs transition-all active:scale-95" title="โทรหาเบอร์หลัก">
+                                    <span class="material-symbols-outlined text-xs text-emerald-600">call</span>
                                     <span>${phoneNum}</span>
                                 </a>
+                                ${stall.phone2 ? `
+                                    <a href="tel:${stall.phone2}" class="inline-flex items-center gap-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-xs transition-all active:scale-95" title="โทรหาเบอร์สำรอง">
+                                        <span class="material-symbols-outlined text-[11px] text-slate-500">call</span>
+                                        <span>${stall.phone2}</span>
+                                    </a>
+                                ` : ''}
+                                ${stall.line ? `
+                                    <span class="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-xs">
+                                        <span class="font-black text-[9px] bg-emerald-600 text-white px-1 rounded">LINE</span>
+                                        <span>${stall.line}</span>
+                                    </span>
+                                ` : ''}
                             </div>
                         </div>
 
@@ -9656,11 +9666,12 @@ function loginAsMerchantStall(stallId) {
     document.getElementById("m-stall-number").value = stall.stallNumber || "";
     document.getElementById("m-stall-zone").value = stall.zone ? `โซน ${stall.zone.charAt(0)}` : "โซน A (เนื้อสัตว์ & ไก่สด)";
     document.getElementById("m-stall-category").value = stall.category || "chicken";
-    document.getElementById("m-owner-name").value = stall.ownerName || "เจ้าของแผงค้า";
-    document.getElementById("m-phone").value = stall.phone || "081-234-5678";
-    document.getElementById("m-experience").value = stall.experience || "เปิดบริการในตลาดสดกว่า 10 ปี";
-    document.getElementById("m-highlight").value = stall.highlight || "สินค้าสดใหม่ คัดเกรดคุณภาพ";
-    document.getElementById("m-desc").value = stall.description || "บริการสับ หั่น แยกชิ้นส่วนฟรี สด สะอาด พร้อมส่งถึงบ้าน";
+    document.getElementById("m-owner-name").value = stall.ownerName || "";
+    document.getElementById("m-phone").value = stall.phone || "";
+    if (document.getElementById("m-phone2")) document.getElementById("m-phone2").value = stall.phone2 || "";
+    if (document.getElementById("m-line")) document.getElementById("m-line").value = stall.line || "";
+    document.getElementById("m-highlight").value = stall.highlight || "";
+    document.getElementById("m-desc").value = stall.description || stall.shopDescription || "";
 
     // Fill Images
     document.getElementById("m-stall-image-url").value = stall.stallImage || MERCHANT_PRESET_IMAGES.stall.chicken;
@@ -9688,16 +9699,17 @@ function registerNewMerchantStall() {
     document.getElementById("merchant-portal-zone-text").textContent = "โซนตลาดสด";
     document.getElementById("merchant-portal-title").textContent = "เทมเพลตเปิดแผงค้าใหม่ (เฮียส่ง Partner)";
 
-    // Default template values
+    // Default template values - clear all sample text so boxes are completely empty
     document.getElementById("m-stall-name").value = "";
-    document.getElementById("m-stall-number").value = "แผง A" + Math.floor(10 + Math.random() * 80);
+    document.getElementById("m-stall-number").value = "";
     document.getElementById("m-stall-zone").value = "โซน A (เนื้อสัตว์ & ไก่สด)";
     document.getElementById("m-stall-category").value = "chicken";
     document.getElementById("m-owner-name").value = "";
     document.getElementById("m-phone").value = "";
-    document.getElementById("m-experience").value = "เปิดบริการในตลาดสด";
-    document.getElementById("m-highlight").value = "วัตถุดิบสดใหม่ สะอาด ถูกสุขอนามัย";
-    document.getElementById("m-desc").value = "คัดสรรวัตถุดิบคุณภาพ พร้อมจัดส่งถึงบ้านคุณ";
+    if (document.getElementById("m-phone2")) document.getElementById("m-phone2").value = "";
+    if (document.getElementById("m-line")) document.getElementById("m-line").value = "";
+    document.getElementById("m-highlight").value = "";
+    document.getElementById("m-desc").value = "";
 
     document.getElementById("m-stall-image-url").value = MERCHANT_PRESET_IMAGES.stall.chicken;
     document.getElementById("m-owner-image-url").value = MERCHANT_PRESET_IMAGES.owner.man1;
@@ -9936,7 +9948,8 @@ function saveMerchantStallData() {
     const category = document.getElementById("m-stall-category").value;
     const ownerName = document.getElementById("m-owner-name").value.trim();
     const phone = document.getElementById("m-phone").value.trim();
-    const experience = document.getElementById("m-experience").value.trim();
+    const phone2 = document.getElementById("m-phone2") ? document.getElementById("m-phone2").value.trim() : "";
+    const line = document.getElementById("m-line") ? document.getElementById("m-line").value.trim() : "";
     const highlight = document.getElementById("m-highlight").value.trim();
     const desc = document.getElementById("m-desc").value.trim();
 
@@ -10041,12 +10054,14 @@ function saveMerchantStallData() {
         category: category,
         ownerName: ownerName,
         phone: phone,
-        experience: experience,
+        phone2: phone2,
+        line: line,
         highlight: highlight,
         description: desc,
+        shopDescription: desc,
         stallImage: stallImage,
         ownerImage: ownerImage,
-        stallTag: `${stallName} ${ownerName} ${highlight}`,
+        stallTag: `${stallName} ${ownerName} ${highlight}`.trim(),
         products: products,
         catalog: catalogGroups
     };

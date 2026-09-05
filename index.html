@@ -2601,11 +2601,11 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label class="block font-bold text-slate-700 mb-1">ชื่อร้านค้า / แผงค้า <span class="text-rose-500">*</span></label>
-                            <input type="text" id="m-stall-name" placeholder="เช่น ร้านไก่สดของเรา, แผงผักป้าสมร" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
+                            <input type="text" id="m-stall-name" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
                         </div>
                         <div>
                             <label class="block font-bold text-slate-700 mb-1">หมายเลขแผงค้า <span class="text-rose-500">*</span></label>
-                            <input type="text" id="m-stall-number" placeholder="เช่น แผง A01, แผง B04" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
+                            <input type="text" id="m-stall-number" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
                         </div>
                         <div>
                             <label class="block font-bold text-slate-700 mb-1">โซนในตลาด <span class="text-rose-500">*</span></label>
@@ -2628,27 +2628,34 @@
                         </div>
                         <div>
                             <label class="block font-bold text-slate-700 mb-1">ชื่อเจ้าของร้าน / ผู้ดูแลแผงค้า <span class="text-rose-500">*</span></label>
-                            <input type="text" id="m-owner-name" placeholder="เช่น คุณเอกชัย, ป้าสมร" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
+                            <input type="text" id="m-owner-name" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
                         </div>
                         <div>
-                            <label class="block font-bold text-slate-700 mb-1">เบอร์โทรศัพท์สำหรับรับออเดอร์ <span class="text-rose-500">*</span></label>
-                            <input type="text" id="m-phone" placeholder="เช่น 081-234-5678" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
+                            <label class="block font-bold text-slate-700 mb-1">ช่องทางติดต่อทาง LINE (ID หรือ เบอร์โทร LINE)</label>
+                            <input type="text" id="m-line" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
                         </div>
                     </div>
 
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">ประสบการณ์ / ระยะเวลาเปิดบริการ</label>
-                        <input type="text" id="m-experience" placeholder="เช่น เปิดบริการในตลาดสดกว่า 12 ปี" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
+                    <!-- ส่วนกรอกเบอร์โทรศัพท์ 2 หมายเลข -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">เบอร์โทรศัพท์สำหรับรับออเดอร์ (เบอร์หลัก 1) <span class="text-rose-500">*</span></label>
+                            <input type="tel" id="m-phone" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">เบอร์โทรศัพท์สำรอง (เบอร์ 2)</label>
+                            <input type="tel" id="m-phone2" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
+                        </div>
                     </div>
 
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">ข้อความไฮไลท์จุดเด่นของร้าน (สโลแกน)</label>
-                        <input type="text" id="m-highlight" placeholder="เช่น ไก่สดเชือดใหม่ทุกเช้า สะอาด ปลอดสารเร่งโต" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
+                        <input type="text" id="m-highlight" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
                     </div>
 
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">รายละเอียดสินค้าและบริการของร้าน</label>
-                        <textarea id="m-desc" rows="2" placeholder="เช่น บริการสับ หั่น แยกชิ้นส่วนฟรี สด สะอาด พร้อมแพ็กส่งถึงบ้าน" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium"></textarea>
+                        <textarea id="m-desc" rows="2" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium"></textarea>
                     </div>
 
                     <!-- Step 1 Next Button -->
@@ -3306,6 +3313,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=7.4"></script>
+    <script src="app.js?v=7.5"></script>
 </body>
 </html>
