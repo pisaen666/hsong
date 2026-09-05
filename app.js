@@ -6969,6 +6969,7 @@ function switchAdminTab(tabName) {
         renderAdminStalls();
     } else if (tabName === "riders") {
         renderAdminRiders();
+        setTimeout(() => initAdminRiderRadarMap(), 150);
     } else if (tabName === "settings") {
         renderAdminSettings();
     }
@@ -7167,53 +7168,849 @@ function renderAdminStalls() {
     `;
 }
 
-// ── Tab 4: Riders Roster & Config
+// ── Tab 4: Riders Roster & Comprehensive Fleet Operations
+let _adminRiderSearchQuery = "";
+let _adminRiderStatusFilter = "all";
+let _adminRiderRadarMap = null;
+
+const DEFAULT_COMMUNITY_RIDERS = [
+    {
+        id: "RIDER-001",
+        name: "พี่สมชาย ปลอดภัย (ไรเดอร์หลัก)",
+        phone: "081-588-7400",
+        plate: "1กข 8902 ชลบุรี",
+        zone: "ตำบลบ้านหนองชาก / ตลาดสด",
+        status: "available",
+        baseFee: 40,
+        lat: 13.2975,
+        lng: 101.1725,
+        avatar: "🛵",
+        codSettledToday: 0
+    },
+    {
+        id: "RIDER-002",
+        name: "พี่วิชัย ว่องไว (ไรเดอร์ 2)",
+        phone: "089-991-2345",
+        plate: "2ขค 4455 ชลบุรี",
+        zone: "ชุมชนหนองชากใน / ตลาดล่าง",
+        status: "on_delivery",
+        baseFee: 40,
+        lat: 13.2920,
+        lng: 101.1680,
+        avatar: "⚡",
+        codSettledToday: 0
+    },
+    {
+        id: "RIDER-003",
+        name: "พี่กิตติพงษ์ ส่งด่วน (ไรเดอร์ 3)",
+        phone: "086-333-8822",
+        plate: "3กง 7890 ชลบุรี",
+        zone: "โซนบ้านบึงรอบนอก / สาย 344",
+        status: "available",
+        baseFee: 40,
+        lat: 13.3050,
+        lng: 101.1760,
+        avatar: "🚀",
+        codSettledToday: 0
+    },
+    {
+        id: "RIDER-004",
+        name: "พี่อรรถพล คล่องตัว (ไรเดอร์ 4)",
+        phone: "084-555-9011",
+        plate: "1มม 1234 ชลบุรี",
+        zone: "หนองชาก - เนินโมก",
+        status: "offline",
+        baseFee: 40,
+        lat: 13.2890,
+        lng: 101.1810,
+        avatar: "🛵",
+        codSettledToday: 0
+    }
+];
+
+function loadCommunityRiders() {
+    try {
+        const raw = localStorage.getItem("talathub_community_riders");
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch (e) {
+        console.error("Error loading community riders:", e);
+    }
+    saveCommunityRiders(DEFAULT_COMMUNITY_RIDERS);
+    return DEFAULT_COMMUNITY_RIDERS;
+}
+
+function saveCommunityRiders(list) {
+    try {
+        localStorage.setItem("talathub_community_riders", JSON.stringify(list));
+    } catch (e) {
+        console.error("Error saving community riders:", e);
+    }
+}
+
+function loadRiderFleetSettings() {
+    try {
+        const raw = localStorage.getItem("talathub_fleet_settings");
+        if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {
+        baseFee: 40,
+        rainSurcharge: false,
+        rainSurchargeAmount: 15,
+        dailyBonusTrips: 10,
+        dailyBonusAmount: 100,
+        maxCodLimit: 2500
+    };
+}
+
+function saveRiderFleetSettings(settings) {
+    try {
+        localStorage.setItem("talathub_fleet_settings", JSON.stringify(settings));
+    } catch (e) {}
+}
+
 function renderAdminRiders() {
     const container = document.getElementById("admin-content-riders");
     if (!container) return;
 
+    const riders = loadCommunityRiders();
+    const settings = loadRiderFleetSettings();
+    const targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(targetDateKey);
+    const reportRiders = (report && report.riderSettlement && report.riderSettlement.riders) || [];
+
+    // Calculate aggregated fleet metrics for selected date
+    let totalCompletedTrips = 0;
+    let totalRiderFeesEarned = 0;
+    let totalInHandCod = 0;
+    let availableCount = 0;
+    let deliveringCount = 0;
+    let offlineCount = 0;
+
+    const riderDataList = riders.map(r => {
+        // Status counts
+        if (r.status === "on_delivery") deliveringCount++;
+        else if (r.status === "offline") offlineCount++;
+        else availableCount++;
+
+        // Match with daily report
+        const rep = reportRiders.find(x => x.riderName === r.name || x.riderPhone === r.phone);
+        const trips = rep ? (rep.tripsCount || 0) : 0;
+        const feeEarned = rep ? (rep.riderFeeEarned || 0) : 0;
+        const codCollected = rep ? (rep.codCollected || 0) : 0;
+        const inHandCod = Math.max(0, codCollected - (Number(r.codSettledToday) || 0));
+
+        totalCompletedTrips += trips;
+        totalRiderFeesEarned += feeEarned;
+        totalInHandCod += inHandCod;
+
+        return {
+            ...r,
+            trips,
+            feeEarned,
+            inHandCod,
+            isCodExceeded: inHandCod >= settings.maxCodLimit
+        };
+    });
+
+    // Filtering & Searching
+    const query = (_adminRiderSearchQuery || "").trim().toLowerCase();
+    const filteredRiders = riderDataList.filter(r => {
+        if (_adminRiderStatusFilter !== "all" && r.status !== _adminRiderStatusFilter) {
+            return false;
+        }
+        if (query) {
+            const matchesName = (r.name || "").toLowerCase().includes(query);
+            const matchesPhone = (r.phone || "").toLowerCase().includes(query);
+            const matchesPlate = (r.plate || "").toLowerCase().includes(query);
+            const matchesZone = (r.zone || "").toLowerCase().includes(query);
+            return matchesName || matchesPhone || matchesPlate || matchesZone;
+        }
+        return true;
+    });
+
     container.innerHTML = `
-        <div class="space-y-4">
-            <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div class="space-y-4 max-w-full">
+            <!-- Top Banner -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
                 <div>
-                    <h3 class="font-extrabold text-base text-slate-800 flex items-center gap-2">
-                        <span class="material-symbols-outlined text-purple-700">sports_motorsports</span>
-                        <span>ทำเนียบไรเดอร์ & ตั้งค่าค่ารอบจัดส่ง (Riders Management)</span>
+                    <h3 class="font-extrabold text-base sm:text-lg text-slate-800 flex items-center gap-2">
+                        <span class="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                            <span class="material-symbols-outlined text-lg">sports_motorsports</span>
+                        </span>
+                        <span>ศูนย์บริหารงานไรเดอร์ชุมชน & ค่ารอบจัดส่ง (Fleet Operations)</span>
                     </h3>
-                    <p class="text-xs text-slate-500">จัดการข้อมูลไรเดอร์ประจำชุมชน ค่ารอบจัดส่ง และสถานะพร้อมรับงาน</p>
+                    <p class="text-xs text-slate-500 mt-0.5">จัดการทำเนียบไรเดอร์ ปรับสถานะพร้อมรับงาน ติดตามยอดเงินสด COD ในมือ และดูเรดาร์ GPS</p>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="openAddRiderModal()" class="px-3 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-sm">person_add</span>
+                        <span>+ เพิ่มไรเดอร์ใหม่</span>
+                    </button>
+                    <button onclick="renderAdminRiders(); initAdminRiderRadarMap(); showToast('🔄 อัปเดตข้อมูลไรเดอร์เรียบร้อย');" class="p-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl shadow-xs active:scale-95 transition-all" title="รีเฟรชข้อมูล">
+                        <span class="material-symbols-outlined text-base">refresh</span>
+                    </button>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-3">
-                            <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl font-bold">
-                                🛵
+            <!-- Fleet Live KPIs (4 Summary Cards) -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+                <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
+                    <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>ไรเดอร์ในระบบทั้งหมด</span>
+                        <span class="material-symbols-outlined text-base text-purple-600">groups</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black text-slate-800">${riders.length} <span class="text-xs font-bold text-slate-500 font-sans">คน</span></div>
+                    <div class="text-[10px] sm:text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
+                        <span class="text-emerald-600 font-bold">🟢 ว่าง ${availableCount}</span>
+                        <span>•</span>
+                        <span class="text-amber-600 font-bold">🟡 วิ่ง ${deliveringCount}</span>
+                        <span>•</span>
+                        <span class="text-slate-400">🔴 พัก ${offlineCount}</span>
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
+                    <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>ส่งสำเร็จวันนี้</span>
+                        <span class="material-symbols-outlined text-base text-emerald-600">task_alt</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black text-emerald-700">${totalCompletedTrips} <span class="text-xs font-bold text-slate-500 font-sans">เที่ยว</span></div>
+                    <div class="text-[10px] sm:text-[11px] text-slate-500">
+                        ค่ารอบสะสมรวม <strong class="text-emerald-700">฿${totalRiderFeesEarned.toLocaleString()}</strong>
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1 ${totalInHandCod > 0 ? 'bg-amber-50/40 border-amber-200' : ''}">
+                    <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>เงินสด COD ในมือรวม</span>
+                        <span class="material-symbols-outlined text-base text-amber-600">payments</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black text-amber-700">฿${totalInHandCod.toLocaleString()}</div>
+                    <div class="text-[10px] sm:text-[11px] text-slate-500">
+                        เงินสดที่ไรเดอร์ถืออยู่รอส่งมอบฮับ
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
+                    <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>โหมดสภาพอากาศ & โบนัส</span>
+                        <span class="material-symbols-outlined text-base ${settings.rainSurcharge ? 'text-sky-600 animate-bounce' : 'text-amber-500'}">
+                            ${settings.rainSurcharge ? 'rainy' : 'wb_sunny'}
+                        </span>
+                    </div>
+                    <div class="text-xs sm:text-sm font-black ${settings.rainSurcharge ? 'text-sky-700' : 'text-slate-700'}">
+                        ${settings.rainSurcharge ? `🌧️ ฝนตก (+฿${settings.rainSurchargeAmount}/เที่ยว)` : '☀️ อากาศแจ่มใสปกติ'}
+                    </div>
+                    <div class="text-[10px] sm:text-[11px] text-slate-400">
+                        ค่ารอบฐาน ฿${settings.baseFee} • โบนัสเป้า ฿${settings.dailyBonusAmount}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toolbar: Search & Status Filters -->
+            <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                <div class="w-full sm:w-72 relative">
+                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
+                    <input type="text" value="${_adminRiderSearchQuery}" oninput="handleRiderSearch(this.value)" placeholder="ค้นหาชื่อ, เบอร์โทร, ทะเบียนรถ..." class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+
+                <div class="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0 scrollbar-none text-xs w-full sm:w-auto">
+                    <button onclick="filterAdminRiders('all')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderStatusFilter === 'all' ? 'bg-purple-700 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        ทั้งหมด (${riders.length})
+                    </button>
+                    <button onclick="filterAdminRiders('available')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderStatusFilter === 'available' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        🟢 พร้อมรับงาน (${availableCount})
+                    </button>
+                    <button onclick="filterAdminRiders('on_delivery')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderStatusFilter === 'on_delivery' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        🟡 กำลังส่ง (${deliveringCount})
+                    </button>
+                    <button onclick="filterAdminRiders('offline')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderStatusFilter === 'offline' ? 'bg-slate-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        🔴 พักรอบ (${offlineCount})
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main Content: 2-Column Responsive Layout -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <!-- Left: Rider Cards (Span 7) -->
+                <div class="lg:col-span-7 space-y-3">
+                    ${filteredRiders.length === 0 ? `
+                        <div class="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-2">
+                            <span class="material-symbols-outlined text-4xl text-slate-300">person_off</span>
+                            <div class="font-bold text-slate-600 text-sm">ไม่พบข้อมูลไรเดอร์ตามเงื่อนไขที่ค้นหา</div>
+                            <button onclick="filterAdminRiders('all'); handleRiderSearch('');" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs">
+                                ล้างตัวกรอง
+                            </button>
+                        </div>
+                    ` : filteredRiders.map(r => `
+                        <div class="bg-white p-4 rounded-2xl border ${r.isCodExceeded ? 'border-rose-400 bg-rose-50/10' : 'border-slate-200'} shadow-sm space-y-3 transition-all hover:shadow-md">
+                            <!-- Card Header -->
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-br ${r.status === 'available' ? 'from-emerald-100 to-emerald-200 text-emerald-800' : r.status === 'on_delivery' ? 'from-amber-100 to-amber-200 text-amber-800' : 'from-slate-100 to-slate-200 text-slate-600'} flex items-center justify-center text-2xl font-bold shadow-xs shrink-0">
+                                        ${r.avatar || '🛵'}
+                                    </div>
+                                    <div class="min-w-0">
+                                        <div class="font-extrabold text-sm sm:text-base text-slate-900 truncate flex items-center gap-1.5">
+                                            <span>${r.name}</span>
+                                        </div>
+                                        <div class="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap font-mono">
+                                            <span class="bg-slate-100 px-1.5 py-0.5 rounded font-bold text-slate-700">${r.plate || '-'}</span>
+                                            <span>•</span>
+                                            <a href="tel:${r.phone}" class="text-purple-700 font-bold hover:underline flex items-center gap-0.5">
+                                                <span>📱 ${r.phone}</span>
+                                            </a>
+                                        </div>
+                                        <div class="text-[11px] text-slate-400 mt-0.5">
+                                            📍 ${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Current Status Badge & 1-Click Switcher -->
+                                <div class="flex flex-col items-end gap-1.5 shrink-0">
+                                    <span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                                        r.status === 'available'
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                            : r.status === 'on_delivery'
+                                            ? 'bg-amber-50 text-amber-700 border-amber-300'
+                                            : 'bg-slate-100 text-slate-600 border-slate-300'
+                                    }">
+                                        ${r.status === 'available' ? '🟢 พร้อมรับงาน' : r.status === 'on_delivery' ? '🟡 กำลังส่งของ' : '🔴 พักรอบ'}
+                                    </span>
+                                    
+                                    <div class="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[10px]">
+                                        <button onclick="setRiderStatus('${r.id}', 'available')" title="เปลี่ยนเป็นพร้อมรับงาน" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'available' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
+                                            พร้อม
+                                        </button>
+                                        <button onclick="setRiderStatus('${r.id}', 'on_delivery')" title="เปลี่ยนเป็นกำลังส่งของ" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'on_delivery' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
+                                            ส่งของ
+                                        </button>
+                                        <button onclick="setRiderStatus('${r.id}', 'offline')" title="เปลี่ยนเป็นพักรอบ" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'offline' ? 'bg-slate-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
+                                            พัก
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <div class="font-extrabold text-sm text-slate-900">พี่สมชาย ปลอดภัย (ไรเดอร์หลัก)</div>
-                                <div class="text-xs text-slate-500 font-mono">ทะเบียน 1กข 8902 • 📱 081-588-7400</div>
+
+                            <!-- Live Daily Settlement / Wallet Stats -->
+                            <div class="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
+                                <div>
+                                    <div class="text-[10px] text-slate-500 font-medium">รอบส่งวันนี้</div>
+                                    <div class="font-extrabold text-slate-800 text-sm sm:text-base">${r.trips} <span class="text-[10px] font-normal text-slate-400">เที่ยว</span></div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] text-slate-500 font-medium">ค่ารอบสะสม</div>
+                                    <div class="font-extrabold text-emerald-700 text-sm sm:text-base">฿${r.feeEarned.toLocaleString()}</div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] text-slate-500 font-medium">เงินสด COD ในมือ</div>
+                                    <div class="font-extrabold text-amber-700 text-sm sm:text-base">฿${r.inHandCod.toLocaleString()}</div>
+                                </div>
+                            </div>
+
+                            <!-- COD Over-limit Warning -->
+                            ${r.isCodExceeded ? `
+                                <div class="bg-rose-50 border border-rose-200 text-rose-800 p-2 rounded-xl flex items-center justify-between gap-2 text-xs animate-pulse">
+                                    <div class="flex items-center gap-1.5 font-bold">
+                                        <span class="material-symbols-outlined text-rose-600 text-sm">warning</span>
+                                        <span>เงินสดในมือเกินเกณฑ์ ฿${settings.maxCodLimit.toLocaleString()}! ต้องนำส่งฮับทันที</span>
+                                    </div>
+                                    <button onclick="settleRiderCod('${r.id}')" class="px-2 py-0.5 bg-rose-600 text-white font-bold rounded-lg text-[10px] hover:bg-rose-700 whitespace-nowrap">
+                                        รับเคลียร์เงิน
+                                    </button>
+                                </div>
+                            ` : ''}
+
+                            <!-- Card Action Buttons -->
+                            <div class="flex items-center justify-between pt-1 border-t border-slate-100 text-xs flex-wrap gap-2">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="พิมพ์สลิปสรุปยอด 80x80">
+                                        <span class="material-symbols-outlined text-xs text-sky-700">receipt</span>
+                                        <span>สลิป 80mm</span>
+                                    </button>
+                                    <button onclick="settleRiderCod('${r.id}')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="บันทึกการส่งมอบเงินสด COD เข้าฮับ">
+                                        <span class="material-symbols-outlined text-xs text-emerald-700">account_balance_wallet</span>
+                                        <span>เคลียร์เงิน COD</span>
+                                    </button>
+                                </div>
+
+                                <div class="flex items-center gap-1">
+                                    <button onclick="openEditRiderModal('${r.id}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all" title="แก้ไขข้อมูลไรเดอร์">
+                                        <span class="material-symbols-outlined text-xs">edit</span>
+                                        <span>แก้ไข</span>
+                                    </button>
+                                    <button onclick="deleteCommunityRider('${r.id}')" class="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg active:scale-95 transition-all" title="ลบไรเดอร์">
+                                        <span class="material-symbols-outlined text-base">delete</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        <span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-1 rounded-full">พร้อมรับงาน</span>
+                    `).join("")}
+                </div>
+
+                <!-- Right: Radar Map & Dynamic Fleet Settings (Span 5) -->
+                <div class="lg:col-span-5 space-y-4">
+                    <!-- Live Radar GPS Map -->
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm">
+                                    <span class="material-symbols-outlined text-base">radar</span>
+                                </span>
+                                <div>
+                                    <h4 class="font-extrabold text-sm text-slate-800">เรดาร์ติดตามตำแหน่งไรเดอร์ (Live GPS)</h4>
+                                    <div class="text-[10px] text-slate-400">พิกัดรอบตลาดสดวิศิษฐ์ชัย • หนองชาก/บ้านบึง</div>
+                                </div>
+                            </div>
+                            <button onclick="initAdminRiderRadarMap()" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold flex items-center gap-1" title="จัดกึ่งกลางแผนที่ใหม่">
+                                <span class="material-symbols-outlined text-xs">my_location</span>
+                                <span>เซ็นเตอร์</span>
+                            </button>
+                        </div>
+
+                        <!-- Map Leaflet Container -->
+                        <div id="admin-rider-radar-map" style="height: 300px; width: 100%;" class="rounded-2xl border border-slate-200 shadow-inner z-0 overflow-hidden"></div>
+
+                        <div class="flex items-center justify-between text-[10px] text-slate-500 flex-wrap gap-1 pt-1 border-t border-slate-100">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="flex items-center gap-1 font-bold text-emerald-700">🟢 พร้อม</span>
+                                <span class="flex items-center gap-1 font-bold text-amber-700">🟡 ส่งของ</span>
+                                <span class="flex items-center gap-1 font-bold text-slate-500">🔴 พัก</span>
+                                <span class="flex items-center gap-1 font-bold text-purple-700">🏛️ ตลาดฮับ</span>
+                            </div>
+                            <span class="text-slate-400">คลิกที่หมุดเพื่อดูข้อมูล</span>
+                        </div>
                     </div>
 
-                    <div class="bg-slate-50 p-3 rounded-xl space-y-1 text-xs text-slate-600">
-                        <div class="flex justify-between">
-                            <span>ค่ารอบมาตรฐานต่อเที่ยว:</span>
-                            <strong class="text-emerald-700">฿40 / เที่ยว</strong>
+                    <!-- Dynamic Compensation & Surcharges Config -->
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-7 h-7 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-bold text-sm">
+                                    <span class="material-symbols-outlined text-base">tune</span>
+                                </span>
+                                <div>
+                                    <h4 class="font-extrabold text-sm text-slate-800">ตั้งค่าค่ารอบ & โบนัสความเร็ว</h4>
+                                    <div class="text-[10px] text-slate-400">คำนวณและปรับเปลี่ยนแบบ Real-time</div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="flex justify-between">
-                            <span>พื้นที่รับผิดชอบ:</span>
-                            <strong>ตำบลบ้านหนองชาก / อำเภอบ้านบึง</strong>
+
+                        <!-- Weather Surcharge 1-Click Toggle -->
+                        <div onclick="toggleRainSurcharge()" class="p-3 rounded-2xl border cursor-pointer transition-all ${settings.rainSurcharge ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white border-sky-400 shadow-md' : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'}">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="text-2xl">${settings.rainSurcharge ? '🌧️' : '☀️'}</span>
+                                    <div>
+                                        <div class="font-extrabold text-xs">
+                                            ${settings.rainSurcharge ? 'เปิดโหมดฝนตกหนัก (+฿' + settings.rainSurchargeAmount + ' / เที่ยว)' : 'โหมดฝนตก / สภาพอากาศรุนแรง'}
+                                        </div>
+                                        <div class="text-[10px] ${settings.rainSurcharge ? 'text-sky-100' : 'text-slate-400'}">
+                                            ${settings.rainSurcharge ? 'เพิ่มค่ารอบให้ไรเดอร์อัตโนมัติทุกเที่ยวที่วิ่งช่วงฝน' : 'คลิกเพื่อเปิดโหมดเพิ่มค่ารอบพิเศษสู้ฝน'}
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="material-symbols-outlined text-xl ${settings.rainSurcharge ? 'text-white' : 'text-slate-400'}">
+                                    ${settings.rainSurcharge ? 'toggle_on' : 'toggle_off'}
+                                </span>
+                            </div>
                         </div>
+
+                        <form onsubmit="saveFleetSettingsFromUI(event)" class="space-y-3 text-xs pt-1">
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">ค่ารอบมาตรฐาน (฿/เที่ยว):</label>
+                                    <input type="number" id="fleet-cfg-base-fee" value="${settings.baseFee || 40}" min="10" max="200" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">โบนัสฝนตก (฿/เที่ยว):</label>
+                                    <input type="number" id="fleet-cfg-rain-bonus" value="${settings.rainSurchargeAmount || 15}" min="0" max="100" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2.5">
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">โบนัสเป้าหมาย (ส่งครบ N เที่ยว):</label>
+                                    <input type="number" id="fleet-cfg-target-trips" value="${settings.dailyBonusTrips || 10}" min="1" max="50" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">ยอดโบนัสพิเศษ (฿):</label>
+                                    <input type="number" id="fleet-cfg-bonus-amount" value="${settings.dailyBonusAmount || 100}" min="0" max="500" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="font-bold text-slate-700 block mb-1">วงเงินสด COD สูงสุดในมือ (เตือนเมื่อเกิน):</label>
+                                <input type="number" id="fleet-cfg-max-cod" value="${settings.maxCodLimit || 2500}" min="500" max="10000" step="100" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold font-mono text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                                <span class="text-[10px] text-slate-400 mt-0.5 block">ระบบจะแสดงป้ายเตือนสีแดงให้ไรเดอร์นำส่งเงินเข้าฮับทันทีเมื่อยอดสะสมเกินเกณฑ์</span>
+                            </div>
+
+                            <button type="submit" class="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold rounded-xl shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5">
+                                <span class="material-symbols-outlined text-sm">save</span>
+                                <span>บันทึกการตั้งค่าค่ารอบ & เกณฑ์ COD</span>
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
         </div>
     `;
 }
+
+// ── Search & Filter Handlers
+function handleRiderSearch(val) {
+    _adminRiderSearchQuery = val;
+    renderAdminRiders();
+    setTimeout(() => initAdminRiderRadarMap(), 150);
+}
+
+function filterAdminRiders(status) {
+    _adminRiderStatusFilter = status;
+    renderAdminRiders();
+    setTimeout(() => initAdminRiderRadarMap(), 150);
+}
+
+function setRiderStatus(riderId, newStatus) {
+    const riders = loadCommunityRiders();
+    const r = riders.find(x => x.id === riderId);
+    if (!r) return;
+    r.status = newStatus;
+    
+    // Simulate slight movement if status becomes on_delivery
+    if (newStatus === "on_delivery") {
+        r.lat = Number((r.lat + (Math.random() - 0.5) * 0.003).toFixed(4));
+        r.lng = Number((r.lng + (Math.random() - 0.5) * 0.003).toFixed(4));
+    }
+
+    saveCommunityRiders(riders);
+    const statusLabels = { available: "🟢 พร้อมรับงาน", on_delivery: "🟡 กำลังส่งของ", offline: "🔴 พักรอบ" };
+    showToast(`🛵 เปลี่ยนสถานะ ${r.name} เป็น ${statusLabels[newStatus] || newStatus} สำเร็จ`);
+    renderAdminRiders();
+    setTimeout(() => initAdminRiderRadarMap(), 150);
+}
+
+function toggleRainSurcharge() {
+    const s = loadRiderFleetSettings();
+    s.rainSurcharge = !s.rainSurcharge;
+    saveRiderFleetSettings(s);
+    if (s.rainSurcharge) {
+        showToast(`🌧️ เปิดโหมดสภาพอากาศแย่ (+฿${s.rainSurchargeAmount} / เที่ยว) แล้ว!`);
+    } else {
+        showToast(`☀️ ปิดโหมดสภาพอากาศแย่ กลับสู่ค่ารอบปกติ`);
+    }
+    renderAdminRiders();
+}
+
+function saveFleetSettingsFromUI(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const s = loadRiderFleetSettings();
+    s.baseFee = Number(document.getElementById("fleet-cfg-base-fee")?.value || 40);
+    s.rainSurchargeAmount = Number(document.getElementById("fleet-cfg-rain-bonus")?.value || 15);
+    s.dailyBonusTrips = Number(document.getElementById("fleet-cfg-target-trips")?.value || 10);
+    s.dailyBonusAmount = Number(document.getElementById("fleet-cfg-bonus-amount")?.value || 100);
+    s.maxCodLimit = Number(document.getElementById("fleet-cfg-max-cod")?.value || 2500);
+    saveRiderFleetSettings(s);
+    showToast("💾 บันทึกการตั้งค่าค่ารอบและเกณฑ์ COD สำเร็จ!");
+    renderAdminRiders();
+}
+
+function settleRiderCod(riderId) {
+    const riders = loadCommunityRiders();
+    const r = riders.find(x => x.id === riderId);
+    if (!r) return;
+
+    const targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(targetDateKey);
+    const reportRiders = (report && report.riderSettlement && report.riderSettlement.riders) || [];
+    const rep = reportRiders.find(x => x.riderName === r.name || x.riderPhone === r.phone);
+    const codCollected = rep ? (rep.codCollected || 0) : 0;
+    const inHandCod = Math.max(0, codCollected - (Number(r.codSettledToday) || 0));
+
+    if (inHandCod <= 0) {
+        showToast(`ℹ️ ${r.name} ไม่มียอดเงินสด COD ค้างส่งในขณะนี้`);
+        return;
+    }
+
+    if (confirm(`ยืนยันการรับมอบเงินสด COD จำนวน ฿${inHandCod.toLocaleString()} จาก ${r.name} เข้าสู่ฮับกลาง?`)) {
+        r.codSettledToday = (Number(r.codSettledToday) || 0) + inHandCod;
+        saveCommunityRiders(riders);
+        showToast(`✅ เคลียร์ยอดเงินสด COD ฿${inHandCod.toLocaleString()} ของ ${r.name} เรียบร้อยแล้ว!`);
+        renderAdminRiders();
+    }
+}
+
+function printThermalRiderSlipFromFleet(riderId) {
+    const riders = loadCommunityRiders();
+    const r = riders.find(x => x.id === riderId);
+    if (!r) return;
+
+    const targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(targetDateKey);
+    const rep = (report && report.riderSettlement && report.riderSettlement.riders)
+        ? report.riderSettlement.riders.find(x => x.riderName === r.name || x.riderPhone === r.phone)
+        : null;
+
+    if (rep) {
+        printThermalRiderSlip(r.name, targetDateKey);
+    } else {
+        // Fallback slip even if 0 orders
+        const thaiDate = formatThaiDateDisplay(targetDateKey);
+        const printTime = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+        const content = `
+            <div class="slip-brand">
+                <div class="market-name">🏪 ตลาดสดฮับวิศิษฐ์ชัย</div>
+                <div class="market-sub">WISIT CHAI FRESH HUB MARKET</div>
+                <div class="doc-badge">[ ใบสรุปสถานะไรเดอร์ ]</div>
+            </div>
+            <div class="divider-dashed"></div>
+            <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
+            <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
+            <div class="slip-row"><span class="slip-label">ไรเดอร์:</span><span class="slip-value">${r.name}</span></div>
+            <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${r.phone}</span></div>
+            <div class="slip-row"><span class="slip-label">ทะเบียน:</span><span class="slip-value">${r.plate || '-'}</span></div>
+            <div class="slip-row"><span class="slip-label">สถานะ:</span><span class="slip-value">${r.status === 'available' ? '🟢 พร้อมรับงาน' : r.status === 'on_delivery' ? '🟡 กำลังส่งของ' : '🔴 พักรอบ'}</span></div>
+            <div class="divider-dashed"></div>
+            <div class="slip-row"><span class="slip-label">จำนวนเที่ยวส่งวันนี้:</span><span class="slip-value">0 เที่ยว</span></div>
+            <div class="slip-row"><span class="slip-label">ค่ารอบสะสม:</span><span class="slip-value">฿0</span></div>
+            <div class="slip-row"><span class="slip-label">เงินสด COD ในมือ:</span><span class="slip-value">฿0</span></div>
+            <div class="divider-dashed"></div>
+            <div class="slip-footer">
+                <div>ตลาดสดฮับวิศิษฐ์ชัย • เอกสารสรุปสถานะประจำวัน</div>
+            </div>
+        `;
+        executePrintHtml(`สลิปไรเดอร์_${r.name}_${targetDateKey}`, content, true);
+    }
+}
+
+// ── Rider CRUD Modal Functions
+function openAddRiderModal() {
+    const modal = document.getElementById("rider-form-modal");
+    if (!modal) return;
+    document.getElementById("rider-form-modal-title").textContent = "เพิ่มไรเดอร์ใหม่เข้าสู่ระบบ";
+    document.getElementById("rider-form-id").value = "";
+    document.getElementById("rider-form-name").value = "";
+    document.getElementById("rider-form-phone").value = "";
+    document.getElementById("rider-form-plate").value = "";
+    document.getElementById("rider-form-zone").value = "ตำบลบ้านหนองชาก / อำเภอบ้านบึง";
+    document.getElementById("rider-form-status").value = "available";
+    document.getElementById("rider-form-basefee").value = "40";
+    modal.classList.remove("hidden");
+}
+
+function openEditRiderModal(riderId) {
+    const riders = loadCommunityRiders();
+    const r = riders.find(x => x.id === riderId);
+    if (!r) return;
+
+    const modal = document.getElementById("rider-form-modal");
+    if (!modal) return;
+    document.getElementById("rider-form-modal-title").textContent = `แก้ไขข้อมูล: ${r.name}`;
+    document.getElementById("rider-form-id").value = r.id;
+    document.getElementById("rider-form-name").value = r.name || "";
+    document.getElementById("rider-form-phone").value = r.phone || "";
+    document.getElementById("rider-form-plate").value = r.plate || "";
+    document.getElementById("rider-form-zone").value = r.zone || "";
+    document.getElementById("rider-form-status").value = r.status || "available";
+    document.getElementById("rider-form-basefee").value = r.baseFee || 40;
+    modal.classList.remove("hidden");
+}
+
+function closeRiderFormModal() {
+    const modal = document.getElementById("rider-form-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function handleRiderFormSubmit(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const id = document.getElementById("rider-form-id")?.value;
+    const name = document.getElementById("rider-form-name")?.value.trim();
+    const phone = document.getElementById("rider-form-phone")?.value.trim();
+    const plate = document.getElementById("rider-form-plate")?.value.trim();
+    const zone = document.getElementById("rider-form-zone")?.value.trim();
+    const status = document.getElementById("rider-form-status")?.value || "available";
+    const baseFee = Number(document.getElementById("rider-form-basefee")?.value || 40);
+
+    if (!name || !phone || !plate) {
+        showToast("⚠️ กรุณากรอกข้อมูลชื่อ เบอร์โทร และทะเบียนรถให้ครบถ้วน");
+        return;
+    }
+
+    const riders = loadCommunityRiders();
+    if (id) {
+        // Edit
+        const r = riders.find(x => x.id === id);
+        if (r) {
+            r.name = name;
+            r.phone = phone;
+            r.plate = plate;
+            r.zone = zone;
+            r.status = status;
+            r.baseFee = baseFee;
+        }
+        showToast(`💾 บันทึกการแก้ไขข้อมูล ${name} เรียบร้อยแล้ว`);
+    } else {
+        // New
+        const newRider = {
+            id: `RIDER-${Date.now().toString().slice(-4)}`,
+            name,
+            phone,
+            plate,
+            zone,
+            status,
+            baseFee,
+            lat: Number((MARKET_ORIGIN.lat + (Math.random() - 0.5) * 0.01).toFixed(4)),
+            lng: Number((MARKET_ORIGIN.lng + (Math.random() - 0.5) * 0.01).toFixed(4)),
+            avatar: "🛵",
+            codSettledToday: 0
+        };
+        riders.push(newRider);
+        showToast(`🎉 เพิ่มไรเดอร์ใหม่ ${name} เข้าสู่ระบบแล้ว!`);
+    }
+
+    saveCommunityRiders(riders);
+    closeRiderFormModal();
+    renderAdminRiders();
+    setTimeout(() => initAdminRiderRadarMap(), 150);
+}
+
+function deleteCommunityRider(riderId) {
+    const riders = loadCommunityRiders();
+    const r = riders.find(x => x.id === riderId);
+    if (!r) return;
+
+    if (confirm(`คุณต้องการลบไรเดอร์ "${r.name}" ออกจากทำเนียบใช่หรือไม่?`)) {
+        const updated = riders.filter(x => x.id !== riderId);
+        saveCommunityRiders(updated);
+        showToast(`🗑️ ลบไรเดอร์ ${r.name} ออกจากระบบเรียบร้อย`);
+        renderAdminRiders();
+        setTimeout(() => initAdminRiderRadarMap(), 150);
+    }
+}
+
+// ── Live Radar GPS Leaflet Map
+function initAdminRiderRadarMap() {
+    const mapContainer = document.getElementById("admin-rider-radar-map");
+    if (!mapContainer || typeof L === "undefined") return;
+
+    try {
+        if (_adminRiderRadarMap) {
+            _adminRiderRadarMap.remove();
+            _adminRiderRadarMap = null;
+        }
+
+        const centerLat = MARKET_ORIGIN.lat || 13.2982;
+        const centerLng = MARKET_ORIGIN.lng || 101.1712;
+
+        _adminRiderRadarMap = L.map("admin-rider-radar-map", {
+            zoomControl: true,
+            attributionControl: false
+        }).setView([centerLat, centerLng], 14);
+
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19
+        }).addTo(_adminRiderRadarMap);
+
+        // 1. Hub Center Marker
+        const hubIcon = L.divIcon({
+            className: "custom-hub-marker",
+            html: `
+                <div style="background: #581c87; color: #fff; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 3px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.35);">
+                    🏛️
+                </div>
+            `,
+            iconSize: [34, 34],
+            iconAnchor: [17, 17],
+            popupAnchor: [0, -18]
+        });
+
+        L.marker([centerLat, centerLng], { icon: hubIcon })
+            .addTo(_adminRiderRadarMap)
+            .bindPopup(`
+                <div style="font-family: 'Prompt', sans-serif; font-size: 12px; line-height: 1.4;">
+                    <div style="font-weight: 800; color: #581c87;">🏛️ ศูนย์กลางตลาดสดวิศิษฐ์ชัย (Hub)</div>
+                    <div style="color: #64748b; font-size: 11px;">จุดรับของ & กระจายสินค้าหลัก</div>
+                </div>
+            `);
+
+        // 2. Rider Markers
+        const riders = loadCommunityRiders();
+        const targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+        const report = aggregateDailyOperations(targetDateKey);
+        const reportRiders = (report && report.riderSettlement && report.riderSettlement.riders) || [];
+
+        riders.forEach(r => {
+            const rep = reportRiders.find(x => x.riderName === r.name || x.riderPhone === r.phone);
+            const inHandCod = rep ? Math.max(0, (rep.codCollected || 0) - (Number(r.codSettledToday) || 0)) : 0;
+            const rLat = r.lat || centerLat;
+            const rLng = r.lng || centerLng;
+
+            let bgColor = "#10b981"; // available (green)
+            let statusText = "🟢 พร้อมรับงาน";
+            if (r.status === "on_delivery") {
+                bgColor = "#f59e0b"; // on delivery (amber)
+                statusText = "🟡 กำลังส่งของ";
+            } else if (r.status === "offline") {
+                bgColor = "#64748b"; // offline (grey)
+                statusText = "🔴 พักรอบ";
+            }
+
+            const riderIcon = L.divIcon({
+                className: "custom-rider-marker",
+                html: `
+                    <div style="background: ${bgColor}; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; border: 2.5px solid #fff; box-shadow: 0 3px 8px rgba(0,0,0,0.3); position: relative;">
+                        ${r.avatar || '🛵'}
+                        ${r.status === 'on_delivery' ? '<span style="position: absolute; top:-2px; right:-2px; width: 9px; height: 9px; background: #ef4444; border-radius: 50%; border: 1.5px solid #fff;"></span>' : ''}
+                    </div>
+                `,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16]
+            });
+
+            const marker = L.marker([rLat, rLng], { icon: riderIcon }).addTo(_adminRiderRadarMap);
+            marker.bindPopup(`
+                <div style="font-family: 'Prompt', sans-serif; font-size: 11px; line-height: 1.5; min-width: 160px;">
+                    <div style="font-weight: 800; font-size: 12px; color: #0f172a;">${r.avatar || '🛵'} ${r.name}</div>
+                    <div style="color: #64748b; font-family: monospace;">ทะเบียน: ${r.plate || '-'}</div>
+                    <div style="font-weight: bold; margin-top: 2px;">สถานะ: ${statusText}</div>
+                    <div style="color: #b45309; font-weight: bold;">เงินสด COD: ฿${inHandCod.toLocaleString()}</div>
+                    <div style="margin-top: 6px;">
+                        <a href="tel:${r.phone}" style="background: #059669; color: white; padding: 3px 8px; border-radius: 6px; font-weight: bold; text-decoration: none; display: inline-block; font-size: 10px;">
+                            📞 โทร ${r.phone}
+                        </a>
+                    </div>
+                </div>
+            `);
+        });
+
+        setTimeout(() => {
+            if (_adminRiderRadarMap) _adminRiderRadarMap.invalidateSize();
+        }, 200);
+    } catch (e) {
+        console.error("Error initializing rider radar map:", e);
+    }
+}
+
+// Window registrations
+window.renderAdminRiders = renderAdminRiders;
+window.handleRiderSearch = handleRiderSearch;
+window.filterAdminRiders = filterAdminRiders;
+window.setRiderStatus = setRiderStatus;
+window.toggleRainSurcharge = toggleRainSurcharge;
+window.saveFleetSettingsFromUI = saveFleetSettingsFromUI;
+window.settleRiderCod = settleRiderCod;
+window.printThermalRiderSlipFromFleet = printThermalRiderSlipFromFleet;
+window.openAddRiderModal = openAddRiderModal;
+window.openEditRiderModal = openEditRiderModal;
+window.closeRiderFormModal = closeRiderFormModal;
+window.handleRiderFormSubmit = handleRiderFormSubmit;
+window.deleteCommunityRider = deleteCommunityRider;
+window.initAdminRiderRadarMap = initAdminRiderRadarMap;
+
 
 // ==========================================
 // ADMIN SETTINGS: 4 SUB-TABS (ลูกค้า / ระบบจัดส่ง / แผงค้า / ไรเดอร์)

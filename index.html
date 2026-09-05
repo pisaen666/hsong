@@ -3183,12 +3183,82 @@
         </div>
     </div>
 
+    <!-- ========================================== -->
+    <!-- RIDER FORM MODAL (เพิ่ม/แก้ไขข้อมูลไรเดอร์)    -->
+    <!-- ========================================== -->
+    <div id="rider-form-modal" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl p-5 max-w-md w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[95vh] overflow-y-auto">
+            <!-- Header -->
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        <span class="material-symbols-outlined text-base">two_wheeler</span>
+                    </span>
+                    <h3 id="rider-form-modal-title" class="font-extrabold text-sm text-slate-800">เพิ่มไรเดอร์ใหม่เข้าสู่ระบบ</h3>
+                </div>
+                <button type="button" onclick="closeRiderFormModal()" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+
+            <form id="rider-form" onsubmit="handleRiderFormSubmit(event)" class="space-y-3 text-xs">
+                <input type="hidden" id="rider-form-id" value="">
+
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">ชื่อ-นามสกุล / ชื่อเรียกไรเดอร์: *</label>
+                    <input type="text" id="rider-form-name" required placeholder="เช่น พี่สมชาย ปลอดภัย (ไรเดอร์ 1)" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์: *</label>
+                        <input type="tel" id="rider-form-phone" required placeholder="081-xxx-xxxx" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold font-mono text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">ทะเบียนรถมอเตอร์ไซค์: *</label>
+                        <input type="text" id="rider-form-plate" required placeholder="เช่น 1กข 8902" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">พื้นที่ / โซนประจำการ:</label>
+                    <input type="text" id="rider-form-zone" placeholder="เช่น ตำบลบ้านหนองชาก / อำเภอบ้านบึง" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">สถานะเริ่มต้น:</label>
+                        <select id="rider-form-status" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                            <option value="available">🟢 พร้อมรับงาน</option>
+                            <option value="on_delivery">🟡 กำลังส่งของ</option>
+                            <option value="offline">🔴 พักรอบ / ออฟไลน์</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">ค่ารอบมาตรฐาน (฿/เที่ยว):</label>
+                        <input type="number" id="rider-form-basefee" value="40" min="10" max="200" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="pt-2 flex gap-2">
+                    <button type="button" onclick="closeRiderFormModal()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl active:scale-95 transition-all text-xs">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1">
+                        <span class="material-symbols-outlined text-sm">save</span>
+                        <span>บันทึกข้อมูล</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Firebase SDK (compat version - ใช้ได้กับ HTML/JS ธรรมดา) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=6.7"></script>
+    <script src="app.js?v=6.8"></script>
 </body>
 </html>
