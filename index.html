@@ -90,7 +90,7 @@
                 </button>
             </div>
 
-            <!-- Right: Authentication Buttons (ลูกค้า & ร้านค้า + Log Out) -->
+            <!-- Right: Authentication Buttons (ลูกค้า, ร้านค้า & Admin) -->
             <div class="flex items-center gap-1.5 shrink-0" id="top-auth-buttons-container">
                 <!-- Customer Login Button -->
                 <button onclick="openCustomerLoginModal()" id="btn-customer-login" class="px-2.5 sm:px-3 py-1.5 rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all">
@@ -103,12 +103,18 @@
                     <span class="material-symbols-outlined text-sm font-bold">store</span>
                     <span>ร้านค้า Log In</span>
                 </button>
+
+                <!-- Admin Button -->
+                <button onclick="handleAdminButtonClick()" id="btn-admin-login" class="px-2.5 sm:px-3 py-1.5 rounded-xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm font-bold">admin_panel_settings</span>
+                    <span>Admin</span>
+                </button>
             </div>
         </div>
     </header>
 
-    <!-- MAIN APP CONTAINER (Phone Frame) -->
-    <main class="w-full max-w-[430px] bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80">
+    <!-- MAIN APP CONTAINER (Dynamic: Phone Frame for Customer/Rider/Picker, Full Widescreen for Admin) -->
+    <main id="main-app-container" class="w-full max-w-[430px] bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300">
 
         <!-- ========================================== -->
         <!-- ROLE 1: CUSTOMER VIEW                      -->
@@ -1103,6 +1109,98 @@
                     <span class="material-symbols-outlined text-base">arrow_back</span>
                     <span>สลับกลับไปหน้าจอลูกค้า (Customer Tracking)</span>
                 </button>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- ROLE 5: ADMIN & MANAGEMENT WIDESCREEN CONSOLE -->
+        <!-- ========================================== -->
+        <section id="admin-view-container" class="view-section hidden flex-1 flex flex-col bg-slate-100 w-full text-slate-800">
+            <!-- Admin Top Header Banner -->
+            <div class="bg-gradient-to-r from-slate-950 via-purple-950 to-slate-900 text-white p-4 sm:p-5 sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg border-b border-purple-800/40">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-700 border-2 border-purple-400/40 flex items-center justify-center text-white text-xl shadow-md shrink-0">
+                        <span class="material-symbols-outlined text-2xl font-bold">admin_panel_settings</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="font-black text-base sm:text-lg tracking-tight">ตลาดฮับวิศิษฐ์ชัย • ศูนย์บริหารจัดการส่วนกลาง (Admin Console)</h2>
+                            <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold px-2 py-0.5 rounded-full hidden sm:inline-block">PC Widescreen</span>
+                        </div>
+                        <div class="text-xs text-purple-200/80 flex items-center gap-2 mt-0.5">
+                            <span>ผู้ดูแลระบบ: <strong class="text-white" id="admin-display-name">เฮียส่ง (Super Admin)</strong></span>
+                            <span>•</span>
+                            <span class="text-emerald-400 font-bold flex items-center gap-1">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span>ระบบฐานข้อมูลออนไลน์ Realtime</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                    <button onclick="switchRole('hub')" class="px-3 py-2 bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shadow-sm" title="สลับไปหน้าจัดของ">
+                        <span class="material-symbols-outlined text-sm text-emerald-400">inventory_2</span>
+                        <span>ไปหน้าจัดของ (Hub)</span>
+                    </button>
+                    <button onclick="logoutAdmin()" class="px-3 py-2 bg-rose-950/80 hover:bg-rose-900 text-rose-300 hover:text-white border border-rose-800/50 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shadow-sm" title="ออกจากระบบแอดมิน">
+                        <span class="material-symbols-outlined text-sm">logout</span>
+                        <span>ออกจากระบบ Admin</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Admin Sub-Navigation Tabs Bar -->
+            <div class="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 flex items-center gap-2 text-xs overflow-x-auto shadow-xs shrink-0">
+                <button onclick="switchAdminTab('report')" id="admin-tab-report" class="admin-tab-btn font-extrabold text-purple-800 border-b-2 border-purple-700 pb-1.5 whitespace-nowrap px-3 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-base text-purple-700">receipt_long</span>
+                    <span>1. รายงานประจำวัน & เคลียร์เงิน</span>
+                </button>
+                <span class="text-slate-300 shrink-0">|</span>
+                <button onclick="switchAdminTab('analytics')" id="admin-tab-analytics" class="admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-base text-slate-400">analytics</span>
+                    <span>2. สถิติภาพรวม & ยอดสะสม</span>
+                </button>
+                <span class="text-slate-300 shrink-0">|</span>
+                <button onclick="switchAdminTab('stalls')" id="admin-tab-stalls" class="admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-base text-slate-400">storefront</span>
+                    <span>3. จัดการ 100 แผงค้า & พร้อมเพย์</span>
+                </button>
+                <span class="text-slate-300 shrink-0">|</span>
+                <button onclick="switchAdminTab('riders')" id="admin-tab-riders" class="admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-base text-slate-400">sports_motorsports</span>
+                    <span>4. จัดการไรเดอร์ & ค่ารอบ</span>
+                </button>
+                <span class="text-slate-300 shrink-0">|</span>
+                <button onclick="switchAdminTab('settings')" id="admin-tab-settings" class="admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-base text-slate-400">settings</span>
+                    <span>5. ตั้งค่าระบบฮับ</span>
+                </button>
+            </div>
+
+            <!-- Tab 1: Daily Operations & Settlements Report (Widescreen PC View) -->
+            <div id="admin-content-report" class="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 text-xs">
+                <!-- Dynamically populated via renderAdminReport() -->
+            </div>
+
+            <!-- Tab 2: Analytics & Trends Overview -->
+            <div id="admin-content-analytics" class="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 hidden text-xs">
+                <!-- Dynamically populated via renderAdminAnalytics() -->
+            </div>
+
+            <!-- Tab 3: Stalls Directory & Settings -->
+            <div id="admin-content-stalls" class="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 hidden text-xs">
+                <!-- Dynamically populated via renderAdminStalls() -->
+            </div>
+
+            <!-- Tab 4: Riders Roster & Config -->
+            <div id="admin-content-riders" class="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 hidden text-xs">
+                <!-- Dynamically populated via renderAdminRiders() -->
+            </div>
+
+            <!-- Tab 5: Hub System Settings -->
+            <div id="admin-content-settings" class="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 hidden text-xs">
+                <!-- Dynamically populated via renderAdminSettings() -->
             </div>
         </section>
 
@@ -3008,12 +3106,55 @@
         </div>
     </div>
 
+    <!-- ========================================== -->
+    <!-- ADMIN LOGIN MODAL (เข้าสู่ระบบผู้ดูแลระบบ)  -->
+    <!-- ========================================== -->
+    <div id="admin-login-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl max-w-sm w-full shadow-2xl p-5 sm:p-6 space-y-4 text-left border border-slate-200 animate-scale-up">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div class="font-extrabold text-sm text-slate-900 flex items-center gap-1.5">
+                    <span class="w-7 h-7 rounded-xl bg-purple-600 text-white flex items-center justify-center text-sm shadow-xs">
+                        <span class="material-symbols-outlined text-base">admin_panel_settings</span>
+                    </span>
+                    <span>เข้าสู่ระบบผู้ดูแลระบบ (Admin)</span>
+                </div>
+                <button onclick="closeAdminLoginModal()" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div class="p-3 bg-purple-50 border border-purple-200 rounded-2xl text-purple-900 space-y-1">
+                    <div class="font-extrabold flex items-center gap-1">
+                        <span>🔒 พื้นที่เฉพาะฝ่ายบริหาร & เจ้าของตลาด</span>
+                    </div>
+                    <p class="text-[11px] text-purple-800">เข้าถึงรายงานยอดขาย GMV, การเคลียร์เงินไรเดอร์, ข้อมูลโอนเงินร้านค้า และกำไรสุทธิ</p>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="font-bold text-slate-700 block text-xs">รหัส PIN หรือ Password แอดมิน (ค่าเริ่มต้น 8888):</label>
+                    <input type="password" id="admin-pin-input" placeholder="กรอก PIN 4 หลัก (8888)" maxlength="10" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-center text-lg tracking-widest text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none bg-slate-50">
+                </div>
+
+                <button type="button" onclick="handleAdminLoginSubmit()" class="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5">
+                    <span class="material-symbols-outlined text-base">login</span>
+                    <span>เข้าสู่ระบบ Admin</span>
+                </button>
+
+                <!-- Fast 1-click test button -->
+                <button type="button" onclick="handleAdminQuickLogin()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-purple-900 font-bold rounded-xl active:scale-95 transition-all text-[11px] flex items-center justify-center gap-1">
+                    <span>⚡ เข้าสู่ระบบทันที (โหมดทดสอบ เฮียส่ง)</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK (compat version - ใช้ได้กับ HTML/JS ธรรมดา) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=5.6"></script>
+    <script src="app.js?v=5.7"></script>
 </body>
 </html>

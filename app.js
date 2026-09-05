@@ -148,6 +148,21 @@ function saveHubToStorage(hub) {
     } catch (e) { }
 }
 
+function loadSavedAdmin() {
+    try {
+        const saved = localStorage.getItem("talathub_logged_in_admin");
+        if (saved) return JSON.parse(saved);
+    } catch (e) { }
+    return null;
+}
+
+function saveAdminToStorage(admin) {
+    try {
+        if (admin) localStorage.setItem("talathub_logged_in_admin", JSON.stringify(admin));
+        else localStorage.removeItem("talathub_logged_in_admin");
+    } catch (e) { }
+}
+
 function loadSavedRider() {
     try {
         const saved = localStorage.getItem("talathub_logged_in_rider");
@@ -2058,10 +2073,27 @@ function navigateReportDay(direction) {
     changeReportDate(getReportDateKey(d.getTime()));
 }
 
-// ── UI Renderer สำหรับแท็บรายงานประจำวัน (#hub-content-report)
+// ── UI Renderer สำหรับแท็บรายงานประจำวัน (Widescreen PC View in Admin)
 function renderHubDailyReport(targetDateKey) {
-    const container = document.getElementById("hub-content-report");
+    const container = document.getElementById("admin-content-report") || document.getElementById("hub-content-report");
     if (!container) return;
+
+    const hubReportContainer = document.getElementById("hub-content-report");
+    if (hubReportContainer && hubReportContainer !== container) {
+        hubReportContainer.innerHTML = `
+            <div class="bg-white rounded-3xl p-6 text-center border border-purple-200 shadow-sm space-y-3">
+                <div class="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mx-auto text-2xl font-bold">
+                    <span class="material-symbols-outlined text-2xl">admin_panel_settings</span>
+                </div>
+                <h3 class="font-extrabold text-sm text-slate-800">ศูนย์รายงานและบัญชีถูกย้ายไปที่ห้อง Admin (จอใหญ่ PC)</h3>
+                <p class="text-slate-500 text-xs max-w-sm mx-auto">เพื่อความสะดวกและอ่านง่ายเต็มหน้าจอพีซี รายงานทุกประเภทได้ถูกแยกไปยังห้องผู้ดูแลระบบแล้ว</p>
+                <button onclick="handleAdminButtonClick()" class="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-extrabold rounded-xl text-xs shadow-md active:scale-95 transition-all inline-flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-sm">open_in_new</span>
+                    <span>เปิดห้องแอดมิน & ดูรายงานเต็มจอ</span>
+                </button>
+            </div>
+        `;
+    }
 
     if (!targetDateKey) {
         targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
@@ -5770,11 +5802,31 @@ function switchRole(targetRole) {
         setActiveRoleView("rider");
         return;
     }
+
+    if (targetRole === "admin") {
+        if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
+            openAdminLoginModal();
+            return;
+        }
+        setActiveRoleView("admin");
+        return;
+    }
 }
 
 function setActiveRoleView(role) {
     state.currentRole = role;
-    const containers = ["customer", "hub", "merchant", "rider"];
+
+    // Toggle main container between mobile phone frame and full PC widescreen for Admin
+    const mainContainer = document.getElementById("main-app-container");
+    if (mainContainer) {
+        if (role === "admin") {
+            mainContainer.className = "w-full max-w-7xl mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300";
+        } else {
+            mainContainer.className = "w-full max-w-[430px] bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300";
+        }
+    }
+
+    const containers = ["customer", "hub", "merchant", "rider", "admin"];
     containers.forEach(r => {
         const el = document.getElementById(`${r}-view-container`);
         const btn = document.getElementById(`role-btn-${r}`);
@@ -5790,13 +5842,410 @@ function setActiveRoleView(role) {
             }
         }
     });
+
     if (role === "hub") {
         renderHubPickingList();
         renderHubSettlement();
     } else if (role === "rider") {
         renderRiderScreen();
+    } else if (role === "admin") {
+        renderAdminView();
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// ==========================================
+// ADMIN CONSOLE & BACKOFFICE CONTROLLERS
+// ==========================================
+let _activeAdminTab = "report";
+let _adminStallSearchQuery = "";
+let _adminStallZoneFilter = "all";
+
+function handleAdminButtonClick() {
+    if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
+        switchRole("admin");
+    } else {
+        openAdminLoginModal();
+    }
+}
+
+function openAdminLoginModal() {
+    const modal = document.getElementById("admin-login-modal");
+    if (modal) {
+        modal.classList.remove("hidden");
+        const pinInput = document.getElementById("admin-pin-input");
+        if (pinInput) {
+            pinInput.value = "";
+            setTimeout(() => pinInput.focus(), 150);
+        }
+    }
+}
+
+function closeAdminLoginModal() {
+    const modal = document.getElementById("admin-login-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function handleAdminLoginSubmit() {
+    const pin = document.getElementById("admin-pin-input")?.value.trim();
+    if (!pin || (pin !== "8888" && pin !== "1234" && pin.length < 4)) {
+        showToast("⚠️ รหัส PIN ไม่ถูกต้อง (ค่าเริ่มต้น: 8888)");
+        return;
+    }
+    state.activeAdmin = {
+        isLoggedIn: true,
+        name: "เฮียส่ง",
+        role: "Super Admin",
+        loggedInAt: Date.now()
+    };
+    saveAdminToStorage(state.activeAdmin);
+    closeAdminLoginModal();
+    renderAuthHeaderButtons();
+    switchRole("admin");
+    showToast("🎉 เข้าสู่ระบบผู้ดูแลระบบ (Admin Console) สำเร็จ!");
+}
+
+function handleAdminQuickLogin() {
+    state.activeAdmin = {
+        isLoggedIn: true,
+        name: "เฮียส่ง",
+        role: "Super Admin",
+        loggedInAt: Date.now()
+    };
+    saveAdminToStorage(state.activeAdmin);
+    closeAdminLoginModal();
+    renderAuthHeaderButtons();
+    switchRole("admin");
+    showToast("⚡ เข้าสู่ระบบแอดมิน (โหมดทดสอบ เฮียส่ง) สำเร็จ!");
+}
+
+function logoutAdmin() {
+    state.activeAdmin = null;
+    saveAdminToStorage(null);
+    renderAuthHeaderButtons();
+    switchRole("customer");
+    showToast("🚪 ออกจากระบบแอดมินเรียบร้อยแล้ว");
+}
+
+function switchAdminTab(tabName) {
+    _activeAdminTab = tabName;
+    const tabs = ["report", "analytics", "stalls", "riders", "settings"];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`admin-tab-${t}`);
+        const content = document.getElementById(`admin-content-${t}`);
+        const isActive = t === tabName;
+        if (btn) {
+            btn.className = isActive
+                ? "admin-tab-btn font-extrabold text-purple-800 border-b-2 border-purple-700 pb-1.5 whitespace-nowrap px-3 flex items-center gap-1.5 transition-all"
+                : "admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5 transition-all";
+        }
+        if (content) {
+            if (isActive) content.classList.remove("hidden");
+            else content.classList.add("hidden");
+        }
+    });
+
+    if (tabName === "report") {
+        renderAdminReport();
+    } else if (tabName === "analytics") {
+        renderAdminAnalytics();
+    } else if (tabName === "stalls") {
+        renderAdminStalls();
+    } else if (tabName === "riders") {
+        renderAdminRiders();
+    } else if (tabName === "settings") {
+        renderAdminSettings();
+    }
+}
+
+function renderAdminView() {
+    const disp = document.getElementById("admin-display-name");
+    if (disp && state.activeAdmin) {
+        disp.textContent = `${state.activeAdmin.name} (${state.activeAdmin.role})`;
+    }
+    switchAdminTab(_activeAdminTab || "report");
+}
+
+function renderAdminReport() {
+    renderHubDailyReport(_activeReportDateKey);
+}
+
+// ── Tab 2: Analytics & Trends Overview
+function renderAdminAnalytics() {
+    const container = document.getElementById("admin-content-analytics");
+    if (!container) return;
+
+    const allOrders = _collectAllOrders();
+    let totalGMV = 0;
+    let totalDelivered = 0;
+    let totalDeliveryFees = 0;
+    const paymentCounts = { promptpay: 0, bank_transfer: 0, cod: 0 };
+
+    allOrders.forEach(o => {
+        const amt = Number(o.grandTotal || o.total || 0);
+        totalGMV += amt;
+        totalDeliveryFees += Number(o.deliveryFee || 20);
+        if (o.status === "delivered") totalDelivered++;
+
+        const pType = (o.paymentType || "promptpay").toLowerCase();
+        if (pType === "cod" || pType === "cash") paymentCounts.cod++;
+        else if (pType === "bank_transfer" || pType === "bank" || pType === "scb") paymentCounts.bank_transfer++;
+        else paymentCounts.promptpay++;
+    });
+
+    const avgBasket = allOrders.length > 0 ? Math.round(totalGMV / allOrders.length) : 0;
+
+    container.innerHTML = `
+        <div class="space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+                <div>
+                    <h3 class="font-extrabold text-base text-slate-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-purple-700">insights</span>
+                        <span>สถิติภาพรวม & ประวัติยอดขายสะสม (Overview Analytics)</span>
+                    </h3>
+                    <p class="text-xs text-slate-500">วิเคราะห์ข้อมูลคำสั่งซื้อและยอดขายทั้งหมดที่บันทึกในระบบ</p>
+                </div>
+                <span class="text-xs bg-purple-100 text-purple-800 font-bold px-3 py-1 rounded-full">
+                    ทั้งหมด ${allOrders.length} ออเดอร์
+                </span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+                    <div class="text-xs font-bold text-slate-500">ยอดขายรวมสะสม (Total GMV)</div>
+                    <div class="text-2xl font-black text-emerald-700">฿${totalGMV.toLocaleString()}</div>
+                    <div class="text-[11px] text-slate-400">จากออเดอร์ทั้งหมดในระบบ</div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+                    <div class="text-xs font-bold text-slate-500">อัตราจัดส่งสำเร็จ (Completion)</div>
+                    <div class="text-2xl font-black text-sky-700">${totalDelivered} / ${allOrders.length}</div>
+                    <div class="text-[11px] text-slate-400">คิดเป็น ${allOrders.length > 0 ? Math.round((totalDelivered / allOrders.length) * 100) : 0}% ของออเดอร์</div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+                    <div class="text-xs font-bold text-slate-500">ยอดสั่งซื้อเฉลี่ยต่อบิล (AOV)</div>
+                    <div class="text-2xl font-black text-indigo-700">฿${avgBasket.toLocaleString()}</div>
+                    <div class="text-[11px] text-slate-400">เฉลี่ยต่อ 1 คำสั่งซื้อ</div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+                    <div class="text-xs font-bold text-slate-500">ค่าจัดส่งรวมสะสม (Delivery Fees)</div>
+                    <div class="text-2xl font-black text-amber-700">฿${totalDeliveryFees.toLocaleString()}</div>
+                    <div class="text-[11px] text-slate-400">ค่าบริการรวมของฮับ</div>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <h4 class="font-bold text-sm text-slate-800">สัดส่วนช่องทางการชำระเงินของลูกค้า</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                        <div class="text-xs font-bold text-blue-900">📱 พร้อมเพย์ (PromptPay)</div>
+                        <div class="text-lg font-black text-blue-950 mt-1">${paymentCounts.promptpay} ออเดอร์</div>
+                    </div>
+                    <div class="p-3 bg-purple-50 border border-purple-200 rounded-xl">
+                        <div class="text-xs font-bold text-purple-900">🏦 โอนผ่านธนาคาร (SCB)</div>
+                        <div class="text-lg font-black text-purple-950 mt-1">${paymentCounts.bank_transfer} ออเดอร์</div>
+                    </div>
+                    <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                        <div class="text-xs font-bold text-amber-900">💵 เงินสดปลายทาง (COD)</div>
+                        <div class="text-lg font-black text-amber-950 mt-1">${paymentCounts.cod} ออเดอร์</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ── Tab 3: Stalls Directory & Settings
+function filterAdminStalls(query) {
+    _adminStallSearchQuery = (query || "").toLowerCase();
+    renderAdminStalls();
+}
+
+function filterAdminStallsByZone(zone) {
+    _adminStallZoneFilter = zone;
+    renderAdminStalls();
+}
+
+function renderAdminStalls() {
+    const container = document.getElementById("admin-content-stalls");
+    if (!container) return;
+
+    let stalls = ALL_100_STALLS;
+    if (_adminStallZoneFilter && _adminStallZoneFilter !== "all") {
+        stalls = stalls.filter(s => s.zone === _adminStallZoneFilter);
+    }
+    if (_adminStallSearchQuery) {
+        stalls = stalls.filter(s =>
+            (s.stallName && s.stallName.toLowerCase().includes(_adminStallSearchQuery)) ||
+            (s.stallNumber && s.stallNumber.toLowerCase().includes(_adminStallSearchQuery)) ||
+            (s.ownerName && s.ownerName.toLowerCase().includes(_adminStallSearchQuery)) ||
+            (s.phone && s.phone.includes(_adminStallSearchQuery))
+        );
+    }
+
+    container.innerHTML = `
+        <div class="space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200">
+                <div>
+                    <h3 class="font-extrabold text-base text-slate-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-purple-700">storefront</span>
+                        <span>จัดการข้อมูล 100 แผงค้า & เบอร์พร้อมเพย์ (Vendors Directory)</span>
+                    </h3>
+                    <p class="text-xs text-slate-500">ตรวจสอบแผงค้า เจ้าของแผง และเบอร์โทรพร้อมเพย์สำหรับโอนเงินเคลียร์ยอด</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="text" oninput="filterAdminStalls(this.value)" value="${_adminStallSearchQuery}" placeholder="🔍 ค้นหาแผงค้า, เลขแผง, เบอร์โทร..." class="border border-slate-300 rounded-xl px-3 py-1.5 text-xs bg-white w-64 focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 overflow-x-auto text-xs pb-1">
+                <button onclick="filterAdminStallsByZone('all')" class="px-3 py-1 rounded-xl font-bold ${_adminStallZoneFilter === 'all' ? 'bg-purple-700 text-white' : 'bg-white text-slate-700 border border-slate-200'}">ทั้งหมด (${ALL_100_STALLS.length})</button>
+                <button onclick="filterAdminStallsByZone('A')" class="px-3 py-1 rounded-xl font-bold ${_adminStallZoneFilter === 'A' ? 'bg-purple-700 text-white' : 'bg-white text-slate-700 border border-slate-200'}">โซน A ไก่/เนื้อ</button>
+                <button onclick="filterAdminStallsByZone('B')" class="px-3 py-1 rounded-xl font-bold ${_adminStallZoneFilter === 'B' ? 'bg-purple-700 text-white' : 'bg-white text-slate-700 border border-slate-200'}">โซน B ผักสด</button>
+                <button onclick="filterAdminStallsByZone('C')" class="px-3 py-1 rounded-xl font-bold ${_adminStallZoneFilter === 'C' ? 'bg-purple-700 text-white' : 'bg-white text-slate-700 border border-slate-200'}">โซน C เครื่องแกง</button>
+                <button onclick="filterAdminStallsByZone('E')" class="px-3 py-1 rounded-xl font-bold ${_adminStallZoneFilter === 'E' ? 'bg-purple-700 text-white' : 'bg-white text-slate-700 border border-slate-200'}">โซน E ซีฟู้ด</button>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                <th class="p-3">เลขแผง / โซน</th>
+                                <th class="p-3">ชื่อร้านค้า</th>
+                                <th class="p-3">เจ้าของแผง</th>
+                                <th class="p-3">เบอร์โทรศัพท์ (พร้อมเพย์)</th>
+                                <th class="p-3 text-center">สถานะ</th>
+                                <th class="p-3 text-center">ทดสอบ QR</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            ${stalls.slice(0, 50).map(s => `
+                            <tr class="hover:bg-slate-50 transition-colors">
+                                <td class="p-3 font-mono font-bold text-slate-700">
+                                    <span class="bg-slate-100 px-2 py-0.5 rounded">${s.stallNumber || 'แผงตลาด'}</span>
+                                    <span class="text-[10px] text-slate-400 ml-1">โซน ${s.zone || '-'}</span>
+                                </td>
+                                <td class="p-3">
+                                    <div class="font-extrabold text-slate-900">${s.stallName}</div>
+                                    <div class="text-[10px] text-slate-400">${s.stallTag || s.category || ''}</div>
+                                </td>
+                                <td class="p-3 text-slate-700 font-medium">${s.ownerName || 'เจ้าของแผง'}</td>
+                                <td class="p-3 font-mono font-bold text-emerald-700">📱 ${s.phone || '089-123-4567'}</td>
+                                <td class="p-3 text-center">
+                                    <span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">เปิดทำการ</span>
+                                </td>
+                                <td class="p-3 text-center">
+                                    <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', 500, '${s.phone || '089-123-4567'}', '${s.ownerName || 'เจ้าของแผง'}', '${s.stallNumber || 'แผงตลาด'}')" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all">
+                                        เปิด QR โอน
+                                    </button>
+                                </td>
+                            </tr>`).join("")}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ── Tab 4: Riders Roster & Config
+function renderAdminRiders() {
+    const container = document.getElementById("admin-content-riders");
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+                <div>
+                    <h3 class="font-extrabold text-base text-slate-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-purple-700">sports_motorsports</span>
+                        <span>ทำเนียบไรเดอร์ & ตั้งค่าค่ารอบจัดส่ง (Riders Management)</span>
+                    </h3>
+                    <p class="text-xs text-slate-500">จัดการข้อมูลไรเดอร์ประจำชุมชน ค่ารอบจัดส่ง และสถานะพร้อมรับงาน</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl font-bold">
+                                🛵
+                            </div>
+                            <div>
+                                <div class="font-extrabold text-sm text-slate-900">พี่สมชาย ปลอดภัย (ไรเดอร์หลัก)</div>
+                                <div class="text-xs text-slate-500 font-mono">ทะเบียน 1กข 8902 • 📱 081-588-7400</div>
+                            </div>
+                        </div>
+                        <span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-1 rounded-full">พร้อมรับงาน</span>
+                    </div>
+
+                    <div class="bg-slate-50 p-3 rounded-xl space-y-1 text-xs text-slate-600">
+                        <div class="flex justify-between">
+                            <span>ค่ารอบมาตรฐานต่อเที่ยว:</span>
+                            <strong class="text-emerald-700">฿40 / เที่ยว</strong>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>พื้นที่รับผิดชอบ:</span>
+                            <strong>ตำบลบ้านหนองชาก / อำเภอบ้านบึง</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ── Tab 5: Hub System Settings
+function renderAdminSettings() {
+    const container = document.getElementById("admin-content-settings");
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="space-y-4 max-w-2xl">
+            <div class="pb-2 border-b border-slate-200">
+                <h3 class="font-extrabold text-base text-slate-800 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-purple-700">settings</span>
+                    <span>ตั้งค่าระบบตลาดฮับวิศิษฐ์ชัย (Hub Settings)</span>
+                </h3>
+                <p class="text-xs text-slate-500">ข้อมูลส่วนกลางของตลาดฮับและบัญชีรับชำระเงิน</p>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-xs">
+                <div class="space-y-1.5">
+                    <label class="font-bold text-slate-700">ชื่อศูนย์กลางตลาดฮับ:</label>
+                    <input type="text" value="ศูนย์กระจายสินค้าตลาดวิศิษฐ์ชัย (เฮียส่ง)" class="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 font-bold text-slate-800" readonly>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1.5">
+                        <label class="font-bold text-slate-700">เวลาเปิดตลาด:</label>
+                        <input type="text" value="05:00 น." class="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 font-bold text-slate-800" readonly>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="font-bold text-slate-700">เวลาปิดรับออเดอร์:</label>
+                        <input type="text" value="18:00 น." class="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 font-bold text-slate-800" readonly>
+                    </div>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="font-bold text-slate-700">เบอร์โทรศัพท์ผู้จัดการฮับ (PromptPay ฮับ):</label>
+                    <input type="text" value="089-123-4567" class="w-full border border-slate-300 rounded-xl p-2.5 bg-slate-50 font-bold font-mono text-emerald-700" readonly>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-slate-500 font-bold">ฐานข้อมูล Cloud Realtime:</span>
+                    <span class="text-emerald-700 font-bold flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>hsong-1f342 Firebase Connected</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 // Hub Login & Logout
@@ -6828,6 +7277,31 @@ function renderAuthHeaderButtons() {
         `;
     }
 
+    // 3. Admin Section
+    if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
+        html += `
+            <div class="flex items-center gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2.5 py-1 rounded-xl text-xs shadow-xs">
+                <span class="text-[11px] text-purple-300 font-bold flex items-center gap-1 cursor-pointer" onclick="switchRole('admin')">
+                    <span class="material-symbols-outlined text-sm text-purple-400">admin_panel_settings</span>
+                    <span>แอดมิน: ${state.activeAdmin.name || 'เฮียส่ง'}</span>
+                </span>
+                <button onclick="switchRole('admin')" class="text-[10px] text-purple-200 bg-purple-800/80 hover:bg-purple-700 px-1.5 py-0.5 rounded-lg font-bold transition-all">
+                    หน้าจอ Admin
+                </button>
+                <button onclick="logoutAdmin()" class="text-[10px] text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบแอดมิน">
+                    ออก
+                </button>
+            </div>
+        `;
+    } else {
+        html += `
+            <button onclick="handleAdminButtonClick()" id="btn-admin-login" class="px-2.5 sm:px-3 py-1.5 rounded-xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all">
+                <span class="material-symbols-outlined text-sm font-bold">admin_panel_settings</span>
+                <span>Admin</span>
+            </button>
+        `;
+    }
+
     container.innerHTML = html;
     updateCustomerLoyaltyBanner();
 }
@@ -7364,6 +7838,7 @@ function initTalatHubApp() {
     state.activeMerchant = loadSavedMerchant();
     state.activeHub = loadSavedHub();
     state.activeRider = loadSavedRider();
+    state.activeAdmin = loadSavedAdmin();
     state.favorites = loadSavedFavorites();
     state.deliveryLocation = loadSavedLocation();
 
