@@ -2874,7 +2874,9 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
                         width: ${isThermal ? '68mm !important' : '100% !important'};
                         max-width: ${isThermal ? '68mm !important' : '100% !important'};
                         margin: 0 auto !important;
-                        padding: ${isThermal ? '3mm 1mm 6mm 1mm !important' : '0 !important'};
+                        padding: ${isThermal ? '2mm 1mm 4mm 1mm !important' : '0 !important'};
+                        page-break-inside: avoid !important;
+                        break-inside: avoid !important;
                     }
                 }
                 body {
@@ -2884,13 +2886,13 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
                     margin: 0;
                     padding: 0;
                     font-size: ${isThermal ? '11px' : '12px'};
-                    line-height: ${isThermal ? '1.35' : '1.45'};
+                    line-height: ${isThermal ? '1.3' : '1.45'};
                 }
                 #print-root-container {
                     width: ${isThermal ? '68mm' : '100%'};
                     max-width: ${isThermal ? '68mm' : '100%'};
                     margin: 0 auto;
-                    padding: ${isThermal ? '3mm 1mm 6mm 1mm' : '10mm 12mm'};
+                    padding: ${isThermal ? '2mm 1mm 4mm 1mm' : '10mm 12mm'};
                     box-sizing: border-box;
                 }
                 .text-center { text-align: center; }
@@ -2898,52 +2900,52 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
                 .text-left { text-align: left; }
                 .font-bold { font-weight: bold; }
                 .font-black { font-weight: 900; }
-                .row { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0; }
-                .divider-dashed { border-top: 1px dashed #333; margin: 5px 0; }
-                .divider-solid { border-top: 1px solid #000; margin: 6px 0; }
-                .divider-double { border-top: 3px double #000; margin: 6px 0; }
-                table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: inherit; }
-                th, td { padding: 4px 6px; }
+                .row { display: flex; justify-content: space-between; align-items: baseline; margin: 1.5px 0; }
+                .divider-dashed { border-top: 1px dashed #333; margin: 4px 0; }
+                .divider-solid { border-top: 1px solid #000; margin: 5px 0; }
+                .divider-double { border-top: 3px double #000; margin: 5px 0; }
+                table { width: 100%; border-collapse: collapse; margin: 5px 0; font-size: inherit; }
+                th, td { padding: 3px 5px; }
 
                 /* Thermal Slip Specialized Styles (80mm POS) */
-                .slip-brand { text-align: center; margin-bottom: 5px; }
-                .market-name { font-size: 15px; font-weight: 900; letter-spacing: 0.3px; color: #000; }
-                .market-sub { font-size: 8.5px; font-weight: 600; color: #333; letter-spacing: 0.8px; margin-top: 1px; text-transform: uppercase; }
-                .doc-badge { font-size: 11px; font-weight: 800; margin-top: 4px; display: inline-block; }
+                .slip-brand { text-align: center; margin-bottom: 4px; }
+                .market-name { font-size: 14.5px; font-weight: 900; letter-spacing: 0.3px; color: #000; }
+                .market-sub { font-size: 8px; font-weight: 600; color: #333; letter-spacing: 0.8px; margin-top: 1px; text-transform: uppercase; }
+                .doc-badge { font-size: 10.5px; font-weight: 800; margin-top: 3px; display: inline-block; }
                 
-                .slip-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; margin: 2px 0; }
+                .slip-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; margin: 1.5px 0; }
                 .slip-label { color: #222; font-weight: normal; flex-shrink: 0; }
                 .slip-value { color: #000; font-weight: 700; text-align: right; word-break: break-word; max-width: 65%; }
 
                 .settle-box {
                     border: 1.5px solid #000;
                     border-radius: 4px;
-                    padding: 5px 8px;
-                    margin: 6px 0;
+                    padding: 4px 6px;
+                    margin: 5px 0;
                     text-align: center;
                     background: #fff;
                 }
                 .settle-title {
-                    font-size: 10.5px;
+                    font-size: 10px;
                     font-weight: 700;
                     letter-spacing: 0.2px;
                 }
                 .settle-amount {
-                    font-size: 19px;
+                    font-size: 18.5px;
                     font-weight: 900;
-                    line-height: 1.25;
-                    margin: 2px 0;
+                    line-height: 1.2;
+                    margin: 1.5px 0;
                 }
                 .settle-sub {
-                    font-size: 9px;
+                    font-size: 8.5px;
                     color: #222;
                 }
 
                 .sig-container {
                     display: flex;
                     justify-content: space-between;
-                    margin-top: 16px;
-                    margin-bottom: 4px;
+                    margin-top: 12px;
+                    margin-bottom: 3px;
                 }
                 .sig-col {
                     width: 47%;
@@ -2952,26 +2954,26 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
                 .sig-line {
                     width: 82%;
                     border-top: 1px dotted #000;
-                    margin: 22px auto 3px auto;
+                    margin: 18px auto 2px auto;
                 }
                 .sig-name {
-                    font-size: 9px;
+                    font-size: 8.5px;
                     font-weight: bold;
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
                 }
                 .sig-role {
-                    font-size: 8px;
+                    font-size: 7.5px;
                     color: #444;
                     margin-top: 1px;
                 }
                 .slip-footer {
                     text-align: center;
-                    font-size: 8.5px;
+                    font-size: 8px;
                     color: #444;
-                    line-height: 1.35;
-                    margin-top: 4px;
+                    line-height: 1.3;
+                    margin-top: 3px;
                 }
 
                 ${!isThermal ? `
