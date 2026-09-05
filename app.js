@@ -6809,15 +6809,15 @@ function setActiveRoleView(role) {
         if (btn) {
             if (r === role) {
                 if (r === "admin") {
-                    btn.className = "role-btn active px-2.5 py-1.5 md:px-5 md:py-2.5 rounded-lg md:rounded-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md flex items-center gap-1.5 md:gap-2 text-xs md:text-sm transition-all duration-200";
+                    btn.className = "role-btn active py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
                 } else {
-                    btn.className = "role-btn active px-2.5 py-1.5 md:px-5 md:py-2.5 rounded-lg md:rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center gap-1.5 md:gap-2 text-xs md:text-sm transition-all duration-200";
+                    btn.className = "role-btn active py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
                 }
             } else {
                 if (r === "admin") {
-                    btn.className = "role-btn px-2.5 py-1.5 md:px-5 md:py-2.5 rounded-lg md:rounded-xl font-medium md:font-semibold text-purple-300 hover:text-white hover:bg-purple-900/40 flex items-center gap-1.5 md:gap-2 text-xs md:text-sm transition-all duration-200";
+                    btn.className = "role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-purple-300 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
                 } else {
-                    btn.className = "role-btn px-2.5 py-1.5 md:px-5 md:py-2.5 rounded-lg md:rounded-xl font-medium md:font-semibold text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center gap-1.5 md:gap-2 text-xs md:text-sm transition-all duration-200";
+                    btn.className = "role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
                 }
             }
         }
@@ -9523,9 +9523,9 @@ function renderAuthHeaderButtons() {
         `;
     } else {
         html += `
-            <button onclick="openCustomerLoginModal()" id="btn-customer-login" class="px-2.5 sm:px-3 md:px-4 py-1.5 md:py-2 rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs md:text-sm flex items-center gap-1 md:gap-1.5 shadow-xs active:scale-95 transition-all">
-                <span class="material-symbols-outlined text-sm md:text-base">person</span>
-                <span>ลูกค้า Log In</span>
+            <button onclick="openCustomerLoginModal()" id="btn-customer-login" class="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-xs active:scale-95 transition-all shrink-0">
+                <span class="material-symbols-outlined text-sm">person</span>
+                <span class="hidden xs:inline sm:inline">ลูกค้า</span>
             </button>
         `;
     }
@@ -9533,24 +9533,24 @@ function renderAuthHeaderButtons() {
     // 2. Merchant Section
     if (state.activeMerchant && state.activeMerchant.isLoggedIn) {
         html += `
-            <div class="flex items-center gap-1.5 bg-amber-950/90 border border-amber-500/40 px-2.5 md:px-3.5 py-1 md:py-1.5 rounded-xl text-xs md:text-sm shadow-xs">
-                <span class="text-[11px] md:text-xs text-amber-300 font-bold flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sm md:text-base text-amber-400">store</span>
-                    <span>${state.activeMerchant.stallNumber || 'ร้านค้า'}</span>
+            <div class="flex items-center gap-1 sm:gap-1.5 bg-amber-950/90 border border-amber-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
+                <span class="text-[11px] sm:text-xs text-amber-300 font-bold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm text-amber-400">store</span>
+                    <span class="truncate max-w-[80px]">${state.activeMerchant.stallNumber || 'ร้านค้า'}</span>
                 </span>
-                <button onclick="loginAsMerchantStall('${state.activeMerchant.stallId}')" class="text-[10px] md:text-xs text-amber-200 bg-amber-800/80 hover:bg-amber-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all">
-                    จัดการแผง
+                <button onclick="loginAsMerchantStall('${state.activeMerchant.stallId}')" class="text-[10px] text-amber-200 bg-amber-800/80 hover:bg-amber-700 px-1.5 py-0.5 rounded font-bold transition-all">
+                    จัดการ
                 </button>
-                <button onclick="logoutMerchant()" class="text-[10px] md:text-xs text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบร้านค้า">
+                <button onclick="logoutMerchant()" class="text-[10px] text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 py-0.5 rounded font-bold transition-all" title="ออกจากระบบร้านค้า">
                     ออก
                 </button>
             </div>
         `;
     } else {
         html += `
-            <button onclick="openMerchantLoginModal()" id="btn-merchant-login" class="px-2.5 sm:px-3 md:px-4 py-1.5 md:py-2 rounded-xl font-bold bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 text-xs md:text-sm flex items-center gap-1 md:gap-1.5 shadow-md hover:shadow-orange-glow active:scale-95 transition-all">
-                <span class="material-symbols-outlined text-sm md:text-base font-bold">store</span>
-                <span>ร้านค้า Log In</span>
+            <button onclick="openMerchantLoginModal()" id="btn-merchant-login" class="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0">
+                <span class="material-symbols-outlined text-sm font-bold">store</span>
+                <span class="hidden xs:inline sm:inline">ร้านค้า</span>
             </button>
         `;
     }
@@ -9558,13 +9558,13 @@ function renderAuthHeaderButtons() {
     // 3. Admin Section
     if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
         html += `
-            <div class="flex items-center gap-1 sm:gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2 sm:px-3 py-1 rounded-xl text-xs shadow-xs shrink-0">
+            <div class="flex items-center gap-1 sm:gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
                 <span class="text-[11px] sm:text-xs text-purple-300 font-bold flex items-center gap-1 cursor-pointer" onclick="switchRole('admin')">
                     <span class="material-symbols-outlined text-sm sm:text-base text-purple-400">admin_panel_settings</span>
                     <span>${state.activeAdmin.name || 'เฮียส่ง'}</span>
                 </span>
                 <button onclick="switchRole('admin')" class="hidden sm:inline-block text-[10px] md:text-xs text-purple-200 bg-purple-800/80 hover:bg-purple-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all">
-                    หน้าจอ Admin
+                    Admin
                 </button>
                 <button onclick="logoutAdmin()" class="text-[10px] md:text-xs text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบแอดมิน">
                     ออก
@@ -9573,8 +9573,8 @@ function renderAuthHeaderButtons() {
         `;
     } else {
         html += `
-            <button onclick="handleAdminButtonClick()" id="btn-admin-login" class="px-2.5 sm:px-3 md:px-4 py-1.5 md:py-2 rounded-xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white text-xs md:text-sm flex items-center gap-1 md:gap-1.5 shadow-md active:scale-95 transition-all">
-                <span class="material-symbols-outlined text-sm md:text-base font-bold">admin_panel_settings</span>
+            <button onclick="handleAdminButtonClick()" id="btn-admin-login" class="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0">
+                <span class="material-symbols-outlined text-sm font-bold">admin_panel_settings</span>
                 <span>Admin</span>
             </button>
         `;
@@ -10120,6 +10120,123 @@ function previewMerchantLiveStore() {
 }
 
 // ==========================================
+// HERO PROMOTIONAL BANNER CAROUSEL (3 BANNERS)
+// ==========================================
+let _currentHeroSlide = 0;
+let _heroBannerInterval = null;
+let _heroTouchStartX = 0;
+let _heroTouchEndX = 0;
+
+function goToHeroBannerSlide(index) {
+    const track = document.getElementById("hero-carousel-track");
+    const dots = document.querySelectorAll(".hero-dot");
+    if (!track) return;
+
+    _currentHeroSlide = (index + 3) % 3;
+    track.style.transform = `translateX(-${_currentHeroSlide * 100}%)`;
+
+    dots.forEach((dot, idx) => {
+        if (idx === _currentHeroSlide) {
+            dot.className = "hero-dot active w-5 h-1.5 rounded-full bg-emerald-400 transition-all shadow-xs";
+        } else {
+            dot.className = "hero-dot w-1.5 h-1.5 rounded-full bg-white/50 hover:bg-white transition-all";
+        }
+    });
+}
+
+function nextHeroBannerSlide(e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    goToHeroBannerSlide(_currentHeroSlide + 1);
+    restartHeroBannerAutoplay();
+}
+
+function prevHeroBannerSlide(e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    goToHeroBannerSlide(_currentHeroSlide - 1);
+    restartHeroBannerAutoplay();
+}
+
+function startHeroBannerAutoplay() {
+    stopHeroBannerAutoplay();
+    _heroBannerInterval = setInterval(() => {
+        goToHeroBannerSlide(_currentHeroSlide + 1);
+    }, 4500);
+}
+
+function stopHeroBannerAutoplay() {
+    if (_heroBannerInterval) {
+        clearInterval(_heroBannerInterval);
+        _heroBannerInterval = null;
+    }
+}
+
+function restartHeroBannerAutoplay() {
+    startHeroBannerAutoplay();
+}
+
+function handleHeroBannerClick(index) {
+    if (index === 0) {
+        // Slide 1: ตลาดสดพรีเมี่ยม
+        const catalogEl = document.getElementById("categories-container") || document.getElementById("catalog-section");
+        if (catalogEl) {
+            catalogEl.scrollIntoView({ behavior: "smooth" });
+        }
+        showToast("🛒 เลือกชมของสดคัดเกรดจาก 100 แผงค้าตลาดวิศิษฐ์ชัยได้เลยครับ");
+    } else if (index === 1) {
+        // Slide 2: เฮียส่ง ส่งตรงถึงมือคุณ รวดเร็ว ทันใจ
+        openLocationModal();
+        showToast("🛵 ระบุพิกัดจัดส่งเพื่อเช็ครอบส่งด่วน 30 นาทีถึงหน้าบ้าน");
+    } else if (index === 2) {
+        // Slide 3: คูปองส่วนลดพิเศษ WELCOMESONG ส่งฟรี
+        const couponCode = "WELCOMESONG";
+        try {
+            if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(couponCode).catch(() => {});
+            }
+        } catch (e) {}
+        showToast(`🎉 รับสิทธิ์คูปอง '${couponCode}' ส่วนลดค่าส่งเรียบร้อยแล้ว!`);
+    }
+}
+
+function initHeroBannerCarousel() {
+    const container = document.getElementById("hero-banner-carousel-container");
+    if (!container) return;
+
+    // Attach touch listeners for mobile swipe
+    container.addEventListener("touchstart", (e) => {
+        if (e.changedTouches && e.changedTouches[0]) {
+            _heroTouchStartX = e.changedTouches[0].screenX;
+        }
+        stopHeroBannerAutoplay();
+    }, { passive: true });
+
+    container.addEventListener("touchend", (e) => {
+        if (e.changedTouches && e.changedTouches[0]) {
+            _heroTouchEndX = e.changedTouches[0].screenX;
+            const diff = _heroTouchStartX - _heroTouchEndX;
+            if (Math.abs(diff) > 35) {
+                if (diff > 0) nextHeroBannerSlide();
+                else prevHeroBannerSlide();
+            }
+        }
+        startHeroBannerAutoplay();
+    }, { passive: true });
+
+    container.addEventListener("mouseenter", stopHeroBannerAutoplay);
+    container.addEventListener("mouseleave", startHeroBannerAutoplay);
+
+    goToHeroBannerSlide(0);
+    startHeroBannerAutoplay();
+}
+
+// Window registrations
+window.goToHeroBannerSlide = goToHeroBannerSlide;
+window.nextHeroBannerSlide = nextHeroBannerSlide;
+window.prevHeroBannerSlide = prevHeroBannerSlide;
+window.handleHeroBannerClick = handleHeroBannerClick;
+window.initHeroBannerCarousel = initHeroBannerCarousel;
+
+// ==========================================
 // INITIALIZE APPLICATION
 // ==========================================
 function initTalatHubApp() {
@@ -10139,6 +10256,7 @@ function initTalatHubApp() {
     renderFavoriteStallsBar();
     renderCatalog();
     updateCartUI();
+    initHeroBannerCarousel();
 }
 
 if (document.readyState === 'loading') {

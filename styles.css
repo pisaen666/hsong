@@ -57,6 +57,16 @@ body {
     border-color: #006c49 !important;
 }
 
+/* Hero Promotional Banner Dot Animations */
+.hero-dot {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.hero-dot.active {
+    width: 1.25rem !important;
+    background-color: #10b981 !important;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.7) !important;
+}
+
 /* Animation Utilities */
 @keyframes scaleUp {
     from {
