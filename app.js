@@ -678,12 +678,55 @@ if (typeof window !== "undefined") {
 // ==========================================
 // LEAFLET MAP & PINPOINT LOCATION ENGINE (แบบ Grab / LINE MAN / 7-11)
 // ==========================================
+// INTERACTIVE LEAFLET MAP LOCATION PICKER (SATELLITE & STREET)
+// ==========================================
 let locationPickerMap = null;
 let locationPickerMarker = null;
+let currentMapLayerType = "satellite"; // "satellite" or "street" (default: ภาพถ่ายดาวเทียมจริง)
+let streetTileLayer = null;
+let satelliteTileLayer = null;
 let currentPickerCoords = {
     lat: MARKET_ORIGIN.lat,
     lng: MARKET_ORIGIN.lng
 };
+
+function setMapLayerType(type) {
+    currentMapLayerType = type;
+    if (locationPickerMap) {
+        if (type === "satellite") {
+            if (streetTileLayer && locationPickerMap.hasLayer(streetTileLayer)) {
+                locationPickerMap.removeLayer(streetTileLayer);
+            }
+            if (satelliteTileLayer && !locationPickerMap.hasLayer(satelliteTileLayer)) {
+                satelliteTileLayer.addTo(locationPickerMap);
+            }
+        } else {
+            if (satelliteTileLayer && locationPickerMap.hasLayer(satelliteTileLayer)) {
+                locationPickerMap.removeLayer(satelliteTileLayer);
+            }
+            if (streetTileLayer && !locationPickerMap.hasLayer(streetTileLayer)) {
+                streetTileLayer.addTo(locationPickerMap);
+            }
+        }
+    }
+    updateMapLayerButtons();
+}
+
+function updateMapLayerButtons() {
+    const btnSat = document.getElementById("map-btn-satellite");
+    const btnStr = document.getElementById("map-btn-street");
+    if (!btnSat || !btnStr) return;
+
+    if (currentMapLayerType === "satellite") {
+        btnSat.className = "px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all bg-emerald-600 text-white shadow-xs cursor-pointer";
+        btnStr.className = "px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all text-slate-600 hover:text-slate-900 cursor-pointer";
+    } else {
+        btnSat.className = "px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all text-slate-600 hover:text-slate-900 cursor-pointer";
+        btnStr.className = "px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all bg-emerald-600 text-white shadow-xs cursor-pointer";
+    }
+}
+window.setMapLayerType = setMapLayerType;
+window.updateMapLayerButtons = updateMapLayerButtons;
 
 function initLocationPickerMap(lat, lng) {
     currentPickerCoords.lat = lat;
@@ -702,18 +745,37 @@ function initLocationPickerMap(lat, lng) {
             locationPickerMap = L.map("location-leaflet-map", {
                 zoomControl: true,
                 attributionControl: false
-            }).setView([lat, lng], 16);
+            }).setView([lat, lng], 17);
 
-            L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            // 1. Google Satellite Hybrid: ภาพถ่ายดาวเทียมจริงความคมชัดสูง พร้อมชื่อถนน/ซอยภาษาไทย
+            satelliteTileLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+                maxZoom: 20,
+                subdomains: ["mt0", "mt1", "mt2", "mt3"]
+            });
+
+            // 2. OpenStreetMap: แผนที่ถนนมาตรฐาน
+            streetTileLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
                 maxZoom: 19
-            }).addTo(locationPickerMap);
+            });
 
-            // Custom Leaflet Red/Emerald Pin Marker
+            // กำหนดให้เริ่มต้นด้วยภาพดาวเทียมจริง
+            if (currentMapLayerType === "satellite") {
+                satelliteTileLayer.addTo(locationPickerMap);
+            } else {
+                streetTileLayer.addTo(locationPickerMap);
+            }
+
+            // Custom Leaflet Pin Marker ที่สว่าง โดดเด่น ชัดเจนมาก บนภาพดาวเทียม
             const markerIcon = L.divIcon({
                 className: "custom-map-pin",
-                html: `<div style="background-color:#006c49;color:#fff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.3);border:2px solid #fff;font-size:18px;transform:translate(-50%,-100%);">📍</div>`,
-                iconSize: [34, 34],
-                iconAnchor: [17, 34]
+                html: `<div style="position:relative;transform:translate(-50%,-100%);cursor:grab;">
+                    <div style="background:linear-gradient(135deg, #ef4444, #b91c1c);color:#fff;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,0.6);border:3px solid #ffffff;font-size:20px;">
+                        📍
+                    </div>
+                    <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:14px;height:6px;background:rgba(0,0,0,0.5);border-radius:50%;filter:blur(1px);"></div>
+                </div>`,
+                iconSize: [38, 38],
+                iconAnchor: [19, 38]
             });
 
             locationPickerMarker = L.marker([lat, lng], {
@@ -737,7 +799,7 @@ function initLocationPickerMap(lat, lng) {
         }
     } else {
         try {
-            locationPickerMap.setView([lat, lng], 16);
+            locationPickerMap.setView([lat, lng], 17);
             if (locationPickerMarker) locationPickerMarker.setLatLng([lat, lng]);
             setTimeout(() => {
                 if (locationPickerMap) locationPickerMap.invalidateSize();
@@ -745,6 +807,7 @@ function initLocationPickerMap(lat, lng) {
         } catch (e) { }
     }
 
+    updateMapLayerButtons();
     onMapCoordinatesChanged(lat, lng, false);
 }
 
