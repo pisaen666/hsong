@@ -917,22 +917,6 @@ async function reverseGeocodeCoordinates(lat, lng) {
         }
     }
 
-    // Update Input Fields if user hasn't typed custom values yet
-    const subInput = document.getElementById("input-addr-subdistrict");
-    if (subInput && subdistrictStr) {
-        subInput.value = subdistrictStr;
-    }
-
-    const soiInput = document.getElementById("input-addr-soi");
-    if (soiInput && roadStr && (!soiInput.value || soiInput.value.trim() === "")) {
-        soiInput.value = roadStr;
-    }
-
-    const landmarkInput = document.getElementById("input-addr-landmark");
-    if (landmarkInput && landmarkStr && (!landmarkInput.value || landmarkInput.value.trim() === "")) {
-        landmarkInput.value = landmarkStr;
-    }
-
     updateModalAddressPreview();
 }
 
@@ -948,14 +932,42 @@ function updateModalAddressPreview() {
     if (soiVal) parts.push(soiVal);
     if (subVal) parts.push(subVal);
 
-    const fullStr = parts.length > 0 ? parts.join(", ") : (state.deliveryLocation?.title || "ตลาดวิศิษฐ์ชัย อ.บ้านบึง จ.ชลบุรี");
-
     const addrText = document.getElementById("modal-gps-address-text");
-    if (addrText) addrText.textContent = fullStr;
+    const readyBadge = document.getElementById("modal-gps-ready-badge");
+
+    if (parts.length > 0) {
+        if (addrText) {
+            addrText.textContent = parts.join(", ");
+            addrText.className = "font-extrabold text-slate-900 text-xs leading-snug";
+        }
+        if (readyBadge) {
+            readyBadge.textContent = "พร้อมส่ง";
+            readyBadge.className = "text-[10px] bg-emerald-700 text-white font-bold px-2 py-0.5 rounded-full shadow-xs";
+        }
+    } else if (state.deliveryLocation && state.deliveryLocation.isSet && state.deliveryLocation.houseNumber) {
+        if (addrText) {
+            addrText.textContent = state.deliveryLocation.title || "-";
+            addrText.className = "font-extrabold text-slate-900 text-xs leading-snug";
+        }
+        if (readyBadge) {
+            readyBadge.textContent = "พร้อมส่ง";
+            readyBadge.className = "text-[10px] bg-emerald-700 text-white font-bold px-2 py-0.5 rounded-full shadow-xs";
+        }
+    } else {
+        if (addrText) {
+            addrText.textContent = "-";
+            addrText.className = "font-medium text-slate-400 text-xs leading-snug";
+        }
+        if (readyBadge) {
+            readyBadge.textContent = "รอระบุที่อยู่";
+            readyBadge.className = "text-[10px] bg-slate-400 text-white font-bold px-2 py-0.5 rounded-full shadow-xs";
+        }
+    }
 
     const landPreview = document.getElementById("modal-gps-landmark-preview");
     if (landPreview) {
         landPreview.textContent = landVal ? `จุดสังเกต: ${landVal}` : "จุดสังเกต: -";
+        landPreview.className = landVal ? "text-[10px] text-amber-800 font-bold" : "text-[10px] text-slate-400 font-bold";
     }
 }
 
@@ -977,7 +989,7 @@ function openLocationModal() {
     const initialLat = (loc && loc.lat) ? Number(loc.lat) : MARKET_ORIGIN.lat;
     const initialLng = (loc && loc.lng) ? Number(loc.lng) : MARKET_ORIGIN.lng;
 
-    // Populate existing values into form fields
+    // Populate existing values into form fields (if previously set by user)
     const houseInput = document.getElementById("input-addr-house");
     const soiInput = document.getElementById("input-addr-soi");
     const subInput = document.getElementById("input-addr-subdistrict");
@@ -989,9 +1001,10 @@ function openLocationModal() {
         if (subInput) subInput.value = loc.subdistrict || "";
         if (landInput) landInput.value = loc.landmark || "";
     } else {
-        if (subInput && (!subInput.value || subInput.value === "")) {
-            subInput.value = "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี";
-        }
+        if (houseInput) houseInput.value = "";
+        if (soiInput) soiInput.value = "";
+        if (subInput) subInput.value = "";
+        if (landInput) landInput.value = "";
     }
 
     // Initialize or resize Leaflet Map

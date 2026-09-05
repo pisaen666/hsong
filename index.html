@@ -1700,29 +1700,29 @@
                     <!-- 1. House Number / Building -->
                     <div>
                         <label class="text-[10px] font-bold text-slate-600 block mb-0.5">1. บ้านเลขที่ / อาคาร / ชั้น / ห้อง / ร้านค้า <span class="text-red-500">*</span></label>
-                        <input type="text" id="input-addr-house" placeholder="เช่น บ้านเลขที่ 128/5 หรือ ร้านตัดผมดาว" class="w-full text-xs p-2 rounded-xl border border-slate-300 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <input type="text" id="input-addr-house" placeholder="" class="w-full text-xs p-2 rounded-xl border border-slate-300 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                     </div>
 
                     <!-- 2. Soi / Road / Village -->
                     <div>
                         <label class="text-[10px] font-bold text-slate-600 block mb-0.5">2. ซอย / ถนน / หมู่บ้าน / ชุมชน</label>
-                        <input type="text" id="input-addr-soi" placeholder="เช่น ซอย 4 เทศบาล, ม.3 หนองชาก" class="w-full text-xs p-2 rounded-xl border border-slate-300 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <input type="text" id="input-addr-soi" placeholder="" class="w-full text-xs p-2 rounded-xl border border-slate-300 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                     </div>
                 </div>
 
-                <!-- 3. Subdistrict / District / Province (Auto-populated from GPS Geocoding) -->
+                <!-- 3. Subdistrict / District / Province -->
                 <div>
-                    <label class="text-[10px] font-bold text-slate-600 block mb-0.5">3. ตำบล / อำเภอ / จังหวัด (ตรวจพบอัตโนมัติจาก GPS)</label>
-                    <input type="text" id="input-addr-subdistrict" placeholder="เช่น ตำบลบ้านหนองชาก, อำเภอบ้านบึง, จังหวัดชลบุรี" class="w-full text-xs p-2 rounded-xl border border-slate-300 bg-slate-50 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    <label class="text-[10px] font-bold text-slate-600 block mb-0.5">3. ตำบล / อำเภอ / จังหวัด</label>
+                    <input type="text" id="input-addr-subdistrict" placeholder="" class="w-full text-xs p-2 rounded-xl border border-slate-300 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                 </div>
 
-                <!-- 4. Landmark / Note for Rider (Crucial!) -->
+                <!-- 4. Landmark / Note for Rider -->
                 <div>
                     <label class="text-[10px] font-bold text-amber-800 block mb-0.5 flex items-center gap-1">
                         <span class="material-symbols-outlined text-xs text-amber-600">flag</span>
                         <span>4. จุดสังเกตชัดเจนสำหรับไรเดอร์ (ช่วยให้ส่งถึงหน้าบ้านแม่นยำ)</span>
                     </label>
-                    <input type="text" id="input-addr-landmark" placeholder="เช่น ประตูรั้วไม้สีน้ำตาล ตรงข้ามต้นมะขามใหญ่ โทรเมื่อถึง" class="w-full text-xs p-2 rounded-xl border border-amber-300 bg-amber-50/40 font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                    <input type="text" id="input-addr-landmark" placeholder="" class="w-full text-xs p-2 rounded-xl border border-amber-300 bg-amber-50/40 font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none">
                 </div>
             </div>
 
@@ -1733,14 +1733,14 @@
                         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                         <span id="modal-gps-source-badge">📍 สรุปที่อยู่ปลายทางที่จะส่งให้ไรเดอร์:</span>
                     </span>
-                    <span class="text-[10px] bg-emerald-700 text-white font-bold px-2 py-0.5 rounded-full shadow-xs">พร้อมส่ง</span>
+                    <span id="modal-gps-ready-badge" class="text-[10px] bg-slate-400 text-white font-bold px-2 py-0.5 rounded-full shadow-xs">รอระบุที่อยู่</span>
                 </div>
 
                 <div class="bg-white p-2 rounded-xl border border-emerald-200 space-y-1">
-                    <div class="font-extrabold text-slate-900 text-xs leading-snug" id="modal-gps-address-text">
-                        ตลาดวิศิษฐ์ชัย อ.บ้านบึง จ.ชลบุรี
+                    <div class="font-medium text-slate-400 text-xs leading-snug" id="modal-gps-address-text">
+                        -
                     </div>
-                    <div class="text-[10px] text-amber-800 font-bold" id="modal-gps-landmark-preview">
+                    <div class="text-[10px] text-slate-400 font-bold" id="modal-gps-landmark-preview">
                         จุดสังเกต: -
                     </div>
                 </div>
@@ -1763,29 +1763,6 @@
                         <span>ทดสอบเปิดพิกัดนี้บน Google Maps</span>
                     </a>
                     <span class="text-[9px] text-slate-400">ระบบเชื่อมต่อ GPS โดยตรง</span>
-                </div>
-            </div>
-
-            <!-- Quick District / Landmark Shortcut Buttons -->
-            <div class="space-y-1 pt-1">
-                <label class="block text-[10px] font-bold text-slate-600">หรือคลิกเลือกชุมชนรอบตลาดวิศิษฐ์ชัย (แล้วใส่บ้านเลขที่เพิ่ม):</label>
-                <div class="grid grid-cols-2 gap-1.5 text-[11px]">
-                    <button type="button" onclick="selectQuickLocation('ตลาดวิศิษฐ์ชัย อ.บ้านบึง (Hub)', 'แผงกลาง', 'ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี', 13.3080, 101.1214)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
-                        <div class="font-bold text-slate-800">🏪 ตลาดวิศิษฐ์ชัย (Hub)</div>
-                        <div class="text-[10px] text-emerald-700">0.0 กม. • ค่าส่งฟรี</div>
-                    </button>
-                    <button type="button" onclick="selectQuickLocation('ชุมชนตลาดวิศิษฐ์ชัย', 'ถ.วิศิษฐ์ชัย', 'ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี', 13.3090, 101.1200)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
-                        <div class="font-bold text-slate-800">🏡 ชุมชนวิศิษฐ์ชัย-เทศบาล</div>
-                        <div class="text-[10px] text-emerald-700">0.5 กม. • ค่าส่ง ฿20</div>
-                    </button>
-                    <button type="button" onclick="selectQuickLocation('ชุมชนบ้านบึงสันติ', 'ซอย 12', 'ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี', 13.3150, 101.1250)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
-                        <div class="font-bold text-slate-800">🏡 ชุมชนบ้านบึงสันติ</div>
-                        <div class="text-[10px] text-emerald-700">1.2 กม. • ค่าส่ง ฿25</div>
-                    </button>
-                    <button type="button" onclick="selectQuickLocation('ชุมชนบ้านหนองชาก', 'ซอยวัดหนองชาก', 'ต.บ้านหนองชาก อ.บ้านบึง จ.ชลบุรี', 13.3250, 101.1550)" class="p-2 rounded-xl border border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-left transition-all active:scale-95 shadow-2xs">
-                        <div class="font-bold text-slate-800">🏡 ชุมชนบ้านหนองชาก</div>
-                        <div class="text-[10px] text-emerald-700">3.8 กม. • ค่าส่ง ฿25</div>
-                    </button>
                 </div>
             </div>
 
@@ -3327,6 +3304,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=7.0"></script>
+    <script src="app.js?v=7.1"></script>
 </body>
 </html>
