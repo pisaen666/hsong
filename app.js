@@ -2833,9 +2833,11 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
     iframe.style.position = "fixed";
     iframe.style.right = "0";
     iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
+    iframe.style.width = isThermal ? "76mm" : "210mm";
+    iframe.style.height = isThermal ? "800px" : "1100px";
     iframe.style.border = "0";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow.document;
@@ -2846,21 +2848,26 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
         <head>
             <meta charset="utf-8">
             <title>${title}</title>
-            <style>
+            <style id="print-page-style">
                 * { box-sizing: border-box; }
                 @media print {
                     @page {
                         size: ${isThermal ? '80mm auto' : 'A4 portrait'};
-                        margin: ${isThermal ? '2mm 3mm' : '10mm 12mm'};
+                        margin: ${isThermal ? '0mm' : '10mm 12mm'};
                     }
-                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    html, body {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
                 }
                 body {
                     font-family: 'Sarabun', 'Segoe UI', Tahoma, -apple-system, sans-serif;
                     background: #fff;
                     color: #000;
                     margin: 0;
-                    padding: ${isThermal ? '2mm 1mm' : '6px'};
+                    padding: ${isThermal ? '2mm 3mm 4mm 3mm' : '6px'};
                     width: ${isThermal ? '74mm' : '100%'};
                     font-size: ${isThermal ? '11px' : '12px'};
                     line-height: ${isThermal ? '1.3' : '1.45'};
@@ -2897,7 +2904,9 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
             </style>
         </head>
         <body>
-            ${bodyContent}
+            <div id="print-root-container">
+                ${bodyContent}
+            </div>
         </body>
         </html>
     `);
@@ -2905,6 +2914,60 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
 
     setTimeout(() => {
         try {
+            if (isThermal) {
+                // คำนวณความสูงตามขนาดเนื้อหาจริงของสลิป เพื่อตัดกระดาษได้พอดีเป๊ะ
+                const container = doc.getElementById("print-root-container") || doc.body;
+                const scrollH = container.scrollHeight || doc.body.scrollHeight || 320;
+                // 1 CSS px ≈ 0.264583mm (ที่ 96 DPI) + เพิ่มระยะเผื่อล่าง 7mm
+                const heightMm = Math.max(65, Math.ceil(scrollH * 0.264583) + 7);
+                const styleEl = doc.getElementById("print-page-style");
+                if (styleEl) {
+                    styleEl.innerHTML = `
+                        * { box-sizing: border-box; }
+                        @media print {
+                            @page {
+                                size: 80mm ${heightMm}mm !important;
+                                margin: 0mm !important;
+                            }
+                            html, body {
+                                width: 80mm !important;
+                                height: ${heightMm}mm !important;
+                                margin: 0 !important;
+                                padding: 0 !important;
+                                overflow: hidden !important;
+                                -webkit-print-color-adjust: exact;
+                                print-color-adjust: exact;
+                            }
+                        }
+                        body {
+                            font-family: 'Sarabun', 'Segoe UI', Tahoma, -apple-system, sans-serif;
+                            padding: 2mm 3mm 3mm 3mm;
+                            width: 74mm;
+                            font-size: 11px;
+                            line-height: 1.3;
+                            color: #000;
+                            background: #fff;
+                        }
+                        .text-center { text-align: center; }
+                        .text-right { text-align: right; }
+                        .text-left { text-align: left; }
+                        .font-bold { font-weight: bold; }
+                        .font-black { font-weight: 900; }
+                        .row { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0; }
+                        .divider-dashed { border-top: 1px dashed #000; margin: 6px 0; }
+                        .divider-solid { border-top: 1px solid #000; margin: 8px 0; }
+                        .divider-double { border-top: 3px double #000; margin: 7px 0; }
+                        table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: inherit; }
+                        th, td { padding: 4px 6px; }
+                        .slip-header { text-align: center; margin-bottom: 6px; }
+                        .slip-title { font-size: 15px; font-weight: 900; }
+                        .slip-sub { font-size: 10px; color: #222; }
+                        .signature-box { display: flex; justify-content: space-between; margin-top: 16px; font-size: 9px; text-align: center; }
+                        .sig-line { width: 33mm; border-top: 1px dotted #000; margin: 25px auto 3px; }
+                    `;
+                }
+            }
+
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
         } catch (e) {
