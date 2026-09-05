@@ -4170,7 +4170,7 @@ function renderCatalog() {
                 <div class="px-3.5 pt-1">
                     <button onclick="openStallCatalogModal('${stall.stallId}')" class="w-full py-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/70 hover:from-emerald-100 hover:to-teal-100 border border-emerald-300/80 rounded-xl text-emerald-900 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs hover:shadow transition-all active:scale-[0.99]">
                         <span class="material-symbols-outlined text-base text-emerald-700">menu_book</span>
-                        <span>ดูเพิ่มเติม: ตารางรายการสินค้าทั้งหมดของแผงนี้ (20+ รายการ)</span>
+                        <span>ดูเพิ่มเติม: ตารางรายการสินค้าทั้งหมดของแผงนี้ (${stall.products.length} รายการ)</span>
                         <span class="material-symbols-outlined text-sm text-emerald-600">chevron_right</span>
                     </button>
                 </div>
@@ -4427,218 +4427,33 @@ function renderDirectoryList() {
 }
 
 // =================================================================
-// FULL PRODUCT CATALOG MODAL ENGINE (ตารางรายการสินค้าฉบับเต็มของร้านค้า)
-// =================================================================
-const STALL_CATALOG_DATABASE = {
-    // 1. ไก่สด Hub
-    stall_chicken: [
-        {
-            groupName: "🥩 ชิ้นส่วนเนื้อไก่สดอนามัย",
-            items: [
-                { id: "chk_01", name: "อกไก่สดลอกหนัง (อนามัย)", spec: "เนื้อแน่น ไร้มัน สดใหม่วันต่อวัน", price: 85, unit: "1 กก." },
-                { id: "chk_04", name: "สันในไก่สดเส้นสวย", spec: "นุ่มพิเศษ ไร้มัน เหมาะทำสลัด/ต้มซุป", price: 95, unit: "1 กก." },
-                { id: "chk_ext_01", name: "สะโพกไก่สดเลาะกระดูก (เนื้อล้วน)", spec: "เนื้อนุ่มชุ่มฉ่ำ ย่าง/ทอดอร่อย", price: 90, unit: "1 กก." },
-                { id: "chk_ext_02", name: "เนื้อไก่บดอนามัย (ไม่ผสมมัน)", spec: "บดสดสะอาด พร้อมปรุงอาหาร", price: 85, unit: "1 กก." },
-                { id: "chk_ext_03", name: "ไก่สดทั้งตัว (ชำแหละตัดแต่งตามสั่ง)", spec: "ไก่อนามัย ชั่งสด สะอาดพร้อมปรุง", price: 120, unit: "1 ตัว (~1.4กก.)" }
-            ]
-        },
-        {
-            groupName: "🍗 ปีก & น่องไก่",
-            items: [
-                { id: "chk_02", name: "น่องติดสะโพกไก่สด", spec: "เนื้อแน่น ฉ่ำ ทอดหรือต้มซุป", price: 45, unit: "500 กรัม" },
-                { id: "chk_03", name: "ปีกกลางไก่สดคัดเกรด", spec: "ขนาดเสมอ ทอดน้ำปลา/ย่าง", price: 110, unit: "1 กก." },
-                { id: "chk_05", name: "น่องไก่สดล้วน (น่องโต)", spec: "น่องไก่ไซส์ใหญ่ ทอดกรอบ", price: 75, unit: "1 กก." },
-                { id: "chk_ext_04", name: "ปีกบนไก่ (น่องเล็ก)", spec: "เหมาะทำต้มซุปมะนาว/ชุบแป้งทอด", price: 80, unit: "1 กก." },
-                { id: "chk_ext_05", name: "ปีกเต็มไก่สดคัดไซส์", spec: "ปีกเต็มสมบูรณ์ ย่างซอสบาร์บีคิว", price: 85, unit: "1 กก." }
-            ]
-        },
-        {
-            groupName: "🫀 เครื่องใน & ชิ้นส่วนพิเศษ",
-            items: [
-                { id: "chk_ext_06", name: "ตับไก่สดคัดชิ้นโต", spec: "สด หวาน ไม่ขม ล้างสะอาด", price: 45, unit: "500 กรัม" },
-                { id: "chk_ext_07", name: "กึ๋นไก่สดกรอบ", spec: "ล้างเอี่ยม กรุบกรอบ ผัดกะเพราเด็ด", price: 50, unit: "500 กรัม" },
-                { id: "chk_ext_08", name: "หัวใจไก่สดคัดพิเศษ", spec: "เสียบไม้ย่าง/ผัดกระเทียมพริกไทย", price: 40, unit: "500 กรัม" },
-                { id: "chk_ext_09", name: "ตีนไก่สดเลาะเล็บ", spec: "ตีนไก่อวบ ต้มซุปเปอร์เปื่อยไว", price: 75, unit: "1 กก." },
-                { id: "chk_ext_10", name: "หนังไก่สดขูดมัน", spec: "ทอดกรอบไร้น้ำมัน/เจียวน้ำมันไก่", price: 55, unit: "1 กก." }
-            ]
-        },
-        {
-            groupName: "🍲 โครงต้มซุป & ไก่หมักปรุงรส",
-            items: [
-                { id: "chk_06", name: "โครงไก่สดต้มน้ำซุปหวาน", spec: "โครงไก่สด ล้างสะอาด ซุปหวานใส", price: 20, unit: "2 โครง" },
-                { id: "chk_ext_11", name: "อกไก่หมักพริกไทยดำพร้อมย่าง", spec: "หมักเข้าเนื้อ คลีนแท้โปรตีนสูง", price: 95, unit: "1 กก." },
-                { id: "chk_ext_12", name: "ปีกไก่หมักซอสนิวออร์ลีนส์", spec: "อบหม้อลมร้อน 15 นาทีทานได้ทันที", price: 115, unit: "1 กก." }
-            ]
-        }
-    ],
+// Full Product Catalog Database (เก็บเฉพาะสินค้าจริงของร้านค้า / Merchant Custom Catalog)
+const STALL_CATALOG_DATABASE = {};
 
-    // 2. ผักสดป้าสมร
-    stall_veggie: [
-        {
-            groupName: "🥬 ผักใบเขียวปลอดสารพิษ",
-            items: [
-                { id: "veg_01", name: "ผักกาดขาวปลอดสาร", spec: "กรอบหวาน สดจากสวน ปลอดสารพิษ", price: 25, unit: "1 หัว (~600g)" },
-                { id: "veg_02", name: "กะหล่ำปลีเขียวสด", spec: "แน่น กรอบ ผัดน้ำปลาหวานหอม", price: 20, unit: "1 หัว" },
-                { id: "veg_06", name: "ผักบุ้งจีนยอดอ่อน", spec: "ยอดอ่อนใบเขียว ผัดไฟแดงกรอบอร่อย", price: 15, unit: "1 กำใหญ่" },
-                { id: "veg_ext_01", name: "ผักกวางตุ้งไต้หวันสด", spec: "ก้านกรอบหวาน ลวกจิ้มน้ำพริก", price: 15, unit: "1 กำ" },
-                { id: "veg_ext_02", name: "คะน้าฮ่องกงยอดอ่อน", spec: "คะน้ากรอบไร้เสี้ยน ผัดน้ำมันหอย", price: 25, unit: "1 กำ" },
-                { id: "veg_ext_03", name: "กะเพราแดงสวนแท้", spec: "กลิ่นหอมฉุน ผัดกะเพราไม่ใส่ซีอิ๊วดำ", price: 10, unit: "1 กำ" },
-                { id: "veg_ext_04", name: "โหระพา & สะระแหน่", spec: "ใบสดเขียว กลิ่นหอมฟุ้ง ทานแนมลาบ", price: 10, unit: "1 กำ" },
-                { id: "veg_ext_05", name: "ต้นหอม & ผักชีไทย", spec: "ล้างสะอาด มัดสดวันต่อวัน", price: 15, unit: "1 มัดคู่" }
-            ]
-        },
-        {
-            groupName: "🥕 ผักหัว & เครื่องเทศสวน",
-            items: [
-                { id: "veg_03", name: "แครอทสดหวานฉ่ำ", spec: "ผิวเกลี้ยง สีส้มสด ทำซุปหวานกลมกล่อม", price: 18, unit: "3 หัว" },
-                { id: "veg_ext_06", name: "หัวไชเท้าสดต้มซุป", spec: "หัวใหญ่ น้ำเยอะ เคี่ยวน้ำซุปหวานใส", price: 20, unit: "2 หัว" },
-                { id: "veg_ext_07", name: "มันฝรั่งสดคัดไซส์", spec: "เนื้อเนียน ทำสตูว์/แกงกะหรี่", price: 35, unit: "1 กก." },
-                { id: "veg_ext_08", name: "ฟักทองทองอำพันแก่จัด", spec: "เนื้อเหนียว มัน หวาน ทำแกงบวด/ผัดไข่", price: 28, unit: "1 ซีก (~800g)" },
-                { id: "veg_ext_09", name: "มะเขือเทศท้อสุกแดง", spec: "เนื้อหนา ทำส้มตำ/ผัดเปรี้ยวหวาน", price: 30, unit: "1 กก." }
-            ]
-        },
-        {
-            groupName: "🌶️ พริกสด & ชุดเครื่องต้มยำ",
-            items: [
-                { id: "veg_05", name: "พริกจินดาแดงสด", spec: "เผ็ดจัดจ้าน สีแดงสด คั่วพริกหอม", price: 15, unit: "1 ขีด" },
-                { id: "veg_ext_10", name: "พริกขี้หนูสวนแท้ (เม็ดเล็ก)", spec: "เผ็ดหอมติดจมูก ทำน้ำปลาพริกเลิศ", price: 20, unit: "1 ขีด" },
-                { id: "veg_ext_11", name: "ชุดเครื่องต้มยำสด (ข่า ตะไคร้ ใบมะกรูด)", spec: "จัดชุดพร้อมต้ม ล้างสะอาด", price: 15, unit: "1 ชุด" },
-                { id: "veg_ext_12", name: "มะนาวแป้นรำไพ (น้ำเยอะ)", spec: "เปลือกบาง กลิ่นหอมเปรี้ยวจี๊ด", price: 20, unit: "6 ลูก" }
-            ]
-        },
-        {
-            groupName: "🍄 เห็ดสด & แตงกวา",
-            items: [
-                { id: "veg_04", name: "เห็ดฟางสดดอกตูม", spec: "เห็ดฟางสดดอกกลม ต้มยำน้ำใสแซ่บ", price: 35, unit: "250 กรัม" },
-                { id: "veg_ext_13", name: "เห็ดนางฟ้าภูฐาน", spec: "ดอกหนา ฉีกต้มยำ/ชุบแป้งทอด", price: 25, unit: "1 แพ็ค (200g)" },
-                { id: "veg_ext_14", name: "เห็ดเข็มทองสด", spec: "เส้นขาว กรุบกรอบ ใส่ชาบู/หมูกระทะ", price: 20, unit: "2 ซอง" },
-                { id: "veg_ext_15", name: "แตงกวาสดคัดเกรด", spec: "กรอบ ไร้เสี้ยน ทานแนมน้ำพริก", price: 20, unit: "1 กก." }
-            ]
-        }
-    ]
-};
-
-// Fallback generator for other stalls to give realistic categorized products
+// ดึงข้อมูลสินค้าของแผงค้า โดยใช้เฉพาะสินค้าจริงเท่านั้น (ไม่ใช้ข้อมูลตัวอย่าง/Mock Data)
 function getStallCatalogData(stallId) {
-    if (STALL_CATALOG_DATABASE[stallId]) {
+    if (STALL_CATALOG_DATABASE[stallId] && STALL_CATALOG_DATABASE[stallId].length > 0) {
         return STALL_CATALOG_DATABASE[stallId];
     }
 
     const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
-    const cat = stall ? stall.category : "chicken";
-    const stallName = stall ? stall.stallName : "ร้านค้า";
-
-    if (cat === "pork") {
-        return [
-            {
-                groupName: "🥩 เนื้อหมูสดคัดเกรดพรีเมียม",
-                items: [
-                    { id: `${stallId}_p1`, name: "หมูสามชั้นเส้นสวย (สลับชั้นไขมัน)", spec: "ชั้นสวย สดใหม่ ทอดน้ำปลา/ต้มพะโล้", price: 170, unit: "1 กก." },
-                    { id: `${stallId}_p2`, name: "สันคอหมูสดสไลซ์", spec: "นุ่ม ละมุน ลายไขมันแทรก ทำสเต็ก/ปิ้งย่าง", price: 160, unit: "1 กก." },
-                    { id: `${stallId}_p3`, name: "สันนอกหมูสด", spec: "เนื้อล้วน ไร้มัน ผัดกระเทียม/ทอดทงคัตสึ", price: 145, unit: "1 กก." },
-                    { id: `${stallId}_p4`, name: "สะโพกหมูสด", spec: "เนื้อแน่น เหมาะต้ม/ทำหมูแดง/แกง", price: 135, unit: "1 กก." },
-                    { id: `${stallId}_p5`, name: "หมูบดอนามัย (เนื้อ 80 / มัน 20)", spec: "บดละเอียด ทำหมูสับต้มบ๊วย/กะเพรา", price: 130, unit: "1 กก." }
-                ]
-            },
-            {
-                groupName: "🍖 ซี่โครง & กระดูกต้มซุป",
-                items: [
-                    { id: `${stallId}_p6`, name: "ซี่โครงหมูอ่อน (กระดูกแก้ว)", spec: "เคี้ยวกระดูกอ่อนกรุบ ทอดกระเทียม/ต้มแซ่บ", price: 155, unit: "1 กก." },
-                    { id: `${stallId}_p7`, name: "กระดูกเล้งต้มซุปหวาน", spec: "เนื้อติดกระดูกเยอะ เคี่ยวน้ำซุปก๋วยเตี๋ยว/เล้งแซ่บ", price: 45, unit: "1 กก." },
-                    { id: `${stallId}_p8`, name: "ขาหมูเผาสด (ขาหน้า/ขาหลัง)", spec: "ล้างขูดสะอาด พร้อมต้มพะโล้", price: 120, unit: "1 กก." }
-                ]
-            },
-            {
-                groupName: "🥓 เครื่องใน & หมูหมักสำเร็จรูป",
-                items: [
-                    { id: `${stallId}_p9`, name: "ตับหมูสดหวาน", spec: "ตับสดชิ้นหนา ผัดกระเทียมพริกไทย", price: 80, unit: "1 กก." },
-                    { id: `${stallId}_p10`, name: "ไส้อ่อนหมูล้างสะอาด", spec: "ลวกจิ้มซีฟู้ด/ทอดกระเทียมพริกไทย", price: 110, unit: "1 กก." },
-                    { id: `${stallId}_p11`, name: "หมูนุ่มหมักน้ำมันงา", spec: "หมักสูตรภัตตาคาร นุ่มเด้ง ใส่ราดหน้า/หมูกระทะ", price: 150, unit: "1 กก." },
-                    { id: `${stallId}_p12`, name: "กากหมูเจียวสดกรอบ", spec: "เจียวสดใหม่วันต่อวัน ไร้กลิ่นหืน", price: 50, unit: "1 ถุง (200g)" }
-                ]
-            }
-        ];
-    } else if (cat === "curry") {
-        return [
-            {
-                groupName: "🌶️ พริกแกงสดตำมือสูตรเข้มข้น",
-                items: [
-                    { id: `${stallId}_c1`, name: "พริกแกงเผ็ดใต้สูตรเข้มข้น", spec: "หอมสมุนไพร ไม่ใส่สารกันบูด", price: 30, unit: "2 ขีด (200g)" },
-                    { id: `${stallId}_c2`, name: "พริกแกงส้มใต้ (แกงเหลือง)", spec: "พริกแกงส้มใต้แท้ เผ็ดเปรี้ยวแซ่บ", price: 30, unit: "2 ขีด (200g)" },
-                    { id: `${stallId}_c3`, name: "พริกแกงเขียวหวานโบราณ", spec: "พริกแกงเขียวหวานหอมใบกะเพรา/โหระพา", price: 30, unit: "2 ขีด (200g)" },
-                    { id: `${stallId}_c4`, name: "พริกแกงพะแนง & พริกแกงมัสมั่น", spec: "หอมเครื่องเทศคั่ว กลิ่นละมุน", price: 35, unit: "2 ขีด (200g)" }
-                ]
-            },
-            {
-                groupName: "🥥 กะทิสดคั้นแท้ & เครื่องแกงสด",
-                items: [
-                    { id: `${stallId}_c5`, name: "กะทิสดคั้นแท้ 100% (ไม่ผสมน้ำ)", spec: "คั้นสดใหม่รอบเช้า หวานมันธรรมชาติ", price: 45, unit: "500 มล." },
-                    { id: `${stallId}_c6`, name: "หัวกะทิสดเข้มข้น", spec: "แตกมันสวย เหมาะทำแกงเผ็ด/แกงคั่ว", price: 35, unit: "300 มล." },
-                    { id: `${stallId}_c7`, name: "หน่อไม้ดองต้มสุกสะอาด", spec: "รสเปรี้ยวกำลังดี แกงส้มปลากะพง", price: 20, unit: "1 ถุง" },
-                    { id: `${stallId}_c8`, name: "ยอดมะพร้าวอ่อนหั่นเส้น", spec: "กรอบหวาน ผัดกะเพรา/แกงส้ม", price: 25, unit: "1 แพ็ค" }
-                ]
-            },
-            {
-                groupName: "📦 ของแห้ง & เครื่องเทศคัดพิเศษ",
-                items: [
-                    { id: `${stallId}_c9`, name: "กุ้งแห้งเกรด A สีธรรมชาติ", spec: "กุ้งทะเลแท้ ไม่เค็มจัด ไร้สีผสมอาหาร", price: 95, unit: "1 ขีด" },
-                    { id: `${stallId}_c10`, name: "กะปิตาดำระนองแท้ 100%", spec: "หอมเคยแท้ ตำน้ำพริกกะปิกินกับปลาทู", price: 45, unit: "1 กระปุก" },
-                    { id: `${stallId}_c11`, name: "น้ำตาลโตนดแท้เมืองเพชร", spec: "หวานหอมนวล แกงกะทิกลมกล่อม", price: 40, unit: "500 กรัม" }
-                ]
-            }
-        ];
-    } else if (cat === "seafood") {
-        return [
-            {
-                groupName: "🦐 กุ้งสด & หอยสดคัดไซส์",
-                items: [
-                    { id: `${stallId}_s1`, name: "กุ้งขาวสดแวนนาไม (30 ตัว/กก.)", spec: "กุ้งสดตัวใส เนื้อแน่นเด้ง นึ่ง/ต้มยำ", price: 220, unit: "1 กก." },
-                    { id: `${stallId}_s2`, name: "กุ้งกุลาดำสดไซส์จัมโบ้", spec: "เนื้อแน่น กรอบ ย่างเกลือ/อบวุ้นเส้น", price: 280, unit: "1 กก." },
-                    { id: `${stallId}_s3`, name: "กุ้งแม่น้ำเป็น (คัดหัวมัน)", spec: "มันหัวกุ้งเยิ้มๆ เผาเตาถ่านเด็ด", price: 380, unit: "1 กก." },
-                    { id: `${stallId}_s4`, name: "หอยแมลงภู่สดล้างสะอาด", spec: "ตัวใหญ่ อบใบโหระพาจิ้มน้ำจิ้มซีฟู้ด", price: 45, unit: "1 กก." },
-                    { id: `${stallId}_s5`, name: "หอยแครงสดลวก (คัดไซส์ใหญ่)", spec: "ล้างโคลนเอี่ยม เลือดฉ่ำๆ หวานกรอบ", price: 120, unit: "1 กก." }
-                ]
-            },
-            {
-                groupName: "🐟 ปลาสด & ปลาหมึกสด",
-                items: [
-                    { id: `${stallId}_s6`, name: "ปลากะพงขาวสด (ขอดเกล็ดควักไส้)", spec: "สดตาใส นึ่งมะนาว/ทอดน้ำปลา", price: 160, unit: "1 ตัว (~800g)" },
-                    { id: `${stallId}_s7`, name: "ปลาทับทิมสดคัดไซส์พิเศษ", spec: "สดไร้กลิ่นคาว ต้มยำ/นึ่งซีอิ๊ว", price: 95, unit: "1 ตัว (~900g)" },
-                    { id: `${stallId}_s8`, name: "ปลาหมึกกล้วยสดไซส์ใหญ่", spec: "สด ตัวใส ลวกจิ้ม/ย่างเตาถ่าน", price: 180, unit: "1 กก." },
-                    { id: `${stallId}_s9`, name: "ปลาหมึกกระดองหั่นบั้ง", spec: "เนื้อหนากรอบกรุบ ผัดกะเพราซีฟู้ด", price: 160, unit: "1 กก." }
-                ]
-            },
-            {
-                groupName: "🦀 ปูสด & อาหารทะเลแปรรูป",
-                items: [
-                    { id: `${stallId}_s10`, name: "ปูม้าสดไข่แน่น (3-4 ตัว/กก.)", spec: "สดหวาน นึ่งสุกพร้อมน้ำจิ้ม", price: 320, unit: "1 กก." },
-                    { id: `${stallId}_s11`, name: "เนื้อปูแกะก้อนพร้อมทาน", spec: "เนื้อปูก้อนโต ทำข้าวผัดปู/ไข่เจียวปู", price: 250, unit: "1 กล่อง (200g)" },
-                    { id: `${stallId}_s12`, name: "ลูกชิ้นปลาเยาวราชแท้ 100%", spec: "ไม่ผสมแป้ง เด้งธรรมชาติ ลวกจิ้ม", price: 60, unit: "1 แพ็ค" }
-                ]
-            }
-        ];
-    } else {
-        // Generic fresh stall products
-        return [
-            {
-                groupName: "🌟 รายการสินค้าสดแนะนำ",
-                items: [
-                    { id: `${stallId}_g1`, name: `${stallName} - สินค้าสดคัดเกรดพิเศษ 1`, spec: "สด สะอาด คัดสรรวันต่อวัน", price: 65, unit: "1 ชุด" },
-                    { id: `${stallId}_g2`, name: `${stallName} - สินค้าสดคัดเกรดพิเศษ 2`, spec: "สดใหม่ คุณภาพมาตรฐานตลาด", price: 85, unit: "1 กก." },
-                    { id: `${stallId}_g3`, name: `${stallName} - สินค้าสดคัดเกรดพิเศษ 3`, spec: "สะอาด ถูกหลักอนามัย", price: 45, unit: "500 กรัม" },
-                    { id: `${stallId}_g4`, name: `${stallName} - สินค้าสดคัดเกรดพิเศษ 4`, spec: "ชั่งน้ำหนักแม่นยำ พร้อมปรุง", price: 50, unit: "1 แพ็ค" },
-                    { id: `${stallId}_g5`, name: `${stallName} - สินค้าสดคัดเกรดพิเศษ 5`, spec: "สดหวานจากแหล่งผลิต", price: 70, unit: "1 กก." }
-                ]
-            },
-            {
-                groupName: "📦 รายการสินค้าจัดชุดสุดคุ้ม",
-                items: [
-                    { id: `${stallId}_g6`, name: `${stallName} - ชุดสุดคุ้มประจำวัน`, spec: "รวมวัตถุดิบยอดนิยมในราคาพิเศษ", price: 120, unit: "1 เซ็ต" },
-                    { id: `${stallId}_g7`, name: `${stallName} - สินค้าคัดไซส์จัมโบ้`, spec: "เกรดพรีเมียม ขนาดใหญ่พิเศษ", price: 150, unit: "1 กก." }
-                ]
-            }
-        ];
+    if (!stall || !stall.products || stall.products.length === 0) {
+        return [];
     }
+
+    const groupName = stall.stallTag ? `รายการสินค้า (${stall.stallTag})` : "รายการสินค้าทั้งหมด";
+    return [
+        {
+            groupName: groupName,
+            items: stall.products.map(p => ({
+                id: p.id,
+                name: p.name,
+                spec: p.desc || "สด สะอาด คัดสรรวันต่อวัน",
+                price: p.price,
+                unit: p.unit || "1 กก."
+            }))
+        }
+    ];
 }
 
 // Modal State
@@ -4759,6 +4574,17 @@ function renderStallCatalogModal() {
 
     // 3. Render Product Table & Item Rows
     if (listContainer) {
+        if (catalog.length === 0) {
+            listContainer.innerHTML = `
+                <div class="text-center py-12 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6">
+                    <span class="material-symbols-outlined text-4xl mb-1 text-slate-300">inventory_2</span>
+                    <p class="text-xs font-bold text-slate-600">ยังไม่มีรายการสินค้าเพิ่มเติมในขณะนี้</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">ทางร้านค้ายังไม่มีรายการสินค้าเพิ่มเติมในระบบ</p>
+                </div>
+            `;
+            return;
+        }
+
         if (filteredGroups.length === 0) {
             listContainer.innerHTML = `
                 <div class="text-center py-12 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6">
