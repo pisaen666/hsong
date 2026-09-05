@@ -2833,7 +2833,7 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
     iframe.style.position = "fixed";
     iframe.style.right = "0";
     iframe.style.bottom = "0";
-    iframe.style.width = isThermal ? "76mm" : "210mm";
+    iframe.style.width = isThermal ? "72mm" : "210mm";
     iframe.style.height = isThermal ? "800px" : "1100px";
     iframe.style.border = "0";
     iframe.style.opacity = "0";
@@ -2848,29 +2848,50 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
         <head>
             <meta charset="utf-8">
             <title>${title}</title>
-            <style id="print-page-style">
+            <style>
                 * { box-sizing: border-box; }
+                @page {
+                    size: ${isThermal ? 'auto' : 'A4 portrait'};
+                    margin: ${isThermal ? '0mm !important' : '10mm 12mm !important'};
+                }
                 @media print {
                     @page {
-                        size: ${isThermal ? '80mm auto' : 'A4 portrait'};
-                        margin: ${isThermal ? '0mm' : '10mm 12mm'};
+                        size: ${isThermal ? 'auto' : 'A4 portrait'};
+                        margin: ${isThermal ? '0mm !important' : '10mm 12mm !important'};
                     }
                     html, body {
                         margin: 0 !important;
                         padding: 0 !important;
-                        -webkit-print-color-adjust: exact;
-                        print-color-adjust: exact;
+                        width: 100% !important;
+                        height: auto !important;
+                        min-height: 0 !important;
+                        background: #fff !important;
+                        color: #000 !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                    #print-root-container {
+                        width: ${isThermal ? '68mm !important' : '100% !important'};
+                        max-width: ${isThermal ? '68mm !important' : '100% !important'};
+                        margin: 0 auto !important;
+                        padding: ${isThermal ? '3mm 1mm 6mm 1mm !important' : '0 !important'};
                     }
                 }
                 body {
-                    font-family: 'Sarabun', 'Segoe UI', Tahoma, -apple-system, sans-serif;
+                    font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, sans-serif;
                     background: #fff;
                     color: #000;
                     margin: 0;
-                    padding: ${isThermal ? '2mm 3mm 4mm 3mm' : '6px'};
-                    width: ${isThermal ? '74mm' : '100%'};
+                    padding: 0;
                     font-size: ${isThermal ? '11px' : '12px'};
-                    line-height: ${isThermal ? '1.3' : '1.45'};
+                    line-height: ${isThermal ? '1.35' : '1.45'};
+                }
+                #print-root-container {
+                    width: ${isThermal ? '68mm' : '100%'};
+                    max-width: ${isThermal ? '68mm' : '100%'};
+                    margin: 0 auto;
+                    padding: ${isThermal ? '3mm 1mm 6mm 1mm' : '10mm 12mm'};
+                    box-sizing: border-box;
                 }
                 .text-center { text-align: center; }
                 .text-right { text-align: right; }
@@ -2878,18 +2899,82 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
                 .font-bold { font-weight: bold; }
                 .font-black { font-weight: 900; }
                 .row { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0; }
-                .divider-dashed { border-top: 1px dashed #000; margin: 6px 0; }
-                .divider-solid { border-top: 1px solid #000; margin: 8px 0; }
-                .divider-double { border-top: 3px double #000; margin: 7px 0; }
+                .divider-dashed { border-top: 1px dashed #333; margin: 5px 0; }
+                .divider-solid { border-top: 1px solid #000; margin: 6px 0; }
+                .divider-double { border-top: 3px double #000; margin: 6px 0; }
                 table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: inherit; }
                 th, td { padding: 4px 6px; }
-                ${isThermal ? `
-                    .slip-header { text-align: center; margin-bottom: 6px; }
-                    .slip-title { font-size: 15px; font-weight: 900; }
-                    .slip-sub { font-size: 10px; color: #222; }
-                    .signature-box { display: flex; justify-content: space-between; margin-top: 16px; font-size: 9px; text-align: center; }
-                    .sig-line { width: 33mm; border-top: 1px dotted #000; margin: 25px auto 3px; }
-                ` : `
+
+                /* Thermal Slip Specialized Styles (80mm POS) */
+                .slip-brand { text-align: center; margin-bottom: 5px; }
+                .market-name { font-size: 15px; font-weight: 900; letter-spacing: 0.3px; color: #000; }
+                .market-sub { font-size: 8.5px; font-weight: 600; color: #333; letter-spacing: 0.8px; margin-top: 1px; text-transform: uppercase; }
+                .doc-badge { font-size: 11px; font-weight: 800; margin-top: 4px; display: inline-block; }
+                
+                .slip-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; margin: 2px 0; }
+                .slip-label { color: #222; font-weight: normal; flex-shrink: 0; }
+                .slip-value { color: #000; font-weight: 700; text-align: right; word-break: break-word; max-width: 65%; }
+
+                .settle-box {
+                    border: 1.5px solid #000;
+                    border-radius: 4px;
+                    padding: 5px 8px;
+                    margin: 6px 0;
+                    text-align: center;
+                    background: #fff;
+                }
+                .settle-title {
+                    font-size: 10.5px;
+                    font-weight: 700;
+                    letter-spacing: 0.2px;
+                }
+                .settle-amount {
+                    font-size: 19px;
+                    font-weight: 900;
+                    line-height: 1.25;
+                    margin: 2px 0;
+                }
+                .settle-sub {
+                    font-size: 9px;
+                    color: #222;
+                }
+
+                .sig-container {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-top: 16px;
+                    margin-bottom: 4px;
+                }
+                .sig-col {
+                    width: 47%;
+                    text-align: center;
+                }
+                .sig-line {
+                    width: 82%;
+                    border-top: 1px dotted #000;
+                    margin: 22px auto 3px auto;
+                }
+                .sig-name {
+                    font-size: 9px;
+                    font-weight: bold;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                .sig-role {
+                    font-size: 8px;
+                    color: #444;
+                    margin-top: 1px;
+                }
+                .slip-footer {
+                    text-align: center;
+                    font-size: 8.5px;
+                    color: #444;
+                    line-height: 1.35;
+                    margin-top: 4px;
+                }
+
+                ${!isThermal ? `
                     .a4-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 14px; }
                     .a4-title { font-size: 17px; font-weight: 900; color: #000; }
                     .a4-meta { font-size: 11px; color: #444; margin-top: 3px; }
@@ -2900,7 +2985,7 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
                     .summary-box { border: 1px solid #cbd5e1; padding: 7px 10px; border-radius: 6px; background: #f8fafc; font-size: 11px; }
                     .signature-section { display: flex; justify-content: space-around; margin-top: 36px; text-align: center; font-size: 11px; }
                     .sig-line { width: 180px; border-top: 1px dotted #000; margin: 38px auto 4px; }
-                `}
+                ` : ''}
             </style>
         </head>
         <body>
@@ -2914,67 +2999,13 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
 
     setTimeout(() => {
         try {
-            if (isThermal) {
-                // คำนวณความสูงตามขนาดเนื้อหาจริงของสลิป เพื่อตัดกระดาษได้พอดีเป๊ะ
-                const container = doc.getElementById("print-root-container") || doc.body;
-                const scrollH = container.scrollHeight || doc.body.scrollHeight || 320;
-                // 1 CSS px ≈ 0.264583mm (ที่ 96 DPI) + เพิ่มระยะเผื่อล่าง 7mm
-                const heightMm = Math.max(65, Math.ceil(scrollH * 0.264583) + 7);
-                const styleEl = doc.getElementById("print-page-style");
-                if (styleEl) {
-                    styleEl.innerHTML = `
-                        * { box-sizing: border-box; }
-                        @media print {
-                            @page {
-                                size: 80mm ${heightMm}mm !important;
-                                margin: 0mm !important;
-                            }
-                            html, body {
-                                width: 80mm !important;
-                                height: ${heightMm}mm !important;
-                                margin: 0 !important;
-                                padding: 0 !important;
-                                overflow: hidden !important;
-                                -webkit-print-color-adjust: exact;
-                                print-color-adjust: exact;
-                            }
-                        }
-                        body {
-                            font-family: 'Sarabun', 'Segoe UI', Tahoma, -apple-system, sans-serif;
-                            padding: 2mm 3mm 3mm 3mm;
-                            width: 74mm;
-                            font-size: 11px;
-                            line-height: 1.3;
-                            color: #000;
-                            background: #fff;
-                        }
-                        .text-center { text-align: center; }
-                        .text-right { text-align: right; }
-                        .text-left { text-align: left; }
-                        .font-bold { font-weight: bold; }
-                        .font-black { font-weight: 900; }
-                        .row { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0; }
-                        .divider-dashed { border-top: 1px dashed #000; margin: 6px 0; }
-                        .divider-solid { border-top: 1px solid #000; margin: 8px 0; }
-                        .divider-double { border-top: 3px double #000; margin: 7px 0; }
-                        table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: inherit; }
-                        th, td { padding: 4px 6px; }
-                        .slip-header { text-align: center; margin-bottom: 6px; }
-                        .slip-title { font-size: 15px; font-weight: 900; }
-                        .slip-sub { font-size: 10px; color: #222; }
-                        .signature-box { display: flex; justify-content: space-between; margin-top: 16px; font-size: 9px; text-align: center; }
-                        .sig-line { width: 33mm; border-top: 1px dotted #000; margin: 25px auto 3px; }
-                    `;
-                }
-            }
-
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
         } catch (e) {
             console.error("Print error:", e);
             window.print();
         }
-    }, 450);
+    }, 300);
 }
 
 // ── 1. พิมพ์สลิปความร้อน 80mm: เคลียร์เงินไรเดอร์
@@ -2991,44 +3022,46 @@ function printThermalRiderSlip(riderName, dateKey) {
     const printTime = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
 
     const content = `
-        <div class="slip-header">
-            <div class="slip-title">ตลาดสดฮับวิศิษฐ์ชัย</div>
-            <div style="font-size: 11px; font-weight: bold; margin-top: 1px;">สลิปสรุปเคลียร์เงินไรเดอร์</div>
-            <div class="slip-sub">(Rider Compensation & COD Slip)</div>
+        <div class="slip-brand">
+            <div class="market-name">🏪 ตลาดสดฮับวิศิษฐ์ชัย</div>
+            <div class="market-sub">WISIT CHAI FRESH HUB MARKET</div>
+            <div class="doc-badge">[ ใบสรุปเคลียร์เงินไรเดอร์ ]</div>
         </div>
         <div class="divider-dashed"></div>
-        <div class="row"><span>วันที่:</span><strong>${thaiDate}</strong></div>
-        <div class="row"><span>เวลาพิมพ์:</span><span>${printTime} น.</span></div>
-        <div class="row"><span>ไรเดอร์:</span><strong>${r.riderName}</strong></div>
-        <div class="row"><span>เบอร์โทร:</span><span>${r.riderPhone}</span></div>
+        <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
+        <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
+        <div class="slip-row"><span class="slip-label">ไรเดอร์:</span><span class="slip-value">${r.riderName}</span></div>
+        <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${r.riderPhone}</span></div>
         <div class="divider-dashed"></div>
-        <div class="row"><span>1. จำนวนเที่ยวส่งสำเร็จ:</span><strong>${r.tripsCount} เที่ยว</strong></div>
-        <div class="row"><span>2. ค่ารอบสะสม (+฿40/เที่ยว):</span><strong>+฿${r.riderFeeEarned.toLocaleString()}</strong></div>
-        <div class="row"><span>3. เงินสด COD ที่เก็บมา:</span><strong>+฿${r.codCollected.toLocaleString()}</strong></div>
-        <div class="row"><span>4. เงินทอนคืนลูกค้า (กรณีของขาด):</span><strong>${r.refundHanded > 0 ? `-฿${r.refundHanded.toLocaleString()}` : '฿0'}</strong></div>
-        <div class="divider-double"></div>
-        <div class="row" style="font-size: 13px;">
-            <strong>ยอดสุทธิส่งมอบฮับ:</strong>
-            <strong style="font-size: 15px;">${r.netCashToHub >= 0 ? `฿${r.netCashToHub.toLocaleString()}` : `-฿${Math.abs(r.netCashToHub).toLocaleString()}`}</strong>
+        <div class="slip-row"><span class="slip-label">1. จำนวนเที่ยวส่งสำเร็จ:</span><span class="slip-value">${r.tripsCount} เที่ยว</span></div>
+        <div class="slip-row"><span class="slip-label">2. ค่ารอบสะสม (+฿40/เที่ยว):</span><span class="slip-value">+฿${r.riderFeeEarned.toLocaleString()}</span></div>
+        <div class="slip-row"><span class="slip-label">3. เงินสด COD ที่เก็บมา:</span><span class="slip-value">+฿${r.codCollected.toLocaleString()}</span></div>
+        <div class="slip-row"><span class="slip-label">4. เงินทอนคืนลูกค้า (ของขาด):</span><span class="slip-value">${r.refundHanded > 0 ? `-฿${r.refundHanded.toLocaleString()}` : '฿0'}</span></div>
+        <div class="settle-box">
+            <div class="settle-title">${r.netCashToHub >= 0 ? 'ยอดเงินสดที่ไรเดอร์ส่งมอบฮับ' : 'ยอดเงินสดที่ฮับจ่ายเพิ่มให้ไรเดอร์'}</div>
+            <div class="settle-amount">${r.netCashToHub >= 0 ? `฿${r.netCashToHub.toLocaleString()}` : `-฿${Math.abs(r.netCashToHub).toLocaleString()}`}</div>
+            <div class="settle-sub">${r.netCashToHub >= 0 ? '(ไรเดอร์ส่งมอบเงินสดเข้ากองกลางฮับ)' : '(ฮับจ่ายชดเชยค่ารอบเป็นเงินสดให้ไรเดอร์)'}</div>
         </div>
-        <div style="text-align: right; font-size: 9px; font-weight: bold; color: #222;">
-            ${r.netCashToHub >= 0 ? '(ไรเดอร์ส่งมอบเงินสดให้ฮับ)' : '(ฮับจ่ายเงินสดเพิ่มให้ไรเดอร์)'}
+        <div class="slip-row" style="margin-top: 4px;">
+            <span class="slip-label">สถานะการเคลียร์:</span>
+            <span class="slip-value">${r.isSettled ? '✅ เคลียร์เงินเรียบร้อยแล้ว' : '⏳ รอเคลียร์เงินสด'}</span>
         </div>
-        <div class="divider-dashed"></div>
-        <div class="row"><span>สถานะการเคลียร์:</span><strong>${r.isSettled ? '✅ เคลียร์เงินเรียบร้อยแล้ว' : '⏳ รอเคลียร์เงินสด'}</strong></div>
-        <div class="signature-box">
-            <div>
+        <div class="sig-container">
+            <div class="sig-col">
                 <div class="sig-line"></div>
-                <div>(ลงชื่อไรเดอร์ผู้ส่งเงิน)</div>
+                <div class="sig-name">( ${r.riderName} )</div>
+                <div class="sig-role">ไรเดอร์ผู้ส่งมอบเงิน</div>
             </div>
-            <div>
+            <div class="sig-col">
                 <div class="sig-line"></div>
-                <div>(ลงชื่อเจ้าหน้าที่ฮับ)</div>
+                <div class="sig-name">( เจ้าหน้าที่รับเงินสด )</div>
+                <div class="sig-role">ฝ่ายการเงิน / ตรวจนับ</div>
             </div>
         </div>
-        <div class="divider-dashed" style="margin-top: 14px;"></div>
-        <div class="text-center" style="font-size: 9px; color: #555;">
-            ตลาดสดฮับวิศิษฐ์ชัย • ขอบคุณที่ร่วมงานด้วยความตั้งใจ
+        <div class="divider-dashed"></div>
+        <div class="slip-footer">
+            <div>ตลาดสดฮับวิศิษฐ์ชัย • ขอบคุณที่ร่วมงานด้วยความตั้งใจ</div>
+            <div>เอกสารสรุปยอดประจำวันอัตโนมัติจากระบบฮับ</div>
         </div>
     `;
 
@@ -3049,45 +3082,47 @@ function printThermalVendorSlip(stallId, dateKey) {
     const printTime = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
 
     const content = `
-        <div class="slip-header">
-            <div class="slip-title">ตลาดสดฮับวิศิษฐ์ชัย</div>
-            <div style="font-size: 11px; font-weight: bold; margin-top: 1px;">ใบสรุปยอดขาย & เคลียร์เงินแผงค้า</div>
-            <div class="slip-sub">(Vendor Daily Settlement Slip)</div>
+        <div class="slip-brand">
+            <div class="market-name">🏪 ตลาดสดฮับวิศิษฐ์ชัย</div>
+            <div class="market-sub">WISIT CHAI FRESH HUB MARKET</div>
+            <div class="doc-badge">[ ใบสรุปยอดขาย & เคลียร์เงินแผงค้า ]</div>
         </div>
         <div class="divider-dashed"></div>
-        <div class="row"><span>วันที่:</span><strong>${thaiDate}</strong></div>
-        <div class="row"><span>เวลาพิมพ์:</span><span>${printTime} น.</span></div>
-        <div class="row"><span>แผงค้า:</span><strong>${s.stallName}</strong></div>
-        <div class="row"><span>ตำแหน่ง:</span><span>${s.stallNumber} (โซน ${s.zone})</span></div>
-        <div class="row"><span>เจ้าของแผง:</span><strong>${s.ownerName}</strong></div>
-        <div class="row"><span>เบอร์พร้อมเพย์:</span><strong>${s.phone}</strong></div>
+        <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
+        <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
+        <div class="slip-row"><span class="slip-label">แผงค้า:</span><span class="slip-value">${s.stallName}</span></div>
+        <div class="slip-row"><span class="slip-label">ตำแหน่ง:</span><span class="slip-value">${s.stallNumber} (โซน ${s.zone})</span></div>
+        <div class="slip-row"><span class="slip-label">เจ้าของแผง:</span><span class="slip-value">${s.ownerName}</span></div>
+        <div class="slip-row"><span class="slip-label">เบอร์พร้อมเพย์:</span><span class="slip-value">${s.phone}</span></div>
         <div class="divider-dashed"></div>
-        <div class="row"><span>จำนวนออเดอร์ที่เข้ารับ:</span><strong>${s.orderCount} บิล</strong></div>
-        <div class="row"><span>จำนวนสินค้าที่ขายได้จริง:</span><strong>${s.itemsCount} ชิ้น</strong></div>
-        <div class="row"><span>ค่าธรรมเนียม GP ตลาด (0%):</span><span>฿0</span></div>
-        <div class="divider-double"></div>
-        <div class="row" style="font-size: 13px;">
-            <strong>ยอดเงินที่ฮับโอนให้:</strong>
-            <strong style="font-size: 15px;">฿${s.totalAmount.toLocaleString()}</strong>
+        <div class="slip-row"><span class="slip-label">จำนวนออเดอร์ที่เข้ารับ:</span><span class="slip-value">${s.orderCount} บิล</span></div>
+        <div class="slip-row"><span class="slip-label">จำนวนสินค้าที่ขายได้จริง:</span><span class="slip-value">${s.itemsCount} ชิ้น</span></div>
+        <div class="slip-row"><span class="slip-label">ค่าธรรมเนียม GP ตลาด (0%):</span><span class="slip-value">฿0</span></div>
+        <div class="settle-box">
+            <div class="settle-title">ยอดเงินสุทธิที่ฮับโอนให้</div>
+            <div class="settle-amount">฿${s.totalAmount.toLocaleString()}</div>
+            <div class="settle-sub">โอนผ่าน PromptPay: ${s.phone}</div>
         </div>
-        <div style="text-align: right; font-size: 9px; color: #333;">
-            (โอนผ่านระบบ PromptPay QR: ${s.phone})
+        <div class="slip-row" style="margin-top: 4px;">
+            <span class="slip-label">สถานะการโอน:</span>
+            <span class="slip-value">${s.isSettled ? '✅ โอนเงินเรียบร้อยแล้ว' : '⏳ รอโอนเงิน (รอบ 18:30 น.)'}</span>
         </div>
-        <div class="divider-dashed"></div>
-        <div class="row"><span>สถานะการโอน:</span><strong>${s.isSettled ? '✅ โอนเงินเรียบร้อยแล้ว' : '⏳ รอโอนเงิน (รอบ 18:30 น.)'}</strong></div>
-        <div class="signature-box">
-            <div>
+        <div class="sig-container">
+            <div class="sig-col">
                 <div class="sig-line"></div>
-                <div>(ลงชื่อเจ้าของแผงค้า)</div>
+                <div class="sig-name">( ${s.ownerName || 'เจ้าของแผงค้า'} )</div>
+                <div class="sig-role">ผู้รับเงิน / เจ้าของแผง</div>
             </div>
-            <div>
+            <div class="sig-col">
                 <div class="sig-line"></div>
-                <div>(ลงชื่อฝ่ายบัญชีฮับ)</div>
+                <div class="sig-name">( ฝ่ายบัญชีและการเงิน )</div>
+                <div class="sig-role">ผู้ตรวจจ่าย / เจ้าหน้าที่ฮับ</div>
             </div>
         </div>
-        <div class="divider-dashed" style="margin-top: 14px;"></div>
-        <div class="text-center" style="font-size: 9px; color: #555;">
-            ตลาดสดฮับวิศิษฐ์ชัย • หนุนร้านค้าชุมชน ขายดีทุกวัน
+        <div class="divider-dashed"></div>
+        <div class="slip-footer">
+            <div>ตลาดสดฮับวิศิษฐ์ชัย • หนุนร้านค้าชุมชน ขายดีทุกวัน</div>
+            <div>เอกสารสรุปยอดประจำวันอัตโนมัติจากระบบฮับ</div>
         </div>
     `;
 
@@ -3136,12 +3171,12 @@ function printThermalOrderSlip(orderId, dateKey) {
             const itQty = Number(it.qty || 1);
             const sub = itPrice * itQty;
             return `
-                <div style="margin: 3px 0; font-size: 10px;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>• ${it.name} x${itQty}</span>
-                        <span>฿${sub.toLocaleString()}</span>
+                <div style="margin: 2.5px 0; font-size: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <span style="max-width: 72%; word-break: break-word;">• ${it.name} x${itQty}</span>
+                        <span style="font-weight: bold;">฿${sub.toLocaleString()}</span>
                     </div>
-                    ${it.stallName ? `<div style="font-size: 9px; color: #555; padding-left: 8px;">(${it.stallName})</div>` : ''}
+                    ${it.stallName ? `<div style="font-size: 8.5px; color: #555; padding-left: 8px;">(${it.stallName})</div>` : ''}
                 </div>
             `;
         }).join("");
@@ -3154,38 +3189,37 @@ function printThermalOrderSlip(orderId, dateKey) {
     const goodsTotal = Math.max(0, grandTotal - delFee);
 
     const content = `
-        <div class="slip-header">
-            <div class="slip-title">ตลาดสดฮับวิศิษฐ์ชัย</div>
-            <div style="font-size: 11px; font-weight: bold; margin-top: 1px;">ใบเสร็จ & รายการจัดส่งสินค้า</div>
-            <div class="slip-sub">(Order Delivery Slip)</div>
+        <div class="slip-brand">
+            <div class="market-name">🏪 ตลาดสดฮับวิศิษฐ์ชัย</div>
+            <div class="market-sub">WISIT CHAI FRESH HUB MARKET</div>
+            <div class="doc-badge">[ ใบเสร็จรับเงิน & ใบส่งของ ]</div>
         </div>
         <div class="divider-dashed"></div>
-        <div class="row" style="font-size: 12px;"><span>เลขที่คำสั่งซื้อ:</span><strong>${o.orderId}</strong></div>
-        <div class="row"><span>วันที่:</span><span>${thaiDate} (${orderTimeStr} น.)</span></div>
-        <div class="row"><span>ผู้รับ:</span><strong>${o.customerName || 'ลูกค้าทั่วไป'}</strong></div>
-        <div class="row"><span>โทรศัพท์:</span><strong>${o.customerPhone || '-'}</strong></div>
-        <div style="margin: 3px 0; font-size: 10px;">
-            <span>ที่อยู่ส่ง: </span><span>${o.address || 'ที่อยู่จัดส่งในเขตบริการ'}</span>
+        <div class="slip-row"><span class="slip-label">เลขที่บิล:</span><span class="slip-value" style="font-size: 11px;">${o.orderId}</span></div>
+        <div class="slip-row"><span class="slip-label">วันที่-เวลา:</span><span class="slip-value">${thaiDate} (${orderTimeStr} น.)</span></div>
+        <div class="slip-row"><span class="slip-label">ผู้รับสินค้า:</span><span class="slip-value">${o.customerName || 'ลูกค้าทั่วไป'}</span></div>
+        <div class="slip-row"><span class="slip-label">โทรศัพท์:</span><span class="slip-value">${o.customerPhone || '-'}</span></div>
+        <div style="margin: 3px 0; font-size: 10px; line-height: 1.3;">
+            <span style="color: #333;">ที่อยู่จัดส่ง: </span><strong>${o.address || 'ที่อยู่จัดส่งในเขตบริการ'}</strong>
         </div>
-        ${o.landmark ? `<div style="margin: 2px 0; font-size: 10px; color: #333;"><span>จุดสังเกต: </span><span>${o.landmark}</span></div>` : ''}
-        <div class="row"><span>ไรเดอร์นำส่ง:</span><strong>${o.riderName || 'พี่สมชาย (1กข 8902)'}</strong></div>
+        ${o.landmark ? `<div style="margin: 2px 0 3px; font-size: 9.5px; color: #444;">จุดสังเกต: ${o.landmark}</div>` : ''}
+        <div class="slip-row"><span class="slip-label">ไรเดอร์นำส่ง:</span><span class="slip-value">${o.riderName || 'พี่สมชาย (1กข 8902)'}</span></div>
         <div class="divider-dashed"></div>
-        <div style="font-weight: bold; margin-bottom: 4px; font-size: 11px;">รายการสินค้าที่จัดส่ง:</div>
+        <div style="font-weight: bold; margin-bottom: 3px; font-size: 10.5px;">รายการสินค้าที่จัดส่ง:</div>
         ${itemsHtml}
         <div class="divider-dashed"></div>
-        <div class="row"><span>รวมค่าสินค้า:</span><span>฿${goodsTotal.toLocaleString()}</span></div>
-        <div class="row"><span>ค่าบริการจัดส่ง:</span><span>฿${delFee.toLocaleString()}</span></div>
-        <div class="divider-double"></div>
-        <div class="row" style="font-size: 13px;">
-            <strong>ยอดรวมทั้งสิ้น:</strong>
-            <strong style="font-size: 15px;">฿${grandTotal.toLocaleString()}</strong>
+        <div class="slip-row"><span class="slip-label">รวมค่าสินค้า:</span><span class="slip-value">฿${goodsTotal.toLocaleString()}</span></div>
+        <div class="slip-row"><span class="slip-label">ค่าบริการจัดส่ง:</span><span class="slip-value">฿${delFee.toLocaleString()}</span></div>
+        <div class="settle-box">
+            <div class="settle-title">ยอดชำระรวมทั้งสิ้น</div>
+            <div class="settle-amount">฿${grandTotal.toLocaleString()}</div>
+            <div class="settle-sub">${paymentLabel}</div>
         </div>
-        <div class="row"><span>วิธีชำระเงิน:</span><strong>${paymentLabel}</strong></div>
-        <div class="divider-dashed" style="margin-top: 12px;"></div>
-        <div class="text-center" style="font-size: 9px; color: #555; line-height: 1.4;">
-            ขอบคุณที่ใช้บริการตลาดสดฮับวิศิษฐ์ชัย<br>
-            คัดสดจากแผง สะอาด ส่งไว ถึงหน้าบ้านคุณ 100%<br>
-            โทรสอบถาม / ติดต่อฮับ: 089-123-4567
+        <div class="divider-dashed" style="margin-top: 8px;"></div>
+        <div class="slip-footer">
+            <div>ขอบคุณที่อุดหนุนตลาดสดฮับวิศิษฐ์ชัย</div>
+            <div>คัดสดจากแผง สะอาด ส่งไว ถึงหน้าบ้านคุณ 100%</div>
+            <div style="margin-top: 2px;">สอบถาม / ติดต่อฮับ: 089-123-4567</div>
         </div>
     `;
 
