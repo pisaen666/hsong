@@ -1,9 +1,9 @@
 // TalatHub (ตลาดฮับ) - Application Core Logic with 100 Stalls Directory
 
 // 1. Data Store: 5 Stalls per Category x 6 Products each + 3x3m Stall Profile
-const MARKET_DATA = [
+const BASE_MARKET_STALLS = [
     // ========================================================
-    // ร้านค้าหลักที่ 1 (Hub กลาง) - แผง A01 (ร้านตั้งต้นสำหรับเริ่มใส่ข้อมูลจริง)
+    // ร้านค้าหลักที่ 1 (Hub กลาง) - แผง A01: ไก่สดอนามัย
     // ========================================================
     {
         stallId: "stall_chicken",
@@ -31,8 +31,130 @@ const MARKET_DATA = [
             { id: "chk_05", name: "น่องไก่สดล้วน (ไซส์ใหญ่)", desc: "เนื้อแน่น เหมาะทำไก่นึ่งกระเทียม", price: 42, unit: "500 กรัม", category: "chicken", image: "https://images.unsplash.com/photo-1587593810167-a84920ea0781?w=400&auto=format&fit=crop&q=80", badge: null },
             { id: "chk_06", name: "โครงไก่สดต้มน้ำซุปหวาน", desc: "โครงไก่สด ล้างสะอาด เคี่ยวน้ำซุปหวานกลมกล่อม", price: 20, unit: "2 โครง", category: "chicken", image: "https://images.unsplash.com/photo-1527477396000-e27163b481c2?w=400&auto=format&fit=crop&q=80", badge: null }
         ]
+    },
+    // ========================================================
+    // ร้านค้าหลักที่ 2 - แผง A09: หมูสดอนามัย
+    // ========================================================
+    {
+        stallId: "stall_pork_a09",
+        stallName: "ร้านหมูสดอนามัย เจ๊กวง (แผง A09)",
+        stallNumber: "แผง A09",
+        zone: "A",
+        category: "pork",
+        stallTag: "🥩 หมูสดอนามัย",
+        dimension: "3×3 เมตร",
+        badgeColor: "bg-pink-100 text-pink-800 border-pink-200",
+        isHub: false,
+        isFavorite: false,
+        stallImage: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=700&auto=format&fit=crop&q=80",
+        ownerImage: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80",
+        ownerName: "เจ๊กวง",
+        phone: "082-345-6789",
+        experience: "เปิดบริการในตลาดกว่า 12 ปี",
+        highlight: "หมูสดอนามัย ชำแหละวันต่อวัน ไม่ใช้สารเร่งเนื้อแดง สะอาด ปลอดภัย",
+        shopDescription: "จำหน่ายเนื้อหมูสดคุณภาพ หมูสามชั้น สันคอ สันนอก ซี่โครงแก้ว และหมูบดอนามัย สดใหม่ทุกวัน พร้อมบริการหั่น สไลซ์ และบดตามต้องการ",
+        products: [
+            { id: "prk_01", name: "หมูสามชั้นสไลซ์ (อนามัย)", desc: "มันแทรกกำลังดี เหมาะทอดหรือชาบู", price: 95, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: "🌟 ขายดี" },
+            { id: "prk_02", name: "สันคอหมูสดคัดเกรด", desc: "นุ่ม ละมุน ลายหินอ่อนสวย", price: 85, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: "🔥 สดใหม่" },
+            { id: "prk_03", name: "สันนอกหมูเนื้อนุ่ม", desc: "ไขมันน้อย เนื้อแน่น สเต๊กหรือผัด", price: 75, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: null },
+            { id: "prk_04", name: "ซี่โครงแก้วหมูสด", desc: "กรุบกรอบ ต้มซุปหรือทอดกระเทียม", price: 65, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: null },
+            { id: "prk_05", name: "หมูบดอนามัยไม่ปนมัน", desc: "บดสดใหม่วันต่อวัน ไร้กลิ่นคาว", price: 70, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: "✨ ยอดฮิต" },
+            { id: "prk_06", name: "สะโพกหมูสดสำหรับต้ม/แกง", desc: "เนื้อแดงล้วน คุณภาพเน้นๆ", price: 60, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: null }
+        ]
+    },
+    // ========================================================
+    // ร้านค้าหลักที่ 3 - แผง B01: ผักสดปลอดสาร
+    // ========================================================
+    {
+        stallId: "stall_veggie_b01",
+        stallName: "ร้านผักสวนครัวปลอดสาร ลุงสนั่น (แผง B01)",
+        stallNumber: "แผง B01",
+        zone: "B",
+        category: "veggie",
+        stallTag: "🥬 ผักสดปลอดสาร",
+        dimension: "3×3 เมตร",
+        badgeColor: "bg-emerald-100 text-emerald-800 border-emerald-200",
+        isHub: false,
+        isFavorite: false,
+        stallImage: "https://images.unsplash.com/photo-1488459716781-31db52582fe9?w=700&auto=format&fit=crop&q=80",
+        ownerImage: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80",
+        ownerName: "ลุงสนั่น",
+        phone: "083-456-7890",
+        experience: "ชาวสวนตัวจริง ปลูกเองขายเอง",
+        highlight: "ผักสดคัดจากสวน ปลอดสารเคมี เก็บสดทุกเช้า กรอบ สะอาด ปลอดภัย",
+        shopDescription: "จำหน่ายผักสดพื้นบ้านและผักโครงการหลวง ผักกาดขาว คะน้าฮ่องกง ผักบุ้งจีน กะหล่ำปลี บรอกโคลี และมะเขือเทศ สดใหม่วันต่อวัน",
+        products: [
+            { id: "veg_01", name: "ผักบุ้งจีนยอดอ่อนปลอดสาร", desc: "ยอดอ่อน กรอบ อร่อย ผัดไฟแดงเด็ด", price: 20, unit: "1 กำ", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: "🌟 ขายดี" },
+            { id: "veg_02", name: "ผักกาดขาวหวานกรอบ", desc: "ใบแน่น กรอบหวาน ต้มแกงจืด", price: 35, unit: "1 กก.", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: "🔥 สดใหม่" },
+            { id: "veg_03", name: "คะน้าฮ่องกงยอดอ่อน", desc: "ก้านกรอบ ไม่ขม ลวกน้ำมันหอย", price: 45, unit: "500 กรัม", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: null },
+            { id: "veg_04", name: "กะหล่ำปลีเขียวปลอดสาร", desc: "หัวแน่น สดจากไร่ ผัดน้ำปลา", price: 30, unit: "1 หัว", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: null },
+            { id: "veg_05", name: "บรอกโคลีสดกรอบ", desc: "ดอกแน่น วิตามินสูง ผัดกุ้งสด", price: 40, unit: "500 กรัม", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: null },
+            { id: "veg_06", name: "มะเขือเทศท้อสีสด", desc: "ผลกลมสวย ฉ่ำน้ำ อุดมไลโคปีน", price: 25, unit: "500 กรัม", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: null }
+        ]
+    },
+    // ========================================================
+    // ร้านค้าหลักที่ 4 - แผง C01: กะทิสด & เครื่องแกงโบราณ
+    // ========================================================
+    {
+        stallId: "stall_curry_c01",
+        stallName: "ร้านกะทิสด & เครื่องแกงโบราณ ลุงสมหมาย (แผง C01)",
+        stallNumber: "แผง C01",
+        zone: "C",
+        category: "curry",
+        stallTag: "🌶️ เครื่องแกง & กะทิสด",
+        dimension: "3×3 เมตร",
+        badgeColor: "bg-red-100 text-red-800 border-red-200",
+        isHub: false,
+        isFavorite: false,
+        stallImage: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=700&auto=format&fit=crop&q=80",
+        ownerImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
+        ownerName: "ลุงสมหมาย",
+        phone: "084-567-8901",
+        experience: "สูตรลับเครื่องแกงใต้กว่า 20 ปี",
+        highlight: "กะทิคั้นสดแท้ 100% ไม่ผสมน้ำ พริกแกงใต้ตำมือ หอมเครื่องเทศถึงใจ",
+        shopDescription: "จำหน่ายกะทิสดคั้นใหม่ พริกแกงเผ็ด พริกแกงเขียวหวาน พริกแกงส้ม หอมแดง กระเทียมไทย และกะปิแท้ระนอง คุณภาพปรุงอาหารระดับภัตตาคาร",
+        products: [
+            { id: "cry_01", name: "หัวกะทิคั้นสดแท้ 100%", desc: "ข้น มัน หอม ไม่ใส่วัตถุกันเสีย", price: 40, unit: "500 มล.", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: "🌟 ขายดี" },
+            { id: "cry_02", name: "พริกแกงเผ็ดใต้สูตรเด็ด", desc: "ตำมือ เครื่องแน่น เผ็ดหอมถึงใจ", price: 30, unit: "200 กรัม", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: "🔥 เผ็ดหอม" },
+            { id: "cry_03", name: "พริกแกงเขียวหวานหอมเครื่อง", desc: "สีสวยธรรมชาติ แกงไก่เข้มข้น", price: 30, unit: "200 กรัม", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: null },
+            { id: "cry_04", name: "หอมแดงศรีสะเกษแท้", desc: "หัวแน่น แห้งดี กลิ่นหอมแรง", price: 45, unit: "500 กรัม", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: null },
+            { id: "cry_05", name: "กระเทียมไทยคัดกลีบ", desc: "กลีบเล็ก หอมฉุน เจียวหอมมาก", price: 50, unit: "500 กรัม", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: null },
+            { id: "cry_06", name: "กะปิแท้เคยแท้ระนอง", desc: "เคยตาสีแท้ หอม ไม่เค็มโดด", price: 60, unit: "กระปุก", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: "✨ กลิ่นหอม" }
+        ]
+    },
+    // ========================================================
+    // ร้านค้าหลักที่ 5 - แผง E05: อาหารทะเลสดมหาชัย
+    // ========================================================
+    {
+        stallId: "stall_seafood_e05",
+        stallName: "ร้านซีฟู้ดสดมหาชัย เจ๊วรรณ (แผง E05)",
+        stallNumber: "แผง E05",
+        zone: "E",
+        category: "seafood",
+        stallTag: "🦐 อาหารทะเลสด",
+        dimension: "3×3 เมตร",
+        badgeColor: "bg-cyan-100 text-cyan-800 border-cyan-200",
+        isHub: false,
+        isFavorite: false,
+        stallImage: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=700&auto=format&fit=crop&q=80",
+        ownerImage: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&auto=format&fit=crop&q=80",
+        ownerName: "เจ๊วรรณ",
+        phone: "085-678-9012",
+        experience: "รับตรงจากเรือประมงมหาชัยทุกคืน",
+        highlight: "อาหารทะเลสดส่งตรงจากสะพานปลา กุ้งเป็น หมึกสด ปลากะพงว่ายน้ำ",
+        shopDescription: "จำหน่ายกุ้งขาว ปลากะพงสด หมึกกล้วยลอก หอยแมลงภู่ ปูม้าสด และแซลมอนนอร์เวย์ สะอาด ขอดเกล็ด ควักไส้ และแล่เนื้อฟรี",
+        products: [
+            { id: "sea_01", name: "กุ้งขาวสดคัดไซส์ใหญ่ (20-25 ตัว/โล)", desc: "เนื้อเด้ง หวานฉ่ำ สดจากบ่อ", price: 180, unit: "1 กก.", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: "🌟 ขายดี" },
+            { id: "sea_02", name: "ปลากะพงขาวสดตัวโต (ขอดเกล็ดฟรี)", desc: "เนื้อขาว นุ่มหวาน ทอดน้ำปลาเลิศ", price: 140, unit: "1 ตัว", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: "🔥 สดจากแพ" },
+            { id: "sea_03", name: "หมึกกล้วยสดไซส์ใหญ่", desc: "หมึกสด ลอกไส้ ลวกจิ้มซีฟู้ด", price: 160, unit: "1 กก.", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: null },
+            { id: "sea_04", name: "หอยแมลงภู่สดคัดไซส์", desc: "ตัวโต ล้างสะอาด ต้มใบโหระพา", price: 55, unit: "1 กก.", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: null },
+            { id: "sea_05", name: "ปูม้าสดเนื้อแน่น", desc: "ปูม้าเป็น นึ่งสดหวานเจี๊ยบ", price: 220, unit: "1 กก.", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: "✨ สดใหม่" },
+            { id: "sea_06", name: "เนื้อปลาแซลมอนสดนอร์เวย์", desc: "เกรดซาชิมิ ลายไขมันสวย", price: 150, unit: "300 กรัม", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: null }
+        ]
     }
 ];
+
+const MARKET_DATA = [...BASE_MARKET_STALLS];
 
 // Generate mock 100 stalls for market directory
 const ALL_100_STALLS = [
@@ -424,11 +546,17 @@ function saveMarketDataToStorage() {
     } catch (e) { }
 }
 
-// Restore saved custom stalls if available
+// Restore saved custom stalls if available (merge with base categories)
 const _savedStalls = loadSavedMarketData();
 if (_savedStalls && Array.isArray(_savedStalls) && _savedStalls.length > 0) {
-    MARKET_DATA.length = 0;
-    _savedStalls.forEach(s => MARKET_DATA.push(s));
+    _savedStalls.forEach(savedStall => {
+        const existingIdx = MARKET_DATA.findIndex(s => s.stallId === savedStall.stallId);
+        if (existingIdx >= 0) {
+            MARKET_DATA[existingIdx] = savedStall;
+        } else {
+            MARKET_DATA.push(savedStall);
+        }
+    });
 }
 
 // ==========================================
@@ -1252,7 +1380,14 @@ const state = {
     activeCoupon: { code: "FRESH20", discount: 20, desc: "ส่วนลด ฿20 สั่งของสดรอบถัดไป" }, // ✅ เริ่มต้นตรงกับ radio FRESH20 ในหน้า checkout
     deliveryLocation: loadSavedLocation(), // Active delivery location
     cart: loadSavedCart(),               // ✅ โหลดตะกร้าจาก localStorage
-    activeOrder: loadSavedActiveOrder()  // ✅ โหลด active order จาก localStorage
+    activeOrder: loadSavedActiveOrder(),  // ✅ โหลด active order จาก localStorage
+    stallRotation: {
+        intervalSeconds: 30,
+        remainingSeconds: 30,
+        isPaused: false,
+        timer: null,
+        displayedStallIds: []
+    }
 };
 
 // ✅ อัปเดตแถบติดตามออเดอร์สดบนหน้าหลัก (Home Screen) และปุ่มเมนูด้านล่าง
@@ -3808,6 +3943,136 @@ function generateSampleDailyOrders() {
 
 
 // ==========================================
+// RANDOMIZED STALL DISPLAY SYSTEM (ระบบสุ่มหมุนเวียนร้านค้าตามหมวดหมู่)
+// ==========================================
+
+function selectRandomStallBatch() {
+    let pool = MARKET_DATA.filter(s => s.products && s.products.length > 0);
+    if (pool.length === 0) pool = MARKET_DATA;
+
+    // ถ้ามีการเลือกหมวดหมู่เฉพาะ (ไม่ใช่ 'all') ให้สุ่มจากร้านในหมวดหมู่นั้น
+    if (state.currentCategoryFilter && state.currentCategoryFilter !== "all") {
+        const catPool = pool.filter(s => s.category === state.currentCategoryFilter);
+        if (catPool.length > 0) {
+            const shuffled = [...catPool].sort(() => 0.5 - Math.random());
+            state.stallRotation.displayedStallIds = shuffled.map(s => s.stallId);
+            return;
+        }
+    }
+
+    // กรณีเลือกดู 'all' (หมวดหมู่ทั้งหมด):
+    // สุ่มเลือก 2 ถึง 3 ร้านค้าจากหมวดหมู่ที่แตกต่างกันเพื่อกระจายความหลากหลาย
+    const categories = ["chicken", "pork", "veggie", "curry", "seafood"];
+    const shuffledCats = [...categories].sort(() => 0.5 - Math.random());
+
+    const selectedStalls = [];
+    const maxToPick = Math.min(pool.length, 3);
+
+    for (const cat of shuffledCats) {
+        if (selectedStalls.length >= maxToPick) break;
+        const stallsInCat = pool.filter(s => s.category === cat);
+        if (stallsInCat.length > 0) {
+            const randomStall = stallsInCat[Math.floor(Math.random() * stallsInCat.length)];
+            if (!selectedStalls.some(s => s.stallId === randomStall.stallId)) {
+                selectedStalls.push(randomStall);
+            }
+        }
+    }
+
+    // ถ้ายังได้ไม่ครบ maxToPick ให้เติมจากร้านอื่นๆ ใน pool
+    if (selectedStalls.length < maxToPick) {
+        const remaining = pool.filter(s => !selectedStalls.some(sel => sel.stallId === s.stallId));
+        const shuffledRemaining = [...remaining].sort(() => 0.5 - Math.random());
+        selectedStalls.push(...shuffledRemaining.slice(0, maxToPick - selectedStalls.length));
+    }
+
+    state.stallRotation.displayedStallIds = selectedStalls.map(s => s.stallId);
+}
+
+function startStallRotationTimer() {
+    if (state.stallRotation.timer) {
+        clearInterval(state.stallRotation.timer);
+    }
+    state.stallRotation.timer = setInterval(() => {
+        // พักการสุ่มถ้า: กด pause ไว้ หรือ กำลังค้นหา หรือ กำลังดูเฉพาะแผง หรือ หน้าจอไม่ใช่หน้าตลาด หรือเปิด modal
+        if (state.stallRotation.isPaused || state.searchQuery || state.currentSingleStall || state.currentScreen !== "market" || isMerchantModalOpen()) {
+            updateStallRotationUI();
+            return;
+        }
+
+        state.stallRotation.remainingSeconds--;
+        if (state.stallRotation.remainingSeconds <= 0) {
+            state.stallRotation.remainingSeconds = state.stallRotation.intervalSeconds;
+            selectRandomStallBatch();
+            renderCatalog();
+        } else {
+            updateStallRotationUI();
+        }
+    }, 1000);
+}
+
+function updateStallRotationUI() {
+    const timerText = document.getElementById("rotation-countdown-text");
+    const toggleIcon = document.getElementById("toggle-rotation-icon");
+    const toggleBtn = document.getElementById("toggle-rotation-btn");
+    const rotBar = document.getElementById("random-rotation-bar");
+
+    if (!rotBar) return;
+
+    // ซ่อนแถบถ้ากำลังดูเฉพาะแผง หรือ กำลังค้นหา
+    if (state.currentSingleStall || (state.searchQuery && state.searchQuery.trim() !== "")) {
+        rotBar.classList.add("hidden");
+        return;
+    } else {
+        rotBar.classList.remove("hidden");
+    }
+
+    if (timerText) {
+        if (state.stallRotation.isPaused) {
+            timerText.textContent = "⏸️ พักการสุ่มหมุนเวียนชั่วคราว";
+        } else if (state.currentCategoryFilter !== "all") {
+            timerText.textContent = `⏳ หมุนเวียนในหมวดใน ${state.stallRotation.remainingSeconds} วิ`;
+        } else {
+            timerText.textContent = `⏳ หมุนเวียนรอบถัดไปใน ${state.stallRotation.remainingSeconds} วิ`;
+        }
+    }
+
+    if (toggleIcon) {
+        toggleIcon.textContent = state.stallRotation.isPaused ? "play_arrow" : "pause";
+    }
+    if (toggleBtn) {
+        toggleBtn.title = state.stallRotation.isPaused ? "เริ่มหมุนเวียนต่อ" : "พักการหมุนเวียนชั่วคราว";
+    }
+}
+
+function triggerManualStallShuffle() {
+    state.stallRotation.remainingSeconds = state.stallRotation.intervalSeconds;
+    selectRandomStallBatch();
+    renderCatalog();
+    updateStallRotationUI();
+    showToast("🎲 สุ่มแสดงร้านค้าชุดใหม่ตามหมวดหมู่เรียบร้อยแล้ว!");
+}
+
+function toggleStallRotationPause() {
+    state.stallRotation.isPaused = !state.stallRotation.isPaused;
+    updateStallRotationUI();
+    showToast(state.stallRotation.isPaused ? "⏸️ พักการสุ่มหมุนเวียนชั่วคราว" : "▶️ เปิดการสุ่มหมุนเวียนต่อ (Auto 30s)");
+}
+
+function initStallRotation() {
+    if (!state.stallRotation.displayedStallIds || state.stallRotation.displayedStallIds.length === 0) {
+        selectRandomStallBatch();
+    }
+    startStallRotationTimer();
+    updateStallRotationUI();
+}
+
+function isMerchantModalOpen() {
+    const modal = document.getElementById("merchant-portal-modal");
+    return modal && !modal.classList.contains("hidden");
+}
+
+// ==========================================
 // CATALOG FILTERING & RENDERING (SUPER-GROUPS)
 // ==========================================
 function renderCatalog() {
@@ -3823,18 +4088,37 @@ function renderCatalog() {
     // 1. Check if filtered by single stall
     if (state.currentSingleStall) {
         filteredStalls = MARKET_DATA.filter(s => s.stallId === state.currentSingleStall);
-        const stallObj = ALL_100_STALLS.find(s => s.stallId === state.currentSingleStall);
+        const stallObj = ALL_100_STALLS.find(s => s.stallId === state.currentSingleStall) || MARKET_DATA.find(s => s.stallId === state.currentSingleStall);
         if (singleStallBanner) {
             singleStallBanner.classList.remove("hidden");
             document.getElementById("single-stall-banner-text").textContent = `กำลังดูเฉพาะ: ${stallObj ? stallObj.stallName : ''}`;
         }
+    } else if (isSearchMode) {
+        if (singleStallBanner) singleStallBanner.classList.add("hidden");
     } else {
         if (singleStallBanner) singleStallBanner.classList.add("hidden");
 
-        // Filter by Category Super-group (only if not searching)
-        if (!isSearchMode && state.currentCategoryFilter !== "all") {
-            filteredStalls = MARKET_DATA.filter(s => s.category === state.currentCategoryFilter);
+        // ระบบสุ่มแสดงข้อมูลร้านค้าตามหมวดหมู่
+        if (!state.stallRotation.displayedStallIds || state.stallRotation.displayedStallIds.length === 0) {
+            selectRandomStallBatch();
         }
+
+        let randomized = state.stallRotation.displayedStallIds
+            .map(id => MARKET_DATA.find(s => s.stallId === id))
+            .filter(Boolean);
+
+        // ถ้ามีการเลือกหมวดหมู่เฉพาะ ให้กรองตามหมวดหมู่นั้น
+        if (state.currentCategoryFilter !== "all") {
+            randomized = randomized.filter(s => s.category === state.currentCategoryFilter);
+            if (randomized.length === 0) {
+                selectRandomStallBatch();
+                randomized = state.stallRotation.displayedStallIds
+                    .map(id => MARKET_DATA.find(s => s.stallId === id))
+                    .filter(Boolean);
+            }
+        }
+
+        filteredStalls = randomized.length > 0 ? randomized : MARKET_DATA;
     }
 
     // 2. SEARCH ENGINE: Match across up to 5 stalls + Fuzzy Suggestions
@@ -4196,6 +4480,7 @@ function renderCatalog() {
     });
 
     container.innerHTML = html;
+    updateStallRotationUI();
 }
 
 // ==========================================
@@ -4274,11 +4559,15 @@ function filterByCategory(category) {
     state.currentSingleStall = null;
 
     document.querySelectorAll(".cat-pill").forEach(pill => pill.classList.remove("active", "bg-emerald-700", "text-white"));
-    const activeBtn = event ? event.currentTarget : document.querySelector('.cat-pill');
-    if (activeBtn) activeBtn.classList.add("active");
+    const activeBtn = (typeof event !== 'undefined' && event && event.currentTarget) ? event.currentTarget : document.querySelector(`.cat-pill[onclick*="${category}"]`);
+    if (activeBtn) activeBtn.classList.add("active", "bg-emerald-700", "text-white");
+
+    selectRandomStallBatch();
+    state.stallRotation.remainingSeconds = state.stallRotation.intervalSeconds;
 
     renderFavoriteStallsBar();
     renderCatalog();
+    updateStallRotationUI();
 }
 
 function scrollCategoryTabs(amount) {
@@ -10150,7 +10439,8 @@ function saveMerchantStallData() {
     if (existingIndex >= 0) {
         MARKET_DATA[existingIndex] = stallObj;
     } else {
-        MARKET_DATA.unshift(stallObj);
+        // เพิ่มเข้าสู่ Pool ร้านค้า (ต่อท้าย เพื่อเข้าสู่ระบบสุ่มหมุนเวียนแสดงผลตามหมวดหมู่)
+        MARKET_DATA.push(stallObj);
     }
 
     // Update ALL_100_STALLS
@@ -10158,19 +10448,20 @@ function saveMerchantStallData() {
     if (allIndex >= 0) {
         ALL_100_STALLS[allIndex] = stallObj;
     } else {
-        ALL_100_STALLS.unshift(stallObj);
+        ALL_100_STALLS.push(stallObj);
     }
 
     saveMarketDataToStorage();
 
     closeMerchantPortalModal();
-    renderCatalog();
+
+    // ไม่นำขึ้นแสดงที่หน้าโฮมเพจทันที แต่ให้เป็นไปตามระบบสุ่มแสดงตามหมวดหมู่ที่กำหนดไว้
+    state.currentSingleStall = null;
     renderDirectoryList();
     renderFavoriteStallsBar();
-
-    // Focus view on this newly saved stall
-    filterBySingleStall(activeMerchantStallId);
-    showToast(`🎉 บันทึกและเปิดหน้าร้าน "${stallName}" เรียบร้อยแล้ว!`);
+    renderCatalog();
+    updateStallRotationUI();
+    showToast(`🎉 ลงทะเบียนเปิดร้าน "${stallName}" สำเร็จ! ข้อมูลแผงค้าเข้าสู่ระบบหมุนเวียนสุ่มแสดงตามหมวดหมู่แล้วครับ`);
 }
 
 function previewMerchantLiveStore() {
@@ -10293,6 +10584,8 @@ window.nextHeroBannerSlide = nextHeroBannerSlide;
 window.prevHeroBannerSlide = prevHeroBannerSlide;
 window.handleHeroBannerClick = handleHeroBannerClick;
 window.initHeroBannerCarousel = initHeroBannerCarousel;
+window.triggerManualStallShuffle = triggerManualStallShuffle;
+window.toggleStallRotationPause = toggleStallRotationPause;
 
 // ==========================================
 // INITIALIZE APPLICATION
@@ -10312,6 +10605,7 @@ function initTalatHubApp() {
     renderAuthHeaderButtons();
     updateCustomerLoyaltyBanner();
     renderFavoriteStallsBar();
+    initStallRotation();
     renderCatalog();
     updateCartUI();
     initHeroBannerCarousel();

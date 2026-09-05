@@ -441,6 +441,35 @@
                     </div>
                 </div>
 
+                <!-- Randomized Stall Display Control Bar (ระบบสุ่มแสดงร้านค้าตามหมวดหมู่) -->
+                <div id="random-rotation-bar" class="px-4 mt-2">
+                    <div class="p-2.5 sm:p-3 bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white rounded-2xl shadow-sm border border-emerald-500/30 flex items-center justify-between gap-2 flex-wrap">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-400/30 shrink-0">
+                                <span class="material-symbols-outlined text-lg">casino</span>
+                            </span>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span class="font-extrabold text-xs text-white">ระบบสุ่มหมุนเวียนร้านค้า</span>
+                                    <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.2 rounded-full border border-emerald-400/20">สุ่มสลับหมวดหมู่</span>
+                                </div>
+                                <div class="text-[11px] text-emerald-200/80 flex items-center gap-1 truncate">
+                                    <span id="rotation-countdown-text">⏳ หมุนเวียนรอบถัดไปใน 30 วิ</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <button onclick="triggerManualStallShuffle()" class="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold border border-white/10 flex items-center gap-1 active:scale-95 transition-all" title="สุ่มแผงค้าชุดใหม่ทันที">
+                                <span class="material-symbols-outlined text-sm text-emerald-300">shuffle</span>
+                                <span>สุ่มใหม่</span>
+                            </button>
+                            <button id="toggle-rotation-btn" onclick="toggleStallRotationPause()" class="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold border border-white/10 flex items-center gap-1 active:scale-95 transition-all" title="หยุดหมุนเวียนชั่วคราว">
+                                <span class="material-symbols-outlined text-sm" id="toggle-rotation-icon">pause</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Product Catalog List -->
                 <div class="px-4 py-2 flex-1 overflow-y-auto space-y-3" id="products-catalog-container">
                     <!-- Products will be dynamically rendered here via app.js -->
@@ -3321,6 +3350,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=7.6"></script>
+    <script src="app.js?v=7.7"></script>
 </body>
 </html>
