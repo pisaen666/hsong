@@ -1155,6 +1155,9 @@ function copyRiderGPSCoords() {
 
 // 2. Application Reactive State
 const state = {
+    screenMode: (function() {
+        try { return localStorage.getItem("hsong_screen_mode") || "pc"; } catch (e) { return "pc"; }
+    })(),
     currentRole: "customer",
     currentScreen: "market",
     currentCategoryFilter: "all", // 'all' | 'chicken' | 'veggie' | 'pork' | 'curry' | 'seafood'
@@ -3127,8 +3130,8 @@ function renderCatalog() {
                     </button>
                 </div>
 
-                <!-- Products Grid (6 รายการ ขนาดเท่ากันทุกช่อง) -->
-                <div class="grid grid-cols-2 gap-2.5 px-3.5">
+                <!-- Products Grid (รองรับขนาด Responsive บนจอ PC และ มือถือ) -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 md:gap-3 px-3.5">
                     ${stall.products.map(product => {
             const inCart = state.cart.find(item => item.productId === product.id);
             const qtyInCart = inCart ? inCart.qty : 0;
@@ -5816,13 +5819,13 @@ function switchRole(targetRole) {
 function setActiveRoleView(role) {
     state.currentRole = role;
 
-    // Toggle main container between mobile phone frame and full PC widescreen for Admin
+    // Toggle main container between mobile phone frame and full PC widescreen for all roles!
     const mainContainer = document.getElementById("main-app-container");
     if (mainContainer) {
-        if (role === "admin") {
-            mainContainer.className = "w-full max-w-7xl mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300";
+        if (state.screenMode === "mobile") {
+            mainContainer.className = "w-full max-w-[430px] mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300";
         } else {
-            mainContainer.className = "w-full max-w-[430px] bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300";
+            mainContainer.className = "w-full max-w-7xl mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300";
         }
     }
 
@@ -5869,7 +5872,33 @@ function setActiveRoleView(role) {
     } else if (role === "admin") {
         renderAdminView();
     }
+    renderScreenModeButton();
     window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// ==========================================
+// PC / MOBILE SCREEN MODE CONTROLLER
+// ==========================================
+function toggleScreenMode() {
+    state.screenMode = (state.screenMode === "mobile") ? "pc" : "mobile";
+    try { localStorage.setItem("hsong_screen_mode", state.screenMode); } catch (e) {}
+    setActiveRoleView(state.currentRole || "customer");
+    renderScreenModeButton();
+    showToast(state.screenMode === "mobile" ? "📱 สลับเป็นขนาดจำลองจอมือถือ (Mobile Frame)" : "💻 ขยายเต็มจอคอมพิวเตอร์ (PC Widescreen) สำหรับทุกหน้าจอเรียบร้อย!");
+}
+
+function renderScreenModeButton() {
+    const btn = document.getElementById("btn-screen-mode-toggle");
+    if (!btn) return;
+    const isMobile = state.screenMode === "mobile";
+    btn.innerHTML = isMobile ? `
+        <span class="material-symbols-outlined text-sm md:text-base text-sky-400">desktop_windows</span>
+        <span class="hidden xl:inline text-sky-200">ขยายเต็มจอ PC</span>
+    ` : `
+        <span class="material-symbols-outlined text-sm md:text-base text-sky-400">smartphone</span>
+        <span class="hidden xl:inline text-sky-200">ย่อจอมือถือ</span>
+    `;
+    btn.title = isMobile ? "คลิกเพื่อขยายเต็มจอคอมพิวเตอร์ (PC Widescreen)" : "คลิกเพื่อจำลองขนาดจอมือถือ (Mobile Frame)";
 }
 
 // ==========================================
@@ -7872,6 +7901,7 @@ function initTalatHubApp() {
     state.deliveryLocation = loadSavedLocation();
 
     setActiveRoleView("customer");
+    renderScreenModeButton();
     updateDeliveryLocationUI();
     renderAuthHeaderButtons();
     updateCustomerLoyaltyBanner();
