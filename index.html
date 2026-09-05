@@ -72,7 +72,7 @@
                     </div>
                 </div>
 
-                <!-- Right: Compact Authentication Buttons + Screen Mode Toggle -->
+                <!-- Right: Compact Authentication Buttons (ลูกค้า & ร้านค้า) -->
                 <div class="flex items-center gap-1 sm:gap-1.5 md:gap-2 shrink-0">
                     <div class="flex items-center gap-1 sm:gap-1.5 md:gap-2" id="top-auth-buttons-container">
                         <!-- Customer Login Button -->
@@ -86,19 +86,7 @@
                             <span class="material-symbols-outlined text-sm font-bold">store</span>
                             <span class="hidden xs:inline sm:inline">ร้านค้า</span>
                         </button>
-
-                        <!-- Admin Button -->
-                        <button onclick="handleAdminButtonClick()" id="btn-admin-login" class="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-md active:scale-95 transition-all">
-                            <span class="material-symbols-outlined text-sm font-bold">admin_panel_settings</span>
-                            <span>Admin</span>
-                        </button>
                     </div>
-
-                    <!-- Screen Mode Toggle (PC Widescreen / Mobile Frame) -->
-                    <button onclick="toggleScreenMode()" id="btn-screen-mode-toggle" class="p-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-500/40 text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all" title="สลับมุมมอง จอคอม PC / จำลองจอมือถือ">
-                        <span class="material-symbols-outlined text-sm sm:text-base text-sky-400">smartphone</span>
-                        <span class="hidden xl:inline text-sky-200">ย่อจอมือถือ</span>
-                    </button>
                 </div>
             </div>
 
@@ -259,8 +247,8 @@
                                 <span id="location-detection-mode-badge">📍 ยังไม่ได้ระบุตำแหน่งจัดส่ง</span>
                             </div>
                             <div class="flex items-center gap-1">
-                                <button onclick="detectCurrentLocationGPS()" class="text-[10px] bg-emerald-500/30 hover:bg-emerald-500/50 text-emerald-200 font-bold px-2 py-0.5 rounded-full border border-emerald-400/40 flex items-center gap-0.5 active:scale-95 transition-all" title="ค้นหาพิกัดจริงจาก GPS">
-                                    <span class="material-symbols-outlined text-xs">gps_fixed</span>
+                                <button onclick="detectCurrentLocationGPS()" class="text-[10px] bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-extrabold px-2.5 py-0.5 rounded-full shadow-sm flex items-center gap-0.5 active:scale-95 transition-all" title="ค้นหาพิกัดจริงจาก GPS">
+                                    <span class="material-symbols-outlined text-xs font-bold">gps_fixed</span>
                                     <span>หาพิกัดจริง</span>
                                 </button>
                                 <button onclick="openLocationModal()" class="text-[10px] bg-white/10 hover:bg-white/20 text-white font-bold px-2 py-0.5 rounded-full border border-white/20 flex items-center gap-0.5 active:scale-95 transition-all">
@@ -1275,6 +1263,33 @@
         </section>
 
     </main>
+
+    <!-- BOTTOM FOOTER (แถบควบคุมด้านล่างสุด: ปุ่ม Admin & ปุ่มขยายเต็มจอ PC) -->
+    <footer id="app-bottom-footer" class="w-full max-w-7xl mx-auto mt-6 mb-8 px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 border-t border-slate-200/80 pt-6">
+        <div class="flex items-center gap-2 text-slate-600">
+            <span class="material-symbols-outlined text-emerald-600 text-base">storefront</span>
+            <span class="font-bold text-slate-700">เฮียส่ง ตลาดวิศิษฐ์ชัย</span>
+            <span class="text-slate-400">•</span>
+            <span class="text-[11px] text-slate-500">สั่งของสดครบ 100 แผง ส่งตรงถึงบ้านคุณ</span>
+        </div>
+        
+        <!-- Controls: Admin & Fullscreen PC -->
+        <div class="flex items-center gap-2" id="bottom-controls-bar">
+            <!-- Bottom Admin Container -->
+            <div id="bottom-admin-container" class="flex items-center gap-1">
+                <button onclick="handleAdminButtonClick()" id="btn-admin-login" class="px-3 py-1.5 rounded-xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] sm:text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0">
+                    <span class="material-symbols-outlined text-sm font-bold">admin_panel_settings</span>
+                    <span>Admin</span>
+                </button>
+            </div>
+
+            <!-- Screen Mode Toggle (PC Widescreen / Mobile Frame) -->
+            <button onclick="toggleScreenMode()" id="btn-screen-mode-toggle" class="px-3 py-1.5 rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-500/40 text-[11px] sm:text-xs flex items-center gap-1.5 shadow-xs active:scale-95 transition-all shrink-0" title="สลับมุมมอง จอคอม PC / จำลองจอมือถือ">
+                <span class="material-symbols-outlined text-sm text-sky-400">desktop_windows</span>
+                <span class="text-sky-200">ขยายเต็มจอ PC</span>
+            </button>
+        </div>
+    </footer>
 
     <!-- 3. MODAL: MARKET STALLS DIRECTORY (ผัง 100 แผงค้าในตลาดสด) -->
     <div id="directory-modal" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 flex items-center justify-center p-3 hidden">
@@ -3312,6 +3327,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=6.9"></script>
+    <script src="app.js?v=7.0"></script>
 </body>
 </html>

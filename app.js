@@ -6862,10 +6862,10 @@ function renderScreenModeButton() {
     const isMobile = state.screenMode === "mobile";
     btn.innerHTML = isMobile ? `
         <span class="material-symbols-outlined text-sm md:text-base text-sky-400">desktop_windows</span>
-        <span class="hidden xl:inline text-sky-200">ขยายเต็มจอ PC</span>
+        <span class="text-sky-200">ขยายเต็มจอ PC</span>
     ` : `
         <span class="material-symbols-outlined text-sm md:text-base text-sky-400">smartphone</span>
-        <span class="hidden xl:inline text-sky-200">ย่อจอมือถือ</span>
+        <span class="text-sky-200">ย่อจอมือถือ</span>
     `;
     btn.title = isMobile ? "คลิกเพื่อขยายเต็มจอคอมพิวเตอร์ (PC Widescreen)" : "คลิกเพื่อจำลองขนาดจอมือถือ (Mobile Frame)";
 }
@@ -9555,32 +9555,37 @@ function renderAuthHeaderButtons() {
         `;
     }
 
-    // 3. Admin Section
-    if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
-        html += `
-            <div class="flex items-center gap-1 sm:gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
-                <span class="text-[11px] sm:text-xs text-purple-300 font-bold flex items-center gap-1 cursor-pointer" onclick="switchRole('admin')">
-                    <span class="material-symbols-outlined text-sm sm:text-base text-purple-400">admin_panel_settings</span>
-                    <span>${state.activeAdmin.name || 'เฮียส่ง'}</span>
-                </span>
-                <button onclick="switchRole('admin')" class="hidden sm:inline-block text-[10px] md:text-xs text-purple-200 bg-purple-800/80 hover:bg-purple-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all">
-                    Admin
-                </button>
-                <button onclick="logoutAdmin()" class="text-[10px] md:text-xs text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบแอดมิน">
-                    ออก
-                </button>
-            </div>
-        `;
-    } else {
-        html += `
-            <button onclick="handleAdminButtonClick()" id="btn-admin-login" class="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0">
-                <span class="material-symbols-outlined text-sm font-bold">admin_panel_settings</span>
-                <span>Admin</span>
-            </button>
-        `;
-    }
-
     container.innerHTML = html;
+
+    // 3. Admin Section (ย้ายไปไว้ที่แถบด้านล่างสุด)
+    const bottomAdminContainer = document.getElementById("bottom-admin-container");
+    if (bottomAdminContainer) {
+        let adminHtml = "";
+        if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
+            adminHtml = `
+                <div class="flex items-center gap-1 sm:gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
+                    <span class="text-[11px] sm:text-xs text-purple-300 font-bold flex items-center gap-1 cursor-pointer" onclick="switchRole('admin')">
+                        <span class="material-symbols-outlined text-sm sm:text-base text-purple-400">admin_panel_settings</span>
+                        <span>${state.activeAdmin.name || 'เฮียส่ง'}</span>
+                    </span>
+                    <button onclick="switchRole('admin')" class="hidden sm:inline-block text-[10px] md:text-xs text-purple-200 bg-purple-800/80 hover:bg-purple-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all">
+                        Admin
+                    </button>
+                    <button onclick="logoutAdmin()" class="text-[10px] md:text-xs text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบแอดมิน">
+                        ออก
+                    </button>
+                </div>
+            `;
+        } else {
+            adminHtml = `
+                <button onclick="handleAdminButtonClick()" id="btn-admin-login" class="px-3 py-1.5 rounded-xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] sm:text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0">
+                    <span class="material-symbols-outlined text-sm font-bold">admin_panel_settings</span>
+                    <span>Admin</span>
+                </button>
+            `;
+        }
+        bottomAdminContainer.innerHTML = adminHtml;
+    }
 
     // Sync admin button in the role selector bar
     const adminBtnInBar = document.getElementById("role-btn-admin");
