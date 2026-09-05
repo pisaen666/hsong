@@ -2397,7 +2397,8 @@ function renderHubDailyReport(targetDateKey) {
                         <th class="p-2.5 text-right">เงินทอนคืนลูกค้า</th>
                         <th class="p-2.5 text-right">ยอดสุทธิส่งฮับ</th>
                         <th class="p-2.5 text-center">สถานะ</th>
-                        <th class="p-2.5 text-center rounded-r-xl">จัดการ</th>
+                        <th class="p-2.5 text-center">จัดการ</th>
+                        <th class="p-2.5 text-center rounded-r-xl">พิมพ์ (80mm)</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -2435,10 +2436,23 @@ function renderHubDailyReport(targetDateKey) {
                                 ${r.isSettled ? 'ยกเลิก' : 'ยืนยันรับเงิน'}
                             </button>
                         </td>
+                        <td class="p-2.5 text-center">
+                            <button onclick="printThermalRiderSlip('${r.riderName.replace(/'/g, "\\'")}', '${targetDateKey}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์สลิปเครื่องพิมพ์ความร้อน 80x80">
+                                <span class="material-symbols-outlined text-xs">receipt</span>
+                                <span>พิมพ์สลิป</span>
+                            </button>
+                        </td>
                     </tr>`).join("")}
                 </tbody>
             </table>
         </div>`}
+        <!-- ปุ่มพิมพ์สรุปกระดาษ A4 ตรงกลางด้านล่างหมวด 2 -->
+        <div class="pt-3 border-t border-slate-100 flex justify-center">
+            <button onclick="printA4RidersSummary('${targetDateKey}')" class="px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
+                <span class="material-symbols-outlined text-sm">print</span>
+                <span>📄 พิมพ์สรุปเคลียร์เงินไรเดอร์ทั้งหมด (กระดาษ A4)</span>
+            </button>
+        </div>
     </div>
 
     <!-- Section 3: Vendor / Stall Settlement Summary Table -->
@@ -2478,7 +2492,8 @@ function renderHubDailyReport(targetDateKey) {
                         <th class="p-2.5 text-center">จำนวนที่ขาย</th>
                         <th class="p-2.5 text-right">ยอดเงินที่ต้องโอน</th>
                         <th class="p-2.5 text-center">สถานะ</th>
-                        <th class="p-2.5 text-center rounded-r-xl">โอนเคลียร์</th>
+                        <th class="p-2.5 text-center">โอนเคลียร์</th>
+                        <th class="p-2.5 text-center rounded-r-xl">พิมพ์ (80mm)</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -2518,10 +2533,23 @@ function renderHubDailyReport(targetDateKey) {
                                 <span>${s.isSettled ? 'ดู QR / โอนซ้ำ' : '💳 โอนพร้อมเพย์'}</span>
                             </button>
                         </td>
+                        <td class="p-2.5 text-center">
+                            <button onclick="printThermalVendorSlip('${s.stallId}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์สลิปเครื่องพิมพ์ความร้อน 80x80">
+                                <span class="material-symbols-outlined text-xs">receipt</span>
+                                <span>พิมพ์สลิป</span>
+                            </button>
+                        </td>
                     </tr>`).join("")}
                 </tbody>
             </table>
         </div>`}
+        <!-- ปุ่มพิมพ์สรุปกระดาษ A4 ตรงกลางด้านล่างหมวด 3 -->
+        <div class="pt-3 border-t border-slate-100 flex justify-center">
+            <button onclick="printA4VendorsSummary('${targetDateKey}')" class="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-700 hover:to-orange-800 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
+                <span class="material-symbols-outlined text-sm">print</span>
+                <span>📄 พิมพ์สรุปยอดเคลียร์เงินแผงค้าทั้งหมด (กระดาษ A4)</span>
+            </button>
+        </div>
     </div>
 
     <!-- Section 4: Daily Orders Audit Ledger -->
@@ -2553,7 +2581,8 @@ function renderHubDailyReport(targetDateKey) {
                         <th class="p-2.5">ช่องทางชำระเงิน</th>
                         <th class="p-2.5 text-right">ยอดรวม</th>
                         <th class="p-2.5">ไรเดอร์นำส่ง</th>
-                        <th class="p-2.5 text-center rounded-r-xl">สถานะ</th>
+                        <th class="p-2.5 text-center">สถานะ</th>
+                        <th class="p-2.5 text-center rounded-r-xl">พิมพ์ (80mm)</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -2585,11 +2614,24 @@ function renderHubDailyReport(targetDateKey) {
                                     ${cfg.icon} ${cfg.label}
                                 </span>
                             </td>
+                            <td class="p-2.5 text-center">
+                                <button onclick="printThermalOrderSlip('${o.orderId}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์ใบเสร็จ/ใบส่งของเครื่องพิมพ์ความร้อน 80x80">
+                                    <span class="material-symbols-outlined text-xs">print</span>
+                                    <span>พิมพ์สลิป</span>
+                                </button>
+                            </td>
                         </tr>`;
                     }).join("")}
                 </tbody>
             </table>
         </div>`}
+        <!-- ปุ่มพิมพ์สมุดบัญชีออเดอร์กระดาษ A4 ตรงกลางด้านล่างหมวด 4 -->
+        <div class="pt-3 border-t border-slate-100 flex justify-center">
+            <button onclick="printA4OrdersAuditLedger('${targetDateKey}')" class="px-4 py-2 bg-gradient-to-r from-slate-700 to-slate-900 hover:from-slate-800 hover:to-black text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
+                <span class="material-symbols-outlined text-sm">print</span>
+                <span>📄 พิมพ์สมุดบัญชีออเดอร์ประจำวันทั้งหมด (กระดาษ A4)</span>
+            </button>
+        </div>
     </div>
     `;
 
@@ -2775,10 +2817,769 @@ function exportDailyReportCSV(dateKey) {
     showToast(`📥 ดาวน์โหลดรายงาน CSV วันที่ ${dateKey} เรียบร้อยแล้ว`);
 }
 
-// ── Print Function
-function printDailyReport() {
-    window.print();
+// ==========================================
+// TALATHUB COMPREHENSIVE PRINT ENGINE
+// รองรับการพิมพ์ 2 โหมด:
+// 1. เครื่องพิมพ์ความร้อน POS ใบเสร็จขนาดเล็ก 80x80mm (80mm Thermal Slip)
+// 2. เครื่องพิมพ์เอกสารมาตรฐานกระดาษ A4 (A4 Full Report & Audit Ledger)
+// ==========================================
+
+function executePrintHtml(title, bodyContent, isThermal = false) {
+    let iframe = document.getElementById("talathub-print-frame");
+    if (iframe) iframe.remove();
+
+    iframe = document.createElement("iframe");
+    iframe.id = "talathub-print-frame";
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+        <!DOCTYPE html>
+        <html lang="th">
+        <head>
+            <meta charset="utf-8">
+            <title>${title}</title>
+            <style>
+                * { box-sizing: border-box; }
+                @media print {
+                    @page {
+                        size: ${isThermal ? '80mm auto' : 'A4 portrait'};
+                        margin: ${isThermal ? '2mm 3mm' : '10mm 12mm'};
+                    }
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                }
+                body {
+                    font-family: 'Sarabun', 'Segoe UI', Tahoma, -apple-system, sans-serif;
+                    background: #fff;
+                    color: #000;
+                    margin: 0;
+                    padding: ${isThermal ? '2mm 1mm' : '6px'};
+                    width: ${isThermal ? '74mm' : '100%'};
+                    font-size: ${isThermal ? '11px' : '12px'};
+                    line-height: ${isThermal ? '1.3' : '1.45'};
+                }
+                .text-center { text-align: center; }
+                .text-right { text-align: right; }
+                .text-left { text-align: left; }
+                .font-bold { font-weight: bold; }
+                .font-black { font-weight: 900; }
+                .row { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0; }
+                .divider-dashed { border-top: 1px dashed #000; margin: 6px 0; }
+                .divider-solid { border-top: 1px solid #000; margin: 8px 0; }
+                .divider-double { border-top: 3px double #000; margin: 7px 0; }
+                table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: inherit; }
+                th, td { padding: 4px 6px; }
+                ${isThermal ? `
+                    .slip-header { text-align: center; margin-bottom: 6px; }
+                    .slip-title { font-size: 15px; font-weight: 900; }
+                    .slip-sub { font-size: 10px; color: #222; }
+                    .signature-box { display: flex; justify-content: space-between; margin-top: 16px; font-size: 9px; text-align: center; }
+                    .sig-line { width: 33mm; border-top: 1px dotted #000; margin: 25px auto 3px; }
+                ` : `
+                    .a4-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 14px; }
+                    .a4-title { font-size: 17px; font-weight: 900; color: #000; }
+                    .a4-meta { font-size: 11px; color: #444; margin-top: 3px; }
+                    .a4-table { margin-top: 8px; font-size: 11px; }
+                    .a4-table th { background-color: #f1f5f9; border: 1px solid #cbd5e1; font-weight: bold; }
+                    .a4-table td { border: 1px solid #e2e8f0; }
+                    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+                    .summary-box { border: 1px solid #cbd5e1; padding: 7px 10px; border-radius: 6px; background: #f8fafc; font-size: 11px; }
+                    .signature-section { display: flex; justify-content: space-around; margin-top: 36px; text-align: center; font-size: 11px; }
+                    .sig-line { width: 180px; border-top: 1px dotted #000; margin: 38px auto 4px; }
+                `}
+            </style>
+        </head>
+        <body>
+            ${bodyContent}
+        </body>
+        </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+        try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+        } catch (e) {
+            console.error("Print error:", e);
+            window.print();
+        }
+    }, 450);
 }
+
+// ── 1. พิมพ์สลิปความร้อน 80mm: เคลียร์เงินไรเดอร์
+function printThermalRiderSlip(riderName, dateKey) {
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(dateKey);
+    const r = report.riderSettlement.riders.find(x => x.riderName === riderName);
+    if (!r) {
+        showToast("⚠️ ไม่พบข้อมูลไรเดอร์ในวันที่เลือก");
+        return;
+    }
+
+    const thaiDate = formatThaiDateDisplay(dateKey);
+    const printTime = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+
+    const content = `
+        <div class="slip-header">
+            <div class="slip-title">ตลาดสดฮับวิศิษฐ์ชัย</div>
+            <div style="font-size: 11px; font-weight: bold; margin-top: 1px;">สลิปสรุปเคลียร์เงินไรเดอร์</div>
+            <div class="slip-sub">(Rider Compensation & COD Slip)</div>
+        </div>
+        <div class="divider-dashed"></div>
+        <div class="row"><span>วันที่:</span><strong>${thaiDate}</strong></div>
+        <div class="row"><span>เวลาพิมพ์:</span><span>${printTime} น.</span></div>
+        <div class="row"><span>ไรเดอร์:</span><strong>${r.riderName}</strong></div>
+        <div class="row"><span>เบอร์โทร:</span><span>${r.riderPhone}</span></div>
+        <div class="divider-dashed"></div>
+        <div class="row"><span>1. จำนวนเที่ยวส่งสำเร็จ:</span><strong>${r.tripsCount} เที่ยว</strong></div>
+        <div class="row"><span>2. ค่ารอบสะสม (+฿40/เที่ยว):</span><strong>+฿${r.riderFeeEarned.toLocaleString()}</strong></div>
+        <div class="row"><span>3. เงินสด COD ที่เก็บมา:</span><strong>+฿${r.codCollected.toLocaleString()}</strong></div>
+        <div class="row"><span>4. เงินทอนคืนลูกค้า (กรณีของขาด):</span><strong>${r.refundHanded > 0 ? `-฿${r.refundHanded.toLocaleString()}` : '฿0'}</strong></div>
+        <div class="divider-double"></div>
+        <div class="row" style="font-size: 13px;">
+            <strong>ยอดสุทธิส่งมอบฮับ:</strong>
+            <strong style="font-size: 15px;">${r.netCashToHub >= 0 ? `฿${r.netCashToHub.toLocaleString()}` : `-฿${Math.abs(r.netCashToHub).toLocaleString()}`}</strong>
+        </div>
+        <div style="text-align: right; font-size: 9px; font-weight: bold; color: #222;">
+            ${r.netCashToHub >= 0 ? '(ไรเดอร์ส่งมอบเงินสดให้ฮับ)' : '(ฮับจ่ายเงินสดเพิ่มให้ไรเดอร์)'}
+        </div>
+        <div class="divider-dashed"></div>
+        <div class="row"><span>สถานะการเคลียร์:</span><strong>${r.isSettled ? '✅ เคลียร์เงินเรียบร้อยแล้ว' : '⏳ รอเคลียร์เงินสด'}</strong></div>
+        <div class="signature-box">
+            <div>
+                <div class="sig-line"></div>
+                <div>(ลงชื่อไรเดอร์ผู้ส่งเงิน)</div>
+            </div>
+            <div>
+                <div class="sig-line"></div>
+                <div>(ลงชื่อเจ้าหน้าที่ฮับ)</div>
+            </div>
+        </div>
+        <div class="divider-dashed" style="margin-top: 14px;"></div>
+        <div class="text-center" style="font-size: 9px; color: #555;">
+            ตลาดสดฮับวิศิษฐ์ชัย • ขอบคุณที่ร่วมงานด้วยความตั้งใจ
+        </div>
+    `;
+
+    executePrintHtml(`สลิปไรเดอร์_${r.riderName}_${dateKey}`, content, true);
+}
+
+// ── 2. พิมพ์สลิปความร้อน 80mm: เคลียร์เงินแผงค้า/ร้านค้า
+function printThermalVendorSlip(stallId, dateKey) {
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(dateKey);
+    const s = report.vendorSettlement.stalls.find(x => x.stallId === stallId);
+    if (!s) {
+        showToast("⚠️ ไม่พบข้อมูลแผงค้าในวันที่เลือก");
+        return;
+    }
+
+    const thaiDate = formatThaiDateDisplay(dateKey);
+    const printTime = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+
+    const content = `
+        <div class="slip-header">
+            <div class="slip-title">ตลาดสดฮับวิศิษฐ์ชัย</div>
+            <div style="font-size: 11px; font-weight: bold; margin-top: 1px;">ใบสรุปยอดขาย & เคลียร์เงินแผงค้า</div>
+            <div class="slip-sub">(Vendor Daily Settlement Slip)</div>
+        </div>
+        <div class="divider-dashed"></div>
+        <div class="row"><span>วันที่:</span><strong>${thaiDate}</strong></div>
+        <div class="row"><span>เวลาพิมพ์:</span><span>${printTime} น.</span></div>
+        <div class="row"><span>แผงค้า:</span><strong>${s.stallName}</strong></div>
+        <div class="row"><span>ตำแหน่ง:</span><span>${s.stallNumber} (โซน ${s.zone})</span></div>
+        <div class="row"><span>เจ้าของแผง:</span><strong>${s.ownerName}</strong></div>
+        <div class="row"><span>เบอร์พร้อมเพย์:</span><strong>${s.phone}</strong></div>
+        <div class="divider-dashed"></div>
+        <div class="row"><span>จำนวนออเดอร์ที่เข้ารับ:</span><strong>${s.orderCount} บิล</strong></div>
+        <div class="row"><span>จำนวนสินค้าที่ขายได้จริง:</span><strong>${s.itemsCount} ชิ้น</strong></div>
+        <div class="row"><span>ค่าธรรมเนียม GP ตลาด (0%):</span><span>฿0</span></div>
+        <div class="divider-double"></div>
+        <div class="row" style="font-size: 13px;">
+            <strong>ยอดเงินที่ฮับโอนให้:</strong>
+            <strong style="font-size: 15px;">฿${s.totalAmount.toLocaleString()}</strong>
+        </div>
+        <div style="text-align: right; font-size: 9px; color: #333;">
+            (โอนผ่านระบบ PromptPay QR: ${s.phone})
+        </div>
+        <div class="divider-dashed"></div>
+        <div class="row"><span>สถานะการโอน:</span><strong>${s.isSettled ? '✅ โอนเงินเรียบร้อยแล้ว' : '⏳ รอโอนเงิน (รอบ 18:30 น.)'}</strong></div>
+        <div class="signature-box">
+            <div>
+                <div class="sig-line"></div>
+                <div>(ลงชื่อเจ้าของแผงค้า)</div>
+            </div>
+            <div>
+                <div class="sig-line"></div>
+                <div>(ลงชื่อฝ่ายบัญชีฮับ)</div>
+            </div>
+        </div>
+        <div class="divider-dashed" style="margin-top: 14px;"></div>
+        <div class="text-center" style="font-size: 9px; color: #555;">
+            ตลาดสดฮับวิศิษฐ์ชัย • หนุนร้านค้าชุมชน ขายดีทุกวัน
+        </div>
+    `;
+
+    executePrintHtml(`สลิปแผงค้า_${s.stallName}_${dateKey}`, content, true);
+}
+
+// ── 3. พิมพ์สลิปความร้อน 80mm: ใบเสร็จ/ใบส่งของรายออเดอร์
+function printThermalOrderSlip(orderId, dateKey) {
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(dateKey);
+    let o = report.ordersList.find(x => x.orderId === orderId);
+    if (!o) {
+        o = _collectAllOrders().find(x => x.orderId === orderId);
+    }
+    if (!o) {
+        showToast("⚠️ ไม่พบข้อมูลคำสั่งซื้อ");
+        return;
+    }
+
+    const thaiDate = formatThaiDateDisplay(dateKey);
+    const orderTimeStr = o.savedAt ? new Date(o.savedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : (o.orderTime || "--:--");
+    const pType = (o.paymentType || "promptpay").toLowerCase();
+    const paymentLabel = pType === "cod" || pType === "cash" ? "💵 เงินสดปลายทาง (COD)" : (pType === "bank_transfer" || pType === "scb" ? "🏦 โอนเงิน SCB" : "📱 สแกนพร้อมเพย์");
+
+    // รวบรวมรายการสินค้า
+    let itemsList = [];
+    if (o.items && Array.isArray(o.items) && o.items.length > 0) {
+        itemsList = o.items;
+    } else if (o.stalls && Array.isArray(o.stalls)) {
+        o.stalls.forEach(st => {
+            (st.items || []).forEach(it => {
+                itemsList.push({
+                    name: it.name || it.productName || it.title || "สินค้าสด",
+                    qty: it.qty || it.quantity || 1,
+                    price: (it.actualPrice !== undefined ? it.actualPrice : it.price) || 0,
+                    stallName: st.stallName || st.name || ""
+                });
+            });
+        });
+    }
+
+    let itemsHtml = "";
+    if (itemsList.length > 0) {
+        itemsHtml = itemsList.map(it => {
+            const itPrice = Number(it.price || 0);
+            const itQty = Number(it.qty || 1);
+            const sub = itPrice * itQty;
+            return `
+                <div style="margin: 3px 0; font-size: 10px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>• ${it.name} x${itQty}</span>
+                        <span>฿${sub.toLocaleString()}</span>
+                    </div>
+                    ${it.stallName ? `<div style="font-size: 9px; color: #555; padding-left: 8px;">(${it.stallName})</div>` : ''}
+                </div>
+            `;
+        }).join("");
+    } else {
+        itemsHtml = `<div style="font-size: 10px; color: #555;">(สินค้าสดคัดคุณภาพตามรายการสั่งซื้อ)</div>`;
+    }
+
+    const grandTotal = Number(o.grandTotal || o.total || 0);
+    const delFee = Number(o.deliveryFee || 20);
+    const goodsTotal = Math.max(0, grandTotal - delFee);
+
+    const content = `
+        <div class="slip-header">
+            <div class="slip-title">ตลาดสดฮับวิศิษฐ์ชัย</div>
+            <div style="font-size: 11px; font-weight: bold; margin-top: 1px;">ใบเสร็จ & รายการจัดส่งสินค้า</div>
+            <div class="slip-sub">(Order Delivery Slip)</div>
+        </div>
+        <div class="divider-dashed"></div>
+        <div class="row" style="font-size: 12px;"><span>เลขที่คำสั่งซื้อ:</span><strong>${o.orderId}</strong></div>
+        <div class="row"><span>วันที่:</span><span>${thaiDate} (${orderTimeStr} น.)</span></div>
+        <div class="row"><span>ผู้รับ:</span><strong>${o.customerName || 'ลูกค้าทั่วไป'}</strong></div>
+        <div class="row"><span>โทรศัพท์:</span><strong>${o.customerPhone || '-'}</strong></div>
+        <div style="margin: 3px 0; font-size: 10px;">
+            <span>ที่อยู่ส่ง: </span><span>${o.address || 'ที่อยู่จัดส่งในเขตบริการ'}</span>
+        </div>
+        ${o.landmark ? `<div style="margin: 2px 0; font-size: 10px; color: #333;"><span>จุดสังเกต: </span><span>${o.landmark}</span></div>` : ''}
+        <div class="row"><span>ไรเดอร์นำส่ง:</span><strong>${o.riderName || 'พี่สมชาย (1กข 8902)'}</strong></div>
+        <div class="divider-dashed"></div>
+        <div style="font-weight: bold; margin-bottom: 4px; font-size: 11px;">รายการสินค้าที่จัดส่ง:</div>
+        ${itemsHtml}
+        <div class="divider-dashed"></div>
+        <div class="row"><span>รวมค่าสินค้า:</span><span>฿${goodsTotal.toLocaleString()}</span></div>
+        <div class="row"><span>ค่าบริการจัดส่ง:</span><span>฿${delFee.toLocaleString()}</span></div>
+        <div class="divider-double"></div>
+        <div class="row" style="font-size: 13px;">
+            <strong>ยอดรวมทั้งสิ้น:</strong>
+            <strong style="font-size: 15px;">฿${grandTotal.toLocaleString()}</strong>
+        </div>
+        <div class="row"><span>วิธีชำระเงิน:</span><strong>${paymentLabel}</strong></div>
+        <div class="divider-dashed" style="margin-top: 12px;"></div>
+        <div class="text-center" style="font-size: 9px; color: #555; line-height: 1.4;">
+            ขอบคุณที่ใช้บริการตลาดสดฮับวิศิษฐ์ชัย<br>
+            คัดสดจากแผง สะอาด ส่งไว ถึงหน้าบ้านคุณ 100%<br>
+            โทรสอบถาม / ติดต่อฮับ: 089-123-4567
+        </div>
+    `;
+
+    executePrintHtml(`ใบเสร็จ_${o.orderId}_${dateKey}`, content, true);
+}
+
+// ── 4. พิมพ์สรุปกระดาษ A4: หมวด 2 เคลียร์เงินไรเดอร์ทั้งหมด
+function printA4RidersSummary(dateKey) {
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(dateKey);
+    const thaiDate = formatThaiDateDisplay(dateKey);
+    const printTime = new Date().toLocaleString("th-TH");
+
+    let tableRows = "";
+    report.riderSettlement.riders.forEach((r, idx) => {
+        tableRows += `
+            <tr>
+                <td class="text-center">${idx + 1}</td>
+                <td><strong>${r.riderName}</strong></td>
+                <td class="text-center">${r.riderPhone}</td>
+                <td class="text-center">${r.tripsCount}</td>
+                <td class="text-right font-bold">฿${r.riderFeeEarned.toLocaleString()}</td>
+                <td class="text-right font-bold">฿${r.codCollected.toLocaleString()}</td>
+                <td class="text-right">${r.refundHanded > 0 ? `-฿${r.refundHanded.toLocaleString()}` : '฿0'}</td>
+                <td class="text-right font-bold" style="color: ${r.netCashToHub >= 0 ? '#047857' : '#b91c1c'};">
+                    ฿${r.netCashToHub.toLocaleString()}
+                </td>
+                <td class="text-center font-bold">
+                    ${r.isSettled ? '✅ เคลียร์แล้ว' : '⏳ รอเคลียร์'}
+                </td>
+            </tr>
+        `;
+    });
+
+    const content = `
+        <div class="a4-header">
+            <div class="a4-title">รายงานสรุปการเคลียร์เงินไรเดอร์ประจำวัน (Rider Settlement Summary)</div>
+            <div class="a4-meta">
+                ตลาดสดฮับวิศิษฐ์ชัย • ประจำวันที่ ${thaiDate} • พิมพ์รายงานเมื่อ: ${printTime}
+            </div>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div>ไรเดอร์ปฏิบัติงาน:</div>
+                <div style="font-size: 15px; font-weight: bold;">${report.riderSettlement.riders.length} คน</div>
+            </div>
+            <div class="summary-box">
+                <div>รวมเที่ยวส่งทั้งหมด:</div>
+                <div style="font-size: 15px; font-weight: bold;">${report.riderSettlement.totalTrips} เที่ยว</div>
+            </div>
+            <div class="summary-box">
+                <div>รวมเงินสด COD ที่เก็บมา:</div>
+                <div style="font-size: 15px; font-weight: bold; color: #b45309;">฿${report.riderSettlement.totalCodCollected.toLocaleString()}</div>
+            </div>
+            <div class="summary-box">
+                <div>ยอดสุทธิที่ฮับต้องรับมอบ:</div>
+                <div style="font-size: 15px; font-weight: bold; color: #047857;">฿${report.riderSettlement.netCashToHub.toLocaleString()}</div>
+            </div>
+        </div>
+
+        <table class="a4-table">
+            <thead>
+                <tr>
+                    <th class="text-center" style="width: 35px;">ที่</th>
+                    <th>ชื่อไรเดอร์</th>
+                    <th class="text-center">เบอร์โทร</th>
+                    <th class="text-center">เที่ยวส่ง</th>
+                    <th class="text-right">ค่ารอบสะสม</th>
+                    <th class="text-right">เงินสด COD</th>
+                    <th class="text-right">เงินทอนคืน</th>
+                    <th class="text-right">ยอดสุทธิส่งฮับ</th>
+                    <th class="text-center">สถานะ</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableRows || '<tr><td colspan="9" class="text-center">ไม่มีข้อมูลไรเดอร์ในวันที่เลือก</td></tr>'}
+            </tbody>
+            <tfoot>
+                <tr style="background: #f8fafc; font-weight: bold; border-top: 2px solid #000;">
+                    <td colspan="3" class="text-center">รวมทั้งสิ้น</td>
+                    <td class="text-center">${report.riderSettlement.totalTrips} เที่ยว</td>
+                    <td class="text-right">฿${report.riderSettlement.totalRiderFees.toLocaleString()}</td>
+                    <td class="text-right">฿${report.riderSettlement.totalCodCollected.toLocaleString()}</td>
+                    <td class="text-right">${report.riderSettlement.totalRefundHanded > 0 ? `-฿${report.riderSettlement.totalRefundHanded.toLocaleString()}` : '฿0'}</td>
+                    <td class="text-right" style="color: #047857;">฿${report.riderSettlement.netCashToHub.toLocaleString()}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <div class="signature-section">
+            <div>
+                <div class="sig-line"></div>
+                <div>( .................................................... )</div>
+                <div style="font-size: 10px; color: #555;">เจ้าหน้าที่ตรวจรับเงินสดฮับ</div>
+            </div>
+            <div>
+                <div class="sig-line"></div>
+                <div>( .................................................... )</div>
+                <div style="font-size: 10px; color: #555;">ผู้จัดการตลาดฮับวิศิษฐ์ชัย</div>
+            </div>
+        </div>
+    `;
+
+    executePrintHtml(`รายงานเคลียร์เงินไรเดอร์_${dateKey}`, content, false);
+}
+
+// ── 5. พิมพ์สรุปกระดาษ A4: หมวด 3 เคลียร์เงินร้านค้า/แผงค้าทั้งหมด
+function printA4VendorsSummary(dateKey) {
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(dateKey);
+    const thaiDate = formatThaiDateDisplay(dateKey);
+    const printTime = new Date().toLocaleString("th-TH");
+
+    let tableRows = "";
+    report.vendorSettlement.stalls.forEach((s, idx) => {
+        tableRows += `
+            <tr>
+                <td class="text-center">${idx + 1}</td>
+                <td><strong>${s.stallName}</strong></td>
+                <td class="text-center">${s.stallNumber} (โซน ${s.zone})</td>
+                <td>${s.ownerName}</td>
+                <td class="text-center">${s.phone}</td>
+                <td class="text-center">${s.itemsCount} ชิ้น</td>
+                <td class="text-center">${s.orderCount} บิล</td>
+                <td class="text-right font-bold">฿${s.totalAmount.toLocaleString()}</td>
+                <td class="text-center font-bold">
+                    ${s.isSettled ? '✅ โอนแล้ว' : '⏳ รอโอน'}
+                </td>
+            </tr>
+        `;
+    });
+
+    const content = `
+        <div class="a4-header">
+            <div class="a4-title">รายงานสรุปยอดขายและการเคลียร์เงินแผงค้า (Vendor Settlements Summary)</div>
+            <div class="a4-meta">
+                ตลาดสดฮับวิศิษฐ์ชัย • ประจำวันที่ ${thaiDate} • พิมพ์รายงานเมื่อ: ${printTime}
+            </div>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div>แผงค้าที่มีรายการขาย:</div>
+                <div style="font-size: 15px; font-weight: bold;">${report.vendorSettlement.stalls.length} แผง</div>
+            </div>
+            <div class="summary-box">
+                <div>ยอดรวมค่าสินค้าทั้งหมด:</div>
+                <div style="font-size: 15px; font-weight: bold; color: #047857;">฿${report.vendorSettlement.totalVendorAmount.toLocaleString()}</div>
+            </div>
+            <div class="summary-box">
+                <div>โอนเงินเรียบร้อยแล้ว:</div>
+                <div style="font-size: 15px; font-weight: bold; color: #1e40af;">฿${report.vendorSettlement.totalSettledAmount.toLocaleString()} (${report.vendorSettlement.settledCount} แผง)</div>
+            </div>
+            <div class="summary-box">
+                <div>คงเหลือรอโอนเคลียร์:</div>
+                <div style="font-size: 15px; font-weight: bold; color: #b91c1c;">฿${report.vendorSettlement.totalPendingAmount.toLocaleString()} (${report.vendorSettlement.pendingCount} แผง)</div>
+            </div>
+        </div>
+
+        <table class="a4-table">
+            <thead>
+                <tr>
+                    <th class="text-center" style="width: 35px;">ที่</th>
+                    <th>แผงค้า / ร้านค้า</th>
+                    <th class="text-center">เลขแผง / โซน</th>
+                    <th>เจ้าของแผง</th>
+                    <th class="text-center">เบอร์พร้อมเพย์</th>
+                    <th class="text-center">ชิ้นที่ขาย</th>
+                    <th class="text-center">ออเดอร์</th>
+                    <th class="text-right">ยอดเงินโอน</th>
+                    <th class="text-center">สถานะ</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableRows || '<tr><td colspan="9" class="text-center">ไม่มีข้อมูลการขายแผงค้าในวันที่เลือก</td></tr>'}
+            </tbody>
+            <tfoot>
+                <tr style="background: #f8fafc; font-weight: bold; border-top: 2px solid #000;">
+                    <td colspan="5" class="text-center">รวมทั้งสิ้น</td>
+                    <td class="text-center">${report.vendorSettlement.stalls.reduce((a,b)=>a+b.itemsCount,0)} ชิ้น</td>
+                    <td class="text-center">${report.vendorSettlement.stalls.reduce((a,b)=>a+b.orderCount,0)} บิล</td>
+                    <td class="text-right" style="color: #047857;">฿${report.vendorSettlement.totalVendorAmount.toLocaleString()}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <div class="signature-section">
+            <div>
+                <div class="sig-line"></div>
+                <div>( .................................................... )</div>
+                <div style="font-size: 10px; color: #555;">ฝ่ายบัญชีและการเงินฮับ</div>
+            </div>
+            <div>
+                <div class="sig-line"></div>
+                <div>( .................................................... )</div>
+                <div style="font-size: 10px; color: #555;">ผู้จัดการตลาดฮับวิศิษฐ์ชัย</div>
+            </div>
+        </div>
+    `;
+
+    executePrintHtml(`รายงานเคลียร์เงินแผงค้า_${dateKey}`, content, false);
+}
+
+// ── 6. พิมพ์สรุปกระดาษ A4: หมวด 4 สมุดบัญชีออเดอร์ประจำวันทั้งหมด
+function printA4OrdersAuditLedger(dateKey) {
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(dateKey);
+    const thaiDate = formatThaiDateDisplay(dateKey);
+    const printTime = new Date().toLocaleString("th-TH");
+
+    let tableRows = "";
+    report.ordersList.forEach((o, idx) => {
+        const timeStr = o.savedAt ? new Date(o.savedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : (o.orderTime || "--:--");
+        const pType = (o.paymentType || "promptpay").toLowerCase();
+        const pLabel = pType === "cod" || pType === "cash" ? "COD (เงินสด)" : (pType === "bank_transfer" || pType === "scb" ? "โอน SCB" : "พร้อมเพย์");
+        const statusLabel = o.status === "delivered" ? "จัดส่งสำเร็จ" : (o.status === "on_the_way" ? "กำลังนำส่ง" : "กำลังจัดของ");
+
+        tableRows += `
+            <tr>
+                <td class="text-center">${idx + 1}</td>
+                <td><strong>${o.orderId}</strong></td>
+                <td class="text-center">${timeStr} น.</td>
+                <td>${o.customerName || 'ลูกค้าทั่วไป'}</td>
+                <td class="text-center">${o.customerPhone || '-'}</td>
+                <td class="text-center">${pLabel}</td>
+                <td class="text-right font-bold">฿${(o.grandTotal || o.total || 0).toLocaleString()}</td>
+                <td class="text-center">${o.deliveryFee ? `฿${o.deliveryFee}` : '฿20'}</td>
+                <td>${o.riderName || '-'}</td>
+                <td class="text-center font-bold">${statusLabel}</td>
+            </tr>
+        `;
+    });
+
+    const content = `
+        <div class="a4-header">
+            <div class="a4-title">สมุดบัญชีแยกประเภทออเดอร์ประจำวัน (Daily Orders Audit Ledger)</div>
+            <div class="a4-meta">
+                ตลาดสดฮับวิศิษฐ์ชัย • ประจำวันที่ ${thaiDate} • พิมพ์รายงานเมื่อ: ${printTime}
+            </div>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div>ออเดอร์ทั้งหมด:</div>
+                <div style="font-size: 15px; font-weight: bold;">${report.summary.totalOrders} ใบ (สำเร็จ ${report.summary.completedOrders})</div>
+            </div>
+            <div class="summary-box">
+                <div>ยอดขายรวม (GMV):</div>
+                <div style="font-size: 15px; font-weight: bold; color: #047857;">฿${report.summary.totalCustomerGMV.toLocaleString()}</div>
+            </div>
+            <div class="summary-box">
+                <div>พร้อมเพย์ + โอนธนาคาร:</div>
+                <div style="font-size: 15px; font-weight: bold; color: #1e40af;">
+                    ฿${(report.summary.paymentBreakdown.promptpay.amount + report.summary.paymentBreakdown.bank_transfer.amount).toLocaleString()}
+                </div>
+            </div>
+            <div class="summary-box">
+                <div>เงินสดปลายทาง (COD):</div>
+                <div style="font-size: 15px; font-weight: bold; color: #b45309;">฿${report.summary.paymentBreakdown.cod.amount.toLocaleString()}</div>
+            </div>
+        </div>
+
+        <table class="a4-table">
+            <thead>
+                <tr>
+                    <th class="text-center" style="width: 30px;">ที่</th>
+                    <th>รหัสออเดอร์</th>
+                    <th class="text-center">เวลา</th>
+                    <th>ชื่อลูกค้า</th>
+                    <th class="text-center">เบอร์โทร</th>
+                    <th class="text-center">วิธีชำระ</th>
+                    <th class="text-right">ยอดรวม</th>
+                    <th class="text-center">ค่าส่ง</th>
+                    <th>ไรเดอร์</th>
+                    <th class="text-center">สถานะ</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableRows || '<tr><td colspan="10" class="text-center">ไม่มีรายการออเดอร์ในวันที่เลือก</td></tr>'}
+            </tbody>
+            <tfoot>
+                <tr style="background: #f8fafc; font-weight: bold; border-top: 2px solid #000;">
+                    <td colspan="6" class="text-center">รวมทั้งสิ้น</td>
+                    <td class="text-right" style="color: #047857;">฿${report.summary.totalCustomerGMV.toLocaleString()}</td>
+                    <td class="text-center">฿${report.summary.totalDeliveryFees.toLocaleString()}</td>
+                    <td colspan="2"></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <div class="signature-section">
+            <div>
+                <div class="sig-line"></div>
+                <div>( .................................................... )</div>
+                <div style="font-size: 10px; color: #555;">เจ้าหน้าที่บันทึกข้อมูลและตรวจสอบออเดอร์</div>
+            </div>
+            <div>
+                <div class="sig-line"></div>
+                <div>( .................................................... )</div>
+                <div style="font-size: 10px; color: #555;">หัวหน้าฝ่ายปฏิบัติการฮับ</div>
+            </div>
+        </div>
+    `;
+
+    executePrintHtml(`สมุดบัญชีออเดอร์_${dateKey}`, content, false);
+}
+
+// ── 7. พิมพ์รายงานประจำวันภาพรวมทั้งฉบับ (A4 Comprehensive Report)
+function printDailyReport(dateKey) {
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(dateKey);
+    const thaiDate = formatThaiDateDisplay(dateKey);
+    const printTime = new Date().toLocaleString("th-TH");
+    const hubNetMargin = report.summary.totalCustomerGMV - report.vendorSettlement.totalVendorAmount - report.riderSettlement.totalRiderFees;
+
+    const content = `
+        <div class="a4-header">
+            <div class="a4-title">รายงานสรุปการดำเนินงานและการเงินประจำวัน (Comprehensive Daily Report)</div>
+            <div class="a4-meta">
+                ตลาดสดฮับวิศิษฐ์ชัย • ประจำวันที่ ${thaiDate} • พิมพ์รายงานเมื่อ: ${printTime}
+            </div>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div>ยอดขายรวมลูกค้า (GMV):</div>
+                <div style="font-size: 16px; font-weight: bold; color: #047857;">฿${report.summary.totalCustomerGMV.toLocaleString()}</div>
+                <div style="font-size: 10px; color: #666;">ออเดอร์ทั้งหมด ${report.summary.totalOrders} ใบ</div>
+            </div>
+            <div class="summary-box">
+                <div>ยอดเคลียร์แผงค้า (ต้นทุน):</div>
+                <div style="font-size: 16px; font-weight: bold; color: #ea580c;">฿${report.vendorSettlement.totalVendorAmount.toLocaleString()}</div>
+                <div style="font-size: 10px; color: #666;">แผงค้า ${report.vendorSettlement.stalls.length} แผง</div>
+            </div>
+            <div class="summary-box">
+                <div>เงินสดไรเดอร์ส่งมอบฮับ:</div>
+                <div style="font-size: 16px; font-weight: bold; color: #0284c7;">฿${report.riderSettlement.netCashToHub.toLocaleString()}</div>
+                <div style="font-size: 10px; color: #666;">วิ่งส่งรวม ${report.riderSettlement.totalTrips} เที่ยว</div>
+            </div>
+            <div class="summary-box">
+                <div>กำไรค่าบริการสุทธิฮับ (Margin):</div>
+                <div style="font-size: 16px; font-weight: bold; color: #7c3aed;">฿${hubNetMargin.toLocaleString()}</div>
+                <div style="font-size: 10px; color: #666;">(ยอดขาย - แผงค้า - ค่ารอบ)</div>
+            </div>
+        </div>
+
+        <h4 style="margin: 14px 0 4px; font-size: 12px; font-weight: bold;">1. สรุปช่องทางรับชำระเงิน</h4>
+        <table class="a4-table">
+            <thead>
+                <tr>
+                    <th>ช่องทางรับเงิน</th>
+                    <th class="text-center">จำนวนออเดอร์</th>
+                    <th class="text-right">ยอดเงินรวม</th>
+                    <th>หมายเหตุ</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>📱 สแกนพร้อมเพย์ (PromptPay QR)</td>
+                    <td class="text-center">${report.summary.paymentBreakdown.promptpay.count}</td>
+                    <td class="text-right font-bold">฿${report.summary.paymentBreakdown.promptpay.amount.toLocaleString()}</td>
+                    <td>เข้าบัญชีฮับกลางอัตโนมัติ</td>
+                </tr>
+                <tr>
+                    <td>🏦 โอนผ่านธนาคาร SCB</td>
+                    <td class="text-center">${report.summary.paymentBreakdown.bank_transfer.count}</td>
+                    <td class="text-right font-bold">฿${report.summary.paymentBreakdown.bank_transfer.amount.toLocaleString()}</td>
+                    <td>ตรวจสอบสลิปแล้ว</td>
+                </tr>
+                <tr>
+                    <td>💵 เงินสดปลายทาง (COD)</td>
+                    <td class="text-center">${report.summary.paymentBreakdown.cod.count}</td>
+                    <td class="text-right font-bold">฿${report.summary.paymentBreakdown.cod.amount.toLocaleString()}</td>
+                    <td>ไรเดอร์เก็บเงินสดมาส่งมอบฮับ</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h4 style="margin: 14px 0 4px; font-size: 12px; font-weight: bold;">2. สรุปเคลียร์เงินไรเดอร์</h4>
+        <table class="a4-table">
+            <thead>
+                <tr>
+                    <th>ไรเดอร์</th>
+                    <th class="text-center">เที่ยวส่ง</th>
+                    <th class="text-right">ค่ารอบสะสม</th>
+                    <th class="text-right">COD เก็บมา</th>
+                    <th class="text-right">เงินสดส่งมอบฮับ</th>
+                    <th class="text-center">สถานะ</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${report.riderSettlement.riders.map(r => `
+                    <tr>
+                        <td><strong>${r.riderName}</strong> (${r.riderPhone})</td>
+                        <td class="text-center">${r.tripsCount}</td>
+                        <td class="text-right">฿${r.riderFeeEarned.toLocaleString()}</td>
+                        <td class="text-right">฿${r.codCollected.toLocaleString()}</td>
+                        <td class="text-right font-bold" style="color: #047857;">฿${r.netCashToHub.toLocaleString()}</td>
+                        <td class="text-center font-bold">${r.isSettled ? '✅ เคลียร์แล้ว' : '⏳ รอเคลียร์'}</td>
+                    </tr>
+                `).join('') || '<tr><td colspan="6" class="text-center">ไม่มีข้อมูล</td></tr>'}
+            </tbody>
+        </table>
+
+        <h4 style="margin: 14px 0 4px; font-size: 12px; font-weight: bold;">3. สรุปเคลียร์เงินแผงค้า</h4>
+        <table class="a4-table">
+            <thead>
+                <tr>
+                    <th>แผงค้า</th>
+                    <th>เจ้าของแผง (เบอร์โทร)</th>
+                    <th class="text-center">ชิ้นที่ขาย</th>
+                    <th class="text-right">ยอดเงินที่ต้องโอน</th>
+                    <th class="text-center">สถานะ</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${report.vendorSettlement.stalls.map(s => `
+                    <tr>
+                        <td><strong>${s.stallName}</strong> (${s.stallNumber})</td>
+                        <td>${s.ownerName} (${s.phone})</td>
+                        <td class="text-center">${s.itemsCount} ชิ้น</td>
+                        <td class="text-right font-bold" style="color: #047857;">฿${s.totalAmount.toLocaleString()}</td>
+                        <td class="text-center font-bold">${s.isSettled ? '✅ โอนแล้ว' : '⏳ รอโอน'}</td>
+                    </tr>
+                `).join('') || '<tr><td colspan="5" class="text-center">ไม่มีข้อมูล</td></tr>'}
+            </tbody>
+        </table>
+
+        <div class="signature-section" style="margin-top: 30px;">
+            <div>
+                <div class="sig-line"></div>
+                <div>( .................................................... )</div>
+                <div style="font-size: 10px; color: #555;">เจ้าหน้าที่จัดทำรายงาน</div>
+            </div>
+            <div>
+                <div class="sig-line"></div>
+                <div>( .................................................... )</div>
+                <div style="font-size: 10px; color: #555;">ผู้จัดการตลาดฮับวิศิษฐ์ชัย</div>
+            </div>
+        </div>
+    `;
+
+    executePrintHtml(`รายงานประจำวัน_${dateKey}`, content, false);
+}
+
+// Global attachment
+window.executePrintHtml = executePrintHtml;
+window.printThermalRiderSlip = printThermalRiderSlip;
+window.printThermalVendorSlip = printThermalVendorSlip;
+window.printThermalOrderSlip = printThermalOrderSlip;
+window.printA4RidersSummary = printA4RidersSummary;
+window.printA4VendorsSummary = printA4VendorsSummary;
+window.printA4OrdersAuditLedger = printA4OrdersAuditLedger;
+window.printDailyReport = printDailyReport;
 
 // ── Sample Generator: สำหรับทดสอบรายงานทันทีในกรณีที่วันนั้นยังไม่มีออเดอร์
 function generateSampleDailyOrders() {
