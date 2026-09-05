@@ -2710,9 +2710,14 @@
                         </div>
 
                         <!-- Banner Preview Box -->
-                        <div class="relative w-full h-36 rounded-xl overflow-hidden bg-slate-200 border border-slate-300 shadow-inner">
-                            <img id="m-preview-stall-img" src="https://images.unsplash.com/photo-1542838132-92c53300491e?w=700&auto=format&fit=crop&q=80" alt="พรีวิวหน้าร้าน" class="w-full h-full object-cover">
-                            <div class="absolute top-2 left-2 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-xs">
+                        <div class="relative w-full h-36 rounded-xl overflow-hidden bg-slate-100 border border-dashed border-slate-300 shadow-inner flex items-center justify-center">
+                            <div id="m-preview-stall-placeholder" class="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-1 bg-slate-50">
+                                <span class="material-symbols-outlined text-3xl text-slate-400">add_photo_alternate</span>
+                                <span class="text-xs font-bold text-slate-500">ยังไม่มีภาพหน้าร้าน</span>
+                                <span class="text-[10px] text-slate-400">อัปโหลดไฟล์รูปภาพหรือใส่ลิงก์รูปภาพด้านบน</span>
+                            </div>
+                            <img id="m-preview-stall-img" src="" alt="พรีวิวหน้าร้าน" class="w-full h-full object-cover hidden">
+                            <div id="m-preview-stall-badge" class="hidden absolute top-2 left-2 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-xs">
                                 ตัวอย่างภาพหน้าร้านบนแอป
                             </div>
                         </div>
@@ -2751,14 +2756,17 @@
 
                         <!-- Owner Preview Box -->
                         <div class="flex items-center gap-3 p-2 bg-white rounded-xl border border-slate-200">
-                            <div class="relative w-14 h-14 rounded-full overflow-hidden border-2 border-emerald-500 shadow-sm shrink-0">
-                                <img id="m-preview-owner-img" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80" alt="พรีวิวเจ้าของ" class="w-full h-full object-cover">
-                                <span class="absolute bottom-0 right-0 bg-emerald-500 text-white rounded-full p-0.5 text-[10px] flex items-center justify-center">
+                            <div class="relative w-14 h-14 rounded-full overflow-hidden border-2 border-slate-300 shadow-sm shrink-0 bg-slate-100 flex items-center justify-center">
+                                <div id="m-preview-owner-placeholder" class="w-full h-full flex items-center justify-center text-slate-400">
+                                    <span class="material-symbols-outlined text-2xl text-slate-400">account_circle</span>
+                                </div>
+                                <img id="m-preview-owner-img" src="" alt="พรีวิวเจ้าของ" class="w-full h-full object-cover hidden">
+                                <span id="m-preview-owner-verified" class="hidden absolute bottom-0 right-0 bg-emerald-500 text-white rounded-full p-0.5 text-[10px] flex items-center justify-center">
                                     <span class="material-symbols-outlined text-[10px]">check</span>
                                 </span>
                             </div>
                             <div>
-                                <div class="font-bold text-slate-800 text-xs">ตัวอย่างรูปโปรไฟล์เจ้าของร้าน</div>
+                                <div id="m-preview-owner-title" class="font-bold text-slate-800 text-xs">ยังไม่ได้เลือกรูปถ่ายเจ้าของร้าน</div>
                                 <div class="text-[10px] text-slate-500">แสดงคู่กับเครื่องหมาย Verified และเบอร์โทรศัพท์บนการ์ดร้านค้า</div>
                             </div>
                         </div>
@@ -3313,6 +3321,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=7.5"></script>
+    <script src="app.js?v=7.6"></script>
 </body>
 </html>

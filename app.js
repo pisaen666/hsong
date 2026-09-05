@@ -9610,21 +9610,58 @@ function handleMerchantFileUpload(event, targetInputId, targetPreviewImgId) {
         const input = document.getElementById(targetInputId);
         const preview = document.getElementById(targetPreviewImgId);
         if (input) input.value = dataUrl;
-        if (preview) preview.src = dataUrl;
+        if (preview) {
+            preview.src = dataUrl;
+            preview.classList.remove("hidden");
+        }
+        updateMerchantImagePreviews();
         showToast("📸 อัปโหลดรูปภาพสำเร็จเรียบร้อยแล้ว!");
     };
     reader.readAsDataURL(file);
 }
 
 function updateMerchantImagePreviews() {
-    const stallImgUrl = document.getElementById("m-stall-image-url").value.trim();
-    const ownerImgUrl = document.getElementById("m-owner-image-url").value.trim();
+    const stallImgUrl = (document.getElementById("m-stall-image-url")?.value || "").trim();
+    const ownerImgUrl = (document.getElementById("m-owner-image-url")?.value || "").trim();
 
     const previewStall = document.getElementById("m-preview-stall-img");
-    const previewOwner = document.getElementById("m-preview-owner-img");
+    const placeholderStall = document.getElementById("m-preview-stall-placeholder");
+    const badgeStall = document.getElementById("m-preview-stall-badge");
 
-    if (previewStall && stallImgUrl) previewStall.src = stallImgUrl;
-    if (previewOwner && ownerImgUrl) previewOwner.src = ownerImgUrl;
+    const previewOwner = document.getElementById("m-preview-owner-img");
+    const placeholderOwner = document.getElementById("m-preview-owner-placeholder");
+    const verifiedOwner = document.getElementById("m-preview-owner-verified");
+    const titleOwner = document.getElementById("m-preview-owner-title");
+
+    if (previewStall) {
+        if (stallImgUrl) {
+            previewStall.src = stallImgUrl;
+            previewStall.classList.remove("hidden");
+            if (placeholderStall) placeholderStall.classList.add("hidden");
+            if (badgeStall) badgeStall.classList.remove("hidden");
+        } else {
+            previewStall.src = "";
+            previewStall.classList.add("hidden");
+            if (placeholderStall) placeholderStall.classList.remove("hidden");
+            if (badgeStall) badgeStall.classList.add("hidden");
+        }
+    }
+
+    if (previewOwner) {
+        if (ownerImgUrl) {
+            previewOwner.src = ownerImgUrl;
+            previewOwner.classList.remove("hidden");
+            if (placeholderOwner) placeholderOwner.classList.add("hidden");
+            if (verifiedOwner) verifiedOwner.classList.remove("hidden");
+            if (titleOwner) titleOwner.textContent = "รูปโปรไฟล์เจ้าของร้าน (พร้อมใช้งาน)";
+        } else {
+            previewOwner.src = "";
+            previewOwner.classList.add("hidden");
+            if (placeholderOwner) placeholderOwner.classList.remove("hidden");
+            if (verifiedOwner) verifiedOwner.classList.add("hidden");
+            if (titleOwner) titleOwner.textContent = "ยังไม่ได้เลือกรูปถ่ายเจ้าของร้าน";
+        }
+    }
 }
 
 function setMerchantStallImgPreset(type) {
@@ -9674,8 +9711,8 @@ function loginAsMerchantStall(stallId) {
     document.getElementById("m-desc").value = stall.description || stall.shopDescription || "";
 
     // Fill Images
-    document.getElementById("m-stall-image-url").value = stall.stallImage || MERCHANT_PRESET_IMAGES.stall.chicken;
-    document.getElementById("m-owner-image-url").value = stall.ownerImage || MERCHANT_PRESET_IMAGES.owner.man1;
+    document.getElementById("m-stall-image-url").value = stall.stallImage || "";
+    document.getElementById("m-owner-image-url").value = stall.ownerImage || "";
     updateMerchantImagePreviews();
 
     // Fill Top 6 Products
@@ -9711,18 +9748,19 @@ function registerNewMerchantStall() {
     document.getElementById("m-highlight").value = "";
     document.getElementById("m-desc").value = "";
 
-    document.getElementById("m-stall-image-url").value = MERCHANT_PRESET_IMAGES.stall.chicken;
-    document.getElementById("m-owner-image-url").value = MERCHANT_PRESET_IMAGES.owner.man1;
+    // Clear sample images
+    document.getElementById("m-stall-image-url").value = "";
+    document.getElementById("m-owner-image-url").value = "";
     updateMerchantImagePreviews();
 
-    // Blank top 6 template
+    // Blank top 6 template - completely clear all sample products and images
     const blankProducts = [
-        { name: "สินค้าไฮไลท์ 1", desc: "สดใหม่ คัดเกรดพรีเมียม", price: 85, unit: "1 กก.", badge: "⭐ แนะนำ", image: MERCHANT_PRESET_IMAGES.stall.chicken },
-        { name: "สินค้าไฮไลท์ 2", desc: "ยอดนิยมประจำร้าน", price: 50, unit: "500 กรัม", badge: "🔥 ยอดฮิต", image: MERCHANT_PRESET_IMAGES.stall.chicken },
-        { name: "สินค้าไฮไลท์ 3", desc: "คุณภาพสดใหม่ สะอาด", price: 60, unit: "แพ็ค", badge: "✨ สดใหม่", image: MERCHANT_PRESET_IMAGES.stall.chicken },
-        { name: "สินค้าไฮไลท์ 4", desc: "วัตถุดิบคุณภาพดี", price: 45, unit: "500 กรัม", badge: "", image: MERCHANT_PRESET_IMAGES.stall.chicken },
-        { name: "สินค้าไฮไลท์ 5", desc: "บริการตัดแต่งฟรี", price: 90, unit: "1 กก.", badge: "", image: MERCHANT_PRESET_IMAGES.stall.chicken },
-        { name: "สินค้าไฮไลท์ 6", desc: "เมนูพิเศษประจำวัน", price: 40, unit: "ชุด", badge: "", image: MERCHANT_PRESET_IMAGES.stall.chicken }
+        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" },
+        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" },
+        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" },
+        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" },
+        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" },
+        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" }
     ];
     renderMerchantTop6ProductsForm(blankProducts);
 
@@ -9734,14 +9772,52 @@ function registerNewMerchantStall() {
     showToast("📝 เริ่มกรอกเทมเพลตข้อมูลร้านค้าของคุณได้เลยครับ");
 }
 
+function updateMerchantProductPreview(index, url) {
+    const preview = document.getElementById(`m-p-preview-${index}`);
+    const placeholder = document.getElementById(`m-p-placeholder-${index}`);
+    const cleanUrl = (url || "").trim();
+    if (preview) {
+        if (cleanUrl) {
+            preview.src = cleanUrl;
+            preview.classList.remove("hidden");
+            if (placeholder) placeholder.classList.add("hidden");
+        } else {
+            preview.src = "";
+            preview.classList.add("hidden");
+            if (placeholder) placeholder.classList.remove("hidden");
+        }
+    }
+}
+
+function handleMerchantProductFileUpload(event, index) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+        alert("กรุณาเลือกไฟล์ที่เป็นรูปภาพเท่านั้นครับ (JPEG, PNG, WEBP)");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        const dataUrl = e.target.result;
+        const input = document.getElementById(`m-p-img-${index}`);
+        if (input) input.value = dataUrl;
+        updateMerchantProductPreview(index, dataUrl);
+        showToast("📸 อัปโหลดรูปภาพสินค้าสำเร็จ!");
+    };
+    reader.readAsDataURL(file);
+}
+
 function renderMerchantTop6ProductsForm(products) {
     const container = document.getElementById("merchant-top6-products-container");
     if (!container) return;
 
     let html = "";
     for (let i = 0; i < 6; i++) {
-        const p = products[i] || { name: "", desc: "", price: 0, unit: "กก.", badge: "", image: MERCHANT_PRESET_IMAGES.stall.chicken };
-        const pImg = p.image || MERCHANT_PRESET_IMAGES.stall.chicken;
+        const p = products[i] || { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" };
+        const pImg = p.image || "";
+        const priceVal = (p.price !== undefined && p.price !== null && p.price !== "") ? p.price : "";
         html += `
             <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
                 <div class="flex items-center justify-between">
@@ -9755,42 +9831,45 @@ function renderMerchantTop6ProductsForm(products) {
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div class="sm:col-span-2">
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ชื่อสินค้า <span class="text-rose-500">*</span></label>
-                        <input type="text" id="m-p-name-${i}" value="${p.name || ''}" placeholder="เช่น อกไก่ลอกหนัง, น่องติดสะโพก" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs">
+                        <input type="text" id="m-p-name-${i}" value="${p.name || ''}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ป้ายสินค้า (Badge)</label>
-                        <input type="text" id="m-p-badge-${i}" value="${p.badge || ''}" placeholder="เช่น ⭐ แนะนำ, 🔥 ยอดฮิต" class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs">
+                        <input type="text" id="m-p-badge-${i}" value="${p.badge || ''}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs">
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">คำอธิบาย / สเปกสินค้า</label>
-                        <input type="text" id="m-p-desc-${i}" value="${p.desc || ''}" placeholder="เช่น ไร้มัน ปลอดสารเร่งโต" class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs">
+                        <input type="text" id="m-p-desc-${i}" value="${p.desc || ''}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ราคา (บาท)</label>
-                        <input type="number" id="m-p-price-${i}" value="${p.price || 0}" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-emerald-700 text-xs">
+                        <input type="number" id="m-p-price-${i}" value="${priceVal}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-emerald-700 text-xs">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หน่วยขาย</label>
-                        <input type="text" id="m-p-unit-${i}" value="${p.unit || 'กก.'}" placeholder="เช่น กก., 500 กรัม, กำ" class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs">
+                        <input type="text" id="m-p-unit-${i}" value="${p.unit || 'กก.'}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs">
                     </div>
                 </div>
 
                 <!-- Product Image Upload / URL Row -->
                 <div class="pt-1 border-t border-slate-200/60 flex items-center gap-2.5">
-                    <img id="m-p-preview-${i}" src="${pImg}" alt="พรีวิวสินค้า" class="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0 bg-white">
+                    <div class="w-12 h-12 rounded-xl border border-dashed border-slate-300 flex items-center justify-center text-slate-400 bg-white shrink-0 overflow-hidden relative shadow-xs">
+                        <img id="m-p-preview-${i}" src="${pImg}" alt="พรีวิวสินค้า" class="w-full h-full object-cover ${pImg ? '' : 'hidden'}">
+                        <span id="m-p-placeholder-${i}" class="material-symbols-outlined text-slate-300 text-xl ${pImg ? 'hidden' : ''}">add_photo_alternate</span>
+                    </div>
                     <div class="flex-1 space-y-1">
                         <div class="flex items-center gap-2 flex-wrap">
                             <label class="cursor-pointer px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg font-bold text-[11px] flex items-center gap-1 active:scale-95 transition-all">
                                 <span class="material-symbols-outlined text-xs text-emerald-600">upload_file</span>
                                 <span>📁 อัปโหลดรูปสินค้าจากเครื่อง</span>
-                                <input type="file" accept="image/*" onchange="handleMerchantFileUpload(event, 'm-p-img-${i}', 'm-p-preview-${i}')" class="hidden">
+                                <input type="file" accept="image/*" onchange="handleMerchantProductFileUpload(event, ${i})" class="hidden">
                             </label>
                             <span class="text-[10px] text-slate-400">หรือใส่ลิงก์รูปภาพ:</span>
                         </div>
-                        <input type="text" id="m-p-img-${i}" value="${pImg}" oninput="document.getElementById('m-p-preview-${i}').src = this.value" placeholder="URL ลิงก์รูปภาพ..." class="w-full p-1.5 rounded-lg bg-white border border-slate-300 text-[11px]">
+                        <input type="text" id="m-p-img-${i}" value="${pImg}" oninput="updateMerchantProductPreview(${i}, this.value)" placeholder="" class="w-full p-1.5 rounded-lg bg-white border border-slate-300 text-[11px]">
                     </div>
                 </div>
             </div>
