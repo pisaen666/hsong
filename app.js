@@ -1219,7 +1219,13 @@ function copyRiderGPSCoords() {
 // 2. Application Reactive State
 const state = {
     screenMode: (function() {
-        try { return localStorage.getItem("hsong_screen_mode") || "pc"; } catch (e) { return "pc"; }
+        try {
+            const saved = localStorage.getItem("hsong_screen_mode");
+            if (saved) return saved;
+            return (typeof window !== "undefined" && window.innerWidth < 768) ? "mobile" : "pc";
+        } catch (e) {
+            return "pc";
+        }
     })(),
     currentRole: "customer",
     currentScreen: "market",
@@ -6786,9 +6792,9 @@ function setActiveRoleView(role) {
     const mainContainer = document.getElementById("main-app-container");
     if (mainContainer) {
         if (state.screenMode === "mobile") {
-            mainContainer.className = "w-full max-w-[430px] mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300";
+            mainContainer.className = "w-full max-w-full md:max-w-[430px] mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300 min-w-0";
         } else {
-            mainContainer.className = "w-full max-w-7xl mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300";
+            mainContainer.className = "w-full max-w-full md:max-w-7xl mx-auto bg-white min-h-[90vh] shadow-2xl relative my-0 md:my-4 md:rounded-3xl overflow-hidden flex flex-col border border-slate-200/80 transition-all duration-300 min-w-0";
         }
     }
 
@@ -8755,12 +8761,12 @@ function renderAuthHeaderButtons() {
     // 3. Admin Section
     if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
         html += `
-            <div class="flex items-center gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2.5 md:px-3.5 py-1 md:py-1.5 rounded-xl text-xs md:text-sm shadow-xs">
-                <span class="text-[11px] md:text-xs text-purple-300 font-bold flex items-center gap-1 cursor-pointer" onclick="switchRole('admin')">
-                    <span class="material-symbols-outlined text-sm md:text-base text-purple-400">admin_panel_settings</span>
-                    <span>แอดมิน: ${state.activeAdmin.name || 'เฮียส่ง'}</span>
+            <div class="flex items-center gap-1 sm:gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2 sm:px-3 py-1 rounded-xl text-xs shadow-xs shrink-0">
+                <span class="text-[11px] sm:text-xs text-purple-300 font-bold flex items-center gap-1 cursor-pointer" onclick="switchRole('admin')">
+                    <span class="material-symbols-outlined text-sm sm:text-base text-purple-400">admin_panel_settings</span>
+                    <span>${state.activeAdmin.name || 'เฮียส่ง'}</span>
                 </span>
-                <button onclick="switchRole('admin')" class="text-[10px] md:text-xs text-purple-200 bg-purple-800/80 hover:bg-purple-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all">
+                <button onclick="switchRole('admin')" class="hidden sm:inline-block text-[10px] md:text-xs text-purple-200 bg-purple-800/80 hover:bg-purple-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all">
                     หน้าจอ Admin
                 </button>
                 <button onclick="logoutAdmin()" class="text-[10px] md:text-xs text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบแอดมิน">
