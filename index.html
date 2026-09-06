@@ -3237,7 +3237,7 @@
     <!-- ========================================== -->
     <!-- RIDER FORM MODAL (เพิ่ม/แก้ไขข้อมูลไรเดอร์)    -->
     <!-- ========================================== -->
-    <div id="rider-form-modal" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in">
+    <div id="rider-form-modal" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-[9999] flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in" onclick="if (event.target === this) closeRiderFormModal();">
         <div class="bg-white rounded-3xl p-5 max-w-md w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[95vh] overflow-y-auto">
             <!-- Header -->
             <div class="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -3354,6 +3354,137 @@
             <div id="app-detail-footer" class="pt-2 border-t border-slate-100 shrink-0 flex items-center justify-between gap-2 flex-wrap">
                 <!-- Action buttons populated dynamically -->
             </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- RIDER APPLICATION EDIT MODAL (แก้ไขข้อมูลใบสมัคร) -->
+    <!-- ========================================== -->
+    <div id="rider-app-edit-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in" onclick="if (event.target === this) closeRiderAppEditModal();">
+        <div class="bg-white rounded-3xl p-5 max-w-lg w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[92vh] flex flex-col">
+            <!-- Header -->
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        <span class="material-symbols-outlined text-base">edit_note</span>
+                    </span>
+                    <div>
+                        <h3 id="app-edit-modal-title" class="font-extrabold text-sm text-slate-900">แก้ไขข้อมูลใบสมัครไรเดอร์</h3>
+                        <div id="app-edit-modal-sub" class="text-[10px] text-purple-700 font-mono font-bold">APP-RD-xxxx</div>
+                    </div>
+                </div>
+                <button type="button" onclick="closeRiderAppEditModal()" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+
+            <!-- Scrollable Form Body -->
+            <form id="rider-app-edit-form" onsubmit="handleRiderAppEditSubmit(event)" class="flex-1 overflow-y-auto space-y-3 pr-1 text-xs text-slate-700">
+                <input type="hidden" id="app-edit-id" value="">
+
+                <div class="grid grid-cols-3 gap-2.5">
+                    <div class="col-span-2">
+                        <label class="font-bold text-slate-700 block mb-1">ชื่อ-นามสกุลจริง: *</label>
+                        <input type="text" id="app-edit-fullname" required placeholder="เช่น นายสมเกียรติ มุ่งมั่น" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">ชื่อเล่น: *</label>
+                        <input type="text" id="app-edit-nickname" required placeholder="เช่น บอล" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์ (Login): *</label>
+                        <input type="tel" id="app-edit-phone" required placeholder="081-xxx-xxxx" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">LINE ID:</label>
+                        <input type="text" id="app-edit-lineid" placeholder="ไอดีไลน์ หรือ เบอร์โทร" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">เลขบัตรประชาชน 13 หลัก:</label>
+                        <input type="text" id="app-edit-idcard" maxlength="13" placeholder="1xxxxxxxxxxxx" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">เลขที่ใบขับขี่:</label>
+                        <input type="text" id="app-edit-drivinglicense" placeholder="เช่น 6500xxxx" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">รุ่นรถมอเตอร์ไซค์: *</label>
+                        <input type="text" id="app-edit-model" required placeholder="เช่น Honda Wave 125i" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">สีรถ:</label>
+                        <input type="text" id="app-edit-color" placeholder="เช่น ดำ-แดง" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">ทะเบียนรถ: *</label>
+                        <input type="text" id="app-edit-plate" required placeholder="เช่น 1กข 8902" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">เบอร์พร้อมเพย์รับเงิน: *</label>
+                        <input type="text" id="app-edit-promptpay" required placeholder="เบอร์โทร หรือ เลข ปชช." class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-emerald-800 bg-emerald-50/50 border-emerald-200 focus:ring-2 focus:ring-emerald-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">ธนาคาร:</label>
+                        <select id="app-edit-bank" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                            <option value="กสิกรไทย">กสิกรไทย (KBANK)</option>
+                            <option value="ไทยพาณิชย์">ไทยพาณิชย์ (SCB)</option>
+                            <option value="กรุงไทย">กรุงไทย (KTB)</option>
+                            <option value="กรุงเทพ">กรุงเทพ (BBL)</option>
+                            <option value="กรุงศรีอยุธยา">กรุงศรีอยุธยา (BAY)</option>
+                            <option value="ออมสิน">ออมสิน (GSB)</option>
+                            <option value="ทหารไทยธนชาต">ทหารไทยธนชาต (ttb)</option>
+                            <option value="พร้อมเพย์ e-Wallet">พร้อมเพย์ e-Wallet</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">พื้นที่ / โซนประจำการที่สะดวก:</label>
+                    <input type="text" id="app-edit-zone" placeholder="เช่น ตลาดหัวกุญแจ และละแวกใกล้เคียง" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">ที่พักอาศัย / ที่อยู่:</label>
+                    <input type="text" id="app-edit-address" placeholder="ที่อยู่ปัจจุบัน" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">สถานะใบสมัคร: *</label>
+                        <select id="app-edit-status" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                            <option value="pending">⏳ รอการพิจารณา (Pending)</option>
+                            <option value="approved">✓ อนุมัติเป็นไรเดอร์แล้ว (Approved)</option>
+                            <option value="rejected">✕ ปฏิเสธ (Rejected)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">หมายเหตุแอดมิน / Notes:</label>
+                        <input type="text" id="app-edit-notes" placeholder="หมายเหตุเพิ่มเติม" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="pt-2 flex gap-2 border-t border-slate-100">
+                    <button type="button" onclick="closeRiderAppEditModal()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl active:scale-95 transition-all text-xs cursor-pointer">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">save</span>
+                        <span>บันทึกการแก้ไข</span>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 

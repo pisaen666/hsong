@@ -135,7 +135,7 @@ function loadSavedRider() {
         const saved = localStorage.getItem("talathub_logged_in_rider");
         if (saved) {
             const parsed = JSON.parse(saved);
-            if (parsed && (parsed.riderId === "rider_somchai" || parsed.riderId === "rider_sombat" || (parsed.name && parsed.name.includes("สมชาย")) || parsed.phone === "081-588-7400")) {
+            if (parsed && (parsed.riderId === "rider_somchai" || parsed.riderId === "rider_sombat" || (parsed.name && parsed.name.includes("สมชาย")) || (typeof isMockCommunityRider === "function" && isMockCommunityRider(parsed)))) {
                 localStorage.removeItem("talathub_logged_in_rider");
                 return null;
             }
@@ -7887,23 +7887,40 @@ let _showAdminRiderAppsHistory = false;
 
 const DEFAULT_COMMUNITY_RIDERS = [];
 
-// Exact mock IDs and full mock names to remove, avoiding substring collisions with real names
+// Mock sample IDs and patterns to remove sample/test dummy data
 const MOCK_COMMUNITY_RIDER_IDS = ["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"];
-const MOCK_COMMUNITY_RIDER_NAMES = ["รุ่งโรจน์ วิ่งไว", "วิชัย สายฟ้า", "สมเกียรติ ซื่อสัตย์", "อนุชา บริการดี", "ธีรภัทร ว่องไว"];
+const MOCK_COMMUNITY_RIDER_PHONES = [
+    "089-111-2233", "081-222-3344", "092-333-4455", "086-444-5566",
+    "0891112233", "0812223344", "0923334455", "0864445566",
+    "089-555-1234", "081-444-5678", "092-333-8899"
+];
+const MOCK_COMMUNITY_RIDER_PLATES = ["1กข-8901", "2กค-4432", "3ขข-7711", "4คง-1234", "1กข-9988"];
+const MOCK_COMMUNITY_RIDER_NAME_KEYWORDS = [
+    "รุ่งโรจน์ ฉับไว", "รุ่งโรจน์ วิ่งไว", "วิชัย สายฟ้า", "สมเกียรติ สู้ฝน", "สมเกียรติ ซื่อสัตย์", 
+    "อนุชา บริการดี", "ธีรภัทร ว่องไว", "เอกชัย สายซิ่ง", "สุรศักดิ์ ใจดี", "อนุสรณ์ ขยันส่ง"
+];
+
 const MOCK_RIDER_APP_IDS = ["APP-RD-101"];
-const MOCK_RIDER_APP_NAMES = ["นายธีรภัทร ว่องไว", "ธีรภัทร ว่องไว", "เอกชัย สายซิ่ง", "สุรศักดิ์ ใจดี", "อนุสรณ์ ขยันส่ง"];
+const MOCK_RIDER_APP_NAME_KEYWORDS = [
+    "ธีรภัทร ว่องไว", "เอกชัย สายซิ่ง", "สุรศักดิ์ ใจดี", "อนุสรณ์ ขยันส่ง"
+];
 
 function isMockCommunityRider(r) {
     if (!r) return true;
     if (r.id && MOCK_COMMUNITY_RIDER_IDS.includes(r.id)) return true;
-    if (r.name && MOCK_COMMUNITY_RIDER_NAMES.includes(r.name.trim())) return true;
+    if (r.phone && MOCK_COMMUNITY_RIDER_PHONES.includes(r.phone.replace(/[-\s]/g, ''))) return true;
+    if (r.phone && MOCK_COMMUNITY_RIDER_PHONES.includes(r.phone.trim())) return true;
+    if (r.plate && MOCK_COMMUNITY_RIDER_PLATES.some(p => r.plate.includes(p))) return true;
+    if (r.name && MOCK_COMMUNITY_RIDER_NAME_KEYWORDS.some(kw => r.name.includes(kw))) return true;
     return false;
 }
 
 function isMockRiderApplication(a) {
     if (!a) return true;
+    if (a.isMock) return true;
     if (a.id && MOCK_RIDER_APP_IDS.includes(a.id)) return true;
-    if (a.fullName && MOCK_RIDER_APP_NAMES.includes(a.fullName.trim())) return true;
+    if (a.phone && MOCK_COMMUNITY_RIDER_PHONES.includes(a.phone.replace(/[-\s]/g, ''))) return true;
+    if (a.fullName && MOCK_RIDER_APP_NAME_KEYWORDS.some(kw => a.fullName.includes(kw))) return true;
     return false;
 }
 
@@ -7927,9 +7944,15 @@ function saveCommunityRiders(list) {
         const cleaned = (list || []).filter(r => !isMockCommunityRider(r));
         localStorage.setItem("talathub_community_riders", JSON.stringify(cleaned));
         if (isFirebaseReady() && db) {
-            db.ref("community_riders").set(cleaned).catch(err => {
-                console.warn("Firebase save community_riders failed:", err);
-            });
+            if (cleaned.length === 0) {
+                db.ref("community_riders").remove().catch(err => {
+                    console.warn("Firebase remove community_riders failed:", err);
+                });
+            } else {
+                db.ref("community_riders").set(cleaned).catch(err => {
+                    console.warn("Firebase save community_riders failed:", err);
+                });
+            }
         }
     } catch (e) {
         console.error("Error saving community riders:", e);
@@ -7957,9 +7980,15 @@ function saveRiderApplications(apps) {
         const cleaned = (apps || []).filter(a => !isMockRiderApplication(a));
         localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
         if (isFirebaseReady() && db) {
-            db.ref("rider_applications").set(cleaned).catch(err => {
-                console.warn("Firebase save rider_applications failed:", err);
-            });
+            if (cleaned.length === 0) {
+                db.ref("rider_applications").remove().catch(err => {
+                    console.warn("Firebase remove rider_applications failed:", err);
+                });
+            } else {
+                db.ref("rider_applications").set(cleaned).catch(err => {
+                    console.warn("Firebase save rider_applications failed:", err);
+                });
+            }
         }
     } catch (e) {
         console.error("Error saving rider applications:", e);
@@ -8844,6 +8873,10 @@ function renderAdminRiders() {
                                             <span class="material-symbols-outlined text-xs">visibility</span>
                                             <span>ดูใบสมัครเต็ม</span>
                                         </button>
+                                        <button onclick="openEditRiderAppModal('${app.id}')" class="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="แก้ไขข้อมูลใบสมัครนี้">
+                                            <span class="material-symbols-outlined text-xs">edit</span>
+                                            <span>แก้ไข</span>
+                                        </button>
 
                                         ${app.status === 'pending' ? `
                                             <button onclick="approveRiderApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติให้เป็นไรเดอร์ในระบบ">
@@ -8857,24 +8890,27 @@ function renderAdminRiders() {
                                             <button onclick="rejectRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all cursor-pointer">
                                                 <span>ปฏิเสธ</span>
                                             </button>
+                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all cursor-pointer" title="ลบใบสมัครนี้">
+                                                <span class="material-symbols-outlined text-sm">delete</span>
+                                            </button>
                                         ` : app.status === 'approved' ? `
-                                            <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
+                                            <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
                                                 <span class="material-symbols-outlined text-xs">two_wheeler</span>
                                                 <span>สลับเข้ารับงาน</span>
                                             </button>
-                                            <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all" title="เปลี่ยนสถานะกลับไปรอพิจารณาใหม่">
+                                            <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all cursor-pointer" title="เปลี่ยนสถานะกลับไปรอพิจารณาใหม่">
                                                 <span class="material-symbols-outlined text-xs">replay</span>
                                                 <span>รอพิจารณา</span>
                                             </button>
-                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="ลบประวัติ">
+                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all cursor-pointer" title="ลบประวัติ">
                                                 <span class="material-symbols-outlined text-sm">delete</span>
                                             </button>
                                         ` : `
-                                            <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
+                                            <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
                                                 <span class="material-symbols-outlined text-xs">replay</span>
                                                 <span>พิจารณาใหม่</span>
                                             </button>
-                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="ลบประวัติ">
+                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all cursor-pointer" title="ลบประวัติ">
                                                 <span class="material-symbols-outlined text-sm">delete</span>
                                             </button>
                                         `}
@@ -9381,6 +9417,7 @@ function openAddRiderModal() {
     if (bankEl) bankEl.value = "กสิกรไทย";
     document.getElementById("rider-form-status").value = "available";
     document.getElementById("rider-form-basefee").value = "40";
+    modal.style.zIndex = "9999";
     modal.classList.remove("hidden");
 }
 
@@ -9405,6 +9442,7 @@ function openEditRiderModal(riderId) {
     if (bankEl) bankEl.value = r.bank || "กสิกรไทย";
     document.getElementById("rider-form-status").value = r.status || "available";
     document.getElementById("rider-form-basefee").value = r.baseFee || 40;
+    modal.style.zIndex = "9999";
     modal.classList.remove("hidden");
 }
 
@@ -9436,6 +9474,8 @@ function handleRiderFormSubmit(e) {
         // Edit
         const r = riders.find(x => x.id === id);
         if (r) {
+            const oldPhone = r.phone;
+            const oldName = r.name;
             r.name = name;
             r.phone = phone;
             r.plate = plate;
@@ -9445,6 +9485,20 @@ function handleRiderFormSubmit(e) {
             r.bank = bank;
             r.status = status;
             r.baseFee = baseFee;
+
+            // Sync with application if exists
+            const apps = loadRiderApplications();
+            const matchedApp = apps.find(a => a.phone === oldPhone || a.phone === phone || (a.fullName && (oldName.includes(a.fullName) || name.includes(a.fullName))));
+            if (matchedApp) {
+                matchedApp.fullName = name;
+                matchedApp.phone = phone;
+                matchedApp.plate = plate;
+                matchedApp.motorcycleModel = motorcycleModel;
+                matchedApp.promptPayNumber = promptPay;
+                matchedApp.promptPayBank = bank;
+                matchedApp.zone = zone;
+                saveRiderApplications(apps);
+            }
         }
         showToast(`💾 บันทึกการแก้ไขข้อมูล ${name} เรียบร้อยแล้ว`);
     } else {
@@ -9726,6 +9780,10 @@ function viewRiderAppDetail(appId) {
     if (footer) {
         footer.innerHTML = `
             <div class="flex items-center gap-1.5 flex-wrap">
+                <button onclick="openEditRiderAppModal('${app.id}'); closeRiderAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลใบสมัครนี้">
+                    <span class="material-symbols-outlined text-sm">edit</span>
+                    <span>แก้ไขข้อมูล</span>
+                </button>
                 ${app.status === 'rejected' ? `
                     <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1">
                         <span class="material-symbols-outlined text-sm">replay</span>
@@ -9741,14 +9799,14 @@ function viewRiderAppDetail(appId) {
                         <span>สลับเข้ารับงาน</span>
                     </button>
                 ` : ''}
-                <button onclick="deleteRiderApplication('${app.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all" title="ลบใบสมัครนี้">
+                <button onclick="deleteRiderApplication('${app.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
                     <span class="material-symbols-outlined text-base">delete</span>
                 </button>
             </div>
 
             <div class="flex items-center gap-1.5 flex-wrap">
                 ${app.status === 'pending' ? `
-                    <button onclick="rejectRiderApplication('${app.id}'); closeRiderAppDetailModal();" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all">
+                    <button onclick="rejectRiderApplication('${app.id}'); closeRiderAppDetailModal();" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
                         ปฏิเสธ
                     </button>
                     <button onclick="approveRiderApplication('${app.id}'); closeRiderAppDetailModal();" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติเป็นไรเดอร์ในระบบ">
@@ -9760,7 +9818,7 @@ function viewRiderAppDetail(appId) {
                         <span>อนุมัติ & รับงานทันที 🚀</span>
                     </button>
                 ` : `
-                    <button onclick="closeRiderAppDetailModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all">
+                    <button onclick="closeRiderAppDetailModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
                         ปิดหน้าต่าง
                     </button>
                 `}
@@ -9777,13 +9835,129 @@ function closeRiderAppDetailModal() {
     if (modal) modal.classList.add("hidden");
 }
 
+// ── Rider Application Edit Modal Handlers
+function openEditRiderAppModal(appId) {
+    const apps = loadRiderApplications();
+    const app = apps.find(x => x.id === appId);
+    if (!app) {
+        showToast("⚠️ ไม่พบข้อมูลใบสมัคร (" + (appId || "") + ")");
+        return;
+    }
+
+    const modal = document.getElementById("rider-app-edit-modal");
+    if (!modal) return;
+
+    document.getElementById("app-edit-id").value = app.id || "";
+    document.getElementById("app-edit-modal-sub").textContent = app.id || "";
+    document.getElementById("app-edit-modal-title").textContent = `แก้ไขใบสมัคร: ${app.fullName || ''}`;
+    document.getElementById("app-edit-fullname").value = app.fullName || "";
+    document.getElementById("app-edit-nickname").value = app.nickname || "";
+    document.getElementById("app-edit-phone").value = app.phone || "";
+    document.getElementById("app-edit-lineid").value = app.lineId || "";
+    document.getElementById("app-edit-idcard").value = app.idCard || "";
+    document.getElementById("app-edit-drivinglicense").value = app.drivingLicense || "";
+    document.getElementById("app-edit-model").value = app.motorcycleModel || "";
+    document.getElementById("app-edit-color").value = app.motorcycleColor || "";
+    document.getElementById("app-edit-plate").value = app.plate || "";
+    document.getElementById("app-edit-promptpay").value = app.promptPayNumber || "";
+    document.getElementById("app-edit-bank").value = app.promptPayBank || "กสิกรไทย";
+    document.getElementById("app-edit-zone").value = app.zone || "";
+    document.getElementById("app-edit-address").value = app.address || "";
+    document.getElementById("app-edit-status").value = app.status || "pending";
+    document.getElementById("app-edit-notes").value = app.notes || "";
+
+    modal.style.zIndex = "9999";
+    modal.classList.remove("hidden");
+}
+
+function closeRiderAppEditModal() {
+    const modal = document.getElementById("rider-app-edit-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function handleRiderAppEditSubmit(e) {
+    if (e && e.preventDefault) e.preventDefault();
+
+    const id = document.getElementById("app-edit-id")?.value;
+    const fullName = document.getElementById("app-edit-fullname")?.value.trim();
+    const nickname = document.getElementById("app-edit-nickname")?.value.trim();
+    const phone = document.getElementById("app-edit-phone")?.value.trim();
+    const lineId = document.getElementById("app-edit-lineid")?.value.trim() || "";
+    const idCard = document.getElementById("app-edit-idcard")?.value.trim() || "";
+    const drivingLicense = document.getElementById("app-edit-drivinglicense")?.value.trim() || "";
+    const motorcycleModel = document.getElementById("app-edit-model")?.value.trim() || "";
+    const motorcycleColor = document.getElementById("app-edit-color")?.value.trim() || "";
+    const plate = document.getElementById("app-edit-plate")?.value.trim();
+    const promptPayNumber = document.getElementById("app-edit-promptpay")?.value.trim() || "";
+    const promptPayBank = document.getElementById("app-edit-bank")?.value || "กสิกรไทย";
+    const zone = document.getElementById("app-edit-zone")?.value.trim() || "";
+    const address = document.getElementById("app-edit-address")?.value.trim() || "";
+    const status = document.getElementById("app-edit-status")?.value || "pending";
+    const notes = document.getElementById("app-edit-notes")?.value.trim() || "";
+
+    if (!fullName || !phone || !plate) {
+        showToast("⚠️ กรุณากรอกชื่อ-นามสกุล เบอร์โทรศัพท์ และทะเบียนรถให้ครบถ้วน");
+        return;
+    }
+
+    const apps = loadRiderApplications();
+    const app = apps.find(x => x.id === id);
+    if (!app) {
+        showToast("⚠️ ไม่พบใบสมัครที่ต้องการแก้ไข");
+        return;
+    }
+
+    const oldPhone = app.phone;
+    const oldName = app.fullName;
+
+    app.fullName = fullName;
+    app.nickname = nickname;
+    app.phone = phone;
+    app.lineId = lineId;
+    app.idCard = idCard;
+    app.drivingLicense = drivingLicense;
+    app.motorcycleModel = motorcycleModel;
+    app.motorcycleColor = motorcycleColor;
+    app.plate = plate;
+    app.promptPayNumber = promptPayNumber;
+    app.promptPayBank = promptPayBank;
+    app.zone = zone;
+    app.address = address;
+    app.status = status;
+    app.notes = notes;
+    app.updatedAt = new Date().toISOString();
+
+    saveRiderApplications(apps);
+
+    // Also synchronize community riders if this rider was already approved or exists in fleet
+    const riders = loadCommunityRiders();
+    const matchedRider = riders.find(r => r.phone === oldPhone || r.phone === phone || (r.name && (r.name.includes(oldName) || r.name.includes(fullName))));
+    if (matchedRider) {
+        matchedRider.name = `${fullName} ${nickname ? `(${nickname})` : ''}`.trim();
+        matchedRider.phone = phone;
+        matchedRider.plate = plate;
+        matchedRider.motorcycleModel = motorcycleModel;
+        matchedRider.promptPay = promptPayNumber;
+        matchedRider.bank = promptPayBank;
+        matchedRider.zone = zone;
+        saveCommunityRiders(riders);
+    }
+
+    closeRiderAppEditModal();
+    showToast(`💾 บันทึกการแก้ไขข้อมูลใบสมัคร ${fullName} เรียบร้อยแล้ว!`);
+    updateAdminRiderBadges();
+    renderAdminRiders();
+}
+
 function deleteRiderApplication(appId) {
-    if (confirm("คุณแน่ใจหรือไม่ว่าต้องการลบประวัติใบสมัครนี้?")) {
+    if (confirm("⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบประวัติใบสมัครนี้ออกจากระบบ?")) {
         const apps = loadRiderApplications();
         const updated = apps.filter(x => x.id !== appId);
         saveRiderApplications(updated);
         closeRiderAppDetailModal();
+        closeRiderAppEditModal();
         showToast("🗑️ ลบใบสมัครเรียบร้อยแล้ว");
+        updateAdminRiderBadges();
         renderAdminRiders();
     }
 }
@@ -10111,19 +10285,22 @@ function simulateRiderGpsMovement() {
 }
 
 function clearFleetTestData() {
-    if (!confirm("⚠️ คุณต้องการล้างข้อมูลตัวอย่าง/ทดสอบ (ใบสมัครตัวอย่าง, กองยานจำลอง) ออกจากระบบใช่หรือไม่?\n\nข้อมูลจริงที่ผู้สมัครกรอกเข้ามาจะยังคงอยู่")) return;
+    if (!confirm("⚠️ คุณต้องการล้างข้อมูลทดสอบ (ใบสมัคร และข้อมูลไรเดอร์ทดสอบทั้งหมด) ออกจากระบบใช่หรือไม่?\n\n• ข้อมูลในเครื่องนี้และบนคลาวด์ Firebase จะถูกรีเซ็ตให้สะอาด 100% พร้อมใช้งานจริง")) return;
 
-    // 1. Clean applications: remove mock/sample IDs or full mock names
-    const apps = loadRiderApplications();
-    const realApps = apps.filter(a => !isMockRiderApplication(a));
-    saveRiderApplications(realApps);
+    // Reset local storage
+    localStorage.removeItem("talathub_rider_applications");
+    localStorage.removeItem("talathub_community_riders");
+    localStorage.removeItem("talathub_logged_in_rider");
 
-    // 2. Clean community riders: remove mock fleet
-    const riders = loadCommunityRiders();
-    const realRiders = riders.filter(r => !isMockCommunityRider(r));
-    saveCommunityRiders(realRiders);
+    // Reset Firebase Realtime Database
+    if (isFirebaseReady() && db) {
+        db.ref("rider_applications").remove().catch(console.warn);
+        db.ref("community_riders").remove().catch(console.warn);
+    }
 
-    showToast("🧹 ล้างข้อมูลตัวอย่างและจำลองออกจากระบบเรียบร้อยแล้ว!");
+    _lastSubmittedRiderApp = null;
+    showToast("🧹 ล้างข้อมูลทดสอบทั้งหมดเรียบร้อยแล้ว! ระบบสะอาด 100%");
+    updateAdminRiderBadges();
     renderAdminRiders();
     setTimeout(() => initAdminRiderRadarMap(), 200);
 }
@@ -10141,6 +10318,9 @@ window.openAddRiderModal = openAddRiderModal;
 window.openEditRiderModal = openEditRiderModal;
 window.closeRiderFormModal = closeRiderFormModal;
 window.handleRiderFormSubmit = handleRiderFormSubmit;
+window.openEditRiderAppModal = openEditRiderAppModal;
+window.closeRiderAppEditModal = closeRiderAppEditModal;
+window.handleRiderAppEditSubmit = handleRiderAppEditSubmit;
 window.deleteCommunityRider = deleteCommunityRider;
 window.initAdminRiderRadarMap = initAdminRiderRadarMap;
 window.viewRiderAppDetail = viewRiderAppDetail;
@@ -12758,7 +12938,7 @@ function autoSanitizeProductionData() {
         if (rawRiders) {
             let riders = JSON.parse(rawRiders);
             if (Array.isArray(riders)) {
-                riders = riders.filter(r => r && r.id && !["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"].includes(r.id));
+                riders = riders.filter(r => !isMockCommunityRider(r));
                 localStorage.setItem("talathub_community_riders", JSON.stringify(riders));
             }
         }
@@ -12769,7 +12949,7 @@ function autoSanitizeProductionData() {
         const savedRider = localStorage.getItem("talathub_logged_in_rider");
         if (savedRider) {
             const r = JSON.parse(savedRider);
-            if (r && (r.riderId === "rider_somchai" || r.riderId === "rider_sombat" || (r.name && r.name.includes("สมชาย")) || r.phone === "081-588-7400")) {
+            if (r && (r.riderId === "rider_somchai" || r.riderId === "rider_sombat" || (r.name && r.name.includes("สมชาย")) || isMockCommunityRider(r))) {
                 localStorage.removeItem("talathub_logged_in_rider");
             }
         }
