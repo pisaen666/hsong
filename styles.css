@@ -66,6 +66,16 @@ body {
     box-shadow: 0 4px 14px rgba(147, 51, 234, 0.45) !important;
 }
 
+#role-btn-rider.active {
+    background: linear-gradient(135deg, #0284c7, #2563eb) !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45) !important;
+}
+
+#role-btn-rider.logged-in {
+    border: 1px solid rgba(56, 189, 248, 0.5) !important;
+}
+
 /* Category Pill Active State */
 .cat-pill.active {
     background-color: #006c49 !important;
