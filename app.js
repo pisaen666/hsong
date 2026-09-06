@@ -3404,6 +3404,9 @@ function printThermalOrderSlip(orderId, dateKey) {
     if (!o) {
         o = _collectAllOrders().find(x => x.orderId === orderId);
     }
+    if (!o && state.activeOrder && (!orderId || state.activeOrder.orderId === orderId)) {
+        o = state.activeOrder;
+    }
     if (!o) {
         showToast("⚠️ ไม่พบข้อมูลคำสั่งซื้อ");
         return;
