@@ -7894,14 +7894,18 @@ const MOCK_RIDER_APP_IDS = ["APP-RD-101"];
 function isMockCommunityRider(r) {
     if (!r) return true;
     if (r.isMock) return true;
-    if (r.id && MOCK_COMMUNITY_RIDER_IDS.includes(r.id)) return true;
+    if (r.id && (MOCK_COMMUNITY_RIDER_IDS.includes(r.id) || r.id === "RIDER-8923")) return true;
+    if (r.name && (r.name.includes("ใจ มุ่งมั่น") || r.name.includes("ไว มุ่งมั่น"))) return true;
+    if (r.phone && r.phone.replace(/[-\s]/g, "") === "0815887400") return true;
     return false;
 }
 
 function isMockRiderApplication(a) {
     if (!a) return true;
     if (a.isMock) return true;
-    if (a.id && MOCK_RIDER_APP_IDS.includes(a.id)) return true;
+    if (a.id && (MOCK_RIDER_APP_IDS.includes(a.id) || a.id === "APP-RD-1148")) return true;
+    if (a.fullName && (a.fullName.includes("ใจ มุ่งมั่น") || a.fullName.includes("ไว มุ่งมั่น"))) return true;
+    if (a.phone && a.phone.replace(/[-\s]/g, "") === "0815887400") return true;
     return false;
 }
 
@@ -12941,14 +12945,14 @@ function autoSanitizeProductionData() {
         }
     } catch (e) {}
 
-    // 3. Community riders & Rider applications
+    // 3. Community riders & Rider applications: Complete purge of mock & sample riders
     try {
         const rawApps = localStorage.getItem("talathub_rider_applications");
         let apps = [];
         if (rawApps) {
             apps = JSON.parse(rawApps);
             if (Array.isArray(apps)) {
-                apps = apps.filter(a => !isMockRiderApplication(a));
+                apps = apps.filter(a => a && !isMockRiderApplication(a));
                 localStorage.setItem("talathub_rider_applications", JSON.stringify(apps));
             }
         }
@@ -12957,17 +12961,7 @@ function autoSanitizeProductionData() {
         if (rawRiders) {
             let riders = JSON.parse(rawRiders);
             if (Array.isArray(riders)) {
-                riders = riders.filter(r => !isMockCommunityRider(r));
-
-                // If a rider exists but their application is still strictly "pending" (not approved), remove them from active fleet!
-                if (Array.isArray(apps) && apps.length > 0) {
-                    riders = riders.filter(r => {
-                        const cleanRPhone = (r.phone || "").replace(/[-\s]/g, "");
-                        const pendingApp = apps.find(a => a.status === "pending" && (a.phone || "").replace(/[-\s]/g, "") === cleanRPhone);
-                        return !pendingApp; // filter out if still pending
-                    });
-                }
-
+                riders = riders.filter(r => r && !isMockCommunityRider(r));
                 localStorage.setItem("talathub_community_riders", JSON.stringify(riders));
             }
         }
