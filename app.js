@@ -1,9 +1,9 @@
 // TalatHub (ตลาดฮับ) - Application Core Logic with 100 Stalls Directory
 
-// 1. Data Store: 5 Stalls per Category x 6 Products each + 3x3m Stall Profile
+// 1. Data Store: Core Hub Stall (แผง A01: ร้านไก่สดเฮียส่ง)
 const BASE_MARKET_STALLS = [
     // ========================================================
-    // ร้านค้าหลักที่ 1 (Hub กลาง) - แผง A01: ไก่สดอนามัย
+    // ร้านค้าหลัก (Hub กลาง) - แผง A01: ไก่สดอนามัย เฮียส่ง
     // ========================================================
     {
         stallId: "stall_chicken",
@@ -31,168 +31,13 @@ const BASE_MARKET_STALLS = [
             { id: "chk_05", name: "น่องไก่สดล้วน (ไซส์ใหญ่)", desc: "เนื้อแน่น เหมาะทำไก่นึ่งกระเทียม", price: 42, unit: "500 กรัม", category: "chicken", image: "https://images.unsplash.com/photo-1587593810167-a84920ea0781?w=400&auto=format&fit=crop&q=80", badge: null },
             { id: "chk_06", name: "โครงไก่สดต้มน้ำซุปหวาน", desc: "โครงไก่สด ล้างสะอาด เคี่ยวน้ำซุปหวานกลมกล่อม", price: 20, unit: "2 โครง", category: "chicken", image: "https://images.unsplash.com/photo-1527477396000-e27163b481c2?w=400&auto=format&fit=crop&q=80", badge: null }
         ]
-    },
-    // ========================================================
-    // ร้านค้าหลักที่ 2 - แผง A09: หมูสดอนามัย
-    // ========================================================
-    {
-        stallId: "stall_pork_a09",
-        stallName: "ร้านหมูสดอนามัย เจ๊กวง (แผง A09)",
-        stallNumber: "แผง A09",
-        zone: "A",
-        category: "pork",
-        stallTag: "🥩 หมูสดอนามัย",
-        dimension: "3×3 เมตร",
-        badgeColor: "bg-pink-100 text-pink-800 border-pink-200",
-        isHub: false,
-        isFavorite: false,
-        stallImage: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=700&auto=format&fit=crop&q=80",
-        ownerImage: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80",
-        ownerName: "เจ๊กวง",
-        phone: "082-345-6789",
-        experience: "เปิดบริการในตลาดกว่า 12 ปี",
-        highlight: "หมูสดอนามัย ชำแหละวันต่อวัน ไม่ใช้สารเร่งเนื้อแดง สะอาด ปลอดภัย",
-        shopDescription: "จำหน่ายเนื้อหมูสดคุณภาพ หมูสามชั้น สันคอ สันนอก ซี่โครงแก้ว และหมูบดอนามัย สดใหม่ทุกวัน พร้อมบริการหั่น สไลซ์ และบดตามต้องการ",
-        products: [
-            { id: "prk_01", name: "หมูสามชั้นสไลซ์ (อนามัย)", desc: "มันแทรกกำลังดี เหมาะทอดหรือชาบู", price: 95, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: "🌟 ขายดี" },
-            { id: "prk_02", name: "สันคอหมูสดคัดเกรด", desc: "นุ่ม ละมุน ลายหินอ่อนสวย", price: 85, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: "🔥 สดใหม่" },
-            { id: "prk_03", name: "สันนอกหมูเนื้อนุ่ม", desc: "ไขมันน้อย เนื้อแน่น สเต๊กหรือผัด", price: 75, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "prk_04", name: "ซี่โครงแก้วหมูสด", desc: "กรุบกรอบ ต้มซุปหรือทอดกระเทียม", price: 65, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "prk_05", name: "หมูบดอนามัยไม่ปนมัน", desc: "บดสดใหม่วันต่อวัน ไร้กลิ่นคาว", price: 70, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: "✨ ยอดฮิต" },
-            { id: "prk_06", name: "สะโพกหมูสดสำหรับต้ม/แกง", desc: "เนื้อแดงล้วน คุณภาพเน้นๆ", price: 60, unit: "500 กรัม", category: "pork", image: "https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=400&auto=format&fit=crop&q=80", badge: null }
-        ]
-    },
-    // ========================================================
-    // ร้านค้าหลักที่ 3 - แผง B01: ผักสดปลอดสาร
-    // ========================================================
-    {
-        stallId: "stall_veggie_b01",
-        stallName: "ร้านผักสวนครัวปลอดสาร ลุงสนั่น (แผง B01)",
-        stallNumber: "แผง B01",
-        zone: "B",
-        category: "veggie",
-        stallTag: "🥬 ผักสดปลอดสาร",
-        dimension: "3×3 เมตร",
-        badgeColor: "bg-emerald-100 text-emerald-800 border-emerald-200",
-        isHub: false,
-        isFavorite: false,
-        stallImage: "https://images.unsplash.com/photo-1488459716781-31db52582fe9?w=700&auto=format&fit=crop&q=80",
-        ownerImage: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80",
-        ownerName: "ลุงสนั่น",
-        phone: "083-456-7890",
-        experience: "ชาวสวนตัวจริง ปลูกเองขายเอง",
-        highlight: "ผักสดคัดจากสวน ปลอดสารเคมี เก็บสดทุกเช้า กรอบ สะอาด ปลอดภัย",
-        shopDescription: "จำหน่ายผักสดพื้นบ้านและผักโครงการหลวง ผักกาดขาว คะน้าฮ่องกง ผักบุ้งจีน กะหล่ำปลี บรอกโคลี และมะเขือเทศ สดใหม่วันต่อวัน",
-        products: [
-            { id: "veg_01", name: "ผักบุ้งจีนยอดอ่อนปลอดสาร", desc: "ยอดอ่อน กรอบ อร่อย ผัดไฟแดงเด็ด", price: 20, unit: "1 กำ", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: "🌟 ขายดี" },
-            { id: "veg_02", name: "ผักกาดขาวหวานกรอบ", desc: "ใบแน่น กรอบหวาน ต้มแกงจืด", price: 35, unit: "1 กก.", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: "🔥 สดใหม่" },
-            { id: "veg_03", name: "คะน้าฮ่องกงยอดอ่อน", desc: "ก้านกรอบ ไม่ขม ลวกน้ำมันหอย", price: 45, unit: "500 กรัม", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "veg_04", name: "กะหล่ำปลีเขียวปลอดสาร", desc: "หัวแน่น สดจากไร่ ผัดน้ำปลา", price: 30, unit: "1 หัว", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "veg_05", name: "บรอกโคลีสดกรอบ", desc: "ดอกแน่น วิตามินสูง ผัดกุ้งสด", price: 40, unit: "500 กรัม", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "veg_06", name: "มะเขือเทศท้อสีสด", desc: "ผลกลมสวย ฉ่ำน้ำ อุดมไลโคปีน", price: 25, unit: "500 กรัม", category: "veggie", image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&auto=format&fit=crop&q=80", badge: null }
-        ]
-    },
-    // ========================================================
-    // ร้านค้าหลักที่ 4 - แผง C01: กะทิสด & เครื่องแกงโบราณ
-    // ========================================================
-    {
-        stallId: "stall_curry_c01",
-        stallName: "ร้านกะทิสด & เครื่องแกงโบราณ ลุงสมหมาย (แผง C01)",
-        stallNumber: "แผง C01",
-        zone: "C",
-        category: "curry",
-        stallTag: "🌶️ เครื่องแกง & กะทิสด",
-        dimension: "3×3 เมตร",
-        badgeColor: "bg-red-100 text-red-800 border-red-200",
-        isHub: false,
-        isFavorite: false,
-        stallImage: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=700&auto=format&fit=crop&q=80",
-        ownerImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
-        ownerName: "ลุงสมหมาย",
-        phone: "084-567-8901",
-        experience: "สูตรลับเครื่องแกงใต้กว่า 20 ปี",
-        highlight: "กะทิคั้นสดแท้ 100% ไม่ผสมน้ำ พริกแกงใต้ตำมือ หอมเครื่องเทศถึงใจ",
-        shopDescription: "จำหน่ายกะทิสดคั้นใหม่ พริกแกงเผ็ด พริกแกงเขียวหวาน พริกแกงส้ม หอมแดง กระเทียมไทย และกะปิแท้ระนอง คุณภาพปรุงอาหารระดับภัตตาคาร",
-        products: [
-            { id: "cry_01", name: "หัวกะทิคั้นสดแท้ 100%", desc: "ข้น มัน หอม ไม่ใส่วัตถุกันเสีย", price: 40, unit: "500 มล.", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: "🌟 ขายดี" },
-            { id: "cry_02", name: "พริกแกงเผ็ดใต้สูตรเด็ด", desc: "ตำมือ เครื่องแน่น เผ็ดหอมถึงใจ", price: 30, unit: "200 กรัม", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: "🔥 เผ็ดหอม" },
-            { id: "cry_03", name: "พริกแกงเขียวหวานหอมเครื่อง", desc: "สีสวยธรรมชาติ แกงไก่เข้มข้น", price: 30, unit: "200 กรัม", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "cry_04", name: "หอมแดงศรีสะเกษแท้", desc: "หัวแน่น แห้งดี กลิ่นหอมแรง", price: 45, unit: "500 กรัม", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "cry_05", name: "กระเทียมไทยคัดกลีบ", desc: "กลีบเล็ก หอมฉุน เจียวหอมมาก", price: 50, unit: "500 กรัม", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "cry_06", name: "กะปิแท้เคยแท้ระนอง", desc: "เคยตาสีแท้ หอม ไม่เค็มโดด", price: 60, unit: "กระปุก", category: "curry", image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80", badge: "✨ กลิ่นหอม" }
-        ]
-    },
-    // ========================================================
-    // ร้านค้าหลักที่ 5 - แผง E05: อาหารทะเลสดมหาชัย
-    // ========================================================
-    {
-        stallId: "stall_seafood_e05",
-        stallName: "ร้านซีฟู้ดสดมหาชัย เจ๊วรรณ (แผง E05)",
-        stallNumber: "แผง E05",
-        zone: "E",
-        category: "seafood",
-        stallTag: "🦐 อาหารทะเลสด",
-        dimension: "3×3 เมตร",
-        badgeColor: "bg-cyan-100 text-cyan-800 border-cyan-200",
-        isHub: false,
-        isFavorite: false,
-        stallImage: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=700&auto=format&fit=crop&q=80",
-        ownerImage: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&auto=format&fit=crop&q=80",
-        ownerName: "เจ๊วรรณ",
-        phone: "085-678-9012",
-        experience: "รับตรงจากเรือประมงมหาชัยทุกคืน",
-        highlight: "อาหารทะเลสดส่งตรงจากสะพานปลา กุ้งเป็น หมึกสด ปลากะพงว่ายน้ำ",
-        shopDescription: "จำหน่ายกุ้งขาว ปลากะพงสด หมึกกล้วยลอก หอยแมลงภู่ ปูม้าสด และแซลมอนนอร์เวย์ สะอาด ขอดเกล็ด ควักไส้ และแล่เนื้อฟรี",
-        products: [
-            { id: "sea_01", name: "กุ้งขาวสดคัดไซส์ใหญ่ (20-25 ตัว/โล)", desc: "เนื้อเด้ง หวานฉ่ำ สดจากบ่อ", price: 180, unit: "1 กก.", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: "🌟 ขายดี" },
-            { id: "sea_02", name: "ปลากะพงขาวสดตัวโต (ขอดเกล็ดฟรี)", desc: "เนื้อขาว นุ่มหวาน ทอดน้ำปลาเลิศ", price: 140, unit: "1 ตัว", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: "🔥 สดจากแพ" },
-            { id: "sea_03", name: "หมึกกล้วยสดไซส์ใหญ่", desc: "หมึกสด ลอกไส้ ลวกจิ้มซีฟู้ด", price: 160, unit: "1 กก.", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "sea_04", name: "หอยแมลงภู่สดคัดไซส์", desc: "ตัวโต ล้างสะอาด ต้มใบโหระพา", price: 55, unit: "1 กก.", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "sea_05", name: "ปูม้าสดเนื้อแน่น", desc: "ปูม้าเป็น นึ่งสดหวานเจี๊ยบ", price: 220, unit: "1 กก.", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: "✨ สดใหม่" },
-            { id: "sea_06", name: "เนื้อปลาแซลมอนสดนอร์เวย์", desc: "เกรดซาชิมิ ลายไขมันสวย", price: 150, unit: "300 กรัม", category: "seafood", image: "https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=400&auto=format&fit=crop&q=80", badge: null }
-        ]
     }
 ];
 
 const MARKET_DATA = [...BASE_MARKET_STALLS];
 
-// Generate mock 100 stalls for market directory
-const ALL_100_STALLS = [
-    ...MARKET_DATA,
-    // Additional Zone A Stalls
-    { stallId: "stall_a02_extra", stallName: "ไก่บ้านอินทรีย์ลุงโต้ง", stallNumber: "แผง A02", zone: "A", category: "chicken", stallTag: "🍗 ไก่บ้านพันธุ์แท้", badgeColor: "bg-orange-50 text-orange-800 border-orange-200", products: [] },
-    { stallId: "stall_a03_extra", stallName: "เนื้อโคขุนโพนยางคำ บังดุล", stallNumber: "แผง A03", zone: "A", category: "chicken", stallTag: "🥩 เนื้อฮาลาล", badgeColor: "bg-orange-50 text-orange-800 border-orange-200", products: [] },
-    { stallId: "stall_a04_extra", stallName: "เป็ดพะโล้แม่สายใจ", stallNumber: "แผง A04", zone: "A", category: "chicken", stallTag: "🦆 เป็ดสด/ต้ม", badgeColor: "bg-orange-50 text-orange-800 border-orange-200", products: [] },
-    { stallId: "stall_a09_extra", stallName: "หมูสามชั้นทองคำ เจ๊กวง", stallNumber: "แผง A09", zone: "A", category: "pork", stallTag: "🥩 หมูสดคัดเกรด", badgeColor: "bg-pink-50 text-pink-800 border-pink-200", products: [] },
-
-    // Additional Zone B Stalls
-    { stallId: "stall_b01_extra", stallName: "ผักสวนครัวลุงสนั่น", stallNumber: "แผง B01", zone: "B", category: "veggie", stallTag: "🥬 ผักพื้นบ้าน", badgeColor: "bg-emerald-50 text-emerald-800 border-emerald-200", products: [] },
-    { stallId: "stall_b02_extra", stallName: "เห็ดสามอย่างเพื่อสุขภาพ ป้าเพ็ญ", stallNumber: "แผง B02", zone: "B", category: "veggie", stallTag: "🍄 เห็ดสดทุกชนิด", badgeColor: "bg-emerald-50 text-emerald-800 border-emerald-200", products: [] },
-    { stallId: "stall_b05_extra", stallName: "พริกขี้หนูสวน & มะนาวเจ๊เล็ก", stallNumber: "แผง B05", zone: "B", category: "veggie", stallTag: "🌶️ พริกหอม", badgeColor: "bg-emerald-50 text-emerald-800 border-emerald-200", products: [] },
-    { stallId: "stall_b06_extra", stallName: "หน่อไม้สด & ผักกูดแม่สร้อย", stallNumber: "แผง B06", zone: "B", category: "veggie", stallTag: "🌱 ผักป่าตามฤดูกาล", badgeColor: "bg-emerald-50 text-emerald-800 border-emerald-200", products: [] },
-
-    // Additional Zone C Stalls
-    { stallId: "stall_c01_extra", stallName: "กะทิสดชาวเกาะ ลุงสมหมาย", stallNumber: "แผง C01", zone: "C", category: "curry", stallTag: "🥥 คั้นสด 100%", badgeColor: "bg-red-50 text-red-800 border-red-200", products: [] },
-    { stallId: "stall_c03_extra", stallName: "หอมแดง กระเทียม กะปิระนอง ป้าแจ๋ว", stallNumber: "แผง C03", zone: "C", category: "curry", stallTag: "🧄 เครื่องครัวไทย", badgeColor: "bg-red-50 text-red-800 border-red-200", products: [] },
-    { stallId: "stall_c04_extra", stallName: "เส้นก๋วยเตี๋ยวสด & วุ้นเส้นโบราณ", stallNumber: "แผง C04", zone: "C", category: "curry", stallTag: "🍜 เส้นทำวันต่อวัน", badgeColor: "bg-red-50 text-red-800 border-red-200", products: [] },
-
-    // Additional Zone E Stalls
-    { stallId: "stall_e05_extra", stallName: "ปลาหมึกย่าง & ซีฟู้ดมหาชัย", stallNumber: "แผง E05", zone: "E", category: "seafood", stallTag: "🦑 ซีฟู้ดสด", badgeColor: "bg-cyan-50 text-cyan-800 border-cyan-200", products: [] }
-];
-
-// Fill up with more stalls dynamically up to 100 stalls
-for (let i = 10; i <= 25; i++) {
-    ALL_100_STALLS.push({ stallId: `stall_a_${i}`, stallName: `แผงเนื้อสัตว์สด ${i}`, stallNumber: `แผง A${i}`, zone: "A", category: "chicken", stallTag: "🍗 เนื้อสด", badgeColor: "bg-slate-50 text-slate-700 border-slate-200", products: [] });
-}
-for (let i = 10; i <= 30; i++) {
-    ALL_100_STALLS.push({ stallId: `stall_b_${i}`, stallName: `แผงผักสดอินทรีย์ ${i}`, stallNumber: `แผง B${i}`, zone: "B", category: "veggie", stallTag: "🥬 ผักสด", badgeColor: "bg-slate-50 text-slate-700 border-slate-200", products: [] });
-}
-for (let i = 10; i <= 25; i++) {
-    ALL_100_STALLS.push({ stallId: `stall_c_${i}`, stallName: `แผงของแห้งเครื่องเทศ ${i}`, stallNumber: `แผง C${i}`, zone: "C", category: "curry", stallTag: "🌶️ ของแห้ง", badgeColor: "bg-slate-50 text-slate-700 border-slate-200", products: [] });
-}
-for (let i = 5; i <= 20; i++) {
-    ALL_100_STALLS.push({ stallId: `stall_e_${i}`, stallName: `แผงอาหารทะเลสด ${i}`, stallNumber: `แผง E${i}`, zone: "E", category: "seafood", stallTag: "🦐 ซีฟู้ด", badgeColor: "bg-slate-50 text-slate-700 border-slate-200", products: [] });
-}
+// Stalls directory (เริ่มต้นจากแผงหลัก และเพิ่มขึ้นตามการลงทะเบียนจริง)
+const ALL_100_STALLS = [...MARKET_DATA];
 
 // Helper: Load & Save Favorites in LocalStorage
 function loadSavedFavorites() {
@@ -290,8 +135,9 @@ function loadSavedRider() {
         const saved = localStorage.getItem("talathub_logged_in_rider");
         if (saved) {
             const parsed = JSON.parse(saved);
-            if (parsed && (parsed.riderId === "rider_somchai" || !parsed.riderId || parsed.phone === "081-234-5678")) {
-                parsed.phone = "081-588-7400";
+            if (parsed && (parsed.riderId === "rider_somchai" || parsed.riderId === "rider_sombat" || (parsed.name && parsed.name.includes("สมชาย")) || parsed.phone === "081-588-7400")) {
+                localStorage.removeItem("talathub_logged_in_rider");
+                return null;
             }
             return parsed;
         }
@@ -357,8 +203,8 @@ function loadSavedActiveOrder() {
         if (saved) {
             const parsed = JSON.parse(saved);
             if (parsed && parsed.orderId) {
-                // ✅ ทิ้งออเดอร์ตัวอย่างเก่า เช่น #TH-4692 หรือไม่มี savedAt timestamp
-                if (!parsed.savedAt || parsed.orderId === "#TH-4692") {
+                const mockOrderIds = ["#TH-6114", "#TH-8101", "#TH-8102", "#TH-8103", "#TH-5324", "#TH-9568", "#TH-4692", "TH-6114", "TH-8101", "TH-8102", "TH-8103", "TH-5324", "TH-9568", "TH-4692"];
+                if (!parsed.savedAt || mockOrderIds.includes(parsed.orderId) || parsed.orderId.startsWith("#TH-810")) {
                     localStorage.removeItem("talathub_active_order");
                     return null;
                 }
@@ -379,18 +225,23 @@ function loadSavedActiveOrder() {
     return null;
 }
 
-// ✅ ล้างข้อมูลทดสอบทั้งหมด (cart + order) สำหรับเริ่มต้นใหม่
-
+// ✅ ล้างข้อมูลทดสอบทั้งหมด สำหรับเริ่มต้นใช้งานจริง
 function clearAllTestData() {
-    // ล้าง localStorage
     localStorage.removeItem("talathub_active_order");
     localStorage.removeItem("talathub_cart");
     localStorage.removeItem("talathub_delivery_location");
+    localStorage.removeItem("talathub_order_history");
+    localStorage.removeItem("talathub_community_riders");
+    localStorage.removeItem("talathub_logged_in_rider");
+    localStorage.removeItem("talathub_custom_market_stalls");
+    localStorage.removeItem("talathub_pending_stalls");
+    localStorage.removeItem("talathub_wallet_transactions");
+    localStorage.removeItem("talathub_rating_reviews");
+    localStorage.removeItem("talathub_mock_orders");
 
     // ล้าง Firebase orders ทั้งหมด
     if (isFirebaseReady()) {
         db.ref("orders").remove().catch(e => console.warn("Firebase clear failed:", e));
-        // ล้าง cart ของ customer ปัจจุบัน
         if (state.customer && state.customer.isLoggedIn) {
             const cid = toFirebaseKey(state.customer.identifier);
             db.ref(`carts/${cid}`).remove().catch(() => {});
@@ -401,6 +252,7 @@ function clearAllTestData() {
     state.activeOrder = null;
     state.cart = [];
     state.deliveryLocation = null;
+    state.activeRider = null;
 
     // อัปเดต UI
     const hubBadge = document.getElementById("hub-badge-count");
@@ -411,15 +263,20 @@ function clearAllTestData() {
     if (typeof renderHubPickingList === "function") renderHubPickingList();
     if (typeof renderHubSettlement === "function") renderHubSettlement();
     renderTrackingScreen();
+    if (typeof renderRiderScreen === "function") renderRiderScreen();
+    renderAuthHeaderButtons();
 
-    showToast("🗑️ ล้างข้อมูลทดสอบเรียบร้อยแล้ว! พร้อมทดสอบใหม่");
+    showToast("🗑️ ล้างข้อมูลทดสอบทั้งหมดเรียบร้อยแล้ว! ระบบสะอาด 100%");
 }
 
 // ── ORDER ARCHIVE: บันทึกออเดอร์ลง talathub_order_history สำหรับคำนวณรายงานประจำวัน
 function archiveOrderToHistory(order) {
     if (!order || !order.orderId) return;
+    const mockOrderIds = ["#TH-6114", "#TH-8101", "#TH-8102", "#TH-8103", "#TH-5324", "#TH-9568", "#TH-4692", "TH-6114", "TH-8101", "TH-8102", "TH-8103", "TH-5324", "TH-9568", "TH-4692"];
+    if (mockOrderIds.includes(order.orderId) || order.orderId.startsWith("#TH-810")) return;
     try {
         let hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+        hist = hist.filter(o => o && o.orderId && !mockOrderIds.includes(o.orderId) && !o.orderId.startsWith("#TH-810"));
         const idx = hist.findIndex(o => o.orderId === order.orderId);
         const orderToSave = { ...order, savedAt: order.savedAt || Date.now() };
         if (idx >= 0) {
@@ -582,13 +439,14 @@ function loadSavedLocation() {
         const saved = localStorage.getItem("talathub_delivery_location");
         if (saved) {
             const parsed = JSON.parse(saved);
-            // ล้างข้อมูลตัวอย่าง/ทดสอบเดิม เช่น เทศบาลเมืองบ้านบึง หรือ คุณสุรีย์ หรือ 0.0 กม.
+            // ล้างข้อมูลตัวอย่าง/ทดสอบเดิม เช่น เทศบาลเมืองบ้านบึง หรือ คุณสุรีย์ หรือ 0.0 กม. หรือ 0.8 กม.
             if (parsed && (
                 !parsed.isSet ||
                 !parsed.title ||
                 parsed.title.includes("เทศบาลเมืองบ้านบึง") ||
                 parsed.title.includes("สุรีย์") ||
-                parsed.distance === "0.0 กม."
+                parsed.distance === "0.0 กม." ||
+                parsed.distance === "0.8 กม."
             )) {
                 localStorage.removeItem("talathub_delivery_location");
                 return null;
@@ -739,12 +597,25 @@ function updateDeliveryLocationUI() {
     const welcomeFeeText = document.getElementById("welcome-fee-text");
     const welcomeSublabel = document.getElementById("welcome-location-sublabel");
 
-    if (loc && loc.isSet) {
-        if (modeBadge) modeBadge.textContent = loc.isRealGPS ? "🛰️ พิกัดจริงของคุณ (GPS / หมุดแผนที่)" : "📍 พิกัดจัดส่งที่ระบุไว้";
-        if (welcomeSublabel) welcomeSublabel.textContent = loc.landmark ? `จุดสังเกต: ${loc.landmark}` : "ที่อยู่จัดส่งของคุณ:";
+    if (state.isSearchingGPS) {
+        if (modeBadge) modeBadge.innerHTML = `<span class="inline-flex items-center gap-1 text-amber-300 font-extrabold animate-pulse"><span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span> 🛰️ กำลังค้นหาพิกัด GPS จริง...</span>`;
+        if (welcomeSublabel) welcomeSublabel.textContent = "สถานะตำแหน่งจัดส่ง:";
+        if (welcomeLocTitle) welcomeLocTitle.innerHTML = `<span class="text-amber-300 font-bold flex items-center gap-1.5 animate-pulse"><span class="material-symbols-outlined text-sm animate-spin">satellite_alt</span> กำลังค้นหาพิกัด GPS จริงจากดาวเทียม...</span>`;
+        if (welcomeDistText) welcomeDistText.innerHTML = `<span class="text-amber-300 font-extrabold animate-pulse">กำลังคำนวณระยะทาง...</span>`;
+        if (welcomeFeeText) welcomeFeeText.innerHTML = `<span class="text-amber-300 font-extrabold animate-pulse">กำลังคำนวณ...</span>`;
+    } else if (loc && loc.isSet) {
+        if (modeBadge) modeBadge.textContent = loc.isRealGPS ? "🛰️ พิกัดจริงของคุณ (GPS ดาวเทียม)" : "📍 พิกัดจัดส่งที่ระบุไว้";
+        if (welcomeSublabel) welcomeSublabel.textContent = loc.isRealGPS ? "ตำแหน่งจัดส่งจริง (ตรวจพบจาก GPS):" : (loc.landmark ? `จุดสังเกต: ${loc.landmark}` : "ที่อยู่จัดส่งของคุณ:");
         if (welcomeLocTitle) welcomeLocTitle.textContent = loc.title;
-        if (welcomeDistText) welcomeDistText.textContent = loc.distance || "0.8 กม.";
-        if (welcomeFeeText) welcomeFeeText.textContent = `฿${loc.fee || 20}`;
+        
+        let distDisplay = loc.distance;
+        if (!distDisplay && loc.lat && loc.lng) {
+            const calculatedDist = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, Number(loc.lat), Number(loc.lng));
+            distDisplay = `${calculatedDist.toFixed(1)} กม.`;
+            loc.distance = distDisplay;
+        }
+        if (welcomeDistText) welcomeDistText.textContent = distDisplay || "แตะหาพิกัดจริง";
+        if (welcomeFeeText) welcomeFeeText.textContent = `฿${loc.fee !== undefined ? loc.fee : 20}`;
     } else {
         if (modeBadge) modeBadge.textContent = "📍 ยังไม่ได้ระบุตำแหน่งจัดส่ง";
         if (welcomeSublabel) welcomeSublabel.textContent = "ตำแหน่งจัดส่งของคุณ:";
@@ -936,7 +807,23 @@ function initLocationPickerMap(lat, lng) {
     }
 
     updateMapLayerButtons();
-    onMapCoordinatesChanged(lat, lng, false);
+    if (state.isSearchingGPS) {
+        const distEl = document.getElementById("modal-gps-dist");
+        const feeEl = document.getElementById("modal-gps-fee");
+        if (distEl) distEl.innerHTML = `<span class="text-amber-600 font-extrabold animate-pulse">กำลังคำนวณ...</span>`;
+        if (feeEl) feeEl.innerHTML = `<span class="text-amber-600 font-extrabold animate-pulse">กำลังคำนวณ...</span>`;
+    } else if (state.deliveryLocation && state.deliveryLocation.isSet) {
+        onMapCoordinatesChanged(lat, lng, false);
+    } else {
+        const distEl = document.getElementById("modal-gps-dist");
+        const feeEl = document.getElementById("modal-gps-fee");
+        if (distEl) distEl.textContent = "รอระบุพิกัด";
+        if (feeEl) feeEl.textContent = "เริ่มต้น ฿20";
+        const latEl = document.getElementById("modal-map-lat");
+        const lngEl = document.getElementById("modal-map-lng");
+        if (latEl) latEl.textContent = "-";
+        if (lngEl) lngEl.textContent = "-";
+    }
 }
 
 // Called whenever coordinates change (via drag, click, GPS, or shortcut)
@@ -1045,7 +932,20 @@ async function reverseGeocodeCoordinates(lat, lng) {
         }
     }
 
+    const soiEl = document.getElementById("input-addr-soi");
+    const subEl = document.getElementById("input-addr-subdistrict");
+    const landEl = document.getElementById("input-addr-landmark");
+    if (soiEl && !soiEl.value && roadStr) soiEl.value = roadStr;
+    if (subEl && !subEl.value && subdistrictStr) subEl.value = subdistrictStr;
+    if (landEl && !landEl.value && landmarkStr) landEl.value = landmarkStr;
+
     updateModalAddressPreview();
+
+    return {
+        road: roadStr,
+        subdistrict: subdistrictStr,
+        landmark: landmarkStr
+    };
 }
 
 // Live update address preview text inside modal
@@ -1109,6 +1009,184 @@ if (typeof document !== "undefined") {
     });
 }
 
+// Function to completely clear all old location & calculated distance data
+function clearOldLocationAndDistanceData() {
+    state.isSearchingGPS = true;
+
+    // 1. Clear Welcome Banner on Main Page
+    const modeBadge = document.getElementById("location-detection-mode-badge");
+    const welcomeLocTitle = document.getElementById("welcome-location-title");
+    const welcomeDistText = document.getElementById("welcome-distance-text");
+    const welcomeFeeText = document.getElementById("welcome-fee-text");
+    const welcomeSublabel = document.getElementById("welcome-location-sublabel");
+
+    if (modeBadge) {
+        modeBadge.innerHTML = `<span class="inline-flex items-center gap-1.5 text-amber-300 font-extrabold animate-pulse"><span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span> 🛰️ กำลังค้นหาพิกัด GPS จริง...</span>`;
+    }
+    if (welcomeSublabel) {
+        welcomeSublabel.textContent = "สถานะตำแหน่งจัดส่ง:";
+    }
+    if (welcomeLocTitle) {
+        welcomeLocTitle.innerHTML = `<span class="text-amber-300 font-bold flex items-center gap-1.5 animate-pulse"><span class="material-symbols-outlined text-sm animate-spin">satellite_alt</span> กำลังเชื่อมต่อดาวเทียม GPS เพื่อค้นหาพิกัดจริงของคุณ...</span>`;
+    }
+    if (welcomeDistText) {
+        welcomeDistText.innerHTML = `<span class="text-amber-300 font-extrabold animate-pulse">กำลังคำนวณระยะทาง...</span>`;
+    }
+    if (welcomeFeeText) {
+        welcomeFeeText.innerHTML = `<span class="text-amber-300 font-extrabold animate-pulse">กำลังคำนวณ...</span>`;
+    }
+
+    // 2. Clear Navbar preview
+    const topAddressPreview = document.getElementById("selected-address-preview");
+    if (topAddressPreview) {
+        topAddressPreview.textContent = "🛰️ กำลังค้นหาพิกัด GPS จริง...";
+    }
+
+    // 3. Clear Checkout view
+    const checkoutFeeElem = document.getElementById("checkout-delivery-fee");
+    const checkoutAddrTitle = document.getElementById("checkout-address-title");
+    const checkoutAddrDetail = document.getElementById("checkout-address-detail");
+    if (checkoutFeeElem) checkoutFeeElem.textContent = "กำลังคำนวณ...";
+    if (checkoutAddrTitle) checkoutAddrTitle.textContent = "กำลังค้นหาพิกัด GPS จริง...";
+    if (checkoutAddrDetail) checkoutAddrDetail.textContent = "กำลังคำนวณระยะทางจากตลาด...";
+
+    // 4. Clear Modal elements
+    const modalDistEl = document.getElementById("modal-gps-dist");
+    const modalFeeEl = document.getElementById("modal-gps-fee");
+    const modalLatEl = document.getElementById("modal-map-lat");
+    const modalLngEl = document.getElementById("modal-map-lng");
+    const modalAddrText = document.getElementById("modal-gps-address-text");
+    const modalLandPreview = document.getElementById("modal-gps-landmark-preview");
+    const modalReadyBadge = document.getElementById("modal-gps-ready-badge");
+    const modalSourceBadge = document.getElementById("modal-gps-source-badge");
+
+    if (modalDistEl) modalDistEl.innerHTML = `<span class="text-amber-600 font-extrabold animate-pulse">กำลังคำนวณ...</span>`;
+    if (modalFeeEl) modalFeeEl.innerHTML = `<span class="text-amber-600 font-extrabold animate-pulse">กำลังคำนวณ...</span>`;
+    if (modalLatEl) modalLatEl.textContent = "กำลังค้นหา...";
+    if (modalLngEl) modalLngEl.textContent = "กำลังค้นหา...";
+    if (modalAddrText) {
+        modalAddrText.textContent = "🛰️ กำลังค้นหาสัญญาณดาวเทียม GPS ละเอียด...";
+        modalAddrText.className = "font-medium text-amber-700 text-xs leading-snug animate-pulse";
+    }
+    if (modalLandPreview) {
+        modalLandPreview.textContent = "จุดสังเกต: -";
+        modalLandPreview.className = "text-[10px] text-slate-400 font-bold";
+    }
+    if (modalReadyBadge) {
+        modalReadyBadge.textContent = "กำลังหาพิกัด";
+        modalReadyBadge.className = "text-[10px] bg-amber-500 text-slate-950 font-extrabold px-2 py-0.5 rounded-full animate-pulse shadow-xs";
+    }
+    if (modalSourceBadge) {
+        modalSourceBadge.textContent = "🛰️ กำลังรับสัญญาณดาวเทียม GPS...";
+    }
+
+    // Clear form inputs in modal
+    const houseInput = document.getElementById("input-addr-house");
+    const soiInput = document.getElementById("input-addr-soi");
+    const subInput = document.getElementById("input-addr-subdistrict");
+    const landInput = document.getElementById("input-addr-landmark");
+    if (houseInput) houseInput.value = "";
+    if (soiInput) soiInput.value = "";
+    if (subInput) subInput.value = "";
+    if (landInput) landInput.value = "";
+}
+
+// Function executed once real GPS is found: Calculates true distance & renders on page for customer
+function applyResolvedGPSLocation(lat, lng, accuracy, sourceName) {
+    state.isSearchingGPS = false;
+
+    const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+    const fee = calculateDeliveryFee(distKm);
+    const distStr = `${distKm.toFixed(1)} กม.`;
+    const feeStr = `฿${fee}`;
+
+    currentPickerCoords.lat = lat;
+    currentPickerCoords.lng = lng;
+
+    const initialGpsTitle = `พิกัด GPS จริง (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+
+    state.deliveryLocation = {
+        title: initialGpsTitle,
+        fullAddress: `${initialGpsTitle} อ.บ้านบึง จ.ชลบุรี`,
+        houseNumber: "",
+        soiRoad: "",
+        subdistrict: "อ.บ้านบึง จ.ชลบุรี",
+        landmark: "",
+        detail: `ห่างจากตลาดวิศิษฐ์ชัย ${distStr} • ค่าส่ง ${feeStr}`,
+        distance: distStr,
+        distKm: distKm,
+        distFromMarketText: `ห่างจากตลาดวิศิษฐ์ชัย ${distStr}`,
+        fee: fee,
+        lat: lat,
+        lng: lng,
+        isRealGPS: true,
+        isSet: true,
+        source: sourceName
+    };
+    saveLocationToStorage(state.deliveryLocation);
+
+    // Render calculated distance and fee on this page ("หน้านี้") immediately!
+    updateDeliveryLocationUI();
+
+    // If modal map is active, update marker position
+    if (locationPickerMap && locationPickerMarker) {
+        locationPickerMap.setView([lat, lng], 17);
+        locationPickerMarker.setLatLng([lat, lng]);
+        setTimeout(() => {
+            if (locationPickerMap) locationPickerMap.invalidateSize();
+        }, 150);
+    }
+
+    // Update modal elements
+    const modalDistEl = document.getElementById("modal-gps-dist");
+    const modalFeeEl = document.getElementById("modal-gps-fee");
+    const modalLatEl = document.getElementById("modal-map-lat");
+    const modalLngEl = document.getElementById("modal-map-lng");
+    const modalSourceBadge = document.getElementById("modal-gps-source-badge");
+    const modalReadyBadge = document.getElementById("modal-gps-ready-badge");
+    const modalTestMapsBtn = document.getElementById("modal-test-maps-btn");
+    const radar = document.getElementById("gps-searching-indicator");
+    const btnLabel = document.getElementById("gps-button-label");
+
+    if (modalDistEl) modalDistEl.textContent = distStr;
+    if (modalFeeEl) modalFeeEl.textContent = feeStr;
+    if (modalLatEl) modalLatEl.textContent = lat.toFixed(4);
+    if (modalLngEl) modalLngEl.textContent = lng.toFixed(4);
+    if (modalSourceBadge) modalSourceBadge.textContent = `🛰️ พบพิกัดจริง (${sourceName}):`;
+    if (modalReadyBadge) {
+        modalReadyBadge.textContent = "พบพิกัดแล้ว";
+        modalReadyBadge.className = "text-[10px] bg-emerald-700 text-white font-bold px-2 py-0.5 rounded-full shadow-xs";
+    }
+    if (modalTestMapsBtn) {
+        modalTestMapsBtn.href = `https://maps.google.com/?q=${lat.toFixed(6)},${lng.toFixed(6)}`;
+    }
+    if (radar) radar.classList.add("hidden");
+    if (btnLabel) btnLabel.textContent = "🛰️ เลื่อนหมุดมาที่ GPS จริงของอุปกรณ์ปัจจุบัน";
+
+    updateModalAddressPreview();
+
+    // Reverse geocode to add human readable Thai road/subdistrict to the display
+    reverseGeocodeCoordinates(lat, lng).then(addrInfo => {
+        if (addrInfo && (addrInfo.road || addrInfo.subdistrict)) {
+            const roadPart = addrInfo.road ? `${addrInfo.road}, ` : "";
+            const subPart = addrInfo.subdistrict || "อ.บ้านบึง จ.ชลบุรี";
+            const fullReadable = `${roadPart}${subPart} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+
+            state.deliveryLocation.title = fullReadable;
+            state.deliveryLocation.fullAddress = fullReadable;
+            state.deliveryLocation.soiRoad = addrInfo.road || "";
+            state.deliveryLocation.subdistrict = addrInfo.subdistrict || "";
+            if (addrInfo.landmark) state.deliveryLocation.landmark = addrInfo.landmark;
+
+            saveLocationToStorage(state.deliveryLocation);
+            updateDeliveryLocationUI();
+            updateModalAddressPreview();
+        }
+    });
+
+    showToast(`📍 พบพิกัด GPS จริงสำเร็จ! (${sourceName}) ระยะทาง ${distStr} จากตลาด • ค่าบริการจัดส่ง ${feeStr}`);
+}
+
 function openLocationModal() {
     updateDeliveryLocationUI();
     document.getElementById("location-modal").classList.remove("hidden");
@@ -1123,7 +1201,7 @@ function openLocationModal() {
     const subInput = document.getElementById("input-addr-subdistrict");
     const landInput = document.getElementById("input-addr-landmark");
 
-    if (loc && loc.isSet) {
+    if (loc && loc.isSet && !state.isSearchingGPS) {
         if (houseInput) houseInput.value = loc.houseNumber || "";
         if (soiInput) soiInput.value = loc.soiRoad || "";
         if (subInput) subInput.value = loc.subdistrict || "";
@@ -1138,6 +1216,9 @@ function openLocationModal() {
     // Initialize or resize Leaflet Map
     setTimeout(() => {
         initLocationPickerMap(initialLat, initialLng);
+        if (state.isSearchingGPS) {
+            clearOldLocationAndDistanceData();
+        }
     }, 150);
 
     updateModalAddressPreview();
@@ -1147,41 +1228,35 @@ function closeLocationModal() {
     document.getElementById("location-modal").classList.add("hidden");
 }
 
-function detectCurrentLocationGPS() {
-    openLocationModal();
+function detectCurrentLocationGPS(forceOpenModal = false) {
+    const isModalOpen = !document.getElementById("location-modal")?.classList.contains("hidden");
+    const shouldKeepModalOpen = forceOpenModal || isModalOpen;
+
+    if (shouldKeepModalOpen) {
+        openLocationModal();
+    }
+
+    // 1. Clear all old data immediately from page, state and modal
+    clearOldLocationAndDistanceData();
 
     const radar = document.getElementById("gps-searching-indicator");
     const btnLabel = document.getElementById("gps-button-label");
-
     if (radar) radar.classList.remove("hidden");
     if (btnLabel) btnLabel.textContent = "🛰️ กำลังค้นหาสัญญาณดาวเทียม GPS ละเอียด...";
 
-    showToast("🛰️ กำลังค้นหาพิกัด GPS จริงจากชิปมือถือ/คอมพิวเตอร์...");
+    showToast("🛰️ กำลังค้นหาพิกัด GPS จริงจากดาวเทียม...");
+
+    let hasResolved = false;
+    const timer = setTimeout(() => {
+        if (!hasResolved) {
+            hasResolved = true;
+            fallbackToIPLocation((lat, lng, acc, src) => {
+                applyResolvedGPSLocation(lat, lng, acc, src);
+            });
+        }
+    }, 9000);
 
     if (navigator.geolocation) {
-        let hasResolved = false;
-        const timer = setTimeout(() => {
-            if (!hasResolved) {
-                hasResolved = true;
-                fallbackToIPLocation(onGPSResolved);
-            }
-        }, 9000);
-
-        function onGPSResolved(lat, lng, accuracy, sourceName) {
-            if (radar) radar.classList.add("hidden");
-            if (btnLabel) btnLabel.textContent = "🛰️ เลื่อนหมุดมาที่ GPS จริงของอุปกรณ์ปัจจุบัน";
-
-            if (locationPickerMap && locationPickerMarker) {
-                locationPickerMap.setView([lat, lng], 17);
-                locationPickerMarker.setLatLng([lat, lng]);
-            }
-            onMapCoordinatesChanged(lat, lng, true);
-
-            const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
-            const fee = calculateDeliveryFee(distKm);
-            showToast(`📍 พบพิกัด GPS สำเร็จ! (${sourceName}) ห่างจากตลาด ${distKm.toFixed(1)} กม. • โปรดระบุบ้านเลขที่/ซอย`);
-        }
-
         navigator.geolocation.getCurrentPosition(
             function (position) {
                 if (hasResolved) return;
@@ -1190,28 +1265,27 @@ function detectCurrentLocationGPS() {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
                 const acc = position.coords.accuracy || 10;
-                onGPSResolved(lat, lng, acc, "GPS ดาวเทียมมือถือ");
+                applyResolvedGPSLocation(lat, lng, acc, "GPS ดาวเทียมอุปกรณ์");
             },
             function (geoError) {
                 if (hasResolved) return;
                 hasResolved = true;
                 clearTimeout(timer);
                 console.warn("Browser GPS unavailable/denied, trying IP Geolocation...", geoError);
-                fallbackToIPLocation(onGPSResolved);
+                fallbackToIPLocation((lat, lng, acc, src) => {
+                    applyResolvedGPSLocation(lat, lng, acc, src);
+                });
             },
             {
                 enableHighAccuracy: true,
                 timeout: 9000,
-                maximumAge: 15000
+                maximumAge: 0
             }
         );
     } else {
+        clearTimeout(timer);
         fallbackToIPLocation((lat, lng, acc, src) => {
-            if (locationPickerMap && locationPickerMarker) {
-                locationPickerMap.setView([lat, lng], 16);
-                locationPickerMarker.setLatLng([lat, lng]);
-            }
-            onMapCoordinatesChanged(lat, lng, true);
+            applyResolvedGPSLocation(lat, lng, acc, src);
         });
     }
 }
@@ -1379,6 +1453,7 @@ const state = {
     activeMerchant: loadSavedMerchant(), // Logged in merchant session
     activeCoupon: { code: "FRESH20", discount: 20, desc: "ส่วนลด ฿20 สั่งของสดรอบถัดไป" }, // ✅ เริ่มต้นตรงกับ radio FRESH20 ในหน้า checkout
     deliveryLocation: loadSavedLocation(), // Active delivery location
+    isSearchingGPS: false, // Flag when searching GPS to clear and prevent showing old distance
     cart: loadSavedCart(),               // ✅ โหลดตะกร้าจาก localStorage
     activeOrder: loadSavedActiveOrder(),  // ✅ โหลด active order จาก localStorage
     stallRotation: {
@@ -1794,10 +1869,11 @@ function _collectAllOrders() {
     }
 
     // 2. localStorage: talathub_order_history
+    const mockOrderIds = ["#TH-6114", "#TH-8101", "#TH-8102", "#TH-8103", "#TH-5324", "#TH-9568", "#TH-4692", "TH-6114", "TH-8101", "TH-8102", "TH-8103", "TH-5324", "TH-9568", "TH-4692"];
     try {
         const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
         hist.forEach(o => {
-            if (o && o.orderId && !seen.has(o.orderId)) {
+            if (o && o.orderId && !seen.has(o.orderId) && !mockOrderIds.includes(o.orderId) && !o.orderId.startsWith("#TH-810")) {
                 orders.push(o);
                 seen.add(o.orderId);
             }
@@ -1807,7 +1883,7 @@ function _collectAllOrders() {
     // 3. localStorage: talathub_active_order (backup)
     try {
         const saved = JSON.parse(localStorage.getItem("talathub_active_order") || "null");
-        if (saved && saved.orderId && !seen.has(saved.orderId)) {
+        if (saved && saved.orderId && !seen.has(saved.orderId) && !mockOrderIds.includes(saved.orderId) && !saved.orderId.startsWith("#TH-810")) {
             orders.push(saved);
             seen.add(saved.orderId);
         }
@@ -1816,7 +1892,7 @@ function _collectAllOrders() {
     // 4. Memory cache from Firebase Realtime DB
     if (window._cachedFirebaseOrders && Array.isArray(window._cachedFirebaseOrders)) {
         window._cachedFirebaseOrders.forEach(o => {
-            if (o && o.orderId && !seen.has(o.orderId)) {
+            if (o && o.orderId && !seen.has(o.orderId) && !mockOrderIds.includes(o.orderId) && !o.orderId.startsWith("#TH-810")) {
                 orders.push(o);
                 seen.add(o.orderId);
             }
@@ -1868,7 +1944,7 @@ function _renderOrderCard(order, now) {
                 ${isStuck ? `🚨 ไม่มีไรเดอร์รับงาน! (${minutesAgo} นาทีแล้ว)` : `⏳ รอไรเดอร์รับงาน (${minutesAgo} นาที)`}
             </span>
             <div class="flex gap-1.5">
-                <button onclick="callRiderPhone(event, '${order.riderPhone || '0815887400'}')"
+                <button onclick="callRiderPhone(event, '${order.riderPhone || ''}')"
                     class="bg-sky-600 hover:bg-sky-700 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all flex items-center gap-1">
                     <span class="material-symbols-outlined text-xs">call</span>
                     <span>โทร</span>
@@ -1900,7 +1976,7 @@ function _renderStuckOrderCard(order, now) {
             <span class="text-rose-600 ml-1">(${minutesAgo} นาทีที่แล้ว)</span>
         </div>
         <div class="flex gap-1.5">
-            <button onclick="callRiderPhone(event, '${order.riderPhone || '0815887400'}')"
+            <button onclick="callRiderPhone(event, '${order.riderPhone || ''}')"
                 class="bg-sky-600 text-white font-bold px-2 py-1 rounded-lg text-[10px] active:scale-95 transition-all">
                 📞 โทร
             </button>
@@ -2111,8 +2187,8 @@ function aggregateDailyOperations(targetDateKey) {
         }
 
         // จัดกลุ่มไรเดอร์
-        const rName = o.riderName || (o.status === "delivered" || o.status === "dispatched" || o.status === "on_the_way" ? "พี่สมชาย (1กข 8902)" : "รอไรเดอร์รับงาน");
-        const rPhone = o.riderPhone || "081-588-7400";
+        const rName = o.riderName || (o.status === "delivered" || o.status === "dispatched" || o.status === "on_the_way" ? "ไรเดอร์ประจำชุมชน" : "รอไรเดอร์รับงาน");
+        const rPhone = o.riderPhone || "-";
         if (!ridersMap[rName]) {
             const isRiderSettled = Boolean(settledRiders[rName]?.isSettled);
             ridersMap[rName] = {
@@ -2379,10 +2455,6 @@ function renderHubDailyReport(targetDateKey) {
             <div class="flex items-center gap-1">
                 <button onclick="setReportDateQuick(0)" class="px-2.5 py-1 rounded-lg font-bold ${isToday ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-all">วันนี้</button>
                 <button onclick="setReportDateQuick(-1)" class="px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">เมื่อวาน</button>
-                ${report.summary.totalOrders === 0 ? `
-                <button onclick="generateSampleDailyOrders()" class="px-2.5 py-1 rounded-lg font-extrabold bg-amber-500 hover:bg-amber-600 text-white shadow-2xs transition-all flex items-center gap-1">
-                    <span>➕ สร้างออเดอร์ตัวอย่าง</span>
-                </button>` : ''}
             </div>
         </div>
     </div>
@@ -3359,7 +3431,7 @@ function printThermalOrderSlip(orderId, dateKey) {
             <span style="color: #333;">ที่อยู่จัดส่ง: </span><strong>${o.address || 'ที่อยู่จัดส่งในเขตบริการ'}</strong>
         </div>
         ${o.landmark ? `<div style="margin: 2px 0 3px; font-size: 9.5px; color: #444;">จุดสังเกต: ${o.landmark}</div>` : ''}
-        <div class="slip-row"><span class="slip-label">ไรเดอร์นำส่ง:</span><span class="slip-value">${o.riderName || 'พี่สมชาย (1กข 8902)'}</span></div>
+        <div class="slip-row"><span class="slip-label">ไรเดอร์นำส่ง:</span><span class="slip-value">${o.riderName || 'ไรเดอร์ส่งของ'}</span></div>
         <div class="divider-dashed"></div>
         <div style="font-weight: bold; margin-bottom: 3px; font-size: 10.5px;">รายการสินค้าที่จัดส่ง:</div>
         ${itemsHtml}
@@ -3834,111 +3906,9 @@ window.printA4VendorsSummary = printA4VendorsSummary;
 window.printA4OrdersAuditLedger = printA4OrdersAuditLedger;
 window.printDailyReport = printDailyReport;
 
-// ── Sample Generator: สำหรับทดสอบรายงานทันทีในกรณีที่วันนั้นยังไม่มีออเดอร์
+// ── Sample Generator: ปิดใช้งานในโหมดทดสอบจริง
 function generateSampleDailyOrders() {
-    const today = getReportDateKey(Date.now());
-    const now = Date.now();
-
-    const sampleOrders = [
-        {
-            orderId: "#TH-8101",
-            status: "delivered",
-            total: 310,
-            grandTotal: 310,
-            deliveryFee: 20,
-            paymentType: "cod",
-            paymentDesc: "เก็บเงินสดปลายทาง (COD)",
-            customerName: "คุณวิภาวรรณ (หมู่บ้านศุภาลัย)",
-            customerPhone: "081-445-8899",
-            riderName: "พี่สมชาย (1กข 8902)",
-            riderPhone: "081-588-7400",
-            savedAt: now - 3600000 * 3,
-            deliveredAt: "08:15 น.",
-            stalls: [
-                {
-                    stallId: "stall_chicken",
-                    name: "ร้านไก่สดเฮียส่ง (แผง A01)",
-                    items: [
-                        { name: "อกไก่สดลอกหนัง (อนามัย)", price: 85, actualPrice: 85, qty: 2, outOfStock: false }
-                    ]
-                },
-                {
-                    stallId: "stall_b01_extra",
-                    name: "ผักสวนครัวลุงสนั่น",
-                    items: [
-                        { name: "ผักบุ้งจีนสด 1 กำ", price: 20, actualPrice: 20, qty: 1, outOfStock: false },
-                        { name: "คะน้าฮ่องกง 1 ถุง", price: 35, actualPrice: 35, qty: 1, outOfStock: false }
-                    ]
-                }
-            ]
-        },
-        {
-            orderId: "#TH-8102",
-            status: "delivered",
-            total: 540,
-            grandTotal: 540,
-            deliveryFee: 20,
-            paymentType: "promptpay",
-            paymentDesc: "ชำระผ่าน PromptPay แล้ว",
-            customerName: "คุณอนุชา (ซอยเทศบาล 4)",
-            customerPhone: "089-778-1122",
-            riderName: "พี่สมชาย (1กข 8902)",
-            riderPhone: "081-588-7400",
-            savedAt: now - 3600000 * 2,
-            deliveredAt: "09:30 น.",
-            stalls: [
-                {
-                    stallId: "stall_chicken",
-                    name: "ร้านไก่สดเฮียส่ง (แผง A01)",
-                    items: [
-                        { name: "น่องติดสะโพกไก่สด", price: 45, actualPrice: 45, qty: 2, outOfStock: false },
-                        { name: "ปีกกลางไก่สดคัดเกรด", price: 75, actualPrice: 75, qty: 2, outOfStock: false }
-                    ]
-                },
-                {
-                    stallId: "stall_e05_extra",
-                    name: "ปลาหมึกย่าง & ซีฟู้ดมหาชัย",
-                    items: [
-                        { name: "ปลาหมึกกล้วยสด 1 กก.", price: 220, actualPrice: 220, qty: 1, outOfStock: false }
-                    ]
-                }
-            ]
-        },
-        {
-            orderId: "#TH-8103",
-            status: "on_the_way",
-            total: 285,
-            grandTotal: 285,
-            deliveryFee: 20,
-            paymentType: "bank_transfer",
-            paymentDesc: "โอน SCB แล้ว (4111305737)",
-            customerName: "ป้าสมใจ (ร้านก๋วยเตี๋ยวหน้าอำเภอ)",
-            customerPhone: "086-332-9900",
-            riderName: "พี่สมชาย (1กข 8902)",
-            riderPhone: "081-588-7400",
-            savedAt: now - 3600000 * 1,
-            stalls: [
-                {
-                    stallId: "stall_chicken",
-                    name: "ร้านไก่สดเฮียส่ง (แผง A01)",
-                    items: [
-                        { name: "สันในไก่สดเส้นสวย", price: 50, actualPrice: 50, qty: 1, outOfStock: false }
-                    ]
-                },
-                {
-                    stallId: "stall_c03_extra",
-                    name: "หอมแดง กระเทียม กะปิระนอง ป้าแจ๋ว",
-                    items: [
-                        { name: "กระเทียมไทยคัดพิเศษ 1 กก.", price: 95, actualPrice: 95, qty: 1, outOfStock: false }
-                    ]
-                }
-            ]
-        }
-    ];
-
-    sampleOrders.forEach(o => archiveOrderToHistory(o));
-    showToast("🎉 สร้าง 3 ออเดอร์ตัวอย่างเรียบร้อยแล้ว! พร้อมตรวจดูรายงานประจำวัน");
-    renderHubDailyReport(today);
+    showToast("ℹ️ ระบบอยู่ในโหมดใช้งานจริง ปิดการสร้างออเดอร์ตัวอย่างแล้ว");
 }
 
 
@@ -5568,7 +5538,7 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         paymentDesc: paymentDesc,
         deliveryNote: orderLandmark,
         customerName: (state.customer && state.customer.isLoggedIn) ? state.customer.identifier : "ลูกค้าทั่วไป",
-        customerPhone: (state.customer && state.customer.phone) ? state.customer.phone : "080-568-7733",
+        customerPhone: (state.customer && state.customer.phone) ? state.customer.phone : ((state.customer && state.customer.identifier && /^\d+$/.test(state.customer.identifier.replace(/-/g,''))) ? state.customer.identifier : "-"),
         address: orderAddress,
         houseNumber: orderHouse,
         soiRoad: orderSoi,
@@ -5690,10 +5660,11 @@ function renderTrackingScreen() {
             if (sp) sp.className = "absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-slate-300 text-white flex items-center justify-center text-[10px] font-bold";
         }
     } else if (orderStatus === "delivering") {
+        const riderDisplayName = order.riderName || "ไรเดอร์";
         if (statusIcon) statusIcon.textContent = "two_wheeler";
         if (statusTitle) statusTitle.textContent = "ไรเดอร์กำลังเดินทางไปหาคุณ 🛵";
-        if (statusDesc) statusDesc.textContent = `พี่สมชายกำลังขับมุ่งหน้า ${destTitle}`;
-        if (etaPill) etaPill.innerHTML = `<span class="material-symbols-outlined text-xs text-cyan-600">alarm</span><span>คาดว่าจะถึงในเวลา <strong>09:05 น.</strong> (อีกประมาณ 10 นาที)</span>`;
+        if (statusDesc) statusDesc.textContent = `${riderDisplayName}กำลังขับมุ่งหน้า ${destTitle}`;
+        if (etaPill) etaPill.innerHTML = `<span class="material-symbols-outlined text-xs text-cyan-600">alarm</span><span>กำลังจัดส่ง</span>`;
 
         if (stepPicking) {
             stepPicking.classList.remove("opacity-50");
@@ -5723,7 +5694,7 @@ function renderTrackingScreen() {
         if (statusIcon) statusIcon.textContent = "check_circle";
         if (statusTitle) statusTitle.textContent = "จัดส่งสำเร็จเรียบร้อยแล้ว 🎉";
         if (statusDesc) statusDesc.textContent = "ของสดคุณภาพส่งตรงถึงครัวคุณเรียบร้อย ตรวจรับสินค้าได้เลย";
-        if (etaPill) etaPill.innerHTML = `<span class="material-symbols-outlined text-xs text-emerald-600">verified</span><span>จัดส่งสำเร็จเมื่อ <strong>09:05 น.</strong> (ตรงเวลา)</span>`;
+        if (etaPill) etaPill.innerHTML = `<span class="material-symbols-outlined text-xs text-emerald-600">verified</span><span>จัดส่งสำเร็จเรียบร้อย</span>`;
 
         [stepPicking, stepDelivering, stepDone].forEach(st => {
             if (st) {
@@ -6047,13 +6018,17 @@ function switchToHubFromTracking() {
 }
 
 function switchToRiderFromTracking() {
-    state.activeRider = {
-        isLoggedIn: true,
-        name: "พี่สมชาย (1กข 8902)",
-        phone: "081-588-7400",
-        license: "1กข 8902"
-    };
-    saveRiderToStorage(state.activeRider);
+    const riders = loadCommunityRiders();
+    if (riders && riders.length > 0) {
+        state.activeRider = {
+            isLoggedIn: true,
+            riderId: riders[0].riderId || riders[0].id,
+            name: riders[0].name,
+            phone: riders[0].phone || "",
+            license: riders[0].license || ""
+        };
+        saveRiderToStorage(state.activeRider);
+    }
     setActiveRoleView("rider");
     renderAuthHeaderButtons();
     renderRiderScreen();
@@ -6072,10 +6047,15 @@ function refreshOrderStatus() {
     }
 }
 
-// Rider Phone Call (โทรติดต่อเบอร์ 081-588-7400)
-function callRiderPhone(event, phone = "0815887400") {
-    const cleanPhone = (phone || "0815887400").toString().replace(/[^\d]/g, '') || "0815887400";
-    showToast("📞 กำลังโทรติดต่อ พี่สมชาย (Hub Rider) 081-588-7400...");
+// Rider Phone Call
+function callRiderPhone(event, phone) {
+    const rPhone = phone || (state.activeOrder && state.activeOrder.riderPhone) || (state.activeRider && state.activeRider.phone) || "";
+    if (!rPhone || rPhone === "-") {
+        showToast("ℹ️ ยังไม่มีเบอร์โทรไรเดอร์สำหรับออเดอร์นี้");
+        return;
+    }
+    const cleanPhone = rPhone.toString().replace(/[^\d]/g, '');
+    showToast(`📞 กำลังโทรติดต่อไรเดอร์ ${cleanPhone}...`);
     if (!event || !event.target || (event.target.tagName !== 'A' && !event.target.closest('a'))) {
         setTimeout(() => {
             window.location.href = `tel:${cleanPhone}`;
@@ -6083,42 +6063,47 @@ function callRiderPhone(event, phone = "0815887400") {
     }
 }
 
-// Rider LINE Message (ส่งข้อความผ่าน LINE ฟรี 100%)
+// Rider LINE Message (ส่งข้อความผ่าน LINE)
 function sendRiderLineMessage(event) {
     if (event) {
         event.preventDefault();
         event.stopPropagation();
     }
-    const orderId = (state.activeOrder && state.activeOrder.orderId) ? state.activeOrder.orderId : "TH-6114";
-    const riderPhone = "081-588-7400";
-    const msg = `สวัสดีครับ พี่สมชาย (ไรเดอร์เบอร์ ${riderPhone}) ขอสอบถามเรื่องออเดอร์ ${orderId} (เฮียส่ง) ครับ`;
+    const orderId = (state.activeOrder && state.activeOrder.orderId) ? state.activeOrder.orderId : "";
+    const riderName = (state.activeOrder && state.activeOrder.riderName) || "ไรเดอร์";
+    const msg = orderId 
+        ? `สวัสดีครับ ${riderName} ขอสอบถามเรื่องออเดอร์ ${orderId} (เฮียส่ง) ครับ`
+        : `สวัสดีครับ ขอสอบถามบริการจัดส่งของสดตลาดวิศิษฐ์ชัย (เฮียส่ง) ครับ`;
     const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
 
-    showToast("💬 กำลังเปิด LINE ส่งข้อความถึงไรเดอร์ (ฟรี 100%)...");
+    showToast("💬 กำลังเปิด LINE ส่งข้อความถึงไรเดอร์...");
 
     if (isMobileDevice()) {
-        // บนมือถือ: เปิดแอป LINE โดยตรงผ่าน Universal Link
         try {
             window.location.href = lineUrl;
         } catch (e) {
             window.open(lineUrl, '_blank');
         }
     } else {
-        // บน PC/Desktop: แสดง Helper Modal และเปิด LINE PC อย่างปลอดภัย
-        showLinePcModal(`ส่งข้อความหาไรเดอร์ (${riderPhone})`, msg);
+        showLinePcModal(`ส่งข้อความหาไรเดอร์`, msg);
     }
 }
 
-// Rider SMS Message (ส่งข้อความ SMS ติดต่อเบอร์ 081-588-7400)
-function sendRiderSMS(event, phone = "0815887400") {
-    const cleanPhone = (phone || "0815887400").toString().replace(/[^\d]/g, '') || "0815887400";
-    const orderId = (state.activeOrder && state.activeOrder.orderId) ? state.activeOrder.orderId : "TH-6114";
-    const msg = `สวัสดีครับ พี่สมชาย (ไรเดอร์) สอบถามเรื่องออเดอร์ ${orderId} ครับ`;
+// Rider SMS Message
+function sendRiderSMS(event, phone) {
+    const rPhone = phone || (state.activeOrder && state.activeOrder.riderPhone) || (state.activeRider && state.activeRider.phone) || "";
+    if (!rPhone || rPhone === "-") {
+        showToast("ℹ️ ยังไม่มีเบอร์โทรไรเดอร์สำหรับออเดอร์นี้");
+        return;
+    }
+    const cleanPhone = rPhone.toString().replace(/[^\d]/g, '');
+    const orderId = (state.activeOrder && state.activeOrder.orderId) ? state.activeOrder.orderId : "";
+    const msg = orderId ? `สวัสดีครับ สอบถามเรื่องออเดอร์ ${orderId} ครับ` : `สวัสดีครับ สอบถามการจัดส่งของสดครับ`;
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     const separator = isIOS ? '&' : '?';
     const smsUrl = `sms:${cleanPhone}${separator}body=${encodeURIComponent(msg)}`;
 
-    showToast("💬 กำลังเปิดระบบส่งข้อความ SMS ถึง 081-588-7400...");
+    showToast(`💬 กำลังเปิดระบบส่งข้อความ SMS ถึง ${cleanPhone}...`);
     if (!event || !event.target || (event.target.tagName !== 'A' && !event.target.closest('a'))) {
         setTimeout(() => {
             window.location.href = smsUrl;
@@ -6128,17 +6113,19 @@ function sendRiderSMS(event, phone = "0815887400") {
 
 // Call Customer Phone (สำหรับไรเดอร์ใช้โทรหาลูกค้า)
 function callCustomerPhone() {
-    let custPhone = "081-588-7400";
+    let custPhone = "";
     if (state.activeOrder && state.activeOrder.customerPhone && state.activeOrder.customerPhone !== "-") {
         custPhone = state.activeOrder.customerPhone;
-    } else if (state.customer && state.customer.phone) {
+    } else if (state.customer && state.customer.phone && state.customer.phone !== "-") {
         custPhone = state.customer.phone;
     }
-    const cleanPhone = custPhone.replace(/[^\d]/g, '') || "0815887400";
-    showToast(`📞 กำลังโทรติดต่อลูกค้า (${custPhone})...`);
-    setTimeout(() => {
-        window.location.href = `tel:${cleanPhone}`;
-    }, 300);
+    if (!custPhone) {
+        showToast("ℹ️ ไม่พบเบอร์โทรศัพท์ของลูกค้า");
+        return;
+    }
+    const clean = custPhone.replace(/[^\d]/g, '');
+    showToast(`📞 กำลังโทรหาลูกค้า: ${clean}...`);
+    window.location.href = `tel:${clean}`;
 }
 
 // Rider Live Chat Modal Management
@@ -6259,10 +6246,51 @@ const stallBadgeLabels = {
 
 function openRatingModal() {
     const modal = document.getElementById("rating-review-modal");
-    if (modal) {
-        modal.classList.remove("hidden");
-        const orderLabel = document.getElementById("rating-order-id-label");
-        if (orderLabel && state.activeOrder) orderLabel.textContent = `ออเดอร์ ${state.activeOrder.orderId}`;
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    let order = state.activeOrder;
+    if (!order) {
+        try {
+            const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+            if (Array.isArray(hist) && hist.length > 0) {
+                order = hist[hist.length - 1];
+            }
+        } catch (e) {}
+    }
+
+    const orderLabel = document.getElementById("rating-order-id-label");
+    if (orderLabel) orderLabel.textContent = order ? `ออเดอร์ ${order.orderId}` : "ออเดอร์ -";
+
+    const tipTitle = document.getElementById("tip-rider-title");
+    if (tipTitle) {
+        tipTitle.textContent = (order && order.riderName) ? `ให้ทิปกำลังใจไรเดอร์ (${order.riderName} 🛵):` : "ให้ทิปกำลังใจไรเดอร์ 🛵:";
+    }
+
+    const container = document.getElementById("rating-stalls-container");
+    if (container) {
+        if (order && order.stalls && order.stalls.length > 0) {
+            container.innerHTML = order.stalls.map((s, idx) => `
+                <div class="flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs">
+                    <span class="font-bold text-slate-800 text-[11px] truncate max-w-[150px]">🏪 ${s.name}</span>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <div class="flex items-center text-amber-400 cursor-pointer" id="stall-stars-${idx}">
+                            <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating(${idx}, 1)">star</span>
+                            <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating(${idx}, 2)">star</span>
+                            <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating(${idx}, 3)">star</span>
+                            <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating(${idx}, 4)">star</span>
+                            <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating(${idx}, 5)">star</span>
+                        </div>
+                        <span class="text-emerald-800 font-bold text-[10px] bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300">สดใหม่</span>
+                    </div>
+                </div>
+            `).join("");
+        } else {
+            container.innerHTML = `
+                <div class="p-3 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-slate-200">
+                    ไม่มีรายการแผงค้าสำหรับประเมิน
+                </div>
+            `;
+        }
     }
 }
 
@@ -6382,7 +6410,7 @@ function openCustomerWalletModal() {
     if (!modal) return;
     modal.classList.remove("hidden");
 
-    const pts = state.customerPoints !== undefined ? state.customerPoints : 60;
+    const pts = state.customerPoints !== undefined ? state.customerPoints : 0;
     const ptsDisplay = document.getElementById("wallet-points-display");
     if (ptsDisplay) ptsDisplay.textContent = `${pts} แต้ม`;
 
@@ -6397,6 +6425,60 @@ function openCustomerWalletModal() {
         const id = state.customer && state.customer.isLoggedIn ? state.customer.identifier : "ผู้ใช้งานทั่วไป";
         idEl.textContent = state.customer && state.customer.isLoggedIn ? `สมาชิก (${id})` : id;
     }
+
+    // Render Recent Order from actual history
+    const container = document.getElementById("wallet-recent-order-container");
+    if (container) {
+        let lastOrder = state.activeOrder;
+        if (!lastOrder) {
+            try {
+                const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+                if (Array.isArray(hist) && hist.length > 0) {
+                    lastOrder = hist[hist.length - 1];
+                }
+            } catch (e) {}
+        }
+
+        if (lastOrder && lastOrder.orderId) {
+            const allItems = [];
+            if (lastOrder.stalls) {
+                lastOrder.stalls.forEach(s => {
+                    (s.items || []).forEach(it => allItems.push(it.name));
+                });
+            }
+            const itemSummary = allItems.slice(0, 4).join(" • ") || "รายการของสด";
+            const itemCount = allItems.length || 1;
+            const total = lastOrder.grandTotal || lastOrder.total || 0;
+
+            container.innerHTML = `
+                <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-2">
+                    <div class="flex items-center justify-between text-[11px]">
+                        <span class="font-extrabold text-slate-800" id="wallet-recent-order-id">ออเดอร์ ${lastOrder.orderId}</span>
+                        <span class="font-black text-orange-600">฿${total} (${itemCount} รายการ)</span>
+                    </div>
+                    <div class="text-[10px] text-slate-500 leading-tight">
+                        ${itemSummary}
+                    </div>
+                    <div class="grid grid-cols-2 gap-1.5 pt-1">
+                        <button type="button" onclick="reorderAndGoCheckout()" class="py-1.5 px-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all shadow-2xs">
+                            <span class="material-symbols-outlined text-xs">replay</span>
+                            <span>สั่งซ้ำบิลนี้</span>
+                        </button>
+                        <button type="button" onclick="closeCustomerWalletModal(); openReceiptModal();" class="py-1.5 px-2 bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all">
+                            <span class="material-symbols-outlined text-xs">receipt_long</span>
+                            <span>ดูใบเสร็จ</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200/90 text-center text-slate-400 text-xs">
+                    ยังไม่มีประวัติการสั่งซื้อ
+                </div>
+            `;
+        }
+    }
 }
 
 function closeCustomerWalletModal() {
@@ -6406,19 +6488,39 @@ function closeCustomerWalletModal() {
 
 function reorderAndGoCheckout() {
     closeCustomerWalletModal();
-    // Re-populate cart with 4 fresh market items
-    state.cart = [
-        { stallId: "stall_b01", stallName: "ผักสวนครัวลุงสนั่น", stallNumber: "แผง B01", productId: "veg_morning_glory", name: "ผักบุ้งจีนสดกรอบ (ปลอดสาร)", price: 20, unit: "กำ", qty: 1 },
-        { stallId: "stall_c01", stallName: "กะทิสดชาวเกาะ ลุงสมหมาย", stallNumber: "แผง C01", productId: "coconut_milk", name: "กะทิสดคั้นสดแท้ 100%", price: 35, unit: "กล่อง", qty: 1 },
-        { stallId: "stall_e11", stallName: "อาหารทะเลสดลุงหวัง", stallNumber: "แผง E11", productId: "seafood_shrimp", name: "กุ้งขาวสดไซส์ใหญ่", price: 110, unit: "500 กรัม", qty: 1 },
-        { stallId: "stall_b01", stallName: "ผักสวนครัวลุงสนั่น", stallNumber: "แผง B01", productId: "veg_coriander", name: "ผักชีสดคัดพิเศษ", price: 15, unit: "ขีด", qty: 1 }
-    ];
-    // Auto-apply FRESH20 discount coupon
-    state.activeCoupon = { code: "FRESH20", discount: 20, desc: "ส่วนลด ฿20 สั่งของสดรอบถัดไป" };
+    let orderToReorder = state.activeOrder;
+    if (!orderToReorder) {
+        try {
+            const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+            if (Array.isArray(hist) && hist.length > 0) {
+                orderToReorder = hist[hist.length - 1];
+            }
+        } catch (e) {}
+    }
 
-    updateCartUI();
-    goToCheckoutScreen();
-    showToast("🔁 หยิบ 4 รายการเดิมลงตะกร้า & ใช้คูปอง FRESH20 (-฿20) ให้เรียบร้อยแล้ว!");
+    if (orderToReorder && orderToReorder.stalls && orderToReorder.stalls.length > 0) {
+        const newCart = [];
+        orderToReorder.stalls.forEach(s => {
+            (s.items || []).forEach(it => {
+                newCart.push({
+                    stallId: s.stallId,
+                    stallName: s.name,
+                    stallNumber: s.stallNumber || "",
+                    productId: it.id || it.productId || "item_" + Math.random(),
+                    name: it.name,
+                    price: it.actualPrice !== undefined ? it.actualPrice : it.price,
+                    unit: it.unit || "ชิ้น",
+                    qty: it.qty || 1
+                });
+            });
+        });
+        state.cart = newCart;
+        updateCartUI();
+        goToCheckoutScreen();
+        showToast(`🔁 หยิบ ${newCart.length} รายการจากออเดอร์เดิมลงตะกร้าเรียบร้อยแล้ว!`);
+    } else {
+        showToast("ℹ️ ไม่พบรายการสินค้าเดิมสำหรับสั่งซ้ำ กรุณาเลือกสินค้าจากหน้าตลาด");
+    }
 }
 
 function redeemRewardItem(rewardName, cost) {
@@ -6498,64 +6600,87 @@ function applyManualCouponCode() {
 // ==========================================
 function openReceiptModal() {
     const modal = document.getElementById("receipt-modal");
-    if (modal) {
-        modal.classList.remove("hidden");
-        const order = state.activeOrder;
-        if (order) {
-            const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-            setVal("receipt-order-id", order.orderId);
-            setVal("receipt-customer-name", order.customerName || "ลูกค้า");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    let order = state.activeOrder;
+    if (!order) {
+        try {
+            const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+            if (Array.isArray(hist) && hist.length > 0) {
+                order = hist[hist.length - 1];
+            }
+        } catch (e) {}
+    }
 
-            const payText = order.paymentType === "bank_transfer" ? "โอนผ่านธนาคารไทยพาณิชย์ (SCB)" : (order.paymentType === "cod" ? "เก็บเงินสดปลายทาง (COD)" : "PromptPay (สแกนจ่ายสำเร็จ)");
-            setVal("receipt-payment-method", payText);
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
-            // Render Dynamic Receipt Items from Active Order
-            const itemsContainer = document.getElementById("receipt-items-list");
-            if (itemsContainer && order.stalls && order.stalls.length > 0) {
-                let itemsHtml = "";
-                let subtotal = 0;
-                order.stalls.forEach(stall => {
-                    (stall.items || []).forEach(item => {
-                        const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
-                        subtotal += price;
-                        const isOOS = item.outOfStock || false;
-                        itemsHtml += `
-                            <div class="flex justify-between py-1.5 ${isOOS ? 'bg-rose-50/80 px-2 rounded-lg border border-rose-200' : ''}">
-                                <div>
-                                    <div class="font-bold ${isOOS ? 'text-rose-800 line-through' : 'text-slate-800'} text-xs">${item.name}</div>
-                                    <div class="text-[10px] ${isOOS ? 'text-rose-600 font-bold' : 'text-slate-400'}">
-                                        ${stall.name} • ${isOOS ? '⚠️ สินค้าหมด (คืนเงินสดใส่ซอง)' : `x${item.qty || 1}`}
-                                    </div>
-                                </div>
-                                <span class="font-bold ${isOOS ? 'text-rose-600' : 'text-slate-800'} text-xs">
-                                    ${isOOS ? `คืน ฿${price}` : `฿${price}`}
-                                </span>
+    if (!order) {
+        setVal("receipt-order-id", "-");
+        setVal("receipt-date-time", "-");
+        setVal("receipt-customer-name", "-");
+        setVal("receipt-payment-method", "-");
+        const itemsContainer = document.getElementById("receipt-items-list");
+        if (itemsContainer) itemsContainer.innerHTML = `<div class="p-4 text-center text-slate-400 text-xs">ไม่มีรายการสินค้าใบเสร็จในขณะนี้</div>`;
+        setVal("receipt-items-subtotal", "฿0");
+        setVal("receipt-multistall-fee", "฿0");
+        setVal("receipt-delivery-fee", "฿0");
+        setVal("receipt-grand-total", "฿0");
+        const refundRow = document.getElementById("receipt-refund-envelope-row");
+        if (refundRow) refundRow.classList.add("hidden");
+        return;
+    }
+
+    setVal("receipt-order-id", order.orderId);
+    setVal("receipt-customer-name", order.customerName || "ลูกค้า");
+
+    const payText = order.paymentType === "bank_transfer" ? "โอนผ่านธนาคารไทยพาณิชย์ (SCB)" : (order.paymentType === "cod" ? "เก็บเงินสดปลายทาง (COD)" : "PromptPay (สแกนจ่ายสำเร็จ)");
+    setVal("receipt-payment-method", payText);
+
+    // Render Dynamic Receipt Items from Active Order
+    const itemsContainer = document.getElementById("receipt-items-list");
+    if (itemsContainer && order.stalls && order.stalls.length > 0) {
+        let itemsHtml = "";
+        let subtotal = 0;
+        order.stalls.forEach(stall => {
+            (stall.items || []).forEach(item => {
+                const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
+                subtotal += price;
+                const isOOS = item.outOfStock || false;
+                itemsHtml += `
+                    <div class="flex justify-between py-1.5 ${isOOS ? 'bg-rose-50/80 px-2 rounded-lg border border-rose-200' : ''}">
+                        <div>
+                            <div class="font-bold ${isOOS ? 'text-rose-800 line-through' : 'text-slate-800'} text-xs">${item.name}</div>
+                            <div class="text-[10px] ${isOOS ? 'text-rose-600 font-bold' : 'text-slate-400'}">
+                                ${stall.name} • ${isOOS ? '⚠️ สินค้าหมด (คืนเงินสดใส่ซอง)' : `x${item.qty || 1}`}
                             </div>
-                        `;
-                    });
-                });
-                itemsContainer.innerHTML = itemsHtml;
-                setVal("receipt-items-subtotal", `฿${subtotal}`);
-            }
+                        </div>
+                        <span class="font-bold ${isOOS ? 'text-rose-600' : 'text-slate-800'} text-xs">
+                            ${isOOS ? `คืน ฿${price}` : `฿${price}`}
+                        </span>
+                    </div>
+                `;
+            });
+        });
+        itemsContainer.innerHTML = itemsHtml;
+        setVal("receipt-items-subtotal", `฿${subtotal}`);
+    }
 
-            const grandTotal = order.grandTotal || order.total || 0;
-            const refundCash = order.refundCashTotal || 0;
-            const finalPaid = Math.max(0, grandTotal - refundCash);
+    const grandTotal = order.grandTotal || order.total || 0;
+    const refundCash = order.refundCashTotal || 0;
+    const finalPaid = Math.max(0, grandTotal - refundCash);
 
-            setVal("receipt-grand-total", `฿${grandTotal}`);
+    setVal("receipt-grand-total", `฿${grandTotal}`);
 
-            // Toggle Refund Envelope Breakdown in Receipt (ขั้นตอนที่ 3)
-            const refundEnvelopeRow = document.getElementById("receipt-refund-envelope-row");
-            if (refundEnvelopeRow) {
-                if (refundCash > 0) {
-                    refundEnvelopeRow.classList.remove("hidden");
-                    setVal("receipt-refund-deduct-amount", `-฿${refundCash}`);
-                    setVal("receipt-final-paid-amount", `฿${finalPaid}`);
-                    setVal("receipt-refund-envelope-amount", `฿${refundCash}`);
-                } else {
-                    refundEnvelopeRow.classList.add("hidden");
-                }
-            }
+    // Toggle Refund Envelope Breakdown in Receipt
+    const refundEnvelopeRow = document.getElementById("receipt-refund-envelope-row");
+    if (refundEnvelopeRow) {
+        if (refundCash > 0) {
+            refundEnvelopeRow.classList.remove("hidden");
+            setVal("receipt-refund-deduct-amount", `-฿${refundCash}`);
+            setVal("receipt-final-paid-amount", `฿${finalPaid}`);
+            setVal("receipt-refund-envelope-amount", `฿${refundCash}`);
+        } else {
+            refundEnvelopeRow.classList.add("hidden");
         }
     }
 }
@@ -7348,73 +7473,23 @@ let _adminRiderSearchQuery = "";
 let _adminRiderStatusFilter = "all";
 let _adminRiderRadarMap = null;
 
-const DEFAULT_COMMUNITY_RIDERS = [
-    {
-        id: "RIDER-001",
-        name: "พี่สมชาย ปลอดภัย (ไรเดอร์หลัก)",
-        phone: "081-588-7400",
-        plate: "1กข 8902 ชลบุรี",
-        zone: "ตำบลบ้านหนองชาก / ตลาดสด",
-        status: "available",
-        baseFee: 40,
-        lat: 13.2975,
-        lng: 101.1725,
-        avatar: "🛵",
-        codSettledToday: 0
-    },
-    {
-        id: "RIDER-002",
-        name: "พี่วิชัย ว่องไว (ไรเดอร์ 2)",
-        phone: "089-991-2345",
-        plate: "2ขค 4455 ชลบุรี",
-        zone: "ชุมชนหนองชากใน / ตลาดล่าง",
-        status: "on_delivery",
-        baseFee: 40,
-        lat: 13.2920,
-        lng: 101.1680,
-        avatar: "⚡",
-        codSettledToday: 0
-    },
-    {
-        id: "RIDER-003",
-        name: "พี่กิตติพงษ์ ส่งด่วน (ไรเดอร์ 3)",
-        phone: "086-333-8822",
-        plate: "3กง 7890 ชลบุรี",
-        zone: "โซนบ้านบึงรอบนอก / สาย 344",
-        status: "available",
-        baseFee: 40,
-        lat: 13.3050,
-        lng: 101.1760,
-        avatar: "🚀",
-        codSettledToday: 0
-    },
-    {
-        id: "RIDER-004",
-        name: "พี่อรรถพล คล่องตัว (ไรเดอร์ 4)",
-        phone: "084-555-9011",
-        plate: "1มม 1234 ชลบุรี",
-        zone: "หนองชาก - เนินโมก",
-        status: "offline",
-        baseFee: 40,
-        lat: 13.2890,
-        lng: 101.1810,
-        avatar: "🛵",
-        codSettledToday: 0
-    }
-];
+const DEFAULT_COMMUNITY_RIDERS = [];
 
 function loadCommunityRiders() {
     try {
         const raw = localStorage.getItem("talathub_community_riders");
         if (raw) {
             const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            if (Array.isArray(parsed)) {
+                // กรองไรเดอร์จำลองเก่าออก
+                const cleaned = parsed.filter(r => r && r.id && !["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"].includes(r.id));
+                return cleaned;
+            }
         }
     } catch (e) {
         console.error("Error loading community riders:", e);
     }
-    saveCommunityRiders(DEFAULT_COMMUNITY_RIDERS);
-    return DEFAULT_COMMUNITY_RIDERS;
+    return [];
 }
 
 function saveCommunityRiders(list) {
@@ -9196,7 +9271,7 @@ function sendOutOfStockLineNotice() {
         });
     }
     const refund = order.refundCashTotal || 0;
-    const cleanOrderId = (order.orderId || "TH-6114").replace(/#/g, '');
+    const cleanOrderId = (order.orderId || "").replace(/#/g, '');
     const trackUrl = `https://pisaen666.github.io/hsong/?track=${encodeURIComponent(cleanOrderId)}`;
     const msg = `🔔【เฮียส่ง】แจ้งเตือนเรื่องสินค้าออเดอร์ ${order.orderId}:\nขออภัยครับ มีสินค้าที่แผงค้าหมด ได้แก่:\n${oosList.map(n => `• ${n}`).join('\n')}\n━━━━━━━━━━━━━━━━━━\n✉️ คืนเงินสดใส่ซอง: ฿${refund}\nทีมงานตัดรายการออก และไรเดอร์ได้นำเงินสดทอนจำนวน ฿${refund} ใส่ซองใสแนบไปกับถุงของสดเรียบร้อยแล้วครับ 🛵💨\n━━━━━━━━━━━━━━━━━━\n👉 แตะลิงก์นี้เพื่อดูสถานะจัดส่ง & ซองเงินทอนของคุณ:\n${trackUrl}`;
 
@@ -9243,13 +9318,19 @@ function completePickingAndDispatchOrder(orderId) {
     }
 
     // Auto populate rider job
-    state.activeRider = state.activeRider || {
-        isLoggedIn: true,
-        name: "พี่สมชาย (1กข 8902)",
-        phone: "081-588-7400",
-        license: "1กข 8902"
-    };
-    saveRiderToStorage(state.activeRider);
+    if (!state.activeRider || !state.activeRider.isLoggedIn) {
+        const availRiders = loadCommunityRiders();
+        if (availRiders && availRiders.length > 0) {
+            state.activeRider = {
+                isLoggedIn: true,
+                riderId: availRiders[0].id,
+                name: availRiders[0].name,
+                phone: availRiders[0].phone,
+                license: availRiders[0].plate
+            };
+            saveRiderToStorage(state.activeRider);
+        }
+    }
 
     // ✅ ซิงค์สถานะใหม่ไปยัง Firebase & localStorage
     saveActiveOrderToStorage(state.activeOrder);
@@ -9277,29 +9358,32 @@ function closeDispatchSuccessModal() {
 }
 
 // ── ปุ่ม 1: ไปหน้าจอไรเดอร์รับงาน ───────────────────────────────────────────
-// เรียกหลังจาก Hub รวมถุงเสร็จและ dispatch ออเดอร์แล้ว
-// ทำหน้าที่: สลับมุมมองเป็น Rider + ตั้งค่า order ให้ไรเดอร์เห็นงานพร้อมรับ
 function goToRiderTrackingScreen() {
     closeDispatchSuccessModal();
 
-    // 1) Auto-login rider ถ้ายังไม่ได้ login
+    // 1) Auto-login rider ถ้ามีไรเดอร์ในระบบ
     if (!state.activeRider || !state.activeRider.isLoggedIn) {
-        state.activeRider = {
-            isLoggedIn: true,
-            riderId: "rider_somchai",
-            name: "พี่สมชาย (1กข 8902)",
-            phone: "081-588-7400",
-            license: "1กข 8902"
-        };
-        saveRiderToStorage(state.activeRider);
+        const availRiders = loadCommunityRiders();
+        if (availRiders && availRiders.length > 0) {
+            state.activeRider = {
+                isLoggedIn: true,
+                riderId: availRiders[0].id,
+                name: availRiders[0].name,
+                phone: availRiders[0].phone,
+                license: availRiders[0].plate
+            };
+            saveRiderToStorage(state.activeRider);
+        }
     }
 
     // 2) อัปเดต order status → "dispatched" (ฮับส่งมอบให้ไรเดอร์แล้ว)
     if (state.activeOrder) {
         state.activeOrder.status = "dispatched";
-        state.activeOrder.dispatchedAt = Date.now(); // ⏱️ timestamp สำหรับ timeout warning ใน Monitor Board
-        state.activeOrder.riderName  = state.activeRider.name;
-        state.activeOrder.riderPhone = state.activeRider.phone;
+        state.activeOrder.dispatchedAt = Date.now();
+        if (state.activeRider && state.activeRider.isLoggedIn) {
+            state.activeOrder.riderName  = state.activeRider.name;
+            state.activeOrder.riderPhone = state.activeRider.phone;
+        }
 
         // คำนวณเงินทอนที่ไรเดอร์ต้องคืนลูกค้า (กรณีสินค้าขาด)
         let refundTotal = 0;
@@ -9314,7 +9398,6 @@ function goToRiderTrackingScreen() {
         }
         state.activeOrder.refundCashTotal = refundTotal;
 
-        // paymentDesc ให้ชัดเจนขึ้น
         if (!state.activeOrder.paymentDesc) {
             state.activeOrder.paymentDesc = state.activeOrder.paymentType === "cash" ? "เงินสด" : "ชำระแล้ว";
         }
@@ -9331,23 +9414,24 @@ function goToRiderTrackingScreen() {
 }
 
 // ── ปุ่ม 2: ไปหน้าจอติดตามส่งของลูกค้า ─────────────────────────────────────
-// เรียกหลังจาก Hub dispatch ออเดอร์แล้ว
-// ทำหน้าที่: สลับมุมมองเป็น Customer + เปิดหน้า Tracking แสดงไรเดอร์กำลังนำส่ง
 function goToCustomerLiveTracking() {
     closeDispatchSuccessModal();
 
-    // อัปเดต order status → "on_the_way" (ไรเดอร์กำลังนำส่ง)
     if (state.activeOrder) {
         state.activeOrder.status = "on_the_way";
 
-        // ใส่ข้อมูลไรเดอร์ถ้ามี เพื่อให้หน้า Tracking แสดงชื่อ/ทะเบียน
         if (state.activeRider && state.activeRider.isLoggedIn) {
             state.activeOrder.riderName  = state.activeRider.name;
             state.activeOrder.riderPhone = state.activeRider.phone;
         } else {
-            // ใส่ข้อมูลไรเดอร์ default ถ้ายังไม่ได้ assign
-            state.activeOrder.riderName  = "พี่สมชาย (1กข 8902)";
-            state.activeOrder.riderPhone = "081-588-7400";
+            const availRiders = loadCommunityRiders();
+            if (availRiders && availRiders.length > 0) {
+                state.activeOrder.riderName  = availRiders[0].name;
+                state.activeOrder.riderPhone = availRiders[0].phone;
+            } else {
+                state.activeOrder.riderName  = "ไรเดอร์จัดส่ง";
+                state.activeOrder.riderPhone = "-";
+            }
         }
 
         saveActiveOrderToStorage(state.activeOrder);
@@ -9512,6 +9596,14 @@ function renderRiderScreen() {
         if (destName) destName.textContent = "รอรับออเดอร์ใหม่จากฮับ";
         if (destDetail) destDetail.textContent = "ขณะนี้ไม่มีคิวจัดส่งที่มอบหมายให้คุณ";
         if (noteText) noteText.textContent = "-";
+        const destHouse = document.getElementById("rider-dest-house");
+        const destSubdistrict = document.getElementById("rider-dest-subdistrict");
+        const phoneBadge = document.getElementById("rider-phone-badge");
+        const gpsCoords = document.getElementById("rider-gps-coords");
+        if (destHouse) destHouse.textContent = "รอระบุที่อยู่จัดส่ง";
+        if (destSubdistrict) destSubdistrict.textContent = "อำเภอบ้านบึง จังหวัดชลบุรี";
+        if (phoneBadge) phoneBadge.textContent = "-";
+        if (gpsCoords) gpsCoords.textContent = "-";
         if (statusBadge) {
             statusBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600";
             statusBadge.textContent = "พร้อมรับงาน";
@@ -9529,7 +9621,7 @@ function renderRiderScreen() {
 
     const orderLat = order.lat || (state.deliveryLocation && state.deliveryLocation.lat) || MARKET_ORIGIN.lat;
     const orderLng = order.lng || (state.deliveryLocation && state.deliveryLocation.lng) || MARKET_ORIGIN.lng;
-    const orderPhone = order.customerPhone || (state.customer && state.customer.phone) || "080-568-7733";
+    const orderPhone = order.customerPhone || (state.customer && state.customer.phone) || "-";
 
     if (badge) badge.textContent = `ออเดอร์ ${order.orderId}`;
     if (totalBadge) totalBadge.textContent = `฿${order.grandTotal || order.total || 0} (${order.paymentDesc || 'ชำระแล้ว'})`;
@@ -9643,29 +9735,56 @@ function renderRiderScreen() {
 
 // Rider Login & Logout
 function openRiderLoginModal() {
-    document.getElementById("rider-login-modal").classList.remove("hidden");
+    const modal = document.getElementById("rider-login-modal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+
+    const select = document.getElementById("rider-select-input");
+    if (select) {
+        const riders = loadCommunityRiders();
+        if (riders && riders.length > 0) {
+            select.innerHTML = riders.map(r => `
+                <option value="${r.id}">🛵 ${r.name} (${r.plate || '-'}) • ${r.phone}</option>
+            `).join("");
+        } else {
+            select.innerHTML = `<option value="">-- ยังไม่มีไรเดอร์ในระบบ (เพิ่มผ่านหน้า Admin) --</option>`;
+        }
+    }
 }
 
 function closeRiderLoginModal() {
-    document.getElementById("rider-login-modal").classList.add("hidden");
+    const modal = document.getElementById("rider-login-modal");
+    if (modal) modal.classList.add("hidden");
 }
 
 function handleRiderLoginSubmit() {
     const riderSelect = document.getElementById("rider-select-input");
-    const val = riderSelect ? riderSelect.value : "rider_somchai";
-    const name = val === "rider_sombat" ? "พี่สมบัติ (2ขค 4511)" : "พี่สมชาย (1กข 8902)";
+    const val = riderSelect ? riderSelect.value : "";
+    if (!val) {
+        showToast("⚠️ ยังไม่มีรายชื่อไรเดอร์ในระบบ กรุณาเพิ่มไรเดอร์ใหม่ผ่านเมนู Admin");
+        return;
+    }
+
+    const riders = loadCommunityRiders();
+    const r = riders.find(x => x.id === val);
+    if (!r) {
+        showToast("⚠️ ไม่พบข้อมูลไรเดอร์ที่เลือก");
+        return;
+    }
 
     state.activeRider = {
         isLoggedIn: true,
-        riderId: val,
-        name: name,
-        phone: val === "rider_sombat" ? "082-999-8877" : "081-588-7400"
+        riderId: r.id,
+        name: r.name,
+        phone: r.phone,
+        license: r.plate
     };
     saveRiderToStorage(state.activeRider);
     closeRiderLoginModal();
     setActiveRoleView("rider");
     renderAuthHeaderButtons();
-    showToast(`🎉 เข้าสู่ระบบไรเดอร์สำเร็จ! ยินดีต้อนรับ ${name}`);
+    renderRiderScreen();
+    showToast(`🎉 เข้าสู่ระบบไรเดอร์สำเร็จ! ยินดีต้อนรับ ${r.name}`);
 }
 
 function logoutRider() {
@@ -10587,10 +10706,88 @@ window.initHeroBannerCarousel = initHeroBannerCarousel;
 window.triggerManualStallShuffle = triggerManualStallShuffle;
 window.toggleStallRotationPause = toggleStallRotationPause;
 
+// Auto-sanitize test & mock data on application launch
+function autoSanitizeProductionData() {
+    const mockOrderIds = ["#TH-6114", "#TH-8101", "#TH-8102", "#TH-8103", "#TH-5324", "#TH-9568", "#TH-4692", "TH-6114", "TH-8101", "TH-8102", "TH-8103", "TH-5324", "TH-9568", "TH-4692"];
+    
+    // 1. Active order
+    try {
+        const savedOrder = localStorage.getItem("talathub_active_order");
+        if (savedOrder) {
+            const parsed = JSON.parse(savedOrder);
+            if (!parsed || !parsed.orderId || mockOrderIds.includes(parsed.orderId) || (typeof parsed.orderId === "string" && parsed.orderId.startsWith("#TH-810"))) {
+                localStorage.removeItem("talathub_active_order");
+            }
+        }
+    } catch (e) {}
+
+    // 2. Order history
+    try {
+        const rawHist = localStorage.getItem("talathub_order_history");
+        if (rawHist) {
+            let hist = JSON.parse(rawHist);
+            if (Array.isArray(hist)) {
+                hist = hist.filter(o => o && o.orderId && !mockOrderIds.includes(o.orderId) && !o.orderId.startsWith("#TH-810"));
+                localStorage.setItem("talathub_order_history", JSON.stringify(hist));
+            }
+        }
+    } catch (e) {}
+
+    // 3. Community riders
+    try {
+        const rawRiders = localStorage.getItem("talathub_community_riders");
+        if (rawRiders) {
+            let riders = JSON.parse(rawRiders);
+            if (Array.isArray(riders)) {
+                riders = riders.filter(r => r && r.id && !["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"].includes(r.id));
+                localStorage.setItem("talathub_community_riders", JSON.stringify(riders));
+            }
+        }
+    } catch (e) {}
+
+    // 4. Logged in rider
+    try {
+        const savedRider = localStorage.getItem("talathub_logged_in_rider");
+        if (savedRider) {
+            const r = JSON.parse(savedRider);
+            if (r && (r.riderId === "rider_somchai" || r.riderId === "rider_sombat" || (r.name && r.name.includes("สมชาย")) || r.phone === "081-588-7400")) {
+                localStorage.removeItem("talathub_logged_in_rider");
+            }
+        }
+    } catch (e) {}
+
+    // 5. Favorites: filter out deleted mock stalls
+    try {
+        const savedFavs = localStorage.getItem("talathub_favorite_stalls");
+        if (savedFavs) {
+            let favs = JSON.parse(savedFavs);
+            if (Array.isArray(favs)) {
+                favs = favs.filter(id => id === "stall_chicken" || id.startsWith("custom_"));
+                if (favs.length === 0) favs = ["stall_chicken"];
+                localStorage.setItem("talathub_favorite_stalls", JSON.stringify(favs));
+            }
+        }
+    } catch (e) {}
+
+    // 6. Cart: filter out items from mock stalls
+    try {
+        const savedCart = localStorage.getItem("talathub_cart");
+        if (savedCart) {
+            let cart = JSON.parse(savedCart);
+            if (Array.isArray(cart)) {
+                cart = cart.filter(item => item && (item.id.startsWith("chk_") || item.id.startsWith("cust_")));
+                localStorage.setItem("talathub_cart", JSON.stringify(cart));
+            }
+        }
+    } catch (e) {}
+}
+
 // ==========================================
 // INITIALIZE APPLICATION
 // ==========================================
 function initTalatHubApp() {
+    autoSanitizeProductionData();
+
     state.customer = loadSavedCustomer();
     state.activeMerchant = loadSavedMerchant();
     state.activeHub = loadSavedHub();

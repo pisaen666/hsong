@@ -247,7 +247,7 @@
                                 <span id="location-detection-mode-badge">📍 ยังไม่ได้ระบุตำแหน่งจัดส่ง</span>
                             </div>
                             <div class="flex items-center gap-1">
-                                <button onclick="detectCurrentLocationGPS()" class="text-[10px] bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-extrabold px-2.5 py-0.5 rounded-full shadow-sm flex items-center gap-0.5 active:scale-95 transition-all" title="ค้นหาพิกัดจริงจาก GPS">
+                                <button onclick="detectCurrentLocationGPS(false)" class="text-[10px] bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-extrabold px-2.5 py-0.5 rounded-full shadow-sm flex items-center gap-0.5 active:scale-95 transition-all" title="ค้นหาพิกัดจริงจาก GPS">
                                     <span class="material-symbols-outlined text-xs font-bold">gps_fixed</span>
                                     <span>หาพิกัดจริง</span>
                                 </button>
@@ -401,25 +401,9 @@
 
                         <!-- 5 Favorite Stalls List (Horizontal Drag & Scroll) -->
                         <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none text-[11px] w-full scroll-smooth cursor-grab active:cursor-grabbing select-none py-0.5" id="favorite-stalls-list">
-                            <!-- 1. ไก่สดเรา (Hub) -->
+                            <!-- 1. ไก่สดเฮียส่ง (Hub) -->
                             <button onclick="filterBySingleStall('stall_chicken')" class="bg-white hover:bg-orange-50 text-orange-900 border border-orange-200 px-2.5 py-1 rounded-xl whitespace-nowrap font-bold flex items-center gap-1 shadow-xs shrink-0 active:scale-95 transition-all">
-                                <span>🍗 แผง A01 (ไก่สดเรา - Hub)</span>
-                            </button>
-                            <!-- 2. ผักป้าสมร -->
-                            <button onclick="filterBySingleStall('stall_veggie')" class="bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-200 px-2.5 py-1 rounded-xl whitespace-nowrap font-bold flex items-center gap-1 shadow-xs shrink-0 active:scale-95 transition-all">
-                                <span>🥬 แผง B04 (ผักป้าสมร)</span>
-                            </button>
-                            <!-- 3. หมูสดเจ๊พร -->
-                            <button onclick="filterBySingleStall('stall_pork')" class="bg-white hover:bg-pink-50 text-pink-900 border border-pink-200 px-2.5 py-1 rounded-xl whitespace-nowrap font-bold flex items-center gap-1 shadow-xs shrink-0 active:scale-95 transition-all">
-                                <span>🥩 แผง A08 (หมูสดเจ๊พร)</span>
-                            </button>
-                            <!-- 4. เครื่องแกงเจ๊ณี -->
-                            <button onclick="filterBySingleStall('stall_curry')" class="bg-white hover:bg-red-50 text-red-900 border border-red-200 px-2.5 py-1 rounded-xl whitespace-nowrap font-bold flex items-center gap-1 shadow-xs shrink-0 active:scale-95 transition-all">
-                                <span>🌶️ แผง C02 (เครื่องแกงเจ๊ณี)</span>
-                            </button>
-                            <!-- 5. ซีฟู้ดลุงหวัง -->
-                            <button onclick="filterBySingleStall('stall_seafood')" class="bg-white hover:bg-cyan-50 text-cyan-900 border border-cyan-200 px-2.5 py-1 rounded-xl whitespace-nowrap font-bold flex items-center gap-1 shadow-xs shrink-0 active:scale-95 transition-all">
-                                <span>🦐 แผง E11 (ซีฟู้ดลุงหวัง)</span>
+                                <span>🍗 แผง A01 (ร้านไก่สดเฮียส่ง - Hub)</span>
                             </button>
                         </div>
 
@@ -735,7 +719,7 @@
                     </button>
                     <div class="text-center">
                         <h2 class="font-extrabold text-sm leading-tight">ติดตามสถานะจัดส่ง</h2>
-                        <p class="text-[11px] text-emerald-200 font-medium" id="tracking-order-id">ออเดอร์ #TH-6114</p>
+                        <p class="text-[11px] text-emerald-200 font-medium" id="tracking-order-id">ไม่มีออเดอร์ค้างส่ง</p>
                     </div>
                     <button onclick="refreshOrderStatus()" class="w-8 h-8 rounded-full hover:bg-white/10 active:scale-90 flex items-center justify-center transition-all" title="รีเฟรชสถานะออเดอร์ล่าสุด">
                         <span class="material-symbols-outlined text-lg">refresh</span>
@@ -749,11 +733,11 @@
                         <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto mb-2">
                             <span class="material-symbols-outlined text-2xl" id="tracking-status-icon">storefront</span>
                         </div>
-                        <h3 class="font-extrabold text-sm text-slate-800 leading-snug" id="tracking-status-title">ทีมงานกำลังเดินหยิบของสดในตลาด</h3>
-                        <p class="text-xs text-slate-500 mt-0.5" id="tracking-status-desc">กำลังรวบรวมชิ้นส่วนไก่ และผักสดจากแผงค้า</p>
-                        <div class="mt-2.5 inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200/80 px-3 py-1 rounded-full text-[11px] font-bold shadow-2xs" id="tracking-eta-pill">
-                            <span class="material-symbols-outlined text-xs text-amber-600">alarm</span>
-                            <span>คาดว่าจะถึงในเวลา <strong>09:15 น.</strong> (อีกประมาณ 20 นาที)</span>
+                        <h3 class="font-extrabold text-sm text-slate-800 leading-snug" id="tracking-status-title">ยังไม่มีออเดอร์ที่กำลังจัดส่ง</h3>
+                        <p class="text-xs text-slate-500 mt-0.5" id="tracking-status-desc">เมื่อคุณสั่งซื้อของสดในตลาด สถานะจัดส่งจะแสดงที่นี่</p>
+                        <div class="mt-2.5 inline-flex items-center gap-1.5 bg-slate-50 text-slate-600 border border-slate-200/80 px-3 py-1 rounded-full text-[11px] font-bold shadow-2xs" id="tracking-eta-pill">
+                            <span class="material-symbols-outlined text-xs text-slate-500">alarm</span>
+                            <span>ไม่มีคิวจัดส่งในขณะนี้</span>
                         </div>
                     </div>
 
@@ -767,19 +751,19 @@
                         <div class="space-y-3.5 relative pl-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
                             <!-- Step 1: Received & Paid -->
                             <div class="relative flex items-start gap-3" id="step-paid">
-                                <span class="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shadow-xs">✓</span>
+                                <span class="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-slate-300 text-white flex items-center justify-center text-[10px] font-bold shadow-xs">1</span>
                                 <div>
                                     <div class="text-xs font-bold text-slate-800">รับคำสั่งซื้อ & ยืนยันชำระเงิน</div>
-                                    <div class="text-[10px] text-slate-400 mt-0.5" id="tracking-step1-subtitle">05:47 น. • ยอดรวม ฿215 (พร้อมเพย์)</div>
+                                    <div class="text-[10px] text-slate-400 mt-0.5" id="tracking-step1-subtitle">-</div>
                                 </div>
                             </div>
 
                             <!-- Step 2: Picking -->
-                            <div class="relative flex items-start gap-3" id="step-picking">
-                                <span class="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center text-[10px] font-bold ring-4 ring-amber-100 animate-pulse">2</span>
+                            <div class="relative flex items-start gap-3 opacity-50" id="step-picking">
+                                <span class="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-slate-300 text-white flex items-center justify-center text-[10px] font-bold">2</span>
                                 <div>
-                                    <div class="text-xs font-bold text-amber-700" id="tracking-step2-title">กำลังเดินรวบรวมของสด (3 แผง)</div>
-                                    <div class="text-[10px] text-slate-500 mt-0.5" id="tracking-step2-stalls">ผักสวนครัวลุงสนั่น + กะทิสดชาวเกาะ ลุงสมหมาย + อาหารทะเลสดลุงหวัง</div>
+                                    <div class="text-xs font-bold text-slate-700" id="tracking-step2-title">รวบรวมของสดจากแผงค้า</div>
+                                    <div class="text-[10px] text-slate-500 mt-0.5" id="tracking-step2-stalls">-</div>
                                 </div>
                             </div>
 
@@ -788,7 +772,7 @@
                                 <span class="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-slate-300 text-white flex items-center justify-center text-[10px] font-bold">3</span>
                                 <div>
                                     <div class="text-xs font-semibold text-slate-700">ไรเดอร์กำลังออกส่งตามพิกัด</div>
-                                    <div class="text-[10px] text-slate-400 mt-0.5" id="tracking-step3-dest">มุ่งหน้า ร้านเจ๊เจียบ ซ.เปิดน้อย</div>
+                                    <div class="text-[10px] text-slate-400 mt-0.5" id="tracking-step3-dest">-</div>
                                 </div>
                             </div>
 
@@ -810,39 +794,44 @@
                                 <span class="material-symbols-outlined text-orange-500 text-base">checklist</span>
                                 <span>รายการหยิบของสดจากแผงค้า</span>
                             </span>
-                            <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold" id="picking-progress-badge">หยิบแล้ว 0/3 แผง</span>
+                            <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold" id="picking-progress-badge">หยิบแล้ว 0/0 แผง</span>
                         </div>
 
                         <!-- Refund Envelope Banner (ปรากฏเมื่อมีสินค้าหมดและคืนเงินสดใส่ซอง) -->
                         <div id="tracking-refund-banner" class="hidden"></div>
 
-                        <!-- Clickable Stall List matching user screenshot -->
-                        <div class="space-y-2" id="tracking-stalls-progress"></div>
+                        <!-- Clickable Stall List -->
+                        <div class="space-y-2" id="tracking-stalls-progress">
+                            <div class="p-6 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">ไม่มีรายการสินค้าที่กำลังจัดส่ง</div>
+                        </div>
                     </div>
 
-                    <!-- Rider Card matching user screenshot -->
-                    <div class="bg-white rounded-2xl p-3.5 shadow-card border border-slate-200/80 flex items-center justify-between">
+                    <!-- Rider Card -->
+                    <div class="bg-white rounded-2xl p-3.5 shadow-card border border-slate-200/80 flex items-center justify-between" id="tracking-rider-card">
                         <div class="flex items-center gap-3 cursor-pointer select-none group" onclick="openRiderChatModal()" title="แตะเพื่อเปิดแชทสดในระบบ">
                             <div class="w-11 h-11 rounded-full bg-[#004D40] text-white flex items-center justify-center text-lg shadow-sm shrink-0 group-hover:scale-105 transition-transform">
                                 <span class="material-symbols-outlined text-red-400">two_wheeler</span>
                             </div>
                             <div>
                                 <div class="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                                    <span>พี่สมชาย (Hub Rider)</span>
-                                    <span class="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">081-588-7400</span>
+                                    <span id="tracking-rider-name">ไรเดอร์ประจำออเดอร์</span>
+                                    <span class="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" id="tracking-rider-phone-badge">-</span>
                                 </div>
-                                <div class="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
-                                    <span>มอเตอร์ไซค์ ทะเบียน 1กข 8902</span>
+                                <div class="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1" id="tracking-rider-plate-desc">
+                                    <span>รอจัดสรรไรเดอร์นำส่ง</span>
                                     <span class="text-[#06C755] font-bold">• แชท LINE ฟรี</span>
                                 </div>
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
-                            <a href="tel:0815887400" id="rider-call-btn" onclick="callRiderPhone(event, '0815887400')" class="w-9 h-9 bg-emerald-50 text-emerald-800 rounded-xl hover:bg-emerald-100 active:scale-95 flex items-center justify-center transition-all border border-emerald-200 shadow-2xs" title="โทรหาไรเดอร์ 081-588-7400">
+                            <a href="javascript:void(0)" id="rider-call-btn" onclick="callRiderPhone(event)" class="w-9 h-9 bg-emerald-50 text-emerald-800 rounded-xl hover:bg-emerald-100 active:scale-95 flex items-center justify-center transition-all border border-emerald-200 shadow-2xs" title="โทรหาไรเดอร์">
                                 <span class="material-symbols-outlined text-lg">call</span>
                             </a>
                             <button type="button" id="rider-line-btn" onclick="sendRiderLineMessage(event)" class="w-9 h-9 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl active:scale-95 flex items-center justify-center transition-all shadow-xs" title="ส่งข้อความผ่าน LINE (ฟรี 100%)">
                                 <span class="material-symbols-outlined text-lg">chat</span>
+                            </button>
+                        </div>
+                    </div>
                             </button>
                         </div>
                     </div>
@@ -986,17 +975,13 @@
                     <div>
                         <label class="text-[11px] text-slate-600 mb-1 block">เลือกล็อค / แผงค้าในตลาด</label>
                         <select id="merchant-stall-select" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium">
-                            <option value="D05">แผงผลไม้เจ๊อ้อย (ล็อค D05)</option>
-                            <option value="A08">หมูสดเจ๊พร (ล็อค A08)</option>
-                            <option value="B04">ผักสดป้าสมร (ล็อค B04)</option>
-                            <option value="C02">เครื่องแกงเจ๊ณี (ล็อค C02)</option>
-                            <option value="E11">อาหารทะเลลุงหวัง (ล็อค E11)</option>
+                            <option value="stall_chicken">ร้านไก่สดเฮียส่ง (แผง A01)</option>
                         </select>
                     </div>
 
                     <div>
                         <label class="text-[11px] text-slate-600 mb-1 block">ประเภทและจำนวนสินค้า</label>
-                        <input type="text" id="merchant-item-desc" placeholder="เช่น ส้มโอ 2 ลูก + มังคุด 3 กก. (ถุงใหญ่)" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs">
+                        <input type="text" id="merchant-item-desc" placeholder="เช่น อกไก่สด 2 กก. + สันใน 1 กก." class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs">
                     </div>
                 </div>
 
@@ -1008,16 +993,16 @@
 
                     <div>
                         <label class="text-[11px] text-slate-600 mb-1 block">ชื่อและเบอร์โทรลูกค้า</label>
-                        <input type="text" id="merchant-cust-name" placeholder="คุณวิภา 082-xxx-5678" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs">
+                        <input type="text" id="merchant-cust-name" placeholder="ระบุชื่อและเบอร์โทรลูกค้า" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs">
                     </div>
 
                     <div>
                         <label class="text-[11px] text-slate-600 mb-1 block">ปลายทางส่งสินค้า</label>
                         <select id="merchant-destination-select" onchange="calculateMerchantFee()" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium">
-                            <option value="25">ม.พฤกษา 3 (ระยะทาง ~1.8 กม.) - ค่าส่ง ฿25</option>
-                            <option value="30">ม.บัวทองธานี (ระยะทาง ~2.5 กม.) - ค่าส่ง ฿30</option>
-                            <option value="35">ม.ชัยพฤกษ์ (ระยะทาง ~3.2 กม.) - ค่าส่ง ฿35</option>
-                            <option value="20">ชุมชนหน้าตลาดสด (~800 ม.) - ค่าส่ง ฿20</option>
+                            <option value="20">ชุมชนตลาดวิศิษฐ์ชัย / หนองชาก (~800 ม.) - ค่าส่ง ฿20</option>
+                            <option value="25">ชุมชนบ้านหนองชาก (~1.8 กม.) - ค่าส่ง ฿25</option>
+                            <option value="30">โซนบ้านบึงรอบนอก (~2.5 กม.) - ค่าส่ง ฿30</option>
+                            <option value="35">หนองชาก - เนินโมก (~3.5 กม.) - ค่าส่ง ฿35</option>
                         </select>
                     </div>
 
@@ -1058,7 +1043,7 @@
                     </div>
                     <div>
                         <div class="text-[10px] text-emerald-300 font-bold uppercase tracking-wider">🛵 Hub Rider System</div>
-                        <h2 class="font-extrabold text-sm">พี่สมชาย • ทะเบียน 1กข 8902</h2>
+                        <h2 class="font-extrabold text-sm" id="rider-profile-name">ไรเดอร์ประจำตลาด</h2>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -1078,10 +1063,10 @@
                 <!-- Active Task Card -->
                 <div class="bg-white rounded-2xl p-4 shadow-card border border-slate-200 space-y-3">
                     <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-                        <span class="bg-emerald-100 text-emerald-800 font-black text-[11px] px-2.5 py-0.5 rounded-full flex items-center gap-1" id="rider-order-id-badge">
-                            <span>ออเดอร์ #TH-6114</span>
+                        <span class="bg-slate-100 text-slate-700 font-black text-[11px] px-2.5 py-0.5 rounded-full flex items-center gap-1" id="rider-order-id-badge">
+                            <span>ไม่มีงานค้าง</span>
                         </span>
-                        <span class="text-xs font-black text-orange-600" id="rider-order-total-badge">฿215 (ชำระแล้ว)</span>
+                        <span class="text-xs font-black text-slate-500" id="rider-order-total-badge">฿0</span>
                     </div>
 
                     <!-- Customer Destination with Granular Details & GPS Navigation (แบบ Grab/Line Man) -->
@@ -1089,9 +1074,9 @@
                         <div class="flex items-center justify-between">
                             <div class="font-extrabold text-slate-800 text-sm flex items-center gap-1">
                                 <span class="material-symbols-outlined text-red-500 text-base">location_on</span>
-                                <span id="rider-dest-name">รอระบุข้อมูลผู้รับ</span>
+                                <span id="rider-dest-name">รอรับออเดอร์ใหม่</span>
                             </div>
-                            <span id="rider-phone-badge" class="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">08x-xxx-xxxx</span>
+                            <span id="rider-phone-badge" class="text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">-</span>
                         </div>
 
                         <!-- Granular Address Display for Rider -->
@@ -1100,10 +1085,10 @@
                                 <span class="material-symbols-outlined text-emerald-600 text-base shrink-0 mt-0.5">home</span>
                                 <div>
                                     <div class="font-extrabold text-slate-900 text-xs leading-snug" id="rider-dest-house">
-                                        บ้านเลขที่ / ซอย / ชุมชน
+                                        รอระบุที่อยู่จัดส่ง
                                     </div>
                                     <div class="text-[11px] text-slate-500 mt-0.5" id="rider-dest-subdistrict">
-                                        ต.บ้านหนองชาก อ.บ้านบึง จ.ชลบุรี
+                                        อำเภอบ้านบึง จังหวัดชลบุรี
                                     </div>
                                     <div class="text-[10px] text-slate-400 hidden" id="rider-dest-detail">รอข้อมูลจัดส่ง</div>
                                 </div>
@@ -1120,7 +1105,7 @@
 
                             <!-- GPS Coords Display -->
                             <div class="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200/80">
-                                <span>🌐 พิกัดดาวเทียม: <strong id="rider-gps-coords" class="font-mono text-slate-700">13.3080, 101.1214</strong></span>
+                                <span>🌐 พิกัดดาวเทียม: <strong id="rider-gps-coords" class="font-mono text-slate-700">-</strong></span>
                                 <button type="button" onclick="copyRiderGPSCoords()" class="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5" title="คัดลอกพิกัด GPS">
                                     <span class="material-symbols-outlined text-xs">content_copy</span>
                                     <span>คัดลอกพิกัด</span>
@@ -1660,7 +1645,7 @@
             </div>
 
             <!-- Auto GPS Detection Live Button -->
-            <button onclick="detectCurrentLocationGPS()" id="btn-trigger-gps" type="button" class="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all">
+            <button onclick="detectCurrentLocationGPS(true)" id="btn-trigger-gps" type="button" class="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all">
                 <span class="relative flex h-2.5 w-2.5">
                     <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                     <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
@@ -1709,8 +1694,8 @@
 
                     <!-- Bottom Coordinates Bar -->
                     <div class="absolute bottom-2 left-2 right-2 bg-slate-900/85 backdrop-blur-xs text-white px-2.5 py-1 rounded-xl text-[10px] flex items-center justify-between z-20 pointer-events-none border border-white/10">
-                        <span>📍 ละติจูด: <strong id="modal-map-lat">13.3080</strong></span>
-                        <span>ลองจิจูด: <strong id="modal-map-lng">101.1214</strong></span>
+                        <span>📍 ละติจูด: <strong id="modal-map-lat">-</strong></span>
+                        <span>ลองจิจูด: <strong id="modal-map-lng">-</strong></span>
                     </div>
                 </div>
             </div>
@@ -1777,11 +1762,11 @@
                 <div class="grid grid-cols-2 gap-1.5 text-[11px] pt-0.5">
                     <div class="bg-white/90 p-1.5 rounded-lg border border-emerald-100 flex items-center gap-1">
                         <span class="material-symbols-outlined text-xs text-emerald-600">route</span>
-                        <span>ระยะทาง: <strong class="text-emerald-800" id="modal-gps-dist">0.0 กม.</strong></span>
+                        <span>ระยะทาง: <strong class="text-emerald-800" id="modal-gps-dist">รอระบุพิกัด</strong></span>
                     </div>
                     <div class="bg-white/90 p-1.5 rounded-lg border border-emerald-100 flex items-center gap-1">
                         <span class="material-symbols-outlined text-xs text-amber-600">moped</span>
-                        <span>ค่าส่ง: <strong class="text-amber-800 font-bold" id="modal-gps-fee">฿20</strong></span>
+                        <span>ค่าส่ง: <strong class="text-amber-800 font-bold" id="modal-gps-fee">เริ่มต้น ฿20</strong></span>
                     </div>
                 </div>
 
@@ -1820,14 +1805,14 @@
                     </div>
                     <div>
                         <div class="font-extrabold text-sm flex items-center gap-1.5 leading-tight">
-                            <span>พี่สมชาย (Hub Rider)</span>
+                            <span id="chat-rider-name">ไรเดอร์ผู้จัดส่ง</span>
                             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                         </div>
-                        <div class="text-[10px] text-emerald-200 mt-0.5">มอเตอร์ไซค์ ทะเบียน 1กข 8902 • 081-588-7400</div>
+                        <div class="text-[10px] text-emerald-200 mt-0.5" id="chat-rider-subtitle">ระบบจัดส่งด่วน • ตลาดวิศิษฐ์ชัย</div>
                     </div>
                 </div>
                 <div class="flex items-center gap-1.5">
-                    <a href="tel:0815887400" onclick="callRiderPhone(event, '0815887400')" class="w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-all" title="โทรหาไรเดอร์ 081-588-7400">
+                    <a href="javascript:void(0)" id="chat-rider-call-btn" onclick="callRiderPhone(event)" class="w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-all" title="โทรหาไรเดอร์">
                         <span class="material-symbols-outlined text-sm">call</span>
                     </a>
                     <button onclick="sendRiderLineMessage(event)" class="w-7 h-7 rounded-full bg-[#06C755] hover:bg-[#05b34c] text-white flex items-center justify-center transition-all shadow-2xs" title="ส่งข้อความผ่าน LINE (ฟรี 100%)">
@@ -1848,17 +1833,8 @@
             <!-- Chat Message Feed -->
             <div id="rider-chat-messages" class="flex-1 p-3 overflow-y-auto space-y-2.5 bg-slate-50 text-xs">
                 <!-- System notice -->
-                <div class="text-center my-1">
-                    <span class="bg-slate-200/70 text-slate-500 text-[10px] px-2.5 py-0.5 rounded-full">เริ่มการสนทนากับไรเดอร์ (เบอร์ติดต่อ 081-588-7400)</span>
-                </div>
-
-                <!-- Rider incoming message -->
-                <div class="flex items-start gap-2 max-w-[85%]">
-                    <div class="w-6 h-6 rounded-full bg-[#004D40] text-white flex items-center justify-center text-[10px] shrink-0 mt-0.5">🛵</div>
-                    <div class="bg-white p-2.5 rounded-2xl rounded-tl-sm shadow-2xs border border-slate-200 text-slate-800">
-                        <div>สวัสดีครับคุณลูกค้า ผมรับออเดอร์ของสดเรียบร้อยแล้ว กำลังรอของครบจากแผงค้าและจะรีบวิ่งไปส่งให้นะครับ 🛵💨</div>
-                        <div class="text-[9px] text-slate-400 text-right mt-1">เพิ่งส่ง</div>
-                    </div>
+                <div class="text-center my-3">
+                    <span class="bg-slate-200/70 text-slate-500 text-[10px] px-2.5 py-1 rounded-full">เริ่มการสนทนากับไรเดอร์ผู้จัดส่งออเดอร์</span>
                 </div>
             </div>
 
@@ -1904,7 +1880,7 @@
                     </span>
                     <div>
                         <h3 class="font-extrabold text-sm text-slate-900">รีวิวความสด & ให้คะแนน</h3>
-                        <p class="text-[10px] text-slate-500" id="rating-order-id-label">ออเดอร์ #TH-6114</p>
+                        <p class="text-[10px] text-slate-500" id="rating-order-id-label">ออเดอร์ -</p>
                     </div>
                 </div>
                 <button onclick="closeRatingModal()" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all">
@@ -1925,54 +1901,13 @@
                 <div class="text-[11px] text-amber-900 font-extrabold" id="rating-stars-label">ยอดเยี่ยมมาก! ของสดส่งไวทันใจ (5/5)</div>
             </div>
 
-            <!-- Stalls Freshness Feedback (ปรับเพิ่ม/ลดจำนวนดาวแต่ละแผงได้) -->
+            <!-- Stalls Freshness Feedback (สร้างตามรายการแผงค้าในออเดอร์จริง) -->
             <div class="space-y-2 text-xs">
                 <label class="font-bold text-slate-800 block">ประเมินความสดของวัตถุดิบแต่ละแผง:</label>
                 
-                <div class="space-y-2">
-                    <!-- Stall 1: ผักสวนครัวลุงสนั่น -->
-                    <div class="flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs">
-                        <span class="font-bold text-slate-800 text-[11px] truncate max-w-[150px]">🥬 ผักสวนครัวลุงสนั่น (B01)</span>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            <div class="flex items-center text-amber-400 cursor-pointer" id="stall-stars-veg">
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('veg', 1)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('veg', 2)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('veg', 3)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('veg', 4)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('veg', 5)">star</span>
-                            </div>
-                            <span class="text-emerald-800 font-bold text-[10px] bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300" id="stall-badge-veg">สดกรอบ</span>
-                        </div>
-                    </div>
-
-                    <!-- Stall 2: กะทิสดชาวเกาะ ลุงสมหมาย -->
-                    <div class="flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs">
-                        <span class="font-bold text-slate-800 text-[11px] truncate max-w-[150px]">🥥 กะทิสดชาวเกาะ ลุงสมหมาย (C01)</span>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            <div class="flex items-center text-amber-400 cursor-pointer" id="stall-stars-coconut">
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('coconut', 1)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('coconut', 2)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('coconut', 3)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('coconut', 4)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('coconut', 5)">star</span>
-                            </div>
-                            <span class="text-emerald-800 font-bold text-[10px] bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300" id="stall-badge-coconut">ข้นมันหอม</span>
-                        </div>
-                    </div>
-
-                    <!-- Stall 3: อาหารทะเลสดลุงหวัง -->
-                    <div class="flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs">
-                        <span class="font-bold text-slate-800 text-[11px] truncate max-w-[150px]">🦐 อาหารทะเลสดลุงหวัง (E11)</span>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            <div class="flex items-center text-amber-400 cursor-pointer" id="stall-stars-seafood">
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('seafood', 1)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('seafood', 2)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('seafood', 3)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('seafood', 4)">star</span>
-                                <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating('seafood', 5)">star</span>
-                            </div>
-                            <span class="text-emerald-800 font-bold text-[10px] bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300" id="stall-badge-seafood">สดตาใส</span>
-                        </div>
+                <div class="space-y-2" id="rating-stalls-container">
+                    <div class="p-3 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-slate-200">
+                        ไม่มีรายการแผงค้าสำหรับประเมิน
                     </div>
                 </div>
             </div>
@@ -1980,7 +1915,7 @@
             <!-- Tip Rider Option -->
             <div class="space-y-1.5 text-xs">
                 <label class="font-bold text-slate-800 flex items-center justify-between">
-                    <span>ให้ทิปกำลังใจไรเดอร์ (พี่สมชาย 🛵):</span>
+                    <span id="tip-rider-title">ให้ทิปกำลังใจไรเดอร์ 🛵:</span>
                     <span class="text-xs text-red-600 font-bold">ไม่บังคับ</span>
                 </label>
                 <div class="grid grid-cols-4 gap-1.5" id="rider-tip-selector">
@@ -2280,32 +2215,18 @@
             </div>
 
             <!-- Recent Order History & 1-Click Reorder (สั่งซ้ำบิลเดิมใน 1 คลิก) -->
-            <div class="space-y-1.5 text-xs pt-1 border-t border-slate-100">
+            <div class="space-y-1.5 text-xs pt-1 border-t border-slate-100" id="wallet-recent-order-section">
                 <div class="font-bold text-slate-800 flex items-center justify-between">
                     <span class="flex items-center gap-1">
                         <span class="material-symbols-outlined text-sm text-emerald-700">history</span>
                         <span>ออเดอร์ล่าสุดที่สั่งไป:</span>
                     </span>
-                    <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">✓ ส่งสำเร็จแล้ว</span>
+                    <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200" id="wallet-order-status-tag">ประวัติการสั่งซื้อ</span>
                 </div>
 
-                <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-2">
-                    <div class="flex items-center justify-between text-[11px]">
-                        <span class="font-extrabold text-slate-800" id="wallet-recent-order-id">ออเดอร์ #TH-5324</span>
-                        <span class="font-black text-orange-600">฿215 (4 รายการ)</span>
-                    </div>
-                    <div class="text-[10px] text-slate-500 leading-tight">
-                        🥬 ผักบุ้งจีน • 🥥 กะทิสด 1 กล่อง • 🦐 กุ้งขาว 500g • 🌿 ผักชี
-                    </div>
-                    <div class="grid grid-cols-2 gap-1.5 pt-1">
-                        <button type="button" onclick="reorderAndGoCheckout()" class="py-1.5 px-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all shadow-2xs">
-                            <span class="material-symbols-outlined text-xs">replay</span>
-                            <span>สั่งซ้ำบิลนี้</span>
-                        </button>
-                        <button type="button" onclick="closeCustomerWalletModal(); openReceiptModal();" class="py-1.5 px-2 bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all">
-                            <span class="material-symbols-outlined text-xs">receipt_long</span>
-                            <span>ดูใบเสร็จ</span>
-                        </button>
+                <div id="wallet-recent-order-container">
+                    <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200/90 text-center text-slate-400 text-xs">
+                        ยังไม่มีประวัติการสั่งซื้อ
                     </div>
                 </div>
             </div>
@@ -2346,55 +2267,28 @@
             <div class="text-[11px] text-slate-600 space-y-1 py-1 border-b border-slate-100">
                 <div class="flex justify-between">
                     <span>เลขที่ใบเสร็จ:</span>
-                    <strong class="text-slate-800" id="receipt-order-id">#TH-6114</strong>
+                    <strong class="text-slate-800" id="receipt-order-id">-</strong>
                 </div>
                 <div class="flex justify-between">
                     <span>วันที่ / เวลา:</span>
-                    <span id="receipt-date-time">3 ก.ย. 2026 • 05:47 น.</span>
+                    <span id="receipt-date-time">-</span>
                 </div>
                 <div class="flex justify-between">
                     <span>ผู้รับสินค้า:</span>
-                    <strong class="text-slate-800" id="receipt-customer-name">ลูกค้า</strong>
+                    <strong class="text-slate-800" id="receipt-customer-name">-</strong>
                 </div>
                 <div class="flex justify-between">
                     <span>ช่องทางชำระเงิน:</span>
-                    <span class="text-emerald-700 font-bold" id="receipt-payment-method">PromptPay (สแกนจ่ายสำเร็จ)</span>
+                    <span class="text-emerald-700 font-bold" id="receipt-payment-method">-</span>
                 </div>
             </div>
 
             <!-- Items Table in Receipt -->
             <div class="space-y-1.5 text-xs">
-                <div class="font-bold text-slate-800 pb-1 border-b border-slate-100">รายการสินค้า (4 ชิ้นจาก 3 แผงค้า):</div>
+                <div class="font-bold text-slate-800 pb-1 border-b border-slate-100">รายการสินค้า:</div>
                 
                 <div class="space-y-1 divide-y divide-slate-50" id="receipt-items-list">
-                    <div class="flex justify-between py-1">
-                        <div>
-                            <div class="font-bold text-slate-800">มะเขือเปราะกรอบหวาน (500 กรัม)</div>
-                            <div class="text-[10px] text-slate-400">แผง B01 ผักสวนครัวลุงสนั่น • x1</div>
-                        </div>
-                        <span class="font-bold text-slate-800">฿15</span>
-                    </div>
-                    <div class="flex justify-between py-1">
-                        <div>
-                            <div class="font-bold text-slate-800">ข่าอ่อน + ตะไคร้สด + ใบมะกรูด (1 ชุด)</div>
-                            <div class="text-[10px] text-slate-400">แผง B01 ผักสวนครัวลุงสนั่น • x1</div>
-                        </div>
-                        <span class="font-bold text-slate-800">฿15</span>
-                    </div>
-                    <div class="flex justify-between py-1">
-                        <div>
-                            <div class="font-bold text-slate-800">หัวกะทิสดคั้นแท้ 100% (500 มล.)</div>
-                            <div class="text-[10px] text-slate-400">แผง C01 กะทิสดชาวเกาะ ลุงสมหมาย • x1</div>
-                        </div>
-                        <span class="font-bold text-slate-800">฿40</span>
-                    </div>
-                    <div class="flex justify-between py-1">
-                        <div>
-                            <div class="font-bold text-slate-800">ปลาหมึกกล้วยสดไซส์กลาง (500 กรัม)</div>
-                            <div class="text-[10px] text-slate-400">แผง E11 อาหารทะเลสดลุงหวัง • x1</div>
-                        </div>
-                        <span class="font-bold text-slate-800">฿110</span>
-                    </div>
+                    <div class="p-3 text-center text-slate-400 text-xs">ไม่มีรายการสินค้า</div>
                 </div>
             </div>
 
@@ -2402,19 +2296,19 @@
             <div class="pt-2 border-t border-dashed border-slate-300 space-y-1 text-xs text-slate-600">
                 <div class="flex justify-between">
                     <span>รวมค่าสินค้า:</span>
-                    <span class="font-medium text-slate-800" id="receipt-items-subtotal">฿180</span>
+                    <span class="font-medium text-slate-800" id="receipt-items-subtotal">฿0</span>
                 </div>
                 <div class="flex justify-between">
-                    <span>ค่าบริการรวมสินค้าหลายแผง (3 แผง):</span>
-                    <span class="font-medium text-slate-800" id="receipt-multistall-fee">฿10</span>
+                    <span>ค่าบริการรวมสินค้าหลายแผง:</span>
+                    <span class="font-medium text-slate-800" id="receipt-multistall-fee">฿0</span>
                 </div>
                 <div class="flex justify-between">
-                    <span>ค่าจัดส่ง (1.8 กม.):</span>
-                    <span class="font-medium text-slate-800" id="receipt-delivery-fee">฿25</span>
+                    <span>ค่าจัดส่ง:</span>
+                    <span class="font-medium text-slate-800" id="receipt-delivery-fee">฿0</span>
                 </div>
                 <div class="flex justify-between pt-1.5 border-t border-slate-200 text-sm font-black text-slate-900">
                     <span>ยอดที่โอนชำระแล้ว:</span>
-                    <span class="text-orange-600 text-base" id="receipt-grand-total">฿215</span>
+                    <span class="text-orange-600 text-base" id="receipt-grand-total">฿0</span>
                 </div>
 
                 <!-- Refund in Envelope Row (ปรากฏเมื่อมีสินค้าหมด) -->
@@ -2991,8 +2885,7 @@
             <div class="space-y-2">
                 <label class="block text-xs font-bold text-slate-700">เลือกรหัสไรเดอร์ประจำตลาด:</label>
                 <select id="rider-select-input" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-xs bg-slate-50">
-                    <option value="rider_somchai">🛵 พี่สมชาย • ทะเบียน 1กข 8902 (Hub Rider 1)</option>
-                    <option value="rider_sombat">🛵 พี่สมบัติ • ทะเบียน 2ขค 4511 (Hub Rider 2)</option>
+                    <option value="">-- ยังไม่มีไรเดอร์ในระบบ (เพิ่มผ่านหน้า Admin) --</option>
                 </select>
             </div>
 
@@ -3027,15 +2920,15 @@
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-xs text-left space-y-2">
                 <div class="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
                     <span>เลขออเดอร์:</span>
-                    <strong id="rider-complete-order-id" class="text-slate-900 font-black">#TH-9568</strong>
+                    <strong id="rider-complete-order-id" class="text-slate-900 font-black">-</strong>
                 </div>
                 <div class="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
                     <span>ลูกค้าผู้รับ:</span>
-                    <strong id="rider-complete-customer-name" class="text-slate-900">080-568-7733</strong>
+                    <strong id="rider-complete-customer-name" class="text-slate-900">-</strong>
                 </div>
                 <div class="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
                     <span>ยอดเงิน & การชำระ:</span>
-                    <strong id="rider-complete-payment-info" class="text-emerald-700 font-bold">฿317 (ชำระแล้ว)</strong>
+                    <strong id="rider-complete-payment-info" class="text-emerald-700 font-bold">-</strong>
                 </div>
                 <!-- Refund note if any -->
                 <div id="rider-complete-refund-row" class="hidden bg-rose-50 p-2 rounded-xl border border-rose-200 text-rose-800 flex items-center justify-between">
@@ -3297,7 +3190,7 @@
 
                 <div>
                     <label class="font-bold text-slate-700 block mb-1">ชื่อ-นามสกุล / ชื่อเรียกไรเดอร์: *</label>
-                    <input type="text" id="rider-form-name" required placeholder="เช่น พี่สมชาย ปลอดภัย (ไรเดอร์ 1)" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    <input type="text" id="rider-form-name" required placeholder="เช่น ธนากร หนองชาก (ไรเดอร์ 1)" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
                 </div>
 
                 <div class="grid grid-cols-2 gap-2.5">
