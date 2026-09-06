@@ -3312,9 +3312,35 @@
                     </div>
                 </div>
 
-                <div>
-                    <label class="font-bold text-slate-700 block mb-1">พื้นที่ / โซนประจำการ:</label>
-                    <input type="text" id="rider-form-zone" placeholder="เช่น ตำบลบ้านหนองชาก / อำเภอบ้านบึง" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">รุ่นรถมอเตอร์ไซค์:</label>
+                        <input type="text" id="rider-form-model" placeholder="เช่น Honda Wave 125i" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">พื้นที่ / โซนประจำการ:</label>
+                        <input type="text" id="rider-form-zone" placeholder="เช่น ตลาดหัวกุญแจ / บ้านบึง" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">เบอร์พร้อมเพย์รับค่ารอบ:</label>
+                        <input type="text" id="rider-form-promptpay" placeholder="เบอร์โทร หรือ เลข ปชช." class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">ธนาคาร:</label>
+                        <select id="rider-form-bank" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                            <option value="กสิกรไทย">กสิกรไทย (KBANK)</option>
+                            <option value="ไทยพาณิชย์">ไทยพาณิชย์ (SCB)</option>
+                            <option value="กรุงไทย">กรุงไทย (KTB)</option>
+                            <option value="กรุงเทพ">กรุงเทพ (BBL)</option>
+                            <option value="กรุงศรีอยุธยา">กรุงศรีอยุธยา (BAY)</option>
+                            <option value="ออมสิน">ออมสิน (GSB)</option>
+                            <option value="ทหารไทยธนชาต">ทหารไทยธนชาต (ttb)</option>
+                            <option value="พร้อมเพย์ e-Wallet">พร้อมเพย์ e-Wallet</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2.5">
@@ -3342,6 +3368,78 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- RIDER APPLICATION DETAIL MODAL (ดูข้อมูลใบสมัครฉบับเต็ม) -->
+    <!-- ========================================== -->
+    <div id="rider-app-detail-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl p-5 max-w-lg w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[92vh] flex flex-col">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        <span class="material-symbols-outlined text-base">assignment_ind</span>
+                    </span>
+                    <div>
+                        <h3 class="font-extrabold text-sm text-slate-900">รายละเอียดใบสมัครร่วมทีมไรเดอร์</h3>
+                        <div id="app-detail-sub" class="text-[10px] text-slate-500 font-mono">APP-RD-xxxx</div>
+                    </div>
+                </div>
+                <button type="button" onclick="closeRiderAppDetailModal()" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+
+            <div id="app-detail-body" class="flex-1 overflow-y-auto space-y-3 pr-1 text-xs text-slate-700">
+                <!-- Dynamically populated via renderRiderAppDetail() -->
+            </div>
+
+            <div id="app-detail-footer" class="pt-2 border-t border-slate-100 shrink-0 flex items-center justify-between gap-2 flex-wrap">
+                <!-- Action buttons populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- FLEET DAILY PAYOUT & SETTLEMENT MODAL (สรุปจ่ายเงินค่ารอบ) -->
+    <!-- ========================================== -->
+    <div id="rider-payout-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl p-5 max-w-2xl w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[92vh] flex flex-col">
+            <div class="flex items-center justify-between pb-2.5 border-b border-slate-100 shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-9 h-9 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white flex items-center justify-center font-bold text-base shadow-sm">
+                        <span class="material-symbols-outlined text-lg">payments</span>
+                    </span>
+                    <div>
+                        <h3 class="font-extrabold text-sm sm:text-base text-slate-900">สรุปยอดโอนเงินค่ารอบ & โบนัสกองยานไรเดอร์</h3>
+                        <p class="text-[11px] text-slate-500">Fleet Daily Compensation & Settlement Console • ตลาดวิศิษฐ์ชัย</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeRiderPayoutModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+
+            <div id="rider-payout-modal-body" class="flex-1 overflow-y-auto space-y-3.5 text-xs">
+                <!-- Dynamically populated via renderFleetPayoutModal() -->
+            </div>
+
+            <div class="pt-2 border-t border-slate-100 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-2">
+                <div class="flex items-center gap-2 w-full sm:w-auto">
+                    <button onclick="printFleetPayoutSlip()" class="flex-1 sm:flex-none px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-sm">print</span>
+                        <span>พิมพ์สลิป 80mm รวม</span>
+                    </button>
+                    <button onclick="closeRiderPayoutModal()" class="flex-1 sm:flex-none px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs text-center active:scale-95 transition-all">
+                        ปิด
+                    </button>
+                </div>
+                <button onclick="batchTransferAllRiderPayouts()" class="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm font-bold">send_and_archive</span>
+                    <span>⚡ สั่งโอนค่ารอบทั้งหมดผ่าน PromptPay</span>
+                </button>
+            </div>
         </div>
     </div>
 
