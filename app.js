@@ -7891,7 +7891,7 @@ function loadCommunityRiders() {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
                 // กรองไรเดอร์จำลองเก่าออก
-                const cleaned = parsed.filter(r => r && r.id && !["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"].includes(r.id));
+                const cleaned = parsed.filter(r => r && r.id && !["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"].includes(r.id) && !(r.name && (r.name.includes("รุ่งโรจน์") || r.name.includes("วิชัย สายฟ้า") || r.name.includes("สมเกียรติ") || r.name.includes("อนุชา บริการดี") || r.name.includes("ธีรภัทร"))));
                 return cleaned;
             }
         }
@@ -7920,7 +7920,11 @@ function loadRiderApplications() {
         const raw = localStorage.getItem("talathub_rider_applications");
         if (raw) {
             const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) return parsed;
+            if (Array.isArray(parsed)) {
+                // กรองใบสมัครตัวอย่างเก่า (APP-RD-101 / นายธีรภัทร) ออก
+                const cleaned = parsed.filter(a => a && a.id !== "APP-RD-101" && !(a.fullName && (a.fullName.includes("ธีรภัทร") || a.fullName.includes("เอกชัย สายซิ่ง") || a.fullName.includes("สุรศักดิ์ ใจดี") || a.fullName.includes("อนุสรณ์ ขยันส่ง"))));
+                return cleaned;
+            }
         }
     } catch (e) {
         console.error("Error loading rider applications:", e);
@@ -7953,7 +7957,8 @@ function initRiderRealtimeSync() {
         try {
             const data = snapshot.val();
             if (data && Array.isArray(data)) {
-                localStorage.setItem("talathub_rider_applications", JSON.stringify(data));
+                const cleaned = data.filter(a => a && a.id !== "APP-RD-101" && !(a.fullName && (a.fullName.includes("ธีรภัทร") || a.fullName.includes("เอกชัย สายซิ่ง") || a.fullName.includes("สุรศักดิ์ ใจดี") || a.fullName.includes("อนุสรณ์ ขยันส่ง"))));
+                localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
                 updateAdminRiderBadges();
                 if (state.currentRole === "admin") {
                     if (_activeAdminTab === "riders") {
@@ -7978,11 +7983,12 @@ function initRiderRealtimeSync() {
         try {
             const data = snapshot.val();
             if (data && Array.isArray(data)) {
-                localStorage.setItem("talathub_community_riders", JSON.stringify(data));
+                const cleaned = data.filter(r => r && r.id && !["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"].includes(r.id) && !(r.name && (r.name.includes("รุ่งโรจน์") || r.name.includes("วิชัย สายฟ้า") || r.name.includes("สมเกียรติ") || r.name.includes("อนุชา บริการดี") || r.name.includes("ธีรภัทร"))));
+                localStorage.setItem("talathub_community_riders", JSON.stringify(cleaned));
                 if (state.currentRole === "admin" && _activeAdminTab === "riders") {
                     renderAdminRiders();
                 }
-                checkCurrentRiderApprovalRealtime(data);
+                checkCurrentRiderApprovalRealtime(cleaned);
             } else if (!data) {
                 const localRiders = loadCommunityRiders();
                 if (localRiders && localRiders.length > 0) {
@@ -8554,9 +8560,9 @@ function renderAdminRiders() {
                         <span class="material-symbols-outlined text-sm font-bold">payments</span>
                         <span>💸 สรุปจ่ายค่ารอบ</span>
                     </button>
-                    <button onclick="loadSampleFleetData()" class="px-2.5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center gap-1 active:scale-95 transition-all" title="จำลองข้อมูลไรเดอร์ 4 คันทันทีสำหรับการทดสอบระบบ">
-                        <span class="material-symbols-outlined text-sm font-bold">bolt</span>
-                        <span>⚡ ตัวอย่างกองยาน</span>
+                    <button onclick="clearFleetTestData()" class="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-extrabold rounded-xl text-xs shadow-sm flex items-center gap-1 active:scale-95 transition-all" title="ล้างข้อมูลจำลอง/ทดสอบในระบบออกทั้งหมด">
+                        <span class="material-symbols-outlined text-sm font-bold text-rose-600">delete_sweep</span>
+                        <span>🧹 ล้างข้อมูลทดสอบ</span>
                     </button>
                     <button onclick="openRiderRegisterModal()" class="px-3 py-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white font-bold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
                         <span class="material-symbols-outlined text-sm font-bold">how_to_reg</span>
@@ -8597,13 +8603,9 @@ function renderAdminRiders() {
                         </div>
                     </div>
                     <div class="flex items-center gap-1.5 self-start sm:self-auto flex-wrap">
-                        <button onclick="createSampleRiderApplication()" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-extrabold rounded-xl text-[11px] flex items-center gap-1 transition-all shadow-2xs active:scale-95" title="สร้างใบสมัครตัวอย่างสำหรับทดสอบระบบ">
-                            <span class="material-symbols-outlined text-sm font-bold">add_circle</span>
-                            <span>+ จำลองใบสมัคร</span>
-                        </button>
-                        <button onclick="openRiderRegisterModal()" class="px-2.5 py-1.5 bg-white hover:bg-sky-50 text-sky-700 border border-sky-300 font-bold rounded-xl text-[11px] flex items-center gap-1 transition-all shadow-2xs active:scale-95">
+                        <button onclick="openRiderRegisterModal()" class="px-3 py-1.5 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white font-bold rounded-xl text-xs flex items-center gap-1 transition-all shadow-xs active:scale-95">
                             <span class="material-symbols-outlined text-sm font-bold">add</span>
-                            <span>เปิดฟอร์มสมัคร</span>
+                            <span>เปิดฟอร์มสมัครไรเดอร์</span>
                         </button>
                     </div>
                 </div>
@@ -8626,13 +8628,13 @@ function renderAdminRiders() {
 
                 <!-- Applications List -->
                 ${displayedApps.length === 0 ? `
-                    <div class="py-6 px-4 bg-emerald-50/60 border border-dashed border-emerald-200 rounded-2xl text-center space-y-2">
-                        <span class="material-symbols-outlined text-3xl text-emerald-600">verified</span>
-                        <div class="font-bold text-xs text-emerald-900">ไม่มีใบสมัครในหมวดหมู่นี้ในขณะนี้</div>
-                        <p class="text-[11px] text-slate-500">กดปุ่ม "+ จำลองใบสมัคร" เพื่อทดสอบโฟลว์การตรวจสอบและอนุมัติไรเดอร์ได้ทันที</p>
-                        <button onclick="createSampleRiderApplication()" class="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all inline-flex items-center gap-1">
-                            <span class="material-symbols-outlined text-sm">add_circle</span>
-                            <span>+ สร้างใบสมัครทดสอบทันที</span>
+                    <div class="py-6 px-4 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center space-y-2">
+                        <span class="material-symbols-outlined text-3xl text-slate-400">inbox</span>
+                        <div class="font-bold text-xs text-slate-700">ไม่มีใบสมัครในหมวดหมู่นี้ในขณะนี้</div>
+                        <p class="text-[11px] text-slate-500">เมื่อมีผู้สมัครกรอกฟอร์มเข้ามา รายชื่อจะปรากฏที่นี่เพื่อให้แอดมินตรวจสอบและอนุมัติทันที</p>
+                        <button onclick="openRiderRegisterModal()" class="px-3.5 py-1.5 bg-gradient-to-r from-sky-600 to-blue-700 text-white font-bold rounded-xl text-xs shadow-sm active:scale-95 transition-all inline-flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">how_to_reg</span>
+                            <span>เปิดฟอร์มสมัครไรเดอร์</span>
                         </button>
                     </div>
                 ` : `
@@ -8695,6 +8697,13 @@ function renderAdminRiders() {
                                             <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
                                                 <span class="material-symbols-outlined text-xs">two_wheeler</span>
                                                 <span>สลับเข้ารับงาน</span>
+                                            </button>
+                                            <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all" title="เปลี่ยนสถานะกลับไปรอพิจารณาใหม่">
+                                                <span class="material-symbols-outlined text-xs">replay</span>
+                                                <span>รอพิจารณา</span>
+                                            </button>
+                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="ลบประวัติ">
+                                                <span class="material-symbols-outlined text-sm">delete</span>
                                             </button>
                                         ` : `
                                             <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
@@ -9539,6 +9548,11 @@ function viewRiderAppDetail(appId) {
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>พิจารณาใหม่</span>
                     </button>
+                ` : app.status === 'approved' ? `
+                    <button onclick="reconsiderRiderApplication('${app.id}')" class="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">replay</span>
+                        <span>ย้อนกลับไปรอพิจารณา</span>
+                    </button>
                 ` : ''}
                 <button onclick="deleteRiderApplication('${app.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all" title="ลบใบสมัครนี้">
                     <span class="material-symbols-outlined text-base">delete</span>
@@ -9904,84 +9918,30 @@ function simulateRiderGpsMovement() {
     setTimeout(() => initAdminRiderRadarMap(), 200);
 }
 
-function loadSampleFleetData() {
-    const sampleFleet = [
-        {
-            id: "RIDER-001",
-            name: "รุ่งโรจน์ ฉับไว (รุ่ง)",
-            phone: "089-111-2233",
-            plate: "1กข-8901 ชลบุรี",
-            motorcycleModel: "Honda Wave 125i",
-            promptPay: "0891112233",
-            bank: "กสิกรไทย",
-            zone: "รอบตลาดสดวิศิษฐ์ชัย • หนองชาก",
-            status: "available",
-            baseFee: 40,
-            tripsCountToday: 8,
-            rating: 4.9,
-            lat: MARKET_ORIGIN.lat + 0.0035,
-            lng: MARKET_ORIGIN.lng + 0.0042,
-            avatar: "🛵",
-            codSettledToday: 0
-        },
-        {
-            id: "RIDER-002",
-            name: "วิชัย สายฟ้า (ชัย)",
-            phone: "081-222-3344",
-            plate: "2กค-4432 ชลบุรี",
-            motorcycleModel: "Honda PCX 160",
-            promptPay: "0812223344",
-            bank: "ไทยพาณิชย์",
-            zone: "โซนตัวอำเภอบ้านบึง • โรงพยาบาล",
-            status: "on_delivery",
-            baseFee: 40,
-            tripsCountToday: 12,
-            rating: 4.8,
-            lat: MARKET_ORIGIN.lat - 0.0048,
-            lng: MARKET_ORIGIN.lng + 0.0062,
-            avatar: "🛵",
-            codSettledToday: 0
-        },
-        {
-            id: "RIDER-003",
-            name: "สมเกียรติ สู้ฝน (เกียรติ)",
-            phone: "092-333-4455",
-            plate: "3ขข-7711 ระยอง",
-            motorcycleModel: "Yamaha Grand Filano",
-            promptPay: "0923334455",
-            bank: "กรุงไทย",
-            zone: "หนองซ้ำซาก • หัวกุญแจ",
-            status: "available",
-            baseFee: 40,
-            tripsCountToday: 15,
-            rating: 5.0,
-            lat: MARKET_ORIGIN.lat + 0.0061,
-            lng: MARKET_ORIGIN.lng - 0.0038,
-            avatar: "🛵",
-            codSettledToday: 0
-        },
-        {
-            id: "RIDER-004",
-            name: "อนุชา บริการดี (ชา)",
-            phone: "086-444-5566",
-            plate: "4คง-1234 ชลบุรี",
-            motorcycleModel: "Honda Click 150i",
-            promptPay: "0864445566",
-            bank: "กรุงเทพ",
-            zone: "รอบตลาดสดวิศิษฐ์ชัย",
-            status: "offline",
-            baseFee: 40,
-            tripsCountToday: 4,
-            rating: 4.7,
-            lat: MARKET_ORIGIN.lat - 0.0022,
-            lng: MARKET_ORIGIN.lng - 0.0055,
-            avatar: "🛵",
-            codSettledToday: 0
-        }
-    ];
+function clearFleetTestData() {
+    if (!confirm("⚠️ คุณต้องการล้างข้อมูลตัวอย่าง/ทดสอบ (ใบสมัครตัวอย่าง, กองยานจำลอง) ออกจากระบบใช่หรือไม่?\n\nข้อมูลจริงที่ผู้สมัครกรอกเข้ามาจะยังคงอยู่")) return;
 
-    saveCommunityRiders(sampleFleet);
-    showToast("🎉 โหลดข้อมูลตัวอย่างกองยานไรเดอร์ 4 คันเรียบร้อยแล้ว!");
+    // 1. Clean applications: remove sample IDs or sample names
+    const apps = loadRiderApplications();
+    const realApps = apps.filter(a => {
+        if (!a) return false;
+        if (a.id === "APP-RD-101") return false;
+        if (a.fullName && (a.fullName.includes("ธีรภัทร") || a.fullName.includes("เอกชัย") || a.fullName.includes("สุรศักดิ์") || a.fullName.includes("อนุสรณ์"))) return false;
+        return true;
+    });
+    saveRiderApplications(realApps);
+
+    // 2. Clean community riders: remove mock fleet
+    const riders = loadCommunityRiders();
+    const realRiders = riders.filter(r => {
+        if (!r) return false;
+        if (["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"].includes(r.id)) return false;
+        if (r.name && (r.name.includes("รุ่งโรจน์") || r.name.includes("วิชัย สายฟ้า") || r.name.includes("สมเกียรติ") || r.name.includes("อนุชา บริการดี") || r.name.includes("ธีรภัทร"))) return false;
+        return true;
+    });
+    saveCommunityRiders(realRiders);
+
+    showToast("🧹 ล้างข้อมูลตัวอย่างและจำลองออกจากระบบเรียบร้อยแล้ว!");
     renderAdminRiders();
     setTimeout(() => initAdminRiderRadarMap(), 200);
 }
@@ -10015,7 +9975,8 @@ window.batchTransferAllRiderPayouts = batchTransferAllRiderPayouts;
 window.printFleetPayoutSlip = printFleetPayoutSlip;
 window.dispatchOrderToRider = dispatchOrderToRider;
 window.simulateRiderGpsMovement = simulateRiderGpsMovement;
-window.loadSampleFleetData = loadSampleFleetData;
+window.clearFleetTestData = clearFleetTestData;
+window.loadSampleFleetData = clearFleetTestData;
 
 
 // ==========================================
