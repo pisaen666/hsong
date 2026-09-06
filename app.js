@@ -1684,6 +1684,7 @@ function goToMarketScreen() {
     document.getElementById("screen-market-home").classList.remove("hidden");
     document.getElementById("screen-checkout").classList.add("hidden");
     document.getElementById("screen-tracking").classList.add("hidden");
+    if (typeof stopRiderJourneySimulation === "function") stopRiderJourneySimulation();
     updateHomeActiveOrderBanner();
 }
 
@@ -1692,6 +1693,7 @@ function goToCheckoutScreen() {
     document.getElementById("screen-market-home").classList.add("hidden");
     document.getElementById("screen-checkout").classList.remove("hidden");
     document.getElementById("screen-tracking").classList.add("hidden");
+    if (typeof stopRiderJourneySimulation === "function") stopRiderJourneySimulation();
     renderCheckoutPage();
 }
 
@@ -1701,6 +1703,12 @@ function goToTrackingScreen() {
     document.getElementById("screen-checkout").classList.add("hidden");
     document.getElementById("screen-tracking").classList.remove("hidden");
     renderTrackingScreen();
+    setTimeout(() => {
+        if (customerLiveTrackingMap) {
+            customerLiveTrackingMap.invalidateSize();
+            if (typeof recenterCustomerLiveMap === "function") recenterCustomerLiveMap();
+        }
+    }, 150);
 }
 
 function switchHubTab(tabName) {
@@ -5616,6 +5624,9 @@ function renderTrackingScreen() {
         if (container) container.innerHTML = `<div class="p-6 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">ไม่มีรายการสินค้าที่กำลังจัดส่ง</div>`;
         const completedBox = document.getElementById("tracking-completed-actions-box");
         if (completedBox) completedBox.classList.add("hidden");
+        const mapCard = document.getElementById("customer-live-delivery-map-card");
+        if (mapCard) mapCard.classList.add("hidden");
+        if (typeof stopRiderJourneySimulation === "function") stopRiderJourneySimulation();
         return;
     }
 
@@ -5717,6 +5728,17 @@ function renderTrackingScreen() {
                 }
             }
         });
+    }
+
+    // Toggle Live Delivery Map Card (แสดงเมื่อไรเดอร์รับของเสร็จและกำลังออกส่ง)
+    if (orderStatus === "delivering" || orderStatus === "delivered") {
+        if (typeof renderCustomerLiveDeliveryMap === "function") {
+            renderCustomerLiveDeliveryMap(order);
+        }
+    } else {
+        const mapCard = document.getElementById("customer-live-delivery-map-card");
+        if (mapCard) mapCard.classList.add("hidden");
+        if (typeof stopRiderJourneySimulation === "function") stopRiderJourneySimulation();
     }
 
     // Toggle Post-Delivery Completed Actions Box
@@ -6000,6 +6022,310 @@ function closeRiderDeliveryCompleteModal() {
     const modal = document.getElementById("rider-delivery-complete-modal");
     if (modal) modal.classList.add("hidden");
 }
+
+// ==========================================
+// CUSTOMER LIVE DELIVERY TRACKING MAP ENGINE (LEAFLET)
+// ==========================================
+let customerLiveTrackingMap = null;
+let customerLiveRiderMarker = null;
+let customerLiveRouteLine = null;
+let customerLiveHubMarker = null;
+let customerLiveDestMarker = null;
+let customerLiveMapLayerType = "satellite"; // "satellite" | "street"
+let customerLiveSatTile = null;
+let customerLiveStreetTile = null;
+let riderJourneySimInterval = null;
+let riderCurrentProgressPct = 42;
+let customerRouteWaypoints = [];
+
+function generateRouteWaypoints(startLat, startLng, destLat, destLng) {
+    const points = [];
+    const steps = 14;
+    const midLat = (startLat + destLat) / 2;
+    const midLng = (startLng + destLng) / 2;
+    const deltaLat = destLat - startLat;
+    const deltaLng = destLng - startLng;
+    // Perpendicular curve offset to simulate real curved roads
+    const offsetLat = -deltaLng * 0.18;
+    const offsetLng = deltaLat * 0.18;
+
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const lat = (1 - t) * (1 - t) * startLat + 2 * (1 - t) * t * (midLat + offsetLat) + t * t * destLat;
+        const lng = (1 - t) * (1 - t) * startLng + 2 * (1 - t) * t * (midLng + offsetLng) + t * t * destLng;
+        points.push([lat, lng]);
+    }
+    return points;
+}
+
+function getPointAlongRoute(points, fraction) {
+    if (!points || points.length === 0) return [MARKET_ORIGIN.lat, MARKET_ORIGIN.lng];
+    if (fraction <= 0) return points[0];
+    if (fraction >= 1) return points[points.length - 1];
+
+    const index = fraction * (points.length - 1);
+    const lowerIdx = Math.floor(index);
+    const upperIdx = Math.ceil(index);
+    const subFrac = index - lowerIdx;
+
+    const p1 = points[lowerIdx];
+    const p2 = points[upperIdx];
+    const lat = p1[0] + (p2[0] - p1[0]) * subFrac;
+    const lng = p1[1] + (p2[1] - p1[1]) * subFrac;
+    return [lat, lng];
+}
+
+function setCustomerMapLayerType(type) {
+    customerLiveMapLayerType = type;
+    if (customerLiveTrackingMap) {
+        if (type === "satellite") {
+            if (customerLiveStreetTile && customerLiveTrackingMap.hasLayer(customerLiveStreetTile)) {
+                customerLiveTrackingMap.removeLayer(customerLiveStreetTile);
+            }
+            if (customerLiveSatTile && !customerLiveTrackingMap.hasLayer(customerLiveSatTile)) {
+                customerLiveSatTile.addTo(customerLiveTrackingMap);
+            }
+        } else {
+            if (customerLiveSatTile && customerLiveTrackingMap.hasLayer(customerLiveSatTile)) {
+                customerLiveTrackingMap.removeLayer(customerLiveSatTile);
+            }
+            if (customerLiveStreetTile && !customerLiveTrackingMap.hasLayer(customerLiveStreetTile)) {
+                customerLiveStreetTile.addTo(customerLiveTrackingMap);
+            }
+        }
+    }
+    const btnSat = document.getElementById("customer-map-btn-sat");
+    const btnStr = document.getElementById("customer-map-btn-street");
+    if (btnSat && btnStr) {
+        if (type === "satellite") {
+            btnSat.className = "px-2 py-0.5 rounded-md bg-emerald-600 text-white shadow-xs transition-all";
+            btnStr.className = "px-2 py-0.5 rounded-md text-slate-600 hover:text-slate-900 transition-all";
+        } else {
+            btnSat.className = "px-2 py-0.5 rounded-md text-slate-600 hover:text-slate-900 transition-all";
+            btnStr.className = "px-2 py-0.5 rounded-md bg-emerald-600 text-white shadow-xs transition-all";
+        }
+    }
+}
+window.setCustomerMapLayerType = setCustomerMapLayerType;
+
+function recenterCustomerLiveMap() {
+    if (!customerLiveTrackingMap || !customerRouteWaypoints || customerRouteWaypoints.length < 2) return;
+    try {
+        const bounds = L.latLngBounds(customerRouteWaypoints);
+        customerLiveTrackingMap.fitBounds(bounds, { padding: [35, 35] });
+    } catch (e) {
+        console.warn("recenterCustomerLiveMap error:", e);
+    }
+}
+window.recenterCustomerLiveMap = recenterCustomerLiveMap;
+
+function updateLiveMapProgressUI(totalDistKm, isDelivered) {
+    const pct = Math.min(100, Math.max(0, Math.round(riderCurrentProgressPct)));
+    const remainingKm = isDelivered ? 0 : Math.max(0.1, Number((totalDistKm * (1 - pct / 100)).toFixed(1)));
+    const etaMinutes = isDelivered ? 0 : Math.max(2, Math.round(remainingKm * 3.5));
+
+    const bar = document.getElementById("customer-map-progress-bar");
+    const pctEl = document.getElementById("customer-map-progress-pct");
+    const etaPill = document.getElementById("customer-map-floating-eta");
+    const distEl = document.getElementById("customer-map-dist-remain");
+    const speedEl = document.getElementById("customer-map-speed-status");
+    const descEl = document.getElementById("customer-map-status-desc");
+
+    if (bar) bar.style.width = `${pct}%`;
+    if (pctEl) pctEl.textContent = `${pct}%`;
+
+    if (isDelivered) {
+        if (etaPill) etaPill.innerHTML = `<span>✓ จัดส่งถึงปลายทางเรียบร้อยแล้ว</span>`;
+        if (distEl) distEl.textContent = `0 กม.`;
+        if (speedEl) speedEl.innerHTML = `<span class="text-emerald-700 font-black">🎉 จัดส่งสำเร็จแล้ว</span>`;
+        if (descEl) descEl.textContent = `ของสดส่งตรงถึงครัวคุณเรียบร้อยแล้ว ตรวจรับของได้เลย`;
+    } else {
+        if (etaPill) etaPill.innerHTML = `<span class="material-symbols-outlined text-cyan-400 text-xs animate-spin">autorenew</span><span>อีกประมาณ ${etaMinutes}-${etaMinutes + 4} นาที</span>`;
+        if (distEl) distEl.textContent = `~${remainingKm} กม.`;
+        if (speedEl) speedEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block mr-1"></span><span>ไรเดอร์กำลังเดินทาง (~35 กม./ชม.)</span>`;
+        if (descEl) descEl.textContent = `ไรเดอร์กำลังขับมุ่งหน้ามาส่งของสดให้คุณ`;
+    }
+}
+
+function startRiderJourneySimulation(totalDistKm) {
+    stopRiderJourneySimulation();
+    riderJourneySimInterval = setInterval(() => {
+        if (riderCurrentProgressPct < 95) {
+            riderCurrentProgressPct += 1.2;
+            if (riderCurrentProgressPct > 95) riderCurrentProgressPct = 95;
+
+            updateLiveMapProgressUI(totalDistKm, false);
+
+            if (customerLiveRiderMarker && customerRouteWaypoints && customerRouteWaypoints.length > 0) {
+                const nextPos = getPointAlongRoute(customerRouteWaypoints, riderCurrentProgressPct / 100);
+                customerLiveRiderMarker.setLatLng(nextPos);
+            }
+        }
+    }, 2800);
+}
+
+function stopRiderJourneySimulation() {
+    if (riderJourneySimInterval) {
+        clearInterval(riderJourneySimInterval);
+        riderJourneySimInterval = null;
+    }
+}
+
+function renderCustomerLiveDeliveryMap(order) {
+    const mapCard = document.getElementById("customer-live-delivery-map-card");
+    if (!mapCard) return;
+    mapCard.classList.remove("hidden");
+
+    const startLat = MARKET_ORIGIN.lat || 13.2982;
+    const startLng = MARKET_ORIGIN.lng || 101.1712;
+
+    const destLat = Number(order.lat || (state.deliveryLocation && state.deliveryLocation.lat) || 13.3080);
+    const destLng = Number(order.lng || (state.deliveryLocation && state.deliveryLocation.lng) || 101.1503);
+    const destTitle = (state.deliveryLocation && state.deliveryLocation.title) ? state.deliveryLocation.title : (order.address || "บ้านคุณ");
+
+    const destLabelEl = document.getElementById("customer-map-dest-label");
+    if (destLabelEl) {
+        destLabelEl.textContent = `📍 ${destTitle.length > 14 ? destTitle.substring(0, 14) + '...' : destTitle}`;
+    }
+
+    const totalDistKm = Number(calculateDistanceKm(startLat, startLng, destLat, destLng).toFixed(1));
+    const isDelivered = order.status === "delivered";
+
+    if (isDelivered) {
+        riderCurrentProgressPct = 100;
+    } else {
+        if (riderCurrentProgressPct >= 96 || riderCurrentProgressPct < 20) {
+            riderCurrentProgressPct = 42;
+        }
+    }
+
+    // Generate waypoints between Market Hub and Customer Destination
+    customerRouteWaypoints = generateRouteWaypoints(startLat, startLng, destLat, destLng);
+
+    // Update UI Progress, ETA, Distance
+    updateLiveMapProgressUI(totalDistKm, isDelivered);
+
+    // Check Leaflet availability
+    if (typeof L === "undefined") {
+        console.warn("Leaflet library not ready yet.");
+        return;
+    }
+
+    const mapElem = document.getElementById("customer-live-leaflet-map");
+    if (!mapElem) return;
+
+    if (!customerLiveTrackingMap) {
+        try {
+            customerLiveTrackingMap = L.map("customer-live-leaflet-map", {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([(startLat + destLat) / 2, (startLng + destLng) / 2], 14);
+
+            customerLiveSatTile = L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+                maxZoom: 20,
+                subdomains: ["mt0", "mt1", "mt2", "mt3"]
+            });
+
+            customerLiveStreetTile = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 19
+            });
+
+            if (customerLiveMapLayerType === "satellite") {
+                customerLiveSatTile.addTo(customerLiveTrackingMap);
+            } else {
+                customerLiveStreetTile.addTo(customerLiveTrackingMap);
+            }
+
+            // Market Hub Pin
+            const hubIcon = L.divIcon({
+                className: "custom-hub-pin",
+                html: `<div style="background: linear-gradient(135deg, #065f46, #047857); color: #fff; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 2.5px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.35);">🏛️</div>`,
+                iconSize: [34, 34],
+                iconAnchor: [17, 17]
+            });
+            customerLiveHubMarker = L.marker([startLat, startLng], { icon: hubIcon })
+                .addTo(customerLiveTrackingMap)
+                .bindPopup("<b>🏛️ ศูนย์กลางตลาดสดวิศิษฐ์ชัย</b><br><span style='font-size:11px;color:#64748b;'>จุดรับของสด & ออกเดินทาง</span>");
+
+            // Customer Destination Pin
+            const destIcon = L.divIcon({
+                className: "custom-dest-pin",
+                html: `<div style="background: linear-gradient(135deg, #dc2626, #b91c1c); color: #fff; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 2.5px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.35);">📍</div>`,
+                iconSize: [34, 34],
+                iconAnchor: [17, 17]
+            });
+            customerLiveDestMarker = L.marker([destLat, destLng], { icon: destIcon })
+                .addTo(customerLiveTrackingMap)
+                .bindPopup(`<b>📍 จุดส่งของถึงคุณ</b><br><span style='font-size:11px;color:#64748b;'>${destTitle}</span>`);
+
+            // Route Polyline
+            customerLiveRouteLine = L.polyline(customerRouteWaypoints, {
+                color: "#10b981",
+                weight: 5,
+                opacity: 0.9,
+                dashArray: "6, 8",
+                lineJoin: "round"
+            }).addTo(customerLiveTrackingMap);
+
+            // Animated Rider Pin
+            const riderCurrentCoord = getPointAlongRoute(customerRouteWaypoints, riderCurrentProgressPct / 100);
+            const riderIcon = L.divIcon({
+                className: "custom-live-rider-pin",
+                html: `
+                <div style="position: relative; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;">
+                    <div style="position: absolute; width: 38px; height: 38px; border-radius: 50%; background: rgba(6, 182, 212, 0.45); animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+                    <div style="background: linear-gradient(135deg, #0891b2, #0284c7); color: #fff; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; border: 2.5px solid #fff; box-shadow: 0 4px 14px rgba(6, 182, 212, 0.6); z-index: 2;">
+                        🛵
+                    </div>
+                </div>`,
+                iconSize: [38, 38],
+                iconAnchor: [19, 19]
+            });
+            customerLiveRiderMarker = L.marker(riderCurrentCoord, { icon: riderIcon })
+                .addTo(customerLiveTrackingMap)
+                .bindPopup(`<b>🛵 ไรเดอร์กำลังเดินทาง</b><br><span style='font-size:11px;color:#0891b2;'>มุ่งหน้า ${destTitle}</span>`);
+
+            setTimeout(() => {
+                if (customerLiveTrackingMap) {
+                    customerLiveTrackingMap.invalidateSize();
+                    recenterCustomerLiveMap();
+                }
+            }, 150);
+        } catch (e) {
+            console.error("customer live map init error:", e);
+        }
+    } else {
+        // Map already initialized: update pins, route, and bounds
+        try {
+            if (customerLiveHubMarker) customerLiveHubMarker.setLatLng([startLat, startLng]);
+            if (customerLiveDestMarker) {
+                customerLiveDestMarker.setLatLng([destLat, destLng]);
+                customerLiveDestMarker.setPopupContent(`<b>📍 จุดส่งของถึงคุณ</b><br><span style='font-size:11px;color:#64748b;'>${destTitle}</span>`);
+            }
+            if (customerLiveRouteLine) customerLiveRouteLine.setLatLngs(customerRouteWaypoints);
+
+            const riderCoord = getPointAlongRoute(customerRouteWaypoints, riderCurrentProgressPct / 100);
+            if (customerLiveRiderMarker) customerLiveRiderMarker.setLatLng(riderCoord);
+
+            setTimeout(() => {
+                if (customerLiveTrackingMap) {
+                    customerLiveTrackingMap.invalidateSize();
+                    recenterCustomerLiveMap();
+                }
+            }, 100);
+        } catch (e) {
+            console.error("customer live map update error:", e);
+        }
+    }
+
+    if (!isDelivered) {
+        startRiderJourneySimulation(totalDistKm);
+    } else {
+        stopRiderJourneySimulation();
+    }
+}
+window.renderCustomerLiveDeliveryMap = renderCustomerLiveDeliveryMap;
+
 
 function goToCustomerTrackingFromRiderComplete() {
     closeRiderDeliveryCompleteModal();
@@ -6956,6 +7282,7 @@ function handleCustomerLoginSubmit() {
     saveCustomerToStorage(state.customer);
 
     closeCustomerLoginModal();
+    updateCustomerRoleButtonUI();
     renderAuthHeaderButtons();
     updateDeliveryLocationUI();
     updateCustomerLoyaltyBanner();
@@ -7015,6 +7342,10 @@ function logoutCustomer() {
     try { localStorage.removeItem("talathub_cart"); } catch (e) {}
 
     // ✅ อัปเดต UI ทั้งหมดให้กลับสู่สถานะผู้มาเยือน (Guest)
+    updateCustomerRoleButtonUI();
+    if (typeof stopRiderJourneySimulation === "function") stopRiderJourneySimulation();
+    const mapCard = document.getElementById("customer-live-delivery-map-card");
+    if (mapCard) mapCard.classList.add("hidden");
     updateHomeActiveOrderBanner();
     updateCartUI();
     renderAuthHeaderButtons();
@@ -7043,8 +7374,39 @@ function logoutMerchant() {
 // ==========================================
 // ROLE-BASED ACCESS CONTROL & ROLE SWITCHING
 // ==========================================
+function updateCustomerRoleButtonUI() {
+    const btn = document.getElementById("role-btn-customer");
+    if (!btn) return;
+
+    const isCustLoggedIn = !!(state.customer && state.customer.isLoggedIn);
+    const isCustomerView = (state.currentRole === "customer" || !state.currentRole);
+
+    if (isCustLoggedIn) {
+        btn.classList.add("logged-in");
+        if (isCustomerView) {
+            btn.className = "role-btn active logged-in py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+        } else {
+            btn.className = "role-btn logged-in py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-emerald-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+        }
+    } else {
+        btn.classList.remove("logged-in");
+        // ลูกค้ายังไม่ได้ล็อกอิน: ไม่เป็นสีเขียว
+        if (isCustomerView) {
+            btn.className = "role-btn active py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-200 bg-slate-700/80 border border-slate-600/60 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+        } else {
+            btn.className = "role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+        }
+    }
+}
+window.updateCustomerRoleButtonUI = updateCustomerRoleButtonUI;
+
 function switchRole(targetRole) {
     if (targetRole === "customer") {
+        // หากอยู่ที่หน้าลูกค้าอยู่แล้ว และยังไม่ได้ล็อกอิน ให้เปิดหน้าต่างเข้าสู่ระบบ
+        if (state.currentRole === "customer" && (!state.customer || !state.customer.isLoggedIn)) {
+            openCustomerLoginModal();
+            return;
+        }
         setActiveRoleView("customer");
         return;
     }
@@ -7118,18 +7480,25 @@ function setActiveRoleView(role) {
             if (r === role) {
                 if (r === "admin") {
                     btn.className = "role-btn active py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+                } else if (r === "customer") {
+                    // Update via updateCustomerRoleButtonUI
                 } else {
                     btn.className = "role-btn active py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
                 }
             } else {
                 if (r === "admin") {
                     btn.className = "role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-purple-300 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+                } else if (r === "customer") {
+                    // Update via updateCustomerRoleButtonUI
                 } else {
                     btn.className = "role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
                 }
             }
         }
     });
+
+    // กำหนดสีปุ่มลูกค้าให้ตรงตามสถานะการล็อกอิน
+    updateCustomerRoleButtonUI();
 
     // Sync admin button in the role selector bar
     const adminBtnInBar = document.getElementById("role-btn-admin");
@@ -9903,6 +10272,7 @@ function renderAuthHeaderButtons() {
     }
 
     updateCustomerLoyaltyBanner();
+    updateCustomerRoleButtonUI();
 }
 
 function updateCustomerLoyaltyBanner() {
@@ -10853,6 +11223,7 @@ function initTalatHubApp() {
     state.deliveryLocation = loadSavedLocation();
 
     setActiveRoleView("customer");
+    updateCustomerRoleButtonUI();
     renderScreenModeButton();
     updateDeliveryLocationUI();
     renderAuthHeaderButtons();
