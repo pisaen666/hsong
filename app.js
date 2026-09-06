@@ -7887,31 +7887,14 @@ let _showAdminRiderAppsHistory = false;
 
 const DEFAULT_COMMUNITY_RIDERS = [];
 
-// Mock sample IDs and patterns to remove sample/test dummy data
+// Mock sample IDs to remove legacy dummy data
 const MOCK_COMMUNITY_RIDER_IDS = ["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"];
-const MOCK_COMMUNITY_RIDER_PHONES = [
-    "089-111-2233", "081-222-3344", "092-333-4455", "086-444-5566",
-    "0891112233", "0812223344", "0923334455", "0864445566",
-    "089-555-1234", "081-444-5678", "092-333-8899"
-];
-const MOCK_COMMUNITY_RIDER_PLATES = ["1กข-8901", "2กค-4432", "3ขข-7711", "4คง-1234", "1กข-9988"];
-const MOCK_COMMUNITY_RIDER_NAME_KEYWORDS = [
-    "รุ่งโรจน์ ฉับไว", "รุ่งโรจน์ วิ่งไว", "วิชัย สายฟ้า", "สมเกียรติ สู้ฝน", "สมเกียรติ ซื่อสัตย์", 
-    "อนุชา บริการดี", "ธีรภัทร ว่องไว", "เอกชัย สายซิ่ง", "สุรศักดิ์ ใจดี", "อนุสรณ์ ขยันส่ง"
-];
-
 const MOCK_RIDER_APP_IDS = ["APP-RD-101"];
-const MOCK_RIDER_APP_NAME_KEYWORDS = [
-    "ธีรภัทร ว่องไว", "เอกชัย สายซิ่ง", "สุรศักดิ์ ใจดี", "อนุสรณ์ ขยันส่ง"
-];
 
 function isMockCommunityRider(r) {
     if (!r) return true;
+    if (r.isMock) return true;
     if (r.id && MOCK_COMMUNITY_RIDER_IDS.includes(r.id)) return true;
-    if (r.phone && MOCK_COMMUNITY_RIDER_PHONES.includes(r.phone.replace(/[-\s]/g, ''))) return true;
-    if (r.phone && MOCK_COMMUNITY_RIDER_PHONES.includes(r.phone.trim())) return true;
-    if (r.plate && MOCK_COMMUNITY_RIDER_PLATES.some(p => r.plate.includes(p))) return true;
-    if (r.name && MOCK_COMMUNITY_RIDER_NAME_KEYWORDS.some(kw => r.name.includes(kw))) return true;
     return false;
 }
 
@@ -7919,8 +7902,6 @@ function isMockRiderApplication(a) {
     if (!a) return true;
     if (a.isMock) return true;
     if (a.id && MOCK_RIDER_APP_IDS.includes(a.id)) return true;
-    if (a.phone && MOCK_COMMUNITY_RIDER_PHONES.includes(a.phone.replace(/[-\s]/g, ''))) return true;
-    if (a.fullName && MOCK_RIDER_APP_NAME_KEYWORDS.some(kw => a.fullName.includes(kw))) return true;
     return false;
 }
 
@@ -7930,7 +7911,7 @@ function loadCommunityRiders() {
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-                return parsed.filter(r => !isMockCommunityRider(r));
+                return parsed.filter(r => r && !isMockCommunityRider(r));
             }
         }
     } catch (e) {
@@ -7941,18 +7922,12 @@ function loadCommunityRiders() {
 
 function saveCommunityRiders(list) {
     try {
-        const cleaned = (list || []).filter(r => !isMockCommunityRider(r));
+        const cleaned = (list || []).filter(r => r && !isMockCommunityRider(r));
         localStorage.setItem("talathub_community_riders", JSON.stringify(cleaned));
         if (isFirebaseReady() && db) {
-            if (cleaned.length === 0) {
-                db.ref("community_riders").remove().catch(err => {
-                    console.warn("Firebase remove community_riders failed:", err);
-                });
-            } else {
-                db.ref("community_riders").set(cleaned).catch(err => {
-                    console.warn("Firebase save community_riders failed:", err);
-                });
-            }
+            db.ref("community_riders").set(cleaned).catch(err => {
+                console.warn("Firebase save community_riders failed:", err);
+            });
         }
     } catch (e) {
         console.error("Error saving community riders:", e);
@@ -7966,7 +7941,7 @@ function loadRiderApplications() {
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-                return parsed.filter(a => !isMockRiderApplication(a));
+                return parsed.filter(a => a && !isMockRiderApplication(a));
             }
         }
     } catch (e) {
@@ -7977,61 +7952,16 @@ function loadRiderApplications() {
 
 function saveRiderApplications(apps) {
     try {
-        const cleaned = (apps || []).filter(a => !isMockRiderApplication(a));
+        const cleaned = (apps || []).filter(a => a && !isMockRiderApplication(a));
         localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
         if (isFirebaseReady() && db) {
-            if (cleaned.length === 0) {
-                db.ref("rider_applications").remove().catch(err => {
-                    console.warn("Firebase remove rider_applications failed:", err);
-                });
-            } else {
-                db.ref("rider_applications").set(cleaned).catch(err => {
-                    console.warn("Firebase save rider_applications failed:", err);
-                });
-            }
+            db.ref("rider_applications").set(cleaned).catch(err => {
+                console.warn("Firebase save rider_applications failed:", err);
+            });
         }
     } catch (e) {
         console.error("Error saving rider applications:", e);
     }
-}
-
-// Helper to merge local and remote apps without wiping fresh local submissions
-function mergeRiderApplicationsList(localList, remoteList) {
-    const map = new Map();
-    (remoteList || []).forEach(a => {
-        if (a && a.id && !isMockRiderApplication(a)) map.set(a.id, a);
-    });
-    (localList || []).forEach(a => {
-        if (!a || !a.id || isMockRiderApplication(a)) return;
-        const existing = map.get(a.id);
-        if (!existing) {
-            map.set(a.id, a);
-        } else {
-            if (a.status === "approved" || (a.approvedAt && !existing.approvedAt)) {
-                map.set(a.id, a);
-            } else if (new Date(a.appliedAt || 0) >= new Date(existing.appliedAt || 0)) {
-                map.set(a.id, a);
-            }
-        }
-    });
-    return Array.from(map.values());
-}
-
-function mergeCommunityRidersList(localList, remoteList) {
-    const map = new Map();
-    (remoteList || []).forEach(r => {
-        if (r && r.id && !isMockCommunityRider(r)) map.set(r.id, r);
-    });
-    (localList || []).forEach(r => {
-        if (!r || !r.id || isMockCommunityRider(r)) return;
-        const existing = map.get(r.id);
-        if (!existing) {
-            map.set(r.id, r);
-        } else {
-            map.set(r.id, { ...existing, ...r });
-        }
-    });
-    return Array.from(map.values());
 }
 
 // ── Realtime Firebase Sync for Riders & Applications
@@ -8045,24 +7975,22 @@ function initRiderRealtimeSync() {
     db.ref("rider_applications").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            const rawList = Array.isArray(data) ? data : (data && typeof data === "object" ? Object.values(data) : []);
-            if (rawList && rawList.length > 0) {
-                const cleaned = rawList.filter(a => !isMockRiderApplication(a));
-                const localApps = loadRiderApplications();
-                const merged = mergeRiderApplicationsList(localApps, cleaned);
-                localStorage.setItem("talathub_rider_applications", JSON.stringify(merged));
-                updateAdminRiderBadges();
-                if (state.currentRole === "admin") {
-                    if (_activeAdminTab === "riders") {
-                        renderAdminRiders();
-                    } else if (_activeAdminTab === "report") {
-                        renderAdminReport();
-                    }
-                }
-            } else if (!data) {
-                const localApps = loadRiderApplications();
-                if (localApps && localApps.length > 0) {
-                    db.ref("rider_applications").set(localApps).catch(() => {});
+            let rawList = [];
+            if (Array.isArray(data)) {
+                rawList = data.filter(Boolean);
+            } else if (data && typeof data === "object") {
+                rawList = Object.values(data).filter(Boolean);
+            }
+
+            const cleaned = rawList.filter(a => a && !isMockRiderApplication(a));
+            localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
+            updateAdminRiderBadges();
+
+            if (state.currentRole === "admin") {
+                if (_activeAdminTab === "riders") {
+                    renderAdminRiders();
+                } else if (_activeAdminTab === "report") {
+                    renderAdminReport();
                 }
             }
         } catch (err) {
@@ -8074,22 +8002,20 @@ function initRiderRealtimeSync() {
     db.ref("community_riders").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            const rawList = Array.isArray(data) ? data : (data && typeof data === "object" ? Object.values(data) : []);
-            if (rawList && rawList.length > 0) {
-                const cleaned = rawList.filter(r => !isMockCommunityRider(r));
-                const localRiders = loadCommunityRiders();
-                const merged = mergeCommunityRidersList(localRiders, cleaned);
-                localStorage.setItem("talathub_community_riders", JSON.stringify(merged));
-                if (state.currentRole === "admin" && _activeAdminTab === "riders") {
-                    renderAdminRiders();
-                }
-                checkCurrentRiderApprovalRealtime(merged);
-            } else if (!data) {
-                const localRiders = loadCommunityRiders();
-                if (localRiders && localRiders.length > 0) {
-                    db.ref("community_riders").set(localRiders).catch(() => {});
-                }
+            let rawList = [];
+            if (Array.isArray(data)) {
+                rawList = data.filter(Boolean);
+            } else if (data && typeof data === "object") {
+                rawList = Object.values(data).filter(Boolean);
             }
+
+            const cleaned = rawList.filter(r => r && !isMockCommunityRider(r));
+            localStorage.setItem("talathub_community_riders", JSON.stringify(cleaned));
+
+            if (state.currentRole === "admin" && _activeAdminTab === "riders") {
+                renderAdminRiders();
+            }
+            checkCurrentRiderApprovalRealtime(cleaned);
         } catch (err) {
             console.warn("Error syncing community_riders:", err);
         }
@@ -8297,27 +8223,11 @@ function handleRiderRegisterSubmit(e) {
         promptPayNumber = phone;
     }
 
-    // Check if phone already registered in community riders
-    const riders = loadCommunityRiders();
-    const existingRider = riders.find(r => (r.phone || "").replace(/[-\s]/g, "") === phone);
-    if (existingRider) {
-        showToast(`ℹ️ เบอร์ ${phone} ได้รับอนุมัติเป็นไรเดอร์แล้ว (${existingRider.name}) สามารถล็อกอินได้ที่ปุ่ม 4. ไรเดอร์`);
-        closeRiderRegisterModal();
-        openRiderLoginModal();
-        return;
-    }
-
     const apps = loadRiderApplications();
-    const existingApp = apps.find(a => (a.phone || "").replace(/[-\s]/g, "") === phone && a.status === "pending");
-    if (existingApp) {
-        _lastSubmittedRiderApp = existingApp;
-        showToast(`ℹ️ เบอร์ ${phone} ได้ส่งใบสมัครไว้แล้ว (${existingApp.id}) อยู่ระหว่างรอแอดมินอนุมัติครับ`);
-        populateRiderSuccessView(existingApp);
-        return;
-    }
+    const existingIndex = apps.findIndex(a => (a.phone || "").replace(/[-\s]/g, "") === phone);
 
     const newApp = {
-        id: `APP-RD-${Date.now().toString().slice(-4)}`,
+        id: existingIndex >= 0 ? apps[existingIndex].id : `APP-RD-${Date.now().toString().slice(-4)}`,
         fullName,
         nickname,
         phone,
@@ -8338,10 +8248,13 @@ function handleRiderRegisterSubmit(e) {
         notes: ""
     };
 
-    apps.unshift(newApp);
+    if (existingIndex >= 0) {
+        apps[existingIndex] = newApp;
+    } else {
+        apps.unshift(newApp);
+    }
     saveRiderApplications(apps);
     _lastSubmittedRiderApp = newApp;
-
     // Reset form inputs for next time
     document.getElementById("rider-register-form")?.reset();
 
@@ -10382,27 +10295,26 @@ function simulateRiderGpsMovement() {
 }
 
 function clearFleetTestData() {
-    if (!confirm("⚠️ คุณต้องการล้างข้อมูลทดสอบ (ใบสมัคร และข้อมูลไรเดอร์ทดสอบทั้งหมด) ออกจากระบบใช่หรือไม่?\n\n• ข้อมูลในเครื่องนี้และบนคลาวด์ Firebase จะถูกรีเซ็ตให้สะอาด 100% พร้อมใช้งานจริง")) return;
+    if (!confirm("⚠️ คุณต้องการล้างข้อมูลระบบไรเดอร์ทั้งหมด (ล้างทั้งใบสมัครและไรเดอร์ทั้งหมด) หรือไม่?\n\n• ข้อมูลในเครื่องนี้และบนคลาวด์ Firebase จะถูกรีเซ็ตให้สะอาด 100% พร้อมใช้งานจริง")) return;
 
     // Reset local storage
     localStorage.removeItem("talathub_rider_applications");
     localStorage.removeItem("talathub_community_riders");
     localStorage.removeItem("talathub_logged_in_rider");
 
-    // Reset Firebase Realtime Database
+    // Reset Firebase Realtime Database with empty arrays
     if (isFirebaseReady() && db) {
-        db.ref("rider_applications").remove().catch(console.warn);
-        db.ref("community_riders").remove().catch(console.warn);
+        db.ref("rider_applications").set([]).catch(console.warn);
+        db.ref("community_riders").set([]).catch(console.warn);
     }
 
     _lastSubmittedRiderApp = null;
-    showToast("🧹 ล้างข้อมูลทดสอบทั้งหมดเรียบร้อยแล้ว! ระบบสะอาด 100%");
+    showToast("🧹 ล้างข้อมูลไรเดอร์และใบสมัครทั้งหมดเรียบร้อยแล้ว! ระบบสะอาด 100%");
     updateAdminRiderBadges();
     renderAdminRiders();
     setTimeout(() => initAdminRiderRadarMap(), 200);
 }
 
-// Window registrations
 window.renderAdminRiders = renderAdminRiders;
 window.handleRiderSearch = handleRiderSearch;
 window.filterAdminRiders = filterAdminRiders;
