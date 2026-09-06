@@ -390,16 +390,19 @@ function loadSavedMarketData() {
         if (saved) {
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                return parsed;
+                const validCustom = parsed.filter(s => s && s.stallId && s.stallId.startsWith("stall_new_"));
+                localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(validCustom));
+                return validCustom;
             }
         }
     } catch (e) { }
-    return null;
+    return [];
 }
 
 function saveMarketDataToStorage() {
     try {
-        localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(MARKET_DATA));
+        const customOnly = MARKET_DATA.filter(s => s && s.stallId && s.stallId.startsWith("stall_new_"));
+        localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(customOnly));
     } catch (e) { }
 }
 
@@ -3920,6 +3923,12 @@ function selectRandomStallBatch() {
     let pool = MARKET_DATA.filter(s => s.products && s.products.length > 0);
     if (pool.length === 0) pool = MARKET_DATA;
 
+    // ถ้ามีแผงค้าแค่ 1 แผง หรือไม่เพียงพอสำหรับการสุ่ม ให้แสดงทั้งหมดตรงๆ และไม่ต้องสุ่ม
+    if (pool.length <= 1) {
+        state.stallRotation.displayedStallIds = pool.map(s => s.stallId);
+        return;
+    }
+
     // ถ้ามีการเลือกหมวดหมู่เฉพาะ (ไม่ใช่ 'all') ให้สุ่มจากร้านในหมวดหมู่นั้น
     if (state.currentCategoryFilter && state.currentCategoryFilter !== "all") {
         const catPool = pool.filter(s => s.category === state.currentCategoryFilter);
@@ -3964,8 +3973,9 @@ function startStallRotationTimer() {
         clearInterval(state.stallRotation.timer);
     }
     state.stallRotation.timer = setInterval(() => {
-        // พักการสุ่มถ้า: กด pause ไว้ หรือ กำลังค้นหา หรือ กำลังดูเฉพาะแผง หรือ หน้าจอไม่ใช่หน้าตลาด หรือเปิด modal
-        if (state.stallRotation.isPaused || state.searchQuery || state.currentSingleStall || state.currentScreen !== "market" || isMerchantModalOpen()) {
+        const eligibleStalls = MARKET_DATA.filter(s => s.products && s.products.length > 0);
+        // ถ้ามีร้านค้าแค่ 1 ร้าน (ยังไม่มีร้านอื่นมาลงทะเบียน) หรือ พักไว้ หรือ ค้นหา ให้หยุดนับ
+        if (eligibleStalls.length <= 1 || state.stallRotation.isPaused || state.searchQuery || state.currentSingleStall || state.currentScreen !== "market" || isMerchantModalOpen()) {
             updateStallRotationUI();
             return;
         }
@@ -3989,8 +3999,9 @@ function updateStallRotationUI() {
 
     if (!rotBar) return;
 
-    // ซ่อนแถบถ้ากำลังดูเฉพาะแผง หรือ กำลังค้นหา
-    if (state.currentSingleStall || (state.searchQuery && state.searchQuery.trim() !== "")) {
+    // ซ่อนแถบถ้ามีร้านค้าไม่เกิน 1 ร้าน (ยังไม่มีร้านลงทะเบียนเพิ่ม) หรือกำลังดูเฉพาะแผง หรือ กำลังค้นหา
+    const eligibleStalls = MARKET_DATA.filter(s => s.products && s.products.length > 0);
+    if (eligibleStalls.length <= 1 || state.currentSingleStall || (state.searchQuery && state.searchQuery.trim() !== "")) {
         rotBar.classList.add("hidden");
         return;
     } else {
@@ -10780,6 +10791,51 @@ function autoSanitizeProductionData() {
             }
         }
     } catch (e) {}
+
+    // 7. Custom stalls in localStorage: filter out old mock stalls
+    try {
+        const rawCustom = localStorage.getItem("talathub_custom_market_stalls");
+        if (rawCustom) {
+            let stalls = JSON.parse(rawCustom);
+            if (Array.isArray(stalls)) {
+                stalls = stalls.filter(s => s && s.stallId && s.stallId.startsWith("stall_new_"));
+                localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(stalls));
+            }
+        }
+    } catch (e) {}
+
+    // 8. Stalls Catalog Database: wipe old mock stalls
+    try {
+        const rawCat = localStorage.getItem("talathub_stall_catalog_database");
+        if (rawCat) {
+            let db = JSON.parse(rawCat);
+            if (db && typeof db === "object") {
+                const cleanDb = {};
+                for (const key of Object.keys(db)) {
+                    if (key === "stall_chicken" || key.startsWith("stall_new_")) {
+                        cleanDb[key] = db[key];
+                    }
+                }
+                localStorage.setItem("talathub_stall_catalog_database", JSON.stringify(cleanDb));
+            }
+        }
+    } catch (e) {}
+
+    // 9. Remove mock caches
+    try {
+        localStorage.removeItem("talathub_pending_stalls");
+        localStorage.removeItem("talathub_mock_orders");
+        localStorage.removeItem("talathub_rating_reviews");
+    } catch (e) {}
+
+    // 10. Enforce MARKET_DATA & ALL_100_STALLS memory purge (only stall_chicken and stall_new_*)
+    const allowedStalls = MARKET_DATA.filter(s => s && s.stallId && (s.stallId === "stall_chicken" || s.stallId.startsWith("stall_new_")));
+    MARKET_DATA.length = 0;
+    MARKET_DATA.push(...allowedStalls);
+
+    const allowedAll = ALL_100_STALLS.filter(s => s && s.stallId && (s.stallId === "stall_chicken" || s.stallId.startsWith("stall_new_")));
+    ALL_100_STALLS.length = 0;
+    ALL_100_STALLS.push(...allowedAll);
 }
 
 // ==========================================
