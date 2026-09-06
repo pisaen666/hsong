@@ -9536,10 +9536,40 @@ function deleteCommunityRider(riderId) {
     const r = riders.find(x => x.id === riderId);
     if (!r) return;
 
-    if (confirm(`คุณต้องการลบไรเดอร์ "${r.name}" ออกจากทำเนียบใช่หรือไม่?`)) {
+    if (confirm(`คุณต้องการลบไรเดอร์ "${r.name}" ออกจากระบบใช่หรือไม่?`)) {
         const updated = riders.filter(x => x.id !== riderId);
         saveCommunityRiders(updated);
+
+        // Also clean up or remove matching application if any
+        try {
+            const cleanPhone = (r.phone || "").replace(/[-\s]/g, "");
+            const apps = loadRiderApplications();
+            const updatedApps = apps.filter(a => {
+                const aPhone = (a.phone || "").replace(/[-\s]/g, "");
+                const matchPhone = cleanPhone && aPhone === cleanPhone;
+                const matchName = a.fullName && r.name && (r.name.includes(a.fullName) || a.fullName.includes(r.name));
+                return !matchPhone && !matchName;
+            });
+            if (updatedApps.length !== apps.length) {
+                saveRiderApplications(updatedApps);
+            }
+        } catch (e) {
+            console.warn("Sync delete application failed:", e);
+        }
+
+        // Clean up logged in session if matching
+        try {
+            const saved = localStorage.getItem("talathub_logged_in_rider");
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed && (parsed.id === riderId || (parsed.phone && r.phone && parsed.phone.replace(/[-\s]/g, '') === r.phone.replace(/[-\s]/g, '')))) {
+                    localStorage.removeItem("talathub_logged_in_rider");
+                }
+            }
+        } catch (e) {}
+
         showToast(`🗑️ ลบไรเดอร์ ${r.name} ออกจากระบบเรียบร้อย`);
+        updateAdminRiderBadges();
         renderAdminRiders();
         setTimeout(() => initAdminRiderRadarMap(), 150);
     }
@@ -9929,36 +9959,103 @@ function handleRiderAppEditSubmit(e) {
 
     saveRiderApplications(apps);
 
-    // Also synchronize community riders if this rider was already approved or exists in fleet
+    // Also synchronize community riders according to status
     const riders = loadCommunityRiders();
-    const matchedRider = riders.find(r => r.phone === oldPhone || r.phone === phone || (r.name && (r.name.includes(oldName) || r.name.includes(fullName))));
-    if (matchedRider) {
-        matchedRider.name = `${fullName} ${nickname ? `(${nickname})` : ''}`.trim();
-        matchedRider.phone = phone;
-        matchedRider.plate = plate;
-        matchedRider.motorcycleModel = motorcycleModel;
-        matchedRider.promptPay = promptPayNumber;
-        matchedRider.bank = promptPayBank;
-        matchedRider.zone = zone;
-        saveCommunityRiders(riders);
+    const cleanOldPhone = (oldPhone || "").replace(/[-\s]/g, "");
+    const cleanNewPhone = (phone || "").replace(/[-\s]/g, "");
+    const matchedRiderIndex = riders.findIndex(r => {
+        const rPhone = (r.phone || "").replace(/[-\s]/g, "");
+        return (cleanOldPhone && rPhone === cleanOldPhone) || (cleanNewPhone && rPhone === cleanNewPhone) || (r.name && (r.name.includes(oldName) || r.name.includes(fullName)));
+    });
+
+    const displayName = `${fullName} ${nickname ? `(${nickname})` : ''}`.trim();
+
+    if (status === "approved") {
+        if (matchedRiderIndex >= 0) {
+            riders[matchedRiderIndex].name = displayName;
+            riders[matchedRiderIndex].phone = phone;
+            riders[matchedRiderIndex].plate = plate;
+            riders[matchedRiderIndex].motorcycleModel = motorcycleModel;
+            riders[matchedRiderIndex].promptPay = promptPayNumber || phone;
+            riders[matchedRiderIndex].bank = promptPayBank;
+            riders[matchedRiderIndex].zone = zone;
+            saveCommunityRiders(riders);
+        } else {
+            const newRider = {
+                id: `RIDER-${Date.now().toString().slice(-4)}`,
+                name: displayName,
+                phone: phone,
+                plate: plate,
+                zone: zone || "รอบตลาดวิศิษฐ์ชัย",
+                status: "available",
+                baseFee: 40,
+                lat: Number((MARKET_ORIGIN.lat + (Math.random() - 0.5) * 0.01).toFixed(4)),
+                lng: Number((MARKET_ORIGIN.lng + (Math.random() - 0.5) * 0.01).toFixed(4)),
+                avatar: "🛵",
+                motorcycleModel: motorcycleModel,
+                promptPay: promptPayNumber || phone,
+                bank: promptPayBank,
+                rating: 5.0,
+                tripsCountToday: 0,
+                codSettledToday: 0
+            };
+            riders.unshift(newRider);
+            saveCommunityRiders(riders);
+        }
+    } else {
+        // If status is pending or rejected, remove from active fleet riders so it does NOT appear in active roster!
+        if (matchedRiderIndex >= 0) {
+            riders.splice(matchedRiderIndex, 1);
+            saveCommunityRiders(riders);
+        }
     }
 
     closeRiderAppEditModal();
     showToast(`💾 บันทึกการแก้ไขข้อมูลใบสมัคร ${fullName} เรียบร้อยแล้ว!`);
     updateAdminRiderBadges();
     renderAdminRiders();
+    setTimeout(() => initAdminRiderRadarMap(), 150);
 }
 
 function deleteRiderApplication(appId) {
     if (confirm("⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบประวัติใบสมัครนี้ออกจากระบบ?")) {
         const apps = loadRiderApplications();
+        const appToDelete = apps.find(x => x.id === appId);
         const updated = apps.filter(x => x.id !== appId);
         saveRiderApplications(updated);
+
+        // Also remove from active community riders if matching
+        if (appToDelete) {
+            const cleanPhone = (appToDelete.phone || "").replace(/[-\s]/g, "");
+            const riders = loadCommunityRiders();
+            const updatedRiders = riders.filter(r => {
+                const rPhone = (r.phone || "").replace(/[-\s]/g, "");
+                const matchPhone = cleanPhone && rPhone === cleanPhone;
+                const matchName = appToDelete.fullName && r.name && (r.name.includes(appToDelete.fullName) || appToDelete.fullName.includes(r.name));
+                return !matchPhone && !matchName;
+            });
+            if (updatedRiders.length !== riders.length) {
+                saveCommunityRiders(updatedRiders);
+            }
+
+            // Also clean up logged in rider if it was this applicant
+            try {
+                const saved = localStorage.getItem("talathub_logged_in_rider");
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed && (parsed.phone && cleanPhone && parsed.phone.replace(/[-\s]/g, '') === cleanPhone)) {
+                        localStorage.removeItem("talathub_logged_in_rider");
+                    }
+                }
+            } catch (e) {}
+        }
+
         closeRiderAppDetailModal();
         closeRiderAppEditModal();
-        showToast("🗑️ ลบใบสมัครเรียบร้อยแล้ว");
+        showToast("🗑️ ลบใบสมัครและข้อมูลไรเดอร์เรียบร้อยแล้ว");
         updateAdminRiderBadges();
         renderAdminRiders();
+        setTimeout(() => initAdminRiderRadarMap(), 150);
     }
 }
 
@@ -12932,13 +13029,33 @@ function autoSanitizeProductionData() {
         }
     } catch (e) {}
 
-    // 3. Community riders
+    // 3. Community riders & Rider applications
     try {
+        const rawApps = localStorage.getItem("talathub_rider_applications");
+        let apps = [];
+        if (rawApps) {
+            apps = JSON.parse(rawApps);
+            if (Array.isArray(apps)) {
+                apps = apps.filter(a => !isMockRiderApplication(a));
+                localStorage.setItem("talathub_rider_applications", JSON.stringify(apps));
+            }
+        }
+
         const rawRiders = localStorage.getItem("talathub_community_riders");
         if (rawRiders) {
             let riders = JSON.parse(rawRiders);
             if (Array.isArray(riders)) {
                 riders = riders.filter(r => !isMockCommunityRider(r));
+
+                // If a rider exists but their application is still strictly "pending" (not approved), remove them from active fleet!
+                if (Array.isArray(apps) && apps.length > 0) {
+                    riders = riders.filter(r => {
+                        const cleanRPhone = (r.phone || "").replace(/[-\s]/g, "");
+                        const pendingApp = apps.find(a => a.status === "pending" && (a.phone || "").replace(/[-\s]/g, "") === cleanRPhone);
+                        return !pendingApp; // filter out if still pending
+                    });
+                }
+
                 localStorage.setItem("talathub_community_riders", JSON.stringify(riders));
             }
         }
