@@ -5,6 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>เฮียส่ง - เพียงคุณสั่ง เราไปส่ง ทุกรายการจากตลาดถึงมือคุณ</title>
     
+    <!-- Instant Purge of old mock stalls in browser LocalStorage before any logic runs -->
+    <script>
+        try {
+            localStorage.removeItem("talathub_custom_market_stalls");
+            localStorage.removeItem("talathub_pending_stalls");
+            localStorage.removeItem("talathub_mock_orders");
+            localStorage.removeItem("talathub_rating_reviews");
+            localStorage.removeItem("talathub_stall_catalog_database");
+            var _favs = localStorage.getItem("talathub_favorite_stalls");
+            if (_favs) {
+                var _parsedFavs = JSON.parse(_favs);
+                if (Array.isArray(_parsedFavs)) {
+                    _parsedFavs = _parsedFavs.filter(function(id) { return id === "stall_chicken" || (typeof id === "string" && id.startsWith("stall_new_")); });
+                    if (_parsedFavs.length === 0) _parsedFavs = ["stall_chicken"];
+                    localStorage.setItem("talathub_favorite_stalls", JSON.stringify(_parsedFavs));
+                }
+            }
+        } catch(e) {}
+    </script>
+    
     <!-- Fonts: Prompt & Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -3243,6 +3263,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=7.7"></script>
+    <script src="app.js?v=8.1_clean_live"></script>
 </body>
 </html>
