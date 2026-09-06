@@ -7402,12 +7402,8 @@ window.updateCustomerRoleButtonUI = updateCustomerRoleButtonUI;
 
 function switchRole(targetRole) {
     if (targetRole === "customer") {
-        // หากอยู่ที่หน้าลูกค้าอยู่แล้ว และยังไม่ได้ล็อกอิน ให้เปิดหน้าต่างเข้าสู่ระบบ
-        if (state.currentRole === "customer" && (!state.customer || !state.customer.isLoggedIn)) {
-            openCustomerLoginModal();
-            return;
-        }
         setActiveRoleView("customer");
+        goToMarketScreen();
         return;
     }
 
