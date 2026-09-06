@@ -3369,204 +3369,306 @@
                 </button>
             </div>
 
-            <!-- Form Content (Scrollable) -->
-            <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs text-slate-700">
-                <!-- Highlight Benefits Card -->
-                <div class="bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50 border border-sky-200 rounded-2xl p-3.5 text-sky-950 space-y-1.5 shadow-2xs">
-                    <div class="font-black text-xs flex items-center gap-1.5 text-sky-900">
-                        <span class="material-symbols-outlined text-base text-sky-600">verified</span>
-                        <span>สิทธิประโยชน์ไรเดอร์ชุมชนเฮียส่ง</span>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] pt-1">
-                        <div class="bg-white/80 p-2 rounded-xl border border-sky-100 flex items-center gap-1.5">
-                            <span class="text-base">💰</span>
-                            <span>ค่ารอบเริ่มต้น <strong>฿40</strong>/เที่ยว</span>
+            <!-- ========================================== -->
+            <!-- 1. STEP: FORM VIEW                          -->
+            <!-- ========================================== -->
+            <div id="rider-reg-step-form" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <!-- Form Content (Scrollable with extra bottom space) -->
+                <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs text-slate-700">
+                    <!-- Highlight Benefits Card -->
+                    <div class="bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50 border border-sky-200 rounded-2xl p-3.5 text-sky-950 space-y-1.5 shadow-2xs">
+                        <div class="font-black text-xs flex items-center gap-1.5 text-sky-900">
+                            <span class="material-symbols-outlined text-base text-sky-600">verified</span>
+                            <span>สิทธิประโยชน์ไรเดอร์ชุมชนเฮียส่ง</span>
                         </div>
-                        <div class="bg-white/80 p-2 rounded-xl border border-sky-100 flex items-center gap-1.5">
-                            <span class="text-base">🌧️</span>
-                            <span>มีโบนัสพิเศษช่วงฝนตก</span>
-                        </div>
-                        <div class="bg-white/80 p-2 rounded-xl border border-sky-100 flex items-center gap-1.5">
-                            <span class="text-base">🎯</span>
-                            <span>โบนัสสะสมครบ 10 เที่ยว</span>
-                        </div>
-                    </div>
-                </div>
-
-                <form id="rider-register-form" onsubmit="handleRiderRegisterSubmit(event)" class="space-y-4">
-                    <!-- Section 1: Personal Info -->
-                    <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
-                        <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                            <span class="material-symbols-outlined text-base text-sky-600">badge</span>
-                            <span>1. ข้อมูลส่วนตัวผู้สมัคร</span>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">ชื่อ - นามสกุลจริง: <span class="text-rose-500">*</span></label>
-                                <input type="text" id="reg-rider-fullname" required placeholder="เช่น นายสมเกียรติ มุ่งมั่น" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] pt-1">
+                            <div class="bg-white/80 p-2 rounded-xl border border-sky-100 flex items-center gap-1.5">
+                                <span class="text-base">💰</span>
+                                <span>ค่ารอบเริ่มต้น <strong>฿40</strong>/เที่ยว</span>
                             </div>
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">ชื่อเล่น: <span class="text-rose-500">*</span></label>
-                                <input type="text" id="reg-rider-nickname" required placeholder="เช่น เกียรติ" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                            <div class="bg-white/80 p-2 rounded-xl border border-sky-100 flex items-center gap-1.5">
+                                <span class="text-base">🌧️</span>
+                                <span>มีโบนัสพิเศษช่วงฝนตก</span>
                             </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์มือถือ (10 หลัก): <span class="text-rose-500">*</span></label>
-                                <input type="tel" id="reg-rider-phone" required pattern="[0-9]{10}" maxlength="10" placeholder="08xxxxxxxx (ใช้ล็อกอินรับงาน)" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
-                                <span class="text-[10px] text-slate-400">ใช้เบอร์นี้เข้าสู่ระบบรับงานหลังได้รับอนุมัติ</span>
-                            </div>
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">LINE ID: <span class="text-rose-500">*</span></label>
-                                <input type="text" id="reg-rider-line" required placeholder="ไอดีไลน์ สำหรับประสานงานด่วน" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">เลขประจำตัวประชาชน (13 หลัก): <span class="text-rose-500">*</span></label>
-                                <input type="text" id="reg-rider-idcard" required pattern="[0-9]{13}" maxlength="13" placeholder="เลข 13 หลัก ตรวจสอบความถูกต้อง" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
-                            </div>
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">ที่อยู่ปัจจุบัน / ละแวกที่พัก:</label>
-                                <input type="text" id="reg-rider-address" placeholder="เช่น ตลาดหัวกุญแจ อ.บ้านบึง จ.ชลบุรี" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                            <div class="bg-white/80 p-2 rounded-xl border border-sky-100 flex items-center gap-1.5">
+                                <span class="text-base">🎯</span>
+                                <span>โบนัสสะสมครบ 10 เที่ยว</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Section 2: Vehicle & Driving License -->
-                    <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
-                        <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                            <span class="material-symbols-outlined text-base text-sky-600">two_wheeler</span>
-                            <span>2. ข้อมูลรถจักรยานยนต์ & ใบขับขี่</span>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">ยี่ห้อ / รุ่นรถมอเตอร์ไซค์: <span class="text-rose-500">*</span></label>
-                                <input type="text" id="reg-rider-model" required placeholder="เช่น Honda Wave 110i, Click 125i" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                    <form id="rider-register-form" onsubmit="handleRiderRegisterSubmit(event)" class="space-y-4">
+                        <!-- Section 1: Personal Info -->
+                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                            <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                <span class="material-symbols-outlined text-base text-sky-600">badge</span>
+                                <span>1. ข้อมูลส่วนตัวผู้สมัคร</span>
                             </div>
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">สีรถ:</label>
-                                <input type="text" id="reg-rider-color" placeholder="เช่น ดำ-แดง, ขาว-น้ำเงิน" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">ชื่อ - นามสกุลจริง: <span class="text-rose-500">*</span></label>
+                                    <input type="text" id="reg-rider-fullname" required placeholder="เช่น นายสมเกียรติ มุ่งมั่น" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">ชื่อเล่น: <span class="text-rose-500">*</span></label>
+                                    <input type="text" id="reg-rider-nickname" required placeholder="เช่น เกียรติ" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์มือถือ (10 หลัก): <span class="text-rose-500">*</span></label>
+                                    <input type="tel" id="reg-rider-phone" required pattern="[0-9]{10}" maxlength="10" placeholder="08xxxxxxxx (ใช้ล็อกอินรับงาน)" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                    <span class="text-[10px] text-slate-400">ใช้เบอร์นี้เข้าสู่ระบบรับงานหลังได้รับอนุมัติ</span>
+                                </div>
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">LINE ID: <span class="text-rose-500">*</span></label>
+                                    <input type="text" id="reg-rider-line" required placeholder="ไอดีไลน์ สำหรับประสานงานด่วน" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">เลขประจำตัวประชาชน (13 หลัก): <span class="text-rose-500">*</span></label>
+                                    <input type="text" id="reg-rider-idcard" required pattern="[0-9]{13}" maxlength="13" placeholder="เลข 13 หลัก ตรวจสอบความถูกต้อง" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">ที่อยู่ปัจจุบัน / ละแวกที่พัก:</label>
+                                    <input type="text" id="reg-rider-address" placeholder="เช่น ตลาดหัวกุญแจ อ.บ้านบึง จ.ชลบุรี" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                </div>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">หมายเลขทะเบียนรถ & จังหวัด: <span class="text-rose-500">*</span></label>
-                                <input type="text" id="reg-rider-plate" required placeholder="เช่น 1กข 4567 ชลบุรี" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                        <!-- Section 2: Vehicle & Driving License -->
+                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                            <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                <span class="material-symbols-outlined text-base text-sky-600">two_wheeler</span>
+                                <span>2. ข้อมูลรถจักรยานยนต์ & ใบขับขี่</span>
                             </div>
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">เลขที่ใบอนุญาตขับขี่: <span class="text-rose-500">*</span></label>
-                                <input type="text" id="reg-rider-license" required placeholder="เช่น 65001234 หรือเลขใบขับขี่" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">ยี่ห้อ / รุ่นรถมอเตอร์ไซค์: <span class="text-rose-500">*</span></label>
+                                    <input type="text" id="reg-rider-model" required placeholder="เช่น Honda Wave 110i, Click 125i" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">สีรถ:</label>
+                                    <input type="text" id="reg-rider-color" placeholder="เช่น ดำ-แดง, ขาว-น้ำเงิน" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <!-- Section 3: Zone & Shifts -->
-                    <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
-                        <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                            <span class="material-symbols-outlined text-base text-sky-600">near_me</span>
-                            <span>3. พื้นที่และช่วงเวลาที่สะดวกรับงาน</span>
-                        </div>
-                        <div>
-                            <label class="font-bold text-slate-700 block mb-1">พื้นที่หลักที่สะดวกวิ่งส่งของ:</label>
-                            <select id="reg-rider-zone" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
-                                <option value="ตลาดหัวกุญแจ และละแวกใกล้เคียง (ระยะ 5 กม.)">ตลาดหัวกุญแจ และละแวกใกล้เคียง (ระยะ 5 กม.)</option>
-                                <option value="ตัวอำเภอบ้านบึง (ระยะ 10 กม.)">ตัวอำเภอบ้านบึง (ระยะ 10 กม.)</option>
-                                <option value="ตำบลหนองชาก / ปากร่วม">ตำบลหนองชาก / ปากร่วม</option>
-                                <option value="วิ่งได้ทุกโซนในเขตบ้านบึง-ชลบุรี (ระยะ 15 กม.)">วิ่งได้ทุกโซนในเขตบ้านบึง-ชลบุรี (ระยะ 15 กม.)</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="font-bold text-slate-700 block mb-1.5">ช่วงเวลาที่พร้อมรับงาน (เลือกได้มากกว่า 1 ข้อ):</label>
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
-                                    <input type="checkbox" id="reg-shift-morning" checked class="accent-sky-600 rounded">
-                                    <span class="text-[11px] font-bold">🌅 เช้า (06:00-11:00)</span>
-                                </label>
-                                <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
-                                    <input type="checkbox" id="reg-shift-noon" checked class="accent-sky-600 rounded">
-                                    <span class="text-[11px] font-bold">☀️ เที่ยง (11:00-15:00)</span>
-                                </label>
-                                <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
-                                    <input type="checkbox" id="reg-shift-evening" class="accent-sky-600 rounded">
-                                    <span class="text-[11px] font-bold">🌆 เย็น (15:00-19:00)</span>
-                                </label>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">หมายเลขทะเบียนรถ & จังหวัด: <span class="text-rose-500">*</span></label>
+                                    <input type="text" id="reg-rider-plate" required placeholder="เช่น 1กข 4567 ชลบุรี" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">เลขที่ใบอนุญาตขับขี่: <span class="text-rose-500">*</span></label>
+                                    <input type="text" id="reg-rider-license" required placeholder="เช่น 65001234 หรือเลขใบขับขี่" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Section 4: Equipment Readiness -->
-                    <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
-                        <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                            <span class="material-symbols-outlined text-base text-sky-600">inventory</span>
-                            <span>4. อุปกรณ์และความพร้อมในการจัดส่ง</span>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
-                                <input type="checkbox" id="reg-eq-bag" checked class="accent-sky-600 rounded">
-                                <span class="text-[11px]">📦 มีกล่องหรือกระเป๋าเก็บความเย็น/ความร้อน</span>
-                            </label>
-                            <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
-                                <input type="checkbox" id="reg-eq-mount" checked class="accent-sky-600 rounded">
-                                <span class="text-[11px]">📱 มีที่ยึดโทรศัพท์มือถือกับแฮนด์รถ</span>
-                            </label>
-                            <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
-                                <input type="checkbox" id="reg-eq-strap" checked class="accent-sky-600 rounded">
-                                <span class="text-[11px]">🪢 มีสายรัดสัมภาระท้ายรถ</span>
-                            </label>
-                            <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
-                                <input type="checkbox" id="reg-eq-helmet" checked class="accent-sky-600 rounded">
-                                <span class="text-[11px]">⛑️ มีหมวกกันน็อกพร้อมสวมใส่</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Section 5: Payout / PromptPay -->
-                    <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
-                        <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                            <span class="material-symbols-outlined text-base text-sky-600">payments</span>
-                            <span>5. บัญชีรับเงินค่ารอบ (พร้อมเพย์ PromptPay)</span>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">หมายเลขพร้อมเพย์ (เบอร์มือถือ หรือ เลขบัตร ปชช.): <span class="text-rose-500">*</span></label>
-                                <input type="text" id="reg-rider-promptpay" required placeholder="เบอร์โทร หรือ เลขบัตร 13 หลัก" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                        <!-- Section 3: Zone & Shifts -->
+                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                            <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                <span class="material-symbols-outlined text-base text-sky-600">near_me</span>
+                                <span>3. พื้นที่และช่วงเวลาที่สะดวกรับงาน</span>
                             </div>
                             <div>
-                                <label class="font-bold text-slate-700 block mb-1">ธนาคารเจ้าของบัญชี: <span class="text-rose-500">*</span></label>
-                                <select id="reg-rider-bank" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
-                                    <option value="กสิกรไทย">กสิกรไทย (KBANK)</option>
-                                    <option value="ไทยพาณิชย์">ไทยพาณิชย์ (SCB)</option>
-                                    <option value="กรุงไทย">กรุงไทย (KTB)</option>
-                                    <option value="กรุงเทพ">กรุงเทพ (BBL)</option>
-                                    <option value="กรุงศรีอยุธยา">กรุงศรีอยุธยา (BAY)</option>
-                                    <option value="ออมสิน">ออมสิน (GSB)</option>
-                                    <option value="ทหารไทยธนชาต">ทหารไทยธนชาต (ttb)</option>
-                                    <option value="พร้อมเพย์ e-Wallet">พร้อมเพย์ e-Wallet</option>
+                                <label class="font-bold text-slate-700 block mb-1">พื้นที่หลักที่สะดวกวิ่งส่งของ:</label>
+                                <select id="reg-rider-zone" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                    <option value="ตลาดหัวกุญแจ และละแวกใกล้เคียง (ระยะ 5 กม.)">ตลาดหัวกุญแจ และละแวกใกล้เคียง (ระยะ 5 กม.)</option>
+                                    <option value="ตัวอำเภอบ้านบึง (ระยะ 10 กม.)">ตัวอำเภอบ้านบึง (ระยะ 10 กม.)</option>
+                                    <option value="ตำบลหนองชาก / ปากร่วม">ตำบลหนองชาก / ปากร่วม</option>
+                                    <option value="วิ่งได้ทุกโซนในเขตบ้านบึง-ชลบุรี (ระยะ 15 กม.)">วิ่งได้ทุกโซนในเขตบ้านบึง-ชลบุรี (ระยะ 15 กม.)</option>
                                 </select>
                             </div>
+
+                            <div>
+                                <label class="font-bold text-slate-700 block mb-1.5">ช่วงเวลาที่พร้อมรับงาน (เลือกได้มากกว่า 1 ข้อ):</label>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
+                                        <input type="checkbox" id="reg-shift-morning" checked class="accent-sky-600 rounded">
+                                        <span class="text-[11px] font-bold">🌅 เช้า (06:00-11:00)</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
+                                        <input type="checkbox" id="reg-shift-noon" checked class="accent-sky-600 rounded">
+                                        <span class="text-[11px] font-bold">☀️ เที่ยง (11:00-15:00)</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
+                                        <input type="checkbox" id="reg-shift-evening" class="accent-sky-600 rounded">
+                                        <span class="text-[11px] font-bold">🌆 เย็น (15:00-19:00)</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section 4: Equipment Readiness -->
+                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                            <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                <span class="material-symbols-outlined text-base text-sky-600">inventory</span>
+                                <span>4. อุปกรณ์และความพร้อมในการจัดส่ง</span>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
+                                    <input type="checkbox" id="reg-eq-bag" checked class="accent-sky-600 rounded">
+                                    <span class="text-[11px]">📦 มีกล่องหรือกระเป๋าเก็บความเย็น/ความร้อน</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
+                                    <input type="checkbox" id="reg-eq-mount" checked class="accent-sky-600 rounded">
+                                    <span class="text-[11px]">📱 มีที่ยึดโทรศัพท์มือถือกับแฮนด์รถ</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
+                                    <input type="checkbox" id="reg-eq-strap" checked class="accent-sky-600 rounded">
+                                    <span class="material-symbols-outlined text-sm text-sky-600">cable</span>
+                                    <span class="text-[11px]">มีสายรัดสัมภาระท้ายรถ</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:bg-sky-50 transition-colors">
+                                    <input type="checkbox" id="reg-eq-helmet" checked class="accent-sky-600 rounded">
+                                    <span class="text-[11px]">⛑️ มีหมวกกันน็อกพร้อมสวมใส่</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Section 5: Payout / PromptPay -->
+                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                            <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                <span class="material-symbols-outlined text-base text-sky-600">payments</span>
+                                <span>5. บัญชีรับเงินค่ารอบ (พร้อมเพย์ PromptPay)</span>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">หมายเลขพร้อมเพย์ (เบอร์มือถือ หรือ เลขบัตร ปชช.): <span class="text-rose-500">*</span></label>
+                                    <input type="text" id="reg-rider-promptpay" required placeholder="เบอร์โทร หรือ เลขบัตร 13 หลัก" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="font-bold text-slate-700 block mb-1">ธนาคารเจ้าของบัญชี: <span class="text-rose-500">*</span></label>
+                                    <select id="reg-rider-bank" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                        <option value="กสิกรไทย">กสิกรไทย (KBANK)</option>
+                                        <option value="ไทยพาณิชย์">ไทยพาณิชย์ (SCB)</option>
+                                        <option value="กรุงไทย">กรุงไทย (KTB)</option>
+                                        <option value="กรุงเทพ">กรุงเทพ (BBL)</option>
+                                        <option value="กรุงศรีอยุธยา">กรุงศรีอยุธยา (BAY)</option>
+                                        <option value="ออมสิน">ออมสิน (GSB)</option>
+                                        <option value="ทหารไทยธนชาต">ทหารไทยธนชาต (ttb)</option>
+                                        <option value="พร้อมเพย์ e-Wallet">พร้อมเพย์ e-Wallet</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Sticky, Elevated Bottom Action Bar (ปุ่มเห็นชัดเจน ไม่จม ไม่ถูกตัด) -->
+                <div class="bg-slate-50/95 backdrop-blur-md border-t border-slate-200 p-3 sm:p-4 shrink-0 shadow-lg space-y-2.5 z-10">
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <button type="button" onclick="closeRiderRegisterModal()" class="w-full sm:w-1/3 py-3 bg-slate-200/90 hover:bg-slate-300 text-slate-700 font-bold rounded-2xl active:scale-95 transition-all text-xs text-center">
+                            ยกเลิก
+                        </button>
+                        <button type="submit" form="rider-register-form" class="w-full sm:w-2/3 py-3 bg-gradient-to-r from-sky-500 via-blue-600 to-sky-600 hover:from-sky-600 hover:to-blue-700 text-white font-black rounded-2xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer">
+                            <span class="material-symbols-outlined text-base font-bold">send</span>
+                            <span>ส่งใบสมัครให้แอดมินอนุมัติ 🚀</span>
+                        </button>
+                    </div>
+
+                    <!-- Quick navigation buttons to transition to other steps -->
+                    <div class="flex items-center justify-between gap-1.5 pt-1 text-[11px] text-slate-500 border-t border-slate-200/80 flex-wrap">
+                        <button type="button" onclick="goToAdminToApproveRider()" class="text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline">
+                            <span class="material-symbols-outlined text-xs">admin_panel_settings</span>
+                            <span>🔑 แอดมิน: ไปหน้าตรวจสอบและอนุมัติใบสมัคร</span>
+                        </button>
+                        <button type="button" onclick="closeRiderRegisterModal(); openRiderLoginModal();" class="text-sky-700 hover:text-sky-900 font-bold flex items-center gap-1 hover:underline">
+                            <span class="material-symbols-outlined text-xs">two_wheeler</span>
+                            <span>เป็นไรเดอร์แล้ว? ล็อกอินปุ่ม 4. ไรเดอร์</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- 2. STEP: SUCCESS & NEXT STEPS PROGRESSION VIEW -->
+            <!-- ========================================== -->
+            <div id="rider-reg-step-success" class="flex-1 flex flex-col min-h-0 overflow-hidden hidden">
+                <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs text-slate-700 text-center">
+                    <!-- Celebratory Animated Icon -->
+                    <div class="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white flex items-center justify-center font-black text-3xl shadow-lg mx-auto animate-bounce">
+                        🎉
+                    </div>
+                    <div>
+                        <h3 class="text-base sm:text-lg font-black text-slate-900">ส่งใบสมัครร่วมทีมไรเดอร์สำเร็จ!</h3>
+                        <p class="text-xs text-slate-500 mt-0.5">ระบบได้ส่งใบสมัครของคุณไปยังศูนย์บริหารไรเดอร์ของแอดมินเฮียส่งเรียบร้อยแล้ว</p>
+                    </div>
+
+                    <!-- 3-Step Process Flow Indicator -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-left space-y-2">
+                        <div class="text-[11px] font-black text-slate-600 uppercase tracking-wider">เส้นทางการเป็นไรเดอร์เฮียส่ง (ตลาดวิศิษฐ์ชัย)</div>
+                        <div class="grid grid-cols-3 gap-1.5 text-center text-[10px]">
+                            <div class="bg-emerald-100 text-emerald-800 border border-emerald-300 p-2 rounded-xl font-bold">
+                                <div class="text-xs mb-0.5">✓ 1. ส่งใบสมัคร</div>
+                                <span>บันทึกแล้ว</span>
+                            </div>
+                            <div class="bg-amber-100 text-amber-900 border border-amber-300 p-2 rounded-xl font-bold animate-pulse">
+                                <div class="text-xs mb-0.5">⏳ 2. แอดมินอนุมัติ</div>
+                                <span>กำลังดำเนินการ</span>
+                            </div>
+                            <div class="bg-sky-50 text-sky-800 border border-sky-200 p-2 rounded-xl font-bold">
+                                <div class="text-xs mb-0.5">🛵 3. ล็อกอินรับงาน</div>
+                                <span>ปุ่ม 4. ไรเดอร์</span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Action Buttons -->
-                    <div class="pt-2 flex flex-col sm:flex-row gap-2">
-                        <button type="button" onclick="closeRiderRegisterModal()" class="w-full sm:w-1/3 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl active:scale-95 transition-all text-xs text-center">
-                            ยกเลิก
-                        </button>
-                        <button type="submit" class="w-full sm:w-2/3 py-3 bg-gradient-to-r from-sky-500 via-blue-600 to-sky-600 hover:from-sky-600 hover:to-blue-700 text-white font-extrabold rounded-2xl shadow-lg active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5">
-                            <span class="material-symbols-outlined text-base font-bold">send</span>
-                            <span>ส่งใบสมัครให้แอดมินอนุมัติ</span>
-                        </button>
+                    <!-- Applicant Summary Card -->
+                    <div class="bg-gradient-to-br from-sky-50 to-blue-50 border border-sky-200 rounded-2xl p-3.5 text-left text-xs space-y-2">
+                        <div class="flex items-center justify-between pb-1.5 border-b border-sky-200/60">
+                            <span class="font-bold text-slate-700">รหัสติดตามใบสมัคร:</span>
+                            <span id="nextstep-app-id" class="font-mono font-black text-sky-800 bg-white px-2.5 py-0.5 rounded-lg border border-sky-300">APP-RD-xxxx</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-500">ชื่อผู้สมัคร:</span>
+                            <span id="nextstep-app-name" class="font-bold text-slate-800">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-500">เบอร์มือถือ (ใช้ล็อกอิน):</span>
+                            <span id="nextstep-app-phone" class="font-bold font-mono text-slate-800">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-500">สถานะปัจจุบัน:</span>
+                            <span id="nextstep-app-status" class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full">⏳ รอแอดมินอนุมัติ</span>
+                        </div>
                     </div>
 
-                    <div class="text-[10px] text-slate-400 text-center pt-1 border-t border-slate-100">
-                        🔒 ข้อมูลของคุณจะถูกส่งให้ทีมแอดมินตลาดวิศิษฐ์ชัยตรวจสอบและอนุมัติ เมื่ออนุมัติแล้วจะสามารถล็อกอินได้ที่ปุ่ม 4. ไรเดอร์
+                    <!-- Next Step Action Buttons (ปุ่มส่งต่อไปยังขั้นตอนต่อไป) -->
+                    <div class="space-y-2.5 pt-2">
+                        <div class="text-left font-bold text-slate-800 text-xs flex items-center gap-1">
+                            <span class="material-symbols-outlined text-purple-600 text-base">forward</span>
+                            <span>เลือกดำเนินการส่งต่อไปยังขั้นตอนต่อไป:</span>
+                        </div>
+
+                        <!-- Button 1: Go to Admin to Approve (Fast track for Admin / tester) -->
+                        <button type="button" onclick="goToAdminToApproveRiderFromSuccess()" class="w-full p-3 bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:from-purple-800 hover:to-indigo-800 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-base">admin_panel_settings</span>
+                            <span>1. ไปยังหน้าจอแอดมินเพื่อกดอนุมัติทันที (Admin Approval Console)</span>
+                        </button>
+
+                        <!-- Button 2: Check Approval Status & Login -->
+                        <button type="button" onclick="checkCurrentRiderApprovalAndLogin()" class="w-full p-3 bg-gradient-to-r from-sky-500 via-blue-600 to-sky-600 hover:from-sky-600 hover:to-blue-700 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-base">check_circle</span>
+                            <span>2. ตรวจสอบสถานะ / ถ้าอนุมัติแล้วให้เข้าสู่ระบบรับงานทันที</span>
+                        </button>
+
+                        <!-- Button 3: Go to Rider Login Modal -->
+                        <button type="button" onclick="closeRiderRegisterModal(); openRiderLoginModal();" class="w-full p-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-2xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all">
+                            <span class="material-symbols-outlined text-sm">login</span>
+                            <span>3. ไปที่ปุ่ม 4. ไรเดอร์ เพื่อเข้าสู่ระบบรับงาน</span>
+                        </button>
+
+                        <!-- Button 4: Back to Home -->
+                        <button type="button" onclick="closeRiderRegisterModal(); goToMarketScreen();" class="w-full p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs active:scale-95 transition-all">
+                            <span>กลับสู่หน้าหลักตลาดวิศิษฐ์ชัย</span>
+                        </button>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
     </div>

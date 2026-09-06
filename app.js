@@ -7940,9 +7940,18 @@ function formatRiderAppDate(isoStr) {
     }
 }
 
+let _lastSubmittedRiderApp = null;
+
 function openRiderRegisterModal() {
     const modal = document.getElementById("rider-register-modal");
     if (!modal) return;
+
+    // Reset to step 1 (form view) whenever opened
+    const formView = document.getElementById("rider-reg-step-form");
+    const successView = document.getElementById("rider-reg-step-success");
+    if (formView) formView.classList.remove("hidden");
+    if (successView) successView.classList.add("hidden");
+
     modal.classList.remove("hidden");
     const firstInput = document.getElementById("reg-rider-fullname");
     if (firstInput) setTimeout(() => firstInput.focus(), 100);
@@ -8016,8 +8025,10 @@ function handleRiderRegisterSubmit(e) {
     const apps = loadRiderApplications();
     const existingApp = apps.find(a => (a.phone || "").replace(/[-\s]/g, "") === phone && a.status === "pending");
     if (existingApp) {
+        _lastSubmittedRiderApp = existingApp;
         showToast(`ℹ️ เบอร์ ${phone} ได้ส่งใบสมัครไว้แล้ว (${existingApp.id}) อยู่ระหว่างรอแอดมินอนุมัติครับ`);
-        closeRiderRegisterModal();
+        // Populate and switch to step 2 view
+        populateRiderSuccessView(existingApp);
         return;
     }
 
@@ -8045,17 +8056,139 @@ function handleRiderRegisterSubmit(e) {
 
     apps.unshift(newApp);
     saveRiderApplications(apps);
+    _lastSubmittedRiderApp = newApp;
 
-    closeRiderRegisterModal();
+    // Reset form inputs for next time
     document.getElementById("rider-register-form")?.reset();
 
-    showToast(`🎉 ส่งใบสมัครสำเร็จ! รหัส ${newApp.id} รอแอดมินตรวจสอบและอนุมัติ เมื่ออนุมัติแล้วสามารถล็อกอินที่ปุ่ม 4. ไรเดอร์ ได้ทันที`);
+    // Show step 2 (Success and next step options)
+    populateRiderSuccessView(newApp);
+
+    showToast(`🎉 ส่งใบสมัครสำเร็จ! รหัส ${newApp.id} ส่งต่อไปยังขั้นตอนอนุมัติแล้ว`);
 
     if (state.currentRole === "admin") {
         renderAdminRiders();
     }
 }
 window.handleRiderRegisterSubmit = handleRiderRegisterSubmit;
+
+function populateRiderSuccessView(app) {
+    const elId = document.getElementById("nextstep-app-id");
+    const elName = document.getElementById("nextstep-app-name");
+    const elPhone = document.getElementById("nextstep-app-phone");
+    const elStatus = document.getElementById("nextstep-app-status");
+
+    if (elId) elId.textContent = app.id || "APP-RD-xxxx";
+    if (elName) elName.textContent = app.fullName + (app.nickname ? ` (${app.nickname})` : "");
+    if (elPhone) elPhone.textContent = app.phone || "-";
+    if (elStatus) {
+        elStatus.className = "bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full";
+        elStatus.textContent = "⏳ รอแอดมินอนุมัติ";
+    }
+
+    const formView = document.getElementById("rider-reg-step-form");
+    const successView = document.getElementById("rider-reg-step-success");
+    if (formView) formView.classList.add("hidden");
+    if (successView) {
+        successView.classList.remove("hidden");
+        const scrollable = successView.querySelector(".overflow-y-auto");
+        if (scrollable) scrollable.scrollTop = 0;
+    }
+}
+
+function goToAdminToApproveRider(appId) {
+    closeRiderRegisterModal();
+    // Auto-login Admin if not already logged in
+    if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
+        state.activeAdmin = {
+            isLoggedIn: true,
+            name: "เฮียส่ง",
+            role: "Super Admin",
+            loggedInAt: Date.now()
+        };
+        saveAdminToStorage(state.activeAdmin);
+    }
+    renderAuthHeaderButtons();
+    setActiveRoleView("admin");
+    switchAdminTab("riders");
+    showToast("🔑 เข้าสู่ศูนย์บริหารไรเดอร์ของแอดมินแล้ว: คุณสามารถกดอนุมัติใบสมัครได้ทันที");
+}
+window.goToAdminToApproveRider = goToAdminToApproveRider;
+
+function goToAdminToApproveRiderFromSuccess() {
+    const appId = _lastSubmittedRiderApp ? _lastSubmittedRiderApp.id : null;
+    goToAdminToApproveRider(appId);
+}
+window.goToAdminToApproveRiderFromSuccess = goToAdminToApproveRiderFromSuccess;
+
+function checkCurrentRiderApprovalAndLogin() {
+    let app = _lastSubmittedRiderApp;
+    if (!app) {
+        const apps = loadRiderApplications();
+        if (apps && apps.length > 0) {
+            app = apps[0];
+        }
+    }
+
+    if (!app) {
+        showToast("⚠️ ยังไม่พบประวัติการส่งใบสมัครล่าสุด");
+        return;
+    }
+
+    const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
+    const riders = loadCommunityRiders();
+    const approvedRider = riders.find(r => (r.phone || "").replace(/[-\s]/g, "") === cleanPhone);
+
+    if (approvedRider) {
+        const statusBadge = document.getElementById("nextstep-app-status");
+        if (statusBadge) {
+            statusBadge.className = "bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full";
+            statusBadge.textContent = "✅ ได้รับอนุมัติแล้ว";
+        }
+        closeRiderRegisterModal();
+        loginRiderWithProfile(approvedRider);
+        showToast(`🎉 ตรวจสอบสถานะ: ใบสมัครได้รับการอนุมัติแล้ว! เข้าสู่ระบบรับงานสำเร็จ (${approvedRider.name})`);
+    } else {
+        const apps = loadRiderApplications();
+        const currentApp = apps.find(a => (a.phone || "").replace(/[-\s]/g, "") === cleanPhone);
+        if (currentApp && currentApp.status === "rejected") {
+            const statusBadge = document.getElementById("nextstep-app-status");
+            if (statusBadge) {
+                statusBadge.className = "bg-rose-100 text-rose-900 border border-rose-300 text-[10px] font-black px-2 py-0.5 rounded-full";
+                statusBadge.textContent = "❌ ไม่ผ่านการอนุมัติ";
+            }
+            showToast("❌ ใบสมัครไม่ผ่านการอนุมัติ กรุณาติดต่อแอดมินตลาดวิศิษฐ์ชัย");
+        } else {
+            showToast(`⏳ ใบสมัคร (${app.id}) ยังรอแอดมินอนุมัติ คุณสามารถกดปุ่ม '1. ไปยังหน้าจอแอดมินเพื่อกดอนุมัติทันที' ด้านบนได้เลยครับ`);
+        }
+    }
+}
+window.checkCurrentRiderApprovalAndLogin = checkCurrentRiderApprovalAndLogin;
+
+function loginRiderById(riderId) {
+    const riders = loadCommunityRiders();
+    const r = riders.find(x => x.id === riderId);
+    if (!r) {
+        showToast("⚠️ ไม่พบข้อมูลไรเดอร์");
+        return;
+    }
+    loginRiderWithProfile(r);
+}
+window.loginRiderById = loginRiderById;
+
+function approveAndLoginRider(appId) {
+    approveRiderApplication(appId);
+    const apps = loadRiderApplications();
+    const app = apps.find(x => x.id === appId);
+    if (!app) return;
+    const riders = loadCommunityRiders();
+    const r = riders.find(x => (x.phone || "").replace(/[-\s]/g, "") === (app.phone || "").replace(/[-\s]/g, ""));
+    if (r) {
+        loginRiderWithProfile(r);
+        showToast(`🎉 อนุมัติและเข้าสู่ระบบเป็น ${r.name} เรียบร้อยแล้ว!`);
+    }
+}
+window.approveAndLoginRider = approveAndLoginRider;
 
 function toggleAdminRiderAppsHistory() {
     _showAdminRiderAppsHistory = !_showAdminRiderAppsHistory;
@@ -8309,10 +8442,14 @@ function renderAdminRiders() {
                                         </div>
                                     </div>
                                     <!-- Action Buttons -->
-                                    <div class="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                                        <button onclick="approveRiderApplication('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5">
+                                    <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
+                                        <button onclick="approveRiderApplication('${app.id}')" class="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1" title="อนุมัติให้เป็นไรเดอร์ในระบบ">
                                             <span class="material-symbols-outlined text-sm font-bold">check_circle</span>
-                                            <span>อนุมัติเป็นไรเดอร์</span>
+                                            <span>อนุมัติ</span>
+                                        </button>
+                                        <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
+                                            <span class="material-symbols-outlined text-sm font-bold">sports_motorsports</span>
+                                            <span>อนุมัติ & รับงานทันที 🚀</span>
                                         </button>
                                         <button onclick="rejectRiderApplication('${app.id}')" class="px-2.5 py-2 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all">
                                             <span>ปฏิเสธ</span>
@@ -8556,6 +8693,10 @@ function renderAdminRiders() {
                             <!-- Card Action Buttons -->
                             <div class="flex items-center justify-between pt-1 border-t border-slate-100 text-xs flex-wrap gap-2">
                                 <div class="flex items-center gap-1.5 flex-wrap">
+                                    <button onclick="loginRiderById('${r.id}')" class="px-2.5 py-1 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="เข้าสู่ระบบเป็นไรเดอร์คนนี้เพื่อรับงานทันที">
+                                        <span class="material-symbols-outlined text-xs">two_wheeler</span>
+                                        <span>เข้าสู่ระบบรับงาน</span>
+                                    </button>
                                     <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="พิมพ์สลิปสรุปยอด 80x80">
                                         <span class="material-symbols-outlined text-xs text-sky-700">receipt</span>
                                         <span>สลิป 80mm</span>
@@ -10372,7 +10513,17 @@ function renderRiderScreen() {
         if (badge) badge.textContent = "ไม่มีงานค้าง";
         if (totalBadge) totalBadge.textContent = "฿0";
         if (destName) destName.textContent = "รอรับออเดอร์ใหม่จากฮับ";
-        if (destDetail) destDetail.textContent = "ขณะนี้ไม่มีคิวจัดส่งที่มอบหมายให้คุณ";
+        if (destDetail) {
+            destDetail.innerHTML = `
+                <div class="space-y-2">
+                    <div>ขณะนี้ไม่มีคิวจัดส่งที่มอบหมายให้คุณ</div>
+                    <button onclick="assignSampleOrderToRider()" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-xs">local_shipping</span>
+                        <span>📦 รับงานส่งของสดตัวอย่างเข้าสู่ระบบรับงาน</span>
+                    </button>
+                </div>
+            `;
+        }
         if (noteText) noteText.textContent = "-";
         const destHouse = document.getElementById("rider-dest-house");
         const destSubdistrict = document.getElementById("rider-dest-subdistrict");
@@ -10510,6 +10661,29 @@ function renderRiderScreen() {
         if (completedBanner) completedBanner.classList.add("hidden");
     }
 }
+
+function assignSampleOrderToRider() {
+    createSampleCustomerOrder();
+    if (!state.activeOrder) return;
+
+    if (state.activeRider && state.activeRider.isLoggedIn) {
+        state.activeOrder.riderName = state.activeRider.name;
+        state.activeOrder.riderPhone = state.activeRider.phone;
+    } else {
+        const riders = loadCommunityRiders();
+        if (riders && riders.length > 0) {
+            state.activeOrder.riderName = riders[0].name;
+            state.activeOrder.riderPhone = riders[0].phone;
+        }
+    }
+    state.activeOrder.status = "picking";
+    saveActiveOrderToStorage(state.activeOrder);
+
+    setActiveRoleView("rider");
+    renderRiderScreen();
+    showToast("📦 มอบหมายออเดอร์ตัวอย่างเข้าคิวของไรเดอร์เรียบร้อย! คุณสามารถเริ่มกด '1. รับของแล้ว ออกส่ง' ได้ทันที");
+}
+window.assignSampleOrderToRider = assignSampleOrderToRider;
 
 // Rider Login & Logout
 function openRiderLoginModal() {
