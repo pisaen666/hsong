@@ -1467,6 +1467,7 @@ const state = {
         displayedStallIds: []
     }
 };
+window.state = state;
 
 // ✅ อัปเดตแถบติดตามออเดอร์สดบนหน้าหลัก (Home Screen) และปุ่มเมนูด้านล่าง
 function updateHomeActiveOrderBanner() {
@@ -2432,7 +2433,7 @@ function renderHubDailyReport(targetDateKey) {
                     <p class="text-xs text-white/90 mt-0.5 font-medium">ผู้สมัครล่าสุด: <strong class="text-white underline">${pendingRiderApps[0].fullName}</strong> (${pendingRiderApps[0].phone}) • สมัครเข้ามาแล้ว</p>
                 </div>
             </div>
-            <button onclick="switchAdminTab('riders')" class="px-4 py-2.5 bg-white hover:bg-amber-50 text-orange-700 font-black rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer">
+            <button onclick="goToAdminToApproveRider('${pendingRiderApps[0].id}')" class="px-4 py-2.5 bg-white hover:bg-amber-50 text-orange-700 font-black rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer">
                 <span class="material-symbols-outlined text-base font-bold">check_circle</span>
                 <span>ดูใบสมัครและกดอนุมัติทันที 🚀</span>
             </button>
@@ -7580,6 +7581,7 @@ function renderScreenModeButton() {
 // ADMIN CONSOLE & BACKOFFICE CONTROLLERS
 // ==========================================
 let _activeAdminTab = "report";
+if (typeof window !== "undefined") window._activeAdminTab = _activeAdminTab;
 let _adminStallSearchQuery = "";
 let _adminStallZoneFilter = "all";
 
@@ -7651,6 +7653,7 @@ function logoutAdmin() {
 
 function switchAdminTab(tabName) {
     _activeAdminTab = tabName;
+    if (typeof window !== "undefined") window._activeAdminTab = tabName;
     const tabs = ["report", "analytics", "stalls", "riders", "settings"];
     tabs.forEach(t => {
         const btn = document.getElementById(`admin-tab-${t}`);
@@ -7884,15 +7887,33 @@ let _showAdminRiderAppsHistory = false;
 
 const DEFAULT_COMMUNITY_RIDERS = [];
 
+// Exact mock IDs and full mock names to remove, avoiding substring collisions with real names
+const MOCK_COMMUNITY_RIDER_IDS = ["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"];
+const MOCK_COMMUNITY_RIDER_NAMES = ["รุ่งโรจน์ วิ่งไว", "วิชัย สายฟ้า", "สมเกียรติ ซื่อสัตย์", "อนุชา บริการดี", "ธีรภัทร ว่องไว"];
+const MOCK_RIDER_APP_IDS = ["APP-RD-101"];
+const MOCK_RIDER_APP_NAMES = ["นายธีรภัทร ว่องไว", "ธีรภัทร ว่องไว", "เอกชัย สายซิ่ง", "สุรศักดิ์ ใจดี", "อนุสรณ์ ขยันส่ง"];
+
+function isMockCommunityRider(r) {
+    if (!r) return true;
+    if (r.id && MOCK_COMMUNITY_RIDER_IDS.includes(r.id)) return true;
+    if (r.name && MOCK_COMMUNITY_RIDER_NAMES.includes(r.name.trim())) return true;
+    return false;
+}
+
+function isMockRiderApplication(a) {
+    if (!a) return true;
+    if (a.id && MOCK_RIDER_APP_IDS.includes(a.id)) return true;
+    if (a.fullName && MOCK_RIDER_APP_NAMES.includes(a.fullName.trim())) return true;
+    return false;
+}
+
 function loadCommunityRiders() {
     try {
         const raw = localStorage.getItem("talathub_community_riders");
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-                // กรองไรเดอร์จำลองเก่าออก
-                const cleaned = parsed.filter(r => r && r.id && !["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"].includes(r.id) && !(r.name && (r.name.includes("รุ่งโรจน์") || r.name.includes("วิชัย สายฟ้า") || r.name.includes("สมเกียรติ") || r.name.includes("อนุชา บริการดี") || r.name.includes("ธีรภัทร"))));
-                return cleaned;
+                return parsed.filter(r => !isMockCommunityRider(r));
             }
         }
     } catch (e) {
@@ -7903,9 +7924,10 @@ function loadCommunityRiders() {
 
 function saveCommunityRiders(list) {
     try {
-        localStorage.setItem("talathub_community_riders", JSON.stringify(list || []));
+        const cleaned = (list || []).filter(r => !isMockCommunityRider(r));
+        localStorage.setItem("talathub_community_riders", JSON.stringify(cleaned));
         if (isFirebaseReady() && db) {
-            db.ref("community_riders").set(list || []).catch(err => {
+            db.ref("community_riders").set(cleaned).catch(err => {
                 console.warn("Firebase save community_riders failed:", err);
             });
         }
@@ -7921,9 +7943,7 @@ function loadRiderApplications() {
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-                // กรองใบสมัครตัวอย่างเก่า (APP-RD-101 / นายธีรภัทร) ออก
-                const cleaned = parsed.filter(a => a && a.id !== "APP-RD-101" && !(a.fullName && (a.fullName.includes("ธีรภัทร") || a.fullName.includes("เอกชัย สายซิ่ง") || a.fullName.includes("สุรศักดิ์ ใจดี") || a.fullName.includes("อนุสรณ์ ขยันส่ง"))));
-                return cleaned;
+                return parsed.filter(a => !isMockRiderApplication(a));
             }
         }
     } catch (e) {
@@ -7934,15 +7954,55 @@ function loadRiderApplications() {
 
 function saveRiderApplications(apps) {
     try {
-        localStorage.setItem("talathub_rider_applications", JSON.stringify(apps || []));
+        const cleaned = (apps || []).filter(a => !isMockRiderApplication(a));
+        localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
         if (isFirebaseReady() && db) {
-            db.ref("rider_applications").set(apps || []).catch(err => {
+            db.ref("rider_applications").set(cleaned).catch(err => {
                 console.warn("Firebase save rider_applications failed:", err);
             });
         }
     } catch (e) {
         console.error("Error saving rider applications:", e);
     }
+}
+
+// Helper to merge local and remote apps without wiping fresh local submissions
+function mergeRiderApplicationsList(localList, remoteList) {
+    const map = new Map();
+    (remoteList || []).forEach(a => {
+        if (a && a.id && !isMockRiderApplication(a)) map.set(a.id, a);
+    });
+    (localList || []).forEach(a => {
+        if (!a || !a.id || isMockRiderApplication(a)) return;
+        const existing = map.get(a.id);
+        if (!existing) {
+            map.set(a.id, a);
+        } else {
+            if (a.status === "approved" || (a.approvedAt && !existing.approvedAt)) {
+                map.set(a.id, a);
+            } else if (new Date(a.appliedAt || 0) >= new Date(existing.appliedAt || 0)) {
+                map.set(a.id, a);
+            }
+        }
+    });
+    return Array.from(map.values());
+}
+
+function mergeCommunityRidersList(localList, remoteList) {
+    const map = new Map();
+    (remoteList || []).forEach(r => {
+        if (r && r.id && !isMockCommunityRider(r)) map.set(r.id, r);
+    });
+    (localList || []).forEach(r => {
+        if (!r || !r.id || isMockCommunityRider(r)) return;
+        const existing = map.get(r.id);
+        if (!existing) {
+            map.set(r.id, r);
+        } else {
+            map.set(r.id, { ...existing, ...r });
+        }
+    });
+    return Array.from(map.values());
 }
 
 // ── Realtime Firebase Sync for Riders & Applications
@@ -7956,9 +8016,12 @@ function initRiderRealtimeSync() {
     db.ref("rider_applications").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            if (data && Array.isArray(data)) {
-                const cleaned = data.filter(a => a && a.id !== "APP-RD-101" && !(a.fullName && (a.fullName.includes("ธีรภัทร") || a.fullName.includes("เอกชัย สายซิ่ง") || a.fullName.includes("สุรศักดิ์ ใจดี") || a.fullName.includes("อนุสรณ์ ขยันส่ง"))));
-                localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
+            const rawList = Array.isArray(data) ? data : (data && typeof data === "object" ? Object.values(data) : []);
+            if (rawList && rawList.length > 0) {
+                const cleaned = rawList.filter(a => !isMockRiderApplication(a));
+                const localApps = loadRiderApplications();
+                const merged = mergeRiderApplicationsList(localApps, cleaned);
+                localStorage.setItem("talathub_rider_applications", JSON.stringify(merged));
                 updateAdminRiderBadges();
                 if (state.currentRole === "admin") {
                     if (_activeAdminTab === "riders") {
@@ -7982,13 +8045,16 @@ function initRiderRealtimeSync() {
     db.ref("community_riders").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            if (data && Array.isArray(data)) {
-                const cleaned = data.filter(r => r && r.id && !["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"].includes(r.id) && !(r.name && (r.name.includes("รุ่งโรจน์") || r.name.includes("วิชัย สายฟ้า") || r.name.includes("สมเกียรติ") || r.name.includes("อนุชา บริการดี") || r.name.includes("ธีรภัทร"))));
-                localStorage.setItem("talathub_community_riders", JSON.stringify(cleaned));
+            const rawList = Array.isArray(data) ? data : (data && typeof data === "object" ? Object.values(data) : []);
+            if (rawList && rawList.length > 0) {
+                const cleaned = rawList.filter(r => !isMockCommunityRider(r));
+                const localRiders = loadCommunityRiders();
+                const merged = mergeCommunityRidersList(localRiders, cleaned);
+                localStorage.setItem("talathub_community_riders", JSON.stringify(merged));
                 if (state.currentRole === "admin" && _activeAdminTab === "riders") {
                     renderAdminRiders();
                 }
-                checkCurrentRiderApprovalRealtime(cleaned);
+                checkCurrentRiderApprovalRealtime(merged);
             } else if (!data) {
                 const localRiders = loadCommunityRiders();
                 if (localRiders && localRiders.length > 0) {
@@ -8292,6 +8358,8 @@ function populateRiderSuccessView(app) {
 
 function goToAdminToApproveRider(appId) {
     closeRiderRegisterModal();
+    closeRiderLoginModal();
+
     // Auto-login Admin if not already logged in
     if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
         state.activeAdmin = {
@@ -8303,9 +8371,33 @@ function goToAdminToApproveRider(appId) {
         saveAdminToStorage(state.activeAdmin);
     }
     renderAuthHeaderButtons();
+
+    // Set active tab to 'riders' before role view switch to prevent race condition
+    _activeAdminTab = "riders";
+    _adminRiderAppFilter = "pending";
+
     setActiveRoleView("admin");
     switchAdminTab("riders");
-    showToast("🔑 เข้าสู่ศูนย์บริหารไรเดอร์ของแอดมินแล้ว: คุณสามารถกดอนุมัติใบสมัครได้ทันที");
+
+    const targetId = appId || (_lastSubmittedRiderApp ? _lastSubmittedRiderApp.id : null);
+
+    showToast("🔑 เข้าสู่ศูนย์บริหารไรเดอร์ของแอดมินแล้ว: กำลังเปิดใบสมัครเพื่อตรวจสอบและอนุมัติ...");
+
+    // Smooth scroll and open applicant detail modal
+    setTimeout(() => {
+        const appSection = document.getElementById("admin-content-riders");
+        if (appSection) {
+            appSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        if (targetId) {
+            viewRiderAppDetail(targetId);
+            const cardEl = document.getElementById(`rider-app-card-${targetId}`);
+            if (cardEl) {
+                cardEl.classList.add("ring-4", "ring-amber-400", "scale-[1.01]");
+                setTimeout(() => cardEl.classList.remove("ring-4", "ring-amber-400", "scale-[1.01]"), 3500);
+            }
+        }
+    }, 250);
 }
 window.goToAdminToApproveRider = goToAdminToApproveRider;
 
@@ -8314,6 +8406,24 @@ function goToAdminToApproveRiderFromSuccess() {
     goToAdminToApproveRider(appId);
 }
 window.goToAdminToApproveRiderFromSuccess = goToAdminToApproveRiderFromSuccess;
+
+// Fast-track 1-click approval for tester / admin directly from success screen
+function approveAndLoginCurrentSubmittedRider() {
+    let app = _lastSubmittedRiderApp;
+    if (!app) {
+        const apps = loadRiderApplications();
+        if (apps && apps.length > 0) {
+            app = apps[0];
+        }
+    }
+    if (!app) {
+        showToast("⚠️ ไม่พบข้อมูลใบสมัครล่าสุด");
+        return;
+    }
+    closeRiderRegisterModal();
+    approveAndLoginRider(app.id);
+}
+window.approveAndLoginCurrentSubmittedRider = approveAndLoginCurrentSubmittedRider;
 
 function checkCurrentRiderApprovalAndLogin() {
     let app = _lastSubmittedRiderApp;
@@ -8330,31 +8440,59 @@ function checkCurrentRiderApprovalAndLogin() {
     }
 
     const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
+    const cleanId = app.id;
+
+    // 1. Check in community riders (approved active fleet)
     const riders = loadCommunityRiders();
     const approvedRider = riders.find(r => (r.phone || "").replace(/[-\s]/g, "") === cleanPhone);
 
-    if (approvedRider) {
+    // 2. Check in rider applications
+    const apps = loadRiderApplications();
+    const currentApp = apps.find(a => a.id === cleanId || (a.phone || "").replace(/[-\s]/g, "") === cleanPhone);
+
+    if (approvedRider || (currentApp && currentApp.status === "approved")) {
         const statusBadge = document.getElementById("nextstep-app-status");
         if (statusBadge) {
-            statusBadge.className = "bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full";
+            statusBadge.className = "bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black px-2.5 py-0.5 rounded-full";
             statusBadge.textContent = "✅ ได้รับอนุมัติแล้ว";
         }
-        closeRiderRegisterModal();
-        loginRiderWithProfile(approvedRider);
-        showToast(`🎉 ตรวจสอบสถานะ: ใบสมัครได้รับการอนุมัติแล้ว! เข้าสู่ระบบรับงานสำเร็จ (${approvedRider.name})`);
-    } else {
-        const apps = loadRiderApplications();
-        const currentApp = apps.find(a => (a.phone || "").replace(/[-\s]/g, "") === cleanPhone);
-        if (currentApp && currentApp.status === "rejected") {
-            const statusBadge = document.getElementById("nextstep-app-status");
-            if (statusBadge) {
-                statusBadge.className = "bg-rose-100 text-rose-900 border border-rose-300 text-[10px] font-black px-2 py-0.5 rounded-full";
-                statusBadge.textContent = "❌ ไม่ผ่านการอนุมัติ";
-            }
-            showToast("❌ ใบสมัครไม่ผ่านการอนุมัติ กรุณาติดต่อแอดมินตลาดวิศิษฐ์ชัย");
-        } else {
-            showToast(`⏳ ใบสมัคร (${app.id}) ยังรอแอดมินอนุมัติ คุณสามารถกดปุ่ม '1. ไปยังหน้าจอแอดมินเพื่อกดอนุมัติทันที' ด้านบนได้เลยครับ`);
+
+        let targetRider = approvedRider;
+        if (!targetRider && currentApp) {
+            const displayName = currentApp.nickname ? `${currentApp.fullName} (${currentApp.nickname})` : currentApp.fullName;
+            targetRider = {
+                id: `RIDER-${Date.now().toString().slice(-4)}`,
+                name: displayName,
+                phone: currentApp.phone,
+                plate: currentApp.plate || "-",
+                zone: currentApp.zone || "รอบตลาดวิศิษฐ์ชัย",
+                status: "available",
+                baseFee: 40,
+                lat: Number((MARKET_ORIGIN.lat + (Math.random() - 0.5) * 0.01).toFixed(4)),
+                lng: Number((MARKET_ORIGIN.lng + (Math.random() - 0.5) * 0.01).toFixed(4)),
+                avatar: "🛵",
+                motorcycleModel: currentApp.motorcycleModel || "",
+                promptPay: currentApp.promptPayNumber || currentApp.phone || "",
+                codSettledToday: 0
+            };
+            riders.unshift(targetRider);
+            saveCommunityRiders(riders);
         }
+
+        closeRiderRegisterModal();
+        if (targetRider) {
+            loginRiderWithProfile(targetRider);
+            showToast(`🎉 ตรวจสอบสถานะ: ใบสมัครได้รับการอนุมัติแล้ว! เข้าสู่ระบบรับงานสำเร็จ (${targetRider.name})`);
+        }
+    } else if (currentApp && currentApp.status === "rejected") {
+        const statusBadge = document.getElementById("nextstep-app-status");
+        if (statusBadge) {
+            statusBadge.className = "bg-rose-100 text-rose-900 border border-rose-300 text-[10px] font-black px-2 py-0.5 rounded-full";
+            statusBadge.textContent = "❌ ไม่ผ่านการอนุมัติ";
+        }
+        showToast("❌ ใบสมัครไม่ผ่านการอนุมัติ กรุณาติดต่อแอดมินตลาดวิศิษฐ์ชัย");
+    } else {
+        showToast(`⏳ ใบสมัคร (${app.id}) กำลังรอแอดมินอนุมัติ คุณสามารถกดปุ่มม่วง '1. ไปยังหน้าจอแอดมินเพื่อกดอนุมัติทันที' หรือปุ่มเขียว '⚡ อนุมัติทันที' ได้เลยครับ`);
     }
 }
 window.checkCurrentRiderApprovalAndLogin = checkCurrentRiderApprovalAndLogin;
@@ -8373,11 +8511,14 @@ window.loginRiderById = loginRiderById;
 function approveAndLoginRider(appId) {
     approveRiderApplication(appId);
     const apps = loadRiderApplications();
-    const app = apps.find(x => x.id === appId);
+    const app = apps.find(x => x.id === appId || (x.phone || "").replace(/[-\s]/g, "") === (appId || "").replace(/[-\s]/g, ""));
     if (!app) return;
     const riders = loadCommunityRiders();
-    const r = riders.find(x => (x.phone || "").replace(/[-\s]/g, "") === (app.phone || "").replace(/[-\s]/g, ""));
+    const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
+    const r = riders.find(x => (x.phone || "").replace(/[-\s]/g, "") === cleanPhone);
     if (r) {
+        closeRiderAppDetailModal();
+        closeRiderRegisterModal();
         loginRiderWithProfile(r);
         showToast(`🎉 อนุมัติและเข้าสู่ระบบเป็น ${r.name} เรียบร้อยแล้ว!`);
     }
@@ -8392,9 +8533,12 @@ window.toggleAdminRiderAppsHistory = toggleAdminRiderAppsHistory;
 
 function approveRiderApplication(appId) {
     const apps = loadRiderApplications();
-    const app = apps.find(x => x.id === appId);
+    const cleanId = String(appId || "").trim();
+    const app = apps.find(x => x.id === cleanId) || 
+                apps.find(x => (x.phone || "").replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, ""));
+
     if (!app) {
-        showToast("⚠️ ไม่พบข้อมูลใบสมัคร");
+        showToast("⚠️ ไม่พบข้อมูลใบสมัคร (" + (appId || "ไม่มีรหัส") + ")");
         return;
     }
 
@@ -8402,9 +8546,23 @@ function approveRiderApplication(appId) {
     app.approvedAt = new Date().toISOString();
     saveRiderApplications(apps);
 
+    // Update _lastSubmittedRiderApp if matching
+    if (_lastSubmittedRiderApp && (_lastSubmittedRiderApp.id === app.id || _lastSubmittedRiderApp.phone === app.phone)) {
+        _lastSubmittedRiderApp.status = "approved";
+        _lastSubmittedRiderApp.approvedAt = app.approvedAt;
+    }
+
+    // Update status badge on success view if open in DOM
+    const statusBadge = document.getElementById("nextstep-app-status");
+    if (statusBadge) {
+        statusBadge.className = "bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black px-2.5 py-0.5 rounded-full";
+        statusBadge.textContent = "✅ ได้รับอนุมัติแล้ว";
+    }
+
     // Create or update in community riders
     const riders = loadCommunityRiders();
-    const existing = riders.find(r => (r.phone || "").replace(/[-\s]/g, "") === (app.phone || "").replace(/[-\s]/g, ""));
+    const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
+    const existing = riders.find(r => (r.phone || "").replace(/[-\s]/g, "") === cleanPhone);
     const displayName = app.nickname ? `${app.fullName} (${app.nickname})` : app.fullName;
 
     if (!existing) {
@@ -8412,7 +8570,7 @@ function approveRiderApplication(appId) {
             id: `RIDER-${Date.now().toString().slice(-4)}`,
             name: displayName,
             phone: app.phone,
-            plate: app.plate,
+            plate: app.plate || "-",
             zone: app.zone || "รอบตลาดวิศิษฐ์ชัย",
             status: "available",
             baseFee: 40,
@@ -8423,12 +8581,18 @@ function approveRiderApplication(appId) {
             promptPay: app.promptPayNumber || app.phone || "",
             codSettledToday: 0
         };
-        riders.push(newRider);
+        riders.unshift(newRider);
+        saveCommunityRiders(riders);
+    } else {
+        existing.name = displayName;
+        existing.plate = app.plate || existing.plate;
+        existing.zone = app.zone || existing.zone;
         saveCommunityRiders(riders);
     }
 
     updateAdminRiderBadges();
     showToast(`🎉 อนุมัติ ${displayName} เป็นไรเดอร์เรียบร้อยแล้ว! ไรเดอร์สามารถล็อกอินรับงานได้ทันที`);
+    closeRiderAppDetailModal();
     renderAdminRiders();
     setTimeout(() => initAdminRiderRadarMap(), 150);
 }
@@ -8640,7 +8804,7 @@ function renderAdminRiders() {
                 ` : `
                     <div class="space-y-3">
                         ${displayedApps.map(app => `
-                            <div class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
+                            <div id="rider-app-card-${app.id}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
                                 <!-- App Header -->
                                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
                                     <div class="flex items-start gap-3">
@@ -8676,21 +8840,21 @@ function renderAdminRiders() {
                                     </div>
                                     <!-- Action Buttons -->
                                     <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
-                                        <button onclick="viewRiderAppDetail('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1" title="ดูข้อมูลใบสมัครฉบับเต็ม">
+                                        <button onclick="viewRiderAppDetail('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="ดูข้อมูลใบสมัครฉบับเต็ม">
                                             <span class="material-symbols-outlined text-xs">visibility</span>
                                             <span>ดูใบสมัครเต็ม</span>
                                         </button>
 
                                         ${app.status === 'pending' ? `
-                                            <button onclick="approveRiderApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1" title="อนุมัติให้เป็นไรเดอร์ในระบบ">
+                                            <button onclick="approveRiderApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติให้เป็นไรเดอร์ในระบบ">
                                                 <span class="material-symbols-outlined text-xs font-bold">check_circle</span>
                                                 <span>อนุมัติ</span>
                                             </button>
-                                            <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
+                                            <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
                                                 <span class="material-symbols-outlined text-xs font-bold">sports_motorsports</span>
                                                 <span>อนุมัติ & รับงานทันที 🚀</span>
                                             </button>
-                                            <button onclick="rejectRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all">
+                                            <button onclick="rejectRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all cursor-pointer">
                                                 <span>ปฏิเสธ</span>
                                             </button>
                                         ` : app.status === 'approved' ? `
@@ -9469,11 +9633,30 @@ function initAdminRiderRadarMap() {
 // ── Application Detail Modal Functions
 function viewRiderAppDetail(appId) {
     const apps = loadRiderApplications();
-    const app = apps.find(x => x.id === appId);
-    if (!app) return;
+    const cleanId = String(appId || "").trim();
+    let app = null;
+    if (cleanId) {
+        app = apps.find(x => x.id === cleanId) || 
+              apps.find(x => (x.phone || "").replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, "")) ||
+              apps.find(x => x.fullName && x.fullName.includes(cleanId));
+    }
+    if (!app && _lastSubmittedRiderApp) {
+        app = apps.find(x => x.id === _lastSubmittedRiderApp.id) || _lastSubmittedRiderApp;
+    }
+    if (!app && apps.length > 0) {
+        app = apps[0];
+    }
+    if (!app) {
+        showToast("⚠️ ไม่พบข้อมูลใบสมัคร (" + (appId || "ไม่มีรหัส") + ")");
+        return;
+    }
 
     const modal = document.getElementById("rider-app-detail-modal");
-    if (!modal) return;
+    if (!modal) {
+        console.error("rider-app-detail-modal not found in DOM");
+        showToast("⚠️ ไม่พบหน้าต่างแสดงรายละเอียดใบสมัคร");
+        return;
+    }
 
     const subEl = document.getElementById("app-detail-sub");
     if (subEl) subEl.textContent = `${app.id} • ยื่นเมื่อ ${formatRiderAppDate(app.appliedAt)}`;
@@ -9542,16 +9725,20 @@ function viewRiderAppDetail(appId) {
 
     if (footer) {
         footer.innerHTML = `
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1.5 flex-wrap">
                 ${app.status === 'rejected' ? `
-                    <button onclick="reconsiderRiderApplication('${app.id}')" class="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1">
+                    <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>พิจารณาใหม่</span>
                     </button>
                 ` : app.status === 'approved' ? `
-                    <button onclick="reconsiderRiderApplication('${app.id}')" class="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1">
+                    <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>ย้อนกลับไปรอพิจารณา</span>
+                    </button>
+                    <button onclick="approveAndLoginRider('${app.id}'); closeRiderAppDetailModal();" class="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">sports_motorsports</span>
+                        <span>สลับเข้ารับงาน</span>
                     </button>
                 ` : ''}
                 <button onclick="deleteRiderApplication('${app.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all" title="ลบใบสมัครนี้">
@@ -9559,14 +9746,18 @@ function viewRiderAppDetail(appId) {
                 </button>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5 flex-wrap">
                 ${app.status === 'pending' ? `
                     <button onclick="rejectRiderApplication('${app.id}'); closeRiderAppDetailModal();" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all">
                         ปฏิเสธ
                     </button>
-                    <button onclick="approveRiderApplication('${app.id}'); closeRiderAppDetailModal();" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1">
+                    <button onclick="approveRiderApplication('${app.id}'); closeRiderAppDetailModal();" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติเป็นไรเดอร์ในระบบ">
                         <span class="material-symbols-outlined text-sm font-bold">check_circle</span>
                         <span>อนุมัติเป็นไรเดอร์</span>
+                    </button>
+                    <button onclick="approveAndLoginRider('${app.id}'); closeRiderAppDetailModal();" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและทดสอบเข้าสู่ระบบรับงานทันที">
+                        <span class="material-symbols-outlined text-sm font-bold">sports_motorsports</span>
+                        <span>อนุมัติ & รับงานทันที 🚀</span>
                     </button>
                 ` : `
                     <button onclick="closeRiderAppDetailModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all">
@@ -9577,6 +9768,7 @@ function viewRiderAppDetail(appId) {
         `;
     }
 
+    modal.style.zIndex = "9999";
     modal.classList.remove("hidden");
 }
 
@@ -9921,24 +10113,14 @@ function simulateRiderGpsMovement() {
 function clearFleetTestData() {
     if (!confirm("⚠️ คุณต้องการล้างข้อมูลตัวอย่าง/ทดสอบ (ใบสมัครตัวอย่าง, กองยานจำลอง) ออกจากระบบใช่หรือไม่?\n\nข้อมูลจริงที่ผู้สมัครกรอกเข้ามาจะยังคงอยู่")) return;
 
-    // 1. Clean applications: remove sample IDs or sample names
+    // 1. Clean applications: remove mock/sample IDs or full mock names
     const apps = loadRiderApplications();
-    const realApps = apps.filter(a => {
-        if (!a) return false;
-        if (a.id === "APP-RD-101") return false;
-        if (a.fullName && (a.fullName.includes("ธีรภัทร") || a.fullName.includes("เอกชัย") || a.fullName.includes("สุรศักดิ์") || a.fullName.includes("อนุสรณ์"))) return false;
-        return true;
-    });
+    const realApps = apps.filter(a => !isMockRiderApplication(a));
     saveRiderApplications(realApps);
 
     // 2. Clean community riders: remove mock fleet
     const riders = loadCommunityRiders();
-    const realRiders = riders.filter(r => {
-        if (!r) return false;
-        if (["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"].includes(r.id)) return false;
-        if (r.name && (r.name.includes("รุ่งโรจน์") || r.name.includes("วิชัย สายฟ้า") || r.name.includes("สมเกียรติ") || r.name.includes("อนุชา บริการดี") || r.name.includes("ธีรภัทร"))) return false;
-        return true;
-    });
+    const realRiders = riders.filter(r => !isMockCommunityRider(r));
     saveCommunityRiders(realRiders);
 
     showToast("🧹 ล้างข้อมูลตัวอย่างและจำลองออกจากระบบเรียบร้อยแล้ว!");
