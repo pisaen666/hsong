@@ -135,9 +135,10 @@
                     <span class="material-symbols-outlined text-sm md:text-base">two_wheeler</span>
                     <span class="truncate">4. ไรเดอร์</span>
                 </button>
-                <button onclick="switchRole('admin')" id="role-btn-admin" class="role-btn hidden py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-purple-300 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-1 md:gap-1.5 transition-all duration-200 text-center">
+                <button onclick="switchRole('admin')" id="role-btn-admin" class="role-btn hidden py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-purple-300 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-1 md:gap-1.5 transition-all duration-200 text-center relative">
                     <span class="material-symbols-outlined text-sm md:text-base">admin_panel_settings</span>
                     <span class="truncate">5. แอดมิน</span>
+                    <span id="role-admin-badge" class="hidden absolute -top-1 -right-1 flex h-3.5 w-3.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-500 text-[8px] text-white font-bold items-center justify-center">!</span></span>
                 </button>
             </div>
 
@@ -1347,9 +1348,10 @@
                     <span>3. จัดการ 100 แผงค้า & พร้อมเพย์</span>
                 </button>
                 <span class="text-slate-300 shrink-0">|</span>
-                <button onclick="switchAdminTab('riders')" id="admin-tab-riders" class="admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5">
+                <button onclick="switchAdminTab('riders')" id="admin-tab-riders" class="admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5 relative">
                     <span class="material-symbols-outlined text-base text-slate-400">sports_motorsports</span>
                     <span>4. จัดการไรเดอร์ & ค่ารอบ</span>
+                    <span id="admin-riders-badge" class="hidden ml-1 px-1.5 py-0.2 text-[10px] font-black bg-rose-500 text-white rounded-full animate-pulse">0</span>
                 </button>
                 <span class="text-slate-300 shrink-0">|</span>
                 <button onclick="switchAdminTab('settings')" id="admin-tab-settings" class="admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5">
@@ -2962,49 +2964,6 @@
         </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- RIDER LOGIN MODAL                          -->
-    <!-- ========================================== -->
-    <div id="rider-login-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
-        <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 border border-slate-100 text-left">
-            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div class="flex items-center gap-2">
-                    <span class="w-9 h-9 rounded-2xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center font-bold">
-                        <span class="material-symbols-outlined text-xl">two_wheeler</span>
-                    </span>
-                    <div>
-                        <h3 class="font-extrabold text-sm text-slate-900">เข้าสู่ระบบไรเดอร์ประจำตลาด</h3>
-                        <p class="text-[11px] text-slate-500">Community Rider Dispatch Platform</p>
-                    </div>
-                </div>
-                <button onclick="closeRiderLoginModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all">
-                    <span class="material-symbols-outlined text-lg">close</span>
-                </button>
-            </div>
-
-            <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 space-y-1">
-                <div class="font-bold flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sm text-emerald-700">badge</span>
-                    <span>สำหรับไรเดอร์รับงานส่งของสด</span>
-                </div>
-                <div class="text-[11px] text-emerald-800">เลือกรหัสไรเดอร์ของคุณเพื่อเข้าดูคิวงานและนำส่งออเดอร์</div>
-            </div>
-
-            <div class="space-y-2">
-                <label class="block text-xs font-bold text-slate-700">เลือกรหัสไรเดอร์ประจำตลาด:</label>
-                <select id="rider-select-input" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-xs bg-slate-50">
-                    <option value="">-- ยังไม่มีไรเดอร์ในระบบ (เพิ่มผ่านหน้า Admin) --</option>
-                </select>
-            </div>
-
-            <div class="pt-1 space-y-2">
-                <button onclick="handleRiderLoginSubmit()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold py-3 rounded-xl shadow-md text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
-                    <span class="material-symbols-outlined text-sm">check_circle</span>
-                    <span>เข้าสู่ระบบ & พร้อมรับงานส่งของ</span>
-                </button>
-            </div>
-        </div>
-    </div>
 
     <!-- ========================================== -->
     <!-- RIDER DELIVERY COMPLETE MODAL              -->
@@ -3495,7 +3454,7 @@
                         </div>
                     </div>
 
-                    <form id="rider-register-form" onsubmit="handleRiderRegisterSubmit(event)" class="space-y-4">
+                    <form id="rider-register-form" onsubmit="handleRiderRegisterSubmit(event)" novalidate class="space-y-4">
                         <!-- Section 1: Personal Info -->
                         <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
                             <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
@@ -3516,7 +3475,7 @@
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                 <div>
                                     <label class="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์มือถือ (10 หลัก): <span class="text-rose-500">*</span></label>
-                                    <input type="tel" id="reg-rider-phone" required pattern="[0-9]{10}" maxlength="10" placeholder="08xxxxxxxx (ใช้ล็อกอินรับงาน)" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                    <input type="tel" id="reg-rider-phone" required pattern="[0-9]{10}" maxlength="10" oninput="syncPromptPayWithPhone()" placeholder="08xxxxxxxx (ใช้ล็อกอินรับงาน)" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
                                     <span class="text-[10px] text-slate-400">ใช้เบอร์นี้เข้าสู่ระบบรับงานหลังได้รับอนุมัติ</span>
                                 </div>
                                 <div>
@@ -3629,19 +3588,31 @@
                         </div>
 
                         <!-- Section 5: Payout / PromptPay -->
-                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
-                            <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
-                                <span class="material-symbols-outlined text-base text-sky-600">payments</span>
-                                <span>5. บัญชีรับเงินค่ารอบ (พร้อมเพย์ PromptPay)</span>
+                        <div class="bg-gradient-to-br from-sky-50/60 to-slate-50 p-3.5 rounded-2xl border border-sky-200 space-y-3">
+                            <div class="font-extrabold text-slate-800 flex items-center justify-between border-b border-sky-200/80 pb-2">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="material-symbols-outlined text-base text-sky-600">payments</span>
+                                    <span>5. บัญชีรับเงินค่ารอบ (พร้อมเพย์ PromptPay)</span>
+                                </div>
+                                <span class="text-[11px] text-sky-700 bg-white px-2 py-0.5 rounded-lg border border-sky-200 font-bold">โอนเงินค่ารอบอัตโนมัติ</span>
                             </div>
+
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                 <div>
-                                    <label class="font-bold text-slate-700 block mb-1">หมายเลขพร้อมเพย์ (เบอร์มือถือ หรือ เลขบัตร ปชช.): <span class="text-rose-500">*</span></label>
-                                    <input type="text" id="reg-rider-promptpay" required placeholder="เบอร์โทร หรือ เลขบัตร 13 หลัก" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <label class="font-bold text-slate-700 block">หมายเลขพร้อมเพย์:</label>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" onclick="fillPromptPayWith('phone')" class="text-[10px] font-bold text-sky-700 hover:text-sky-900 bg-white hover:bg-sky-100 px-1.5 py-0.5 rounded border border-sky-200 transition-all">⚡ ใช้เบอร์มือถือ</button>
+                                            <button type="button" onclick="fillPromptPayWith('idcard')" class="text-[10px] font-bold text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 transition-all">⚡ ใช้เลขบัตร</button>
+                                        </div>
+                                    </div>
+                                    <input type="text" id="reg-rider-promptpay" placeholder="เบอร์โทร หรือ เลขบัตร 13 หลัก" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                    <span class="text-[10px] text-slate-500 mt-0.5 block">💡 หากเว้นว่างไว้ ระบบจะใช้เบอร์โทรศัพท์มือถือที่ลงทะเบียนรับเงินให้อัตโนมัติ</span>
                                 </div>
                                 <div>
-                                    <label class="font-bold text-slate-700 block mb-1">ธนาคารเจ้าของบัญชี: <span class="text-rose-500">*</span></label>
+                                    <label class="font-bold text-slate-700 block mb-1">ธนาคารเจ้าของบัญชี:</label>
                                     <select id="reg-rider-bank" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+                                        <option value="พร้อมเพย์ e-Wallet">พร้อมเพย์ ทั่วไป (PromptPay)</option>
                                         <option value="กสิกรไทย">กสิกรไทย (KBANK)</option>
                                         <option value="ไทยพาณิชย์">ไทยพาณิชย์ (SCB)</option>
                                         <option value="กรุงไทย">กรุงไทย (KTB)</option>
@@ -3649,7 +3620,6 @@
                                         <option value="กรุงศรีอยุธยา">กรุงศรีอยุธยา (BAY)</option>
                                         <option value="ออมสิน">ออมสิน (GSB)</option>
                                         <option value="ทหารไทยธนชาต">ทหารไทยธนชาต (ttb)</option>
-                                        <option value="พร้อมเพย์ e-Wallet">พร้อมเพย์ e-Wallet</option>
                                     </select>
                                 </div>
                             </div>
@@ -3852,6 +3822,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=8.4_rider_system"></script>
+    <script src="app.js?v=8.5_rider_sync"></script>
 </body>
 </html>

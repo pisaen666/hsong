@@ -2414,7 +2414,34 @@ function renderHubDailyReport(targetDateKey) {
     // คำนวณรายได้ค่าบริการสุทธิของฮับ (GMV - ยอดจ่ายแม่ค้า - ค่ารอบไรเดอร์)
     const hubNetMargin = report.summary.totalCustomerGMV - report.vendorSettlement.totalVendorAmount - report.riderSettlement.totalRiderFees;
 
+    const riderApps = loadRiderApplications();
+    const pendingRiderApps = riderApps.filter(a => a.status === 'pending');
+    let pendingBannerHtml = '';
+    if (pendingRiderApps.length > 0) {
+        pendingBannerHtml = `
+        <div class="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 rounded-3xl p-3.5 sm:p-4 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-pulse border border-amber-300">
+            <div class="flex items-center gap-3">
+                <span class="w-11 h-11 rounded-2xl bg-white/25 backdrop-blur-md text-white flex items-center justify-center font-bold text-2xl shrink-0 shadow-xs">
+                    🛵
+                </span>
+                <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-black text-sm sm:text-base">มีใบสมัครร่วมทีมไรเดอร์ใหม่ ${pendingRiderApps.length} รายการ</span>
+                        <span class="bg-white text-orange-700 font-black text-[10px] px-2.5 py-0.5 rounded-full shadow-xs">รอแอดมินอนุมัติ</span>
+                    </div>
+                    <p class="text-xs text-white/90 mt-0.5 font-medium">ผู้สมัครล่าสุด: <strong class="text-white underline">${pendingRiderApps[0].fullName}</strong> (${pendingRiderApps[0].phone}) • สมัครเข้ามาแล้ว</p>
+                </div>
+            </div>
+            <button onclick="switchAdminTab('riders')" class="px-4 py-2.5 bg-white hover:bg-amber-50 text-orange-700 font-black rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer">
+                <span class="material-symbols-outlined text-base font-bold">check_circle</span>
+                <span>ดูใบสมัครและกดอนุมัติทันที 🚀</span>
+            </button>
+        </div>
+        `;
+    }
+
     let html = `
+    ${pendingBannerHtml}
     <!-- Top Filter Bar & Controls -->
     <div class="bg-white rounded-3xl p-3 sm:p-4 border border-slate-200 shadow-sm space-y-3">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
@@ -7659,6 +7686,7 @@ function renderAdminView() {
     if (disp && state.activeAdmin) {
         disp.textContent = `${state.activeAdmin.name} (${state.activeAdmin.role})`;
     }
+    updateAdminRiderBadges();
     switchAdminTab(_activeAdminTab || "report");
 }
 
@@ -7875,7 +7903,12 @@ function loadCommunityRiders() {
 
 function saveCommunityRiders(list) {
     try {
-        localStorage.setItem("talathub_community_riders", JSON.stringify(list));
+        localStorage.setItem("talathub_community_riders", JSON.stringify(list || []));
+        if (isFirebaseReady() && db) {
+            db.ref("community_riders").set(list || []).catch(err => {
+                console.warn("Firebase save community_riders failed:", err);
+            });
+        }
     } catch (e) {
         console.error("Error saving community riders:", e);
     }
@@ -7892,44 +7925,155 @@ function loadRiderApplications() {
     } catch (e) {
         console.error("Error loading rider applications:", e);
     }
-    // ตัวอย่างใบสมัครเริ่มต้นสำหรับให้ทดสอบระบบอนุมัติได้ทันที
-    const defaultApps = [
-        {
-            id: "APP-RD-101",
-            fullName: "นายธีรภัทร ส่งไว",
-            nickname: "บอล",
-            phone: "0897654321",
-            lineId: "ball_rider88",
-            idCard: "1209900123456",
-            address: "124/5 ต.หัวกุญแจ อ.บ้านบึง จ.ชลบุรี",
-            motorcycleModel: "Honda Wave 110i",
-            motorcycleColor: "แดง-ดำ",
-            plate: "2กง 4567 ชลบุรี",
-            drivingLicense: "65008912",
-            zone: "ตลาดหัวกุญแจ และละแวกใกล้เคียง (ระยะ 5 กม.)",
-            shifts: ["รอบเช้า (06:00-11:00)", "รอบเที่ยง (11:00-15:00)"],
-            equipments: ["มีกล่อง/กระเป๋าเก็บความเย็น", "มีที่ยึดมือถือแฮนด์รถ", "มีสายรัดสัมภาระ", "มีหมวกกันน็อก"],
-            promptPayNumber: "0897654321",
-            promptPayBank: "กสิกรไทย",
-            appliedAt: new Date(Date.now() - 3600000).toISOString(),
-            status: "pending",
-            notes: ""
-        }
-    ];
-    saveRiderApplications(defaultApps);
-    return defaultApps;
+    return [];
 }
 
 function saveRiderApplications(apps) {
     try {
-        localStorage.setItem("talathub_rider_applications", JSON.stringify(apps));
+        localStorage.setItem("talathub_rider_applications", JSON.stringify(apps || []));
         if (isFirebaseReady() && db) {
-            db.ref("rider_applications").set(apps).catch(() => {});
+            db.ref("rider_applications").set(apps || []).catch(err => {
+                console.warn("Firebase save rider_applications failed:", err);
+            });
         }
     } catch (e) {
         console.error("Error saving rider applications:", e);
     }
 }
+
+// ── Realtime Firebase Sync for Riders & Applications
+let _isRiderSyncInitialized = false;
+
+function initRiderRealtimeSync() {
+    if (!isFirebaseReady() || _isRiderSyncInitialized) return;
+    _isRiderSyncInitialized = true;
+
+    // 1. Sync Rider Applications from Firebase
+    db.ref("rider_applications").on("value", snapshot => {
+        try {
+            const data = snapshot.val();
+            if (data && Array.isArray(data)) {
+                localStorage.setItem("talathub_rider_applications", JSON.stringify(data));
+                updateAdminRiderBadges();
+                if (state.currentRole === "admin") {
+                    if (_activeAdminTab === "riders") {
+                        renderAdminRiders();
+                    } else if (_activeAdminTab === "report") {
+                        renderAdminReport();
+                    }
+                }
+            } else if (!data) {
+                const localApps = loadRiderApplications();
+                if (localApps && localApps.length > 0) {
+                    db.ref("rider_applications").set(localApps).catch(() => {});
+                }
+            }
+        } catch (err) {
+            console.warn("Error syncing rider_applications:", err);
+        }
+    });
+
+    // 2. Sync Community Riders from Firebase
+    db.ref("community_riders").on("value", snapshot => {
+        try {
+            const data = snapshot.val();
+            if (data && Array.isArray(data)) {
+                localStorage.setItem("talathub_community_riders", JSON.stringify(data));
+                if (state.currentRole === "admin" && _activeAdminTab === "riders") {
+                    renderAdminRiders();
+                }
+                checkCurrentRiderApprovalRealtime(data);
+            } else if (!data) {
+                const localRiders = loadCommunityRiders();
+                if (localRiders && localRiders.length > 0) {
+                    db.ref("community_riders").set(localRiders).catch(() => {});
+                }
+            }
+        } catch (err) {
+            console.warn("Error syncing community_riders:", err);
+        }
+    });
+}
+window.initRiderRealtimeSync = initRiderRealtimeSync;
+
+function updateAdminRiderBadges() {
+    const apps = loadRiderApplications();
+    const pendingCount = apps.filter(a => a.status === "pending").length;
+
+    // Badge on Admin Tab (แท็บ 4. จัดการไรเดอร์ & ค่ารอบ)
+    const tabBadge = document.getElementById("admin-riders-badge");
+    if (tabBadge) {
+        if (pendingCount > 0) {
+            tabBadge.textContent = `${pendingCount} รออนุมัติ`;
+            tabBadge.className = "ml-1 px-1.5 py-0.5 text-[10px] font-black bg-amber-500 text-slate-950 rounded-full animate-pulse shadow-xs";
+            tabBadge.classList.remove("hidden");
+        } else {
+            tabBadge.classList.add("hidden");
+        }
+    }
+
+    // Badge on Main Navigation Bar (ปุ่ม 5. แอดมิน)
+    const roleBadge = document.getElementById("role-admin-badge");
+    if (roleBadge) {
+        if (pendingCount > 0) {
+            roleBadge.classList.remove("hidden");
+        } else {
+            roleBadge.classList.add("hidden");
+        }
+    }
+}
+window.updateAdminRiderBadges = updateAdminRiderBadges;
+
+function checkCurrentRiderApprovalRealtime(ridersList) {
+    if (!_lastSubmittedRiderApp) return;
+    const cleanPhone = (_lastSubmittedRiderApp.phone || "").replace(/[-\s]/g, "");
+    const approvedRider = (ridersList || []).find(r => (r.phone || "").replace(/[-\s]/g, "") === cleanPhone);
+
+    if (approvedRider) {
+        const statusBadge = document.getElementById("nextstep-app-status");
+        if (statusBadge) {
+            statusBadge.className = "bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black px-2.5 py-0.5 rounded-full";
+            statusBadge.textContent = "✅ ได้รับอนุมัติแล้ว!";
+        }
+    }
+}
+
+function syncPromptPayWithPhone() {
+    const phoneInput = document.getElementById("reg-rider-phone");
+    const ppInput = document.getElementById("reg-rider-promptpay");
+    if (!phoneInput || !ppInput) return;
+    const phone = phoneInput.value.trim().replace(/[-\s]/g, "");
+    if (!ppInput.value || ppInput.dataset.autoFilled === "true") {
+        ppInput.value = phone;
+        ppInput.dataset.autoFilled = "true";
+    }
+}
+window.syncPromptPayWithPhone = syncPromptPayWithPhone;
+
+function fillPromptPayWith(type) {
+    const ppInput = document.getElementById("reg-rider-promptpay");
+    if (!ppInput) return;
+    if (type === "phone") {
+        const phone = document.getElementById("reg-rider-phone")?.value.trim().replace(/[-\s]/g, "");
+        if (!phone) {
+            showToast("⚠️ กรุณากรอกเบอร์โทรศัพท์ในข้อ 1 ก่อนครับ");
+            return;
+        }
+        ppInput.value = phone;
+        ppInput.dataset.autoFilled = "false";
+        showToast("⚡ นำเบอร์มือถือมาเป็นพร้อมเพย์เรียบร้อย");
+    } else if (type === "idcard") {
+        const idcard = document.getElementById("reg-rider-idcard")?.value.trim().replace(/[-\s]/g, "");
+        if (!idcard) {
+            showToast("⚠️ กรุณากรอกเลขบัตรประชาชนในข้อ 1 ก่อนครับ");
+            return;
+        }
+        ppInput.value = idcard;
+        ppInput.dataset.autoFilled = "false";
+        showToast("⚡ นำเลขบัตร ปชช. มาเป็นพร้อมเพย์เรียบร้อย");
+    }
+}
+window.fillPromptPayWith = fillPromptPayWith;
 
 function formatRiderAppDate(isoStr) {
     if (!isoStr) return "-";
@@ -7968,15 +8112,28 @@ window.closeRiderRegisterModal = closeRiderRegisterModal;
 function handleRiderRegisterSubmit(e) {
     if (e && e.preventDefault) e.preventDefault();
 
+    function markInvalidField(id, message) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            el.focus();
+            el.classList.add("ring-2", "ring-rose-500", "border-rose-500");
+            setTimeout(() => {
+                el.classList.remove("ring-2", "ring-rose-500", "border-rose-500");
+            }, 3000);
+        }
+        showToast(message);
+    }
+
     const fullName = document.getElementById("reg-rider-fullname")?.value.trim();
     const nickname = document.getElementById("reg-rider-nickname")?.value.trim();
     const phone = document.getElementById("reg-rider-phone")?.value.trim().replace(/[-\s]/g, "");
     const lineId = document.getElementById("reg-rider-line")?.value.trim();
     const idCard = document.getElementById("reg-rider-idcard")?.value.trim().replace(/[-\s]/g, "");
-    const address = document.getElementById("reg-rider-address")?.value.trim();
+    const address = document.getElementById("reg-rider-address")?.value.trim() || "";
 
     const motorcycleModel = document.getElementById("reg-rider-model")?.value.trim();
-    const motorcycleColor = document.getElementById("reg-rider-color")?.value.trim();
+    const motorcycleColor = document.getElementById("reg-rider-color")?.value.trim() || "";
     const plate = document.getElementById("reg-rider-plate")?.value.trim();
     const drivingLicense = document.getElementById("reg-rider-license")?.value.trim();
 
@@ -7995,22 +8152,48 @@ function handleRiderRegisterSubmit(e) {
     if (document.getElementById("reg-eq-strap")?.checked) equipments.push("มีสายรัดสัมภาระ");
     if (document.getElementById("reg-eq-helmet")?.checked) equipments.push("มีหมวกกันน็อก");
 
-    const promptPayNumber = document.getElementById("reg-rider-promptpay")?.value.trim();
+    // PromptPay: Auto-fallback to phone if empty
+    let promptPayNumber = document.getElementById("reg-rider-promptpay")?.value.trim().replace(/[-\s]/g, "");
+    if (!promptPayNumber && phone) {
+        promptPayNumber = phone;
+    }
     const promptPayBank = document.getElementById("reg-rider-bank")?.value || "พร้อมเพย์";
 
-    if (!fullName || !phone || !plate || !idCard || !promptPayNumber) {
-        showToast("⚠️ กรุณากรอกข้อมูลที่จำเป็น (*) ให้ครบถ้วน");
+    // Step-by-Step validation with smooth scroll & focus
+    if (!fullName) {
+        markInvalidField("reg-rider-fullname", "⚠️ กรุณากรอกชื่อ - นามสกุลจริงของผู้สมัคร");
         return;
     }
-
-    if (phone.length < 9 || phone.length > 10) {
-        showToast("⚠️ กรุณาระบุเบอร์โทรศัพท์มือถือ 10 หลักให้ถูกต้อง");
+    if (!nickname) {
+        markInvalidField("reg-rider-nickname", "⚠️ กรุณากรอกชื่อเล่น");
         return;
     }
-
-    if (idCard.length !== 13) {
-        showToast("⚠️ กรุณาระบุเลขประจำตัวประชาชน 13 หลักให้ถูกต้อง");
+    if (!phone || phone.length < 9 || phone.length > 10) {
+        markInvalidField("reg-rider-phone", "⚠️ กรุณาระบุเบอร์โทรศัพท์มือถือ 10 หลักให้ถูกต้อง");
         return;
+    }
+    if (!lineId) {
+        markInvalidField("reg-rider-line", "⚠️ กรุณากรอก LINE ID สำหรับประสานงานด่วน");
+        return;
+    }
+    if (!idCard || idCard.length !== 13) {
+        markInvalidField("reg-rider-idcard", "⚠️ กรุณาระบุเลขประจำตัวประชาชน 13 หลักให้ถูกต้อง");
+        return;
+    }
+    if (!motorcycleModel) {
+        markInvalidField("reg-rider-model", "⚠️ กรุณากรอกยี่ห้อ / รุ่นรถมอเตอร์ไซค์");
+        return;
+    }
+    if (!plate) {
+        markInvalidField("reg-rider-plate", "⚠️ กรุณากรอกหมายเลขทะเบียนรถ & จังหวัด");
+        return;
+    }
+    if (!drivingLicense) {
+        markInvalidField("reg-rider-license", "⚠️ กรุณากรอกเลขที่ใบอนุญาตขับขี่");
+        return;
+    }
+    if (!promptPayNumber) {
+        promptPayNumber = phone;
     }
 
     // Check if phone already registered in community riders
@@ -8028,7 +8211,6 @@ function handleRiderRegisterSubmit(e) {
     if (existingApp) {
         _lastSubmittedRiderApp = existingApp;
         showToast(`ℹ️ เบอร์ ${phone} ได้ส่งใบสมัครไว้แล้ว (${existingApp.id}) อยู่ระหว่างรอแอดมินอนุมัติครับ`);
-        // Populate and switch to step 2 view
         populateRiderSuccessView(existingApp);
         return;
     }
@@ -8064,11 +8246,16 @@ function handleRiderRegisterSubmit(e) {
 
     // Show step 2 (Success and next step options)
     populateRiderSuccessView(newApp);
+    updateAdminRiderBadges();
 
-    showToast(`🎉 ส่งใบสมัครสำเร็จ! รหัส ${newApp.id} ส่งต่อไปยังขั้นตอนอนุมัติแล้ว`);
+    showToast(`🎉 ส่งใบสมัครสำเร็จ! รหัส ${newApp.id} ข้อมูลส่งถึงแอดมินเรียบร้อยแล้ว`);
 
     if (state.currentRole === "admin") {
-        renderAdminRiders();
+        if (_activeAdminTab === "riders") {
+            renderAdminRiders();
+        } else if (_activeAdminTab === "report") {
+            renderAdminReport();
+        }
     }
 }
 window.handleRiderRegisterSubmit = handleRiderRegisterSubmit;
@@ -8227,13 +8414,14 @@ function approveRiderApplication(appId) {
             lng: Number((MARKET_ORIGIN.lng + (Math.random() - 0.5) * 0.01).toFixed(4)),
             avatar: "🛵",
             motorcycleModel: app.motorcycleModel || "",
-            promptPay: app.promptPayNumber || "",
+            promptPay: app.promptPayNumber || app.phone || "",
             codSettledToday: 0
         };
         riders.push(newRider);
         saveCommunityRiders(riders);
     }
 
+    updateAdminRiderBadges();
     showToast(`🎉 อนุมัติ ${displayName} เป็นไรเดอร์เรียบร้อยแล้ว! ไรเดอร์สามารถล็อกอินรับงานได้ทันที`);
     renderAdminRiders();
     setTimeout(() => initAdminRiderRadarMap(), 150);
@@ -8249,6 +8437,7 @@ function rejectRiderApplication(appId) {
         app.status = "rejected";
         app.rejectedAt = new Date().toISOString();
         saveRiderApplications(apps);
+        updateAdminRiderBadges();
         showToast(`❌ ปฏิเสธใบสมัครของ ${app.fullName} เรียบร้อยแล้ว`);
         renderAdminRiders();
     }
@@ -8280,6 +8469,7 @@ function renderAdminRiders() {
     const container = document.getElementById("admin-content-riders");
     if (!container) return;
 
+    updateAdminRiderBadges();
     const riders = loadCommunityRiders();
     const settings = loadRiderFleetSettings();
     const applications = loadRiderApplications();
@@ -12539,6 +12729,14 @@ function initTalatHubApp() {
     renderCatalog();
     updateCartUI();
     initHeroBannerCarousel();
+    updateAdminRiderBadges();
+    initRiderRealtimeSync();
+    if (!isFirebaseReady()) {
+        setTimeout(() => {
+            initRiderRealtimeSync();
+            updateAdminRiderBadges();
+        }, 1500);
+    }
 }
 
 if (document.readyState === 'loading') {
