@@ -7861,14 +7861,28 @@ function renderMerchantActiveDeliveries() {
     if (!container) return;
 
     const orders = state.merchantExpressOrders || [];
-    const activeOrders = orders.filter(o => o.originStall?.stallId === activeMerchantStallId || !o.originStall);
+    // กรองเฉพาะงานของแผงค้านี้
+    const activeOrders = orders.filter(o => {
+        if (!o || !o.orderId) return false;
+        if (activeMerchantStallId && o.originStall?.stallId) {
+            return o.originStall.stallId === activeMerchantStallId;
+        }
+        return true;
+    });
 
     if (activeOrders.length === 0 && (!state.activeOrder || state.activeOrder.orderType !== "MERCHANT_EXPRESS")) {
         container.innerHTML = "";
         return;
     }
 
-    const order = (state.activeOrder && state.activeOrder.orderType === "MERCHANT_EXPRESS") ? state.activeOrder : activeOrders[0];
+    // เลือกออเดอร์ที่แผงค้ากำลังดูอยู่ (หรือออเดอร์ล่าสุด)
+    let order = null;
+    if (state.selectedMerchantExpressOrderId) {
+        order = activeOrders.find(o => o.orderId === state.selectedMerchantExpressOrderId);
+    }
+    if (!order) {
+        order = (state.activeOrder && state.activeOrder.orderType === "MERCHANT_EXPRESS") ? state.activeOrder : activeOrders[0];
+    }
     if (!order) {
         container.innerHTML = "";
         return;
@@ -7881,21 +7895,73 @@ function renderMerchantActiveDeliveries() {
         avatar: "🛵"
     };
 
+    // คำนวณสถานะ 4 สเต็ป
+    const isStep1Done = true; // ส่งงานเข้าฮับแล้วเสมอ
+    const isStep2Done = order.status === "assigned" || order.status === "delivering" || order.status === "delivered";
+    const isStep3Done = order.status === "delivering" || order.status === "delivered";
+    const isStep4Done = order.status === "delivered";
+
+    let progressPercent = 15;
     let statusText = "⏳ รอกำลังพลจากฮับ";
-    let statusClass = "bg-amber-100 text-amber-800 border-amber-300";
+    let statusClass = "bg-amber-500/20 text-amber-300 border-amber-400/40";
+    let etaText = "⏳ ฮับกำลังจัดสรรไรเดอร์ (~3-5 นาที)";
+
     if (order.status === "assigned") {
+        progressPercent = 48;
         statusText = "🛵 ไรเดอร์กำลังมารับของที่แผง";
-        statusClass = "bg-sky-100 text-sky-800 border-sky-300 animate-pulse";
+        statusClass = "bg-sky-500/20 text-sky-300 border-sky-400/50 animate-pulse";
+        etaText = `🛵 ${rider.name} กำลังเดินทางมาที่แผง (~2-4 นาที)`;
     } else if (order.status === "delivering") {
+        progressPercent = 80;
         statusText = "📦 ไรเดอร์รับของแล้ว กำลังนำส่งลูกค้า";
-        statusClass = "bg-purple-100 text-purple-800 border-purple-300 animate-pulse";
+        statusClass = "bg-purple-500/20 text-purple-300 border-purple-400/50 animate-pulse";
+        etaText = `📦 ไรเดอร์กำลังมุ่งหน้าไปบ้านลูกค้า (~8-12 นาที)`;
     } else if (order.status === "delivered") {
+        progressPercent = 100;
         statusText = "✅ ส่งถึงมือลูกค้าเรียบร้อยแล้ว";
-        statusClass = "bg-emerald-100 text-emerald-800 border-emerald-300";
+        statusClass = "bg-emerald-500/20 text-emerald-300 border-emerald-400/50";
+        etaText = "🎉 จัดส่งสำเร็จเรียบร้อย!";
+    } else if (order.status === "cancelled") {
+        progressPercent = 0;
+        statusText = "🚫 ยกเลิกคำขอแล้ว";
+        statusClass = "bg-rose-500/20 text-rose-300 border-rose-400/50";
+        etaText = "คำขอเรียกรถนี้ถูกยกเลิกแล้ว";
+    }
+
+    // จัดการระยะทางให้เป็นตัวเลขที่ถูกต้องเสมอ
+    let distDisplay = "0.8";
+    if (order.distanceKm !== undefined && order.distanceKm !== null) {
+        const parsedDist = parseFloat(order.distanceKm);
+        if (!isNaN(parsedDist) && parsedDist > 0 && parsedDist < 100) {
+            distDisplay = parsedDist.toFixed(1);
+        }
+    }
+
+    // แถบสลับดูงานที่กำลังวิ่งอยู่ทั้งหมด (Multi-Order Selector)
+    let multiOrderTabsHtml = "";
+    if (activeOrders.length > 1) {
+        multiOrderTabsHtml = `
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs border-b border-white/10">
+                <span class="text-[10px] text-slate-300 shrink-0 font-bold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs text-orange-400">swap_horiz</span>
+                    <span>สลับดูงานแผงคุณ (${activeOrders.length}):</span>
+                </span>
+                ${activeOrders.map(o => {
+                    const isSel = o.orderId === order.orderId;
+                    const stIcon = o.status === 'delivered' ? '✅' : (o.status === 'delivering' ? '📦' : (o.status === 'cancelled' ? '🚫' : '🛵'));
+                    return `
+                        <button type="button" onclick="selectMerchantExpressOrder('${o.orderId}')" class="px-2.5 py-1 rounded-full text-[10px] font-extrabold shrink-0 transition-all cursor-pointer flex items-center gap-1 ${isSel ? 'bg-orange-500 text-white shadow-md ring-2 ring-orange-300/60' : 'bg-white/10 text-slate-300 hover:bg-white/20'}">
+                            <span>${stIcon}</span>
+                            <span>${o.orderId} (${o.customerName || 'ลูกค้า'})</span>
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        `;
     }
 
     container.innerHTML = `
-        <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-3xl p-4 shadow-xl border-2 border-orange-500/80 space-y-3.5 animate-fade-in">
+        <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-3xl p-4 shadow-2xl border-2 border-orange-500/80 space-y-3.5 animate-fade-in text-left">
             <!-- Step 3 Progress Banner -->
             <div class="bg-orange-500/20 border border-orange-400/40 rounded-2xl px-3 py-1.5 flex items-center justify-between text-[11px]">
                 <div class="flex items-center gap-1.5 text-orange-200 font-extrabold">
@@ -7905,7 +7971,9 @@ function renderMerchantActiveDeliveries() {
                 <span class="text-[10px] bg-white/15 text-orange-300 px-2 py-0.5 rounded-full font-bold">ส่งงานเข้าฮับสำเร็จ</span>
             </div>
 
-            <!-- Header -->
+            ${multiOrderTabsHtml}
+
+            <!-- Header with Live Status Badge -->
             <div class="flex items-center justify-between border-b border-white/10 pb-2.5">
                 <div class="flex items-center gap-2">
                     <span class="w-8 h-8 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-md">⚡</span>
@@ -7922,6 +7990,55 @@ function renderMerchantActiveDeliveries() {
                 </span>
             </div>
 
+            <!-- Visual Progress Stepped Timeline (4 สเต็ป คืบหน้าเหมือนลูกค้าเห็น) -->
+            <div class="bg-black/35 rounded-2xl p-3 border border-white/10 space-y-2">
+                <div class="flex items-center justify-between text-[11px]">
+                    <span class="text-orange-300 font-bold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">timeline</span>
+                        <span>ไทม์ไลน์ความคืบหน้าของไรเดอร์</span>
+                    </span>
+                    <span class="text-[10px] text-slate-300 font-medium">${etaText}</span>
+                </div>
+                <div class="relative flex items-center justify-between pt-1 px-3">
+                    <!-- Background Line -->
+                    <div class="absolute left-7 right-7 top-4 h-1 bg-white/15 -translate-y-1/2 z-0"></div>
+                    <!-- Active Gradient Progress Line -->
+                    <div class="absolute left-7 top-4 h-1 bg-gradient-to-r from-orange-500 via-sky-500 to-emerald-400 -translate-y-1/2 z-0 transition-all duration-500" style="width: calc(${progressPercent}% * 0.85);"></div>
+
+                    <!-- Step 1: เข้าฮับ -->
+                    <div class="relative z-10 flex flex-col items-center text-center">
+                        <div class="w-6 h-6 rounded-full bg-orange-500 text-white ring-2 ring-orange-400 flex items-center justify-center text-[10px] font-bold shadow-md">
+                            ✓
+                        </div>
+                        <span class="text-[9px] font-extrabold mt-1 text-orange-200">1. เข้าฮับ</span>
+                    </div>
+
+                    <!-- Step 2: ไรเดอร์รับงาน -->
+                    <div class="relative z-10 flex flex-col items-center text-center">
+                        <div class="w-6 h-6 rounded-full ${isStep2Done ? 'bg-sky-500 text-white ring-2 ring-sky-400' : (order.status === 'waiting_rider' ? 'bg-slate-700 text-slate-300 ring-2 ring-amber-400 animate-pulse' : 'bg-slate-700 text-slate-400')} flex items-center justify-center text-[10px] font-bold shadow-md">
+                            ${isStep2Done ? '✓' : '2'}
+                        </div>
+                        <span class="text-[9px] font-extrabold mt-1 ${isStep2Done ? 'text-sky-300' : 'text-slate-400'}">2. ไรเดอร์รับงาน</span>
+                    </div>
+
+                    <!-- Step 3: รับของที่แผง -->
+                    <div class="relative z-10 flex flex-col items-center text-center">
+                        <div class="w-6 h-6 rounded-full ${isStep3Done ? 'bg-purple-500 text-white ring-2 ring-purple-400' : (order.status === 'assigned' ? 'bg-sky-600 text-white ring-2 ring-sky-300 animate-pulse' : 'bg-slate-700 text-slate-400')} flex items-center justify-center text-[10px] font-bold shadow-md">
+                            ${isStep3Done ? '✓' : '3'}
+                        </div>
+                        <span class="text-[9px] font-extrabold mt-1 ${isStep3Done ? 'text-purple-300' : (order.status === 'assigned' ? 'text-sky-200' : 'text-slate-400')}">3. รับของที่แผง</span>
+                    </div>
+
+                    <!-- Step 4: ส่งถึงลูกค้า -->
+                    <div class="relative z-10 flex flex-col items-center text-center">
+                        <div class="w-6 h-6 rounded-full ${isStep4Done ? 'bg-emerald-500 text-white ring-2 ring-emerald-300' : (order.status === 'delivering' ? 'bg-purple-600 text-white ring-2 ring-purple-300 animate-pulse' : 'bg-slate-700 text-slate-400')} flex items-center justify-center text-[10px] font-bold shadow-md">
+                            ${isStep4Done ? '✓' : '4'}
+                        </div>
+                        <span class="text-[9px] font-extrabold mt-1 ${isStep4Done ? 'text-emerald-300' : (order.status === 'delivering' ? 'text-purple-200' : 'text-slate-400')}">4. ส่งถึงลูกค้า</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Order info summary -->
             <div class="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-1.5 text-xs">
                 <div class="flex justify-between items-start">
@@ -7936,7 +8053,7 @@ function renderMerchantActiveDeliveries() {
                 </div>
                 <div class="text-[10px] text-slate-300 truncate">📍 ที่อยู่จัดส่ง: ${order.address}</div>
                 <div class="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-white/10">
-                    <span>ระยะทาง ~${order.distanceKm || 0.8} กม. • ค่าส่ง ฿${order.deliveryFee || 20}</span>
+                    <span>ระยะทาง ~${distDisplay} กม. • ค่าส่ง ฿${order.deliveryFee || 20}</span>
                     <span class="text-emerald-400 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
                         <span class="material-symbols-outlined text-xs">verified</span>
                         <span>ชำระค่าส่งเข้าฮับแล้ว (฿${order.deliveryFee || 20})</span>
@@ -7960,39 +8077,200 @@ function renderMerchantActiveDeliveries() {
                             <div class="text-[10px] text-slate-300">ทะเบียน: ${rider.plate || 'รถตลาดวิศิษฐ์ชัย'} • เบอร์โทร: ${rider.phone || '-'}</div>
                         </div>
                     </div>
+                    ${order.status === "delivered" ? `
+                        <button type="button" onclick="viewMerchantDeliveryProof('${order.orderId}')" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer shrink-0">
+                            <span class="material-symbols-outlined text-sm">photo_camera</span>
+                            <span>ดูรูปหลักฐาน</span>
+                        </button>
+                    ` : ''}
                 </div>
             </div>
 
-            <!-- Action Buttons: Call, Chat, Radar, Slip -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+            <!-- Main Action Bar: Call, Chat, Radar, Slip + Share to LINE -->
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 text-xs">
+                <!-- 1. ปุ่มแชร์ LINE ให้ลูกค้า -->
+                <button type="button" onclick="shareMerchantTrackingToLine('${order.orderId}')" class="p-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-black flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="ส่งลิงก์ติดตามไรเดอร์ให้ลูกค้าทาง LINE">
+                    <span class="material-symbols-outlined text-sm">send</span>
+                    <span>แชร์ LINE ลูกค้า</span>
+                </button>
+                <!-- 2. โทรหาไรเดอร์ -->
                 <button type="button" onclick="callRiderFromMerchant('${rider.phone}')" class="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">call</span>
                     <span>โทรหาไรเดอร์</span>
                 </button>
+                <!-- 3. แชทไรเดอร์ -->
                 <button type="button" onclick="openMerchantRiderChat('${order.orderId}')" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">chat</span>
-                    <span>แชทกับไรเดอร์</span>
+                    <span>แชทไรเดอร์</span>
                 </button>
+                <!-- 4. ดูเรดาร์สด -->
                 <button type="button" onclick="viewOrderOnRadar('${order.orderId}')" class="p-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">radar</span>
                     <span>ดูเรดาร์สด</span>
                 </button>
+                <!-- 5. สลิป 80mm -->
                 <button type="button" onclick="printMerchantExpressSlip('${order.orderId}')" class="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">print</span>
                     <span>สลิป 80mm</span>
                 </button>
             </div>
 
-            <!-- New Order CTA Button -->
-            <div class="pt-2 border-t border-white/10 flex items-center justify-between">
-                <span class="text-[10px] text-slate-300">มีออเดอร์ลูกค้าคนอื่นอีกไหม?</span>
-                <button type="button" onclick="resetAndFocusMerchantForm()" class="px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer">
-                    <span class="material-symbols-outlined text-xs">add</span>
-                    <span>ส่งของออเดอร์ถัดไป ➕</span>
+            <!-- Footer Toolbar: Cancel Order & New Order Button -->
+            <div class="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div>
+                    ${(order.status === "waiting_rider" || order.status === "assigned") ? `
+                        <button type="button" onclick="cancelMerchantExpressOrder('${order.orderId}')" class="text-[11px] text-rose-300 hover:text-rose-100 hover:underline flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-sm">cancel</span>
+                            <span>ขอยกเลิกคำขอเรียกไรเดอร์</span>
+                        </button>
+                    ` : `
+                        <span class="text-[10px] text-slate-300">มีออเดอร์ลูกค้าคนอื่นอีกไหม?</span>
+                    `}
+                </div>
+                <button type="button" onclick="resetAndFocusMerchantForm()" class="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">add</span>
+                    <span>+ ส่งของออเดอร์ถัดไป ➕</span>
                 </button>
             </div>
         </div>
     `;
+}
+
+function selectMerchantExpressOrder(orderId) {
+    state.selectedMerchantExpressOrderId = orderId;
+    const found = (state.merchantExpressOrders || []).find(o => o.orderId === orderId);
+    if (found) {
+        state.activeOrder = found;
+    }
+    renderMerchantActiveDeliveries();
+    showToast(`🔍 สลับแสดงความคืบหน้างาน ${orderId}`);
+}
+
+function shareMerchantTrackingToLine(orderId) {
+    const orders = state.merchantExpressOrders || [];
+    const order = orders.find(o => o.orderId === orderId) || (state.activeOrder?.orderId === orderId ? state.activeOrder : orders[0]);
+    if (!order) {
+        showToast("⚠️ ไม่พบข้อมูลคำสั่งซื้อ");
+        return;
+    }
+
+    const origin = order.originStall || {};
+    const rider = order.assignedRider || { name: "ฮับกำลังจัดสรรไรเดอร์", phone: "-" };
+    const trackingUrl = `${window.location.origin}${window.location.pathname}?track=${order.orderId}`;
+
+    const text = `🛵 [ตลาดฮับวิศิษฐ์ชัย] แจ้งสถานะการจัดส่งของสด\n` +
+        `🏪 ร้านค้า: ${origin.stallName || 'แผงค้าในตลาด'} (${origin.stallNumber || 'แผงค้า'})\n` +
+        `📦 รหัสงาน: ${order.orderId}\n` +
+        `👤 ผู้รับ: คุณ${order.customerName || 'ลูกค้า'}\n` +
+        `📍 ที่อยู่จัดส่ง: ${order.address || '-'}\n` +
+        `🛵 ไรเดอร์ผู้ส่ง: ${rider.name} (โทร: ${rider.phone || '-'})\n` +
+        `🔗 ตรวจสอบพิกัดและสถานะไรเดอร์สด: ${trackingUrl}`;
+
+    if (typeof isMobileDevice === "function" && isMobileDevice()) {
+        const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
+        window.open(lineUrl, '_blank');
+    } else {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast("📋 คัดลอกข้อความสำหรับส่งให้ลูกค้าทาง LINE เรียบร้อยแล้ว!");
+            }).catch(() => {
+                if (typeof showLinePcModal === "function") {
+                    showLinePcModal("ข้อความติดตามออเดอร์สำหรับส่งให้ลูกค้าใน LINE", text);
+                } else {
+                    alert(text);
+                }
+            });
+        } else {
+            if (typeof showLinePcModal === "function") {
+                showLinePcModal("ข้อความติดตามออเดอร์สำหรับส่งให้ลูกค้าใน LINE", text);
+            } else {
+                alert(text);
+            }
+        }
+    }
+}
+
+function viewMerchantDeliveryProof(orderId) {
+    const orders = state.merchantExpressOrders || [];
+    const order = orders.find(o => o.orderId === orderId) || (state.activeOrder?.orderId === orderId ? state.activeOrder : null);
+    if (!order) return;
+
+    let modal = document.getElementById("merchant-proof-modal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "merchant-proof-modal";
+        modal.className = "fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 animate-fade-in";
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove("hidden");
+    const rider = order.assignedRider || { name: "ไรเดอร์ประจำตลาด", plate: "-" };
+    modal.innerHTML = `
+        <div class="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-scale-up text-slate-800 text-left">
+            <div class="flex items-center justify-between border-b pb-2.5">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">📸</span>
+                    <h3 class="font-extrabold text-sm text-slate-900">หลักฐานการจัดส่งสำเร็จ</h3>
+                </div>
+                <button type="button" onclick="document.getElementById('merchant-proof-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold">✕</button>
+            </div>
+            <div class="rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 relative aspect-4/3 flex items-center justify-center">
+                <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80" alt="หลักฐานการจัดส่ง" class="w-full h-full object-cover">
+                <div class="absolute bottom-2 left-2 right-2 bg-black/70 backdrop-blur-md rounded-xl p-2 text-white text-[10px] space-y-0.5">
+                    <div class="font-bold flex items-center justify-between">
+                        <span>${order.orderId} • ส่งมอบแล้ว</span>
+                        <span class="text-emerald-400">✓ ยืนยัน GPS</span>
+                    </div>
+                    <div class="text-slate-300 truncate">📍 ${order.address}</div>
+                </div>
+            </div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-xs space-y-1">
+                <div class="font-bold text-emerald-900 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm text-emerald-600">verified</span>
+                    <span>ผู้รับของ: คุณ${order.customerName || 'ลูกค้า'}</span>
+                </div>
+                <div class="text-[11px] text-slate-600">ไรเดอร์ผู้จัดส่ง: ${rider.name} (${rider.plate || '-'})</div>
+                <div class="text-[10px] text-slate-500">เวลาจัดส่งเสร็จสิ้น: ${order.deliveredAt || order.time || 'วันนี้'}</div>
+            </div>
+            <button type="button" onclick="document.getElementById('merchant-proof-modal').classList.add('hidden')" class="w-full py-2.5 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                ปิดหน้าต่าง
+            </button>
+        </div>
+    `;
+}
+
+function cancelMerchantExpressOrder(orderId) {
+    const orders = state.merchantExpressOrders || [];
+    const order = orders.find(o => o.orderId === orderId) || (state.activeOrder?.orderId === orderId ? state.activeOrder : null);
+    if (!order) {
+        showToast("⚠️ ไม่พบคำสั่งซื้อ");
+        return;
+    }
+    if (order.status !== "waiting_rider" && order.status !== "assigned") {
+        showToast("⚠️ ไรเดอร์กำลังเดินทางนำส่งแล้ว ไม่สามารถยกเลิกได้ กรุณาติดต่อฮับ");
+        return;
+    }
+
+    if (!confirm(`ยืนยันการขอยกเลิกเรียกไรเดอร์สำหรับงาน ${order.orderId} หรือไม่?\n(ค่าบริการ ฿${order.deliveryFee} จะถูกประสานงานคืนให้แผงค้า)`)) {
+        return;
+    }
+
+    order.status = "cancelled";
+    order.cancelledAt = new Date().toISOString();
+    order.cancelReason = "ร้านค้ายกเลิกคำขอเรียกไรเดอร์";
+
+    if (state.activeOrder && state.activeOrder.orderId === order.orderId) {
+        state.activeOrder.status = "cancelled";
+    }
+
+    try {
+        localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(orders.slice(0, 20)));
+        localStorage.setItem("hsong_active_order", JSON.stringify(order));
+        localStorage.setItem("talathub_active_order", JSON.stringify(order));
+    } catch(e) {}
+
+    showToast(`🚫 ยกเลิกงาน ${order.orderId} เรียบร้อยแล้ว ประสานงานคืนค่าส่งเข้าแผงค้า`);
+    renderMerchantActiveDeliveries();
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
 }
 
 function callRiderFromMerchant(phone) {
