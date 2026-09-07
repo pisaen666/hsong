@@ -3939,6 +3939,294 @@ function printDailyReport(dateKey) {
 }
 
 // Global attachment
+
+// ── 8. พิมพ์ประวัติและใบสมัครไรเดอร์กระดาษ A4
+function printA4RiderApplication(appId) {
+    const apps = loadRiderApplications();
+    const app = apps.find(x => x.id === appId);
+    if (!app) {
+        showToast("⚠️ ไม่พบข้อมูลใบสมัคร");
+        return;
+    }
+    const thaiDate = formatThaiDateDisplay(getReportDateKey(app.appliedAt || Date.now()));
+    const printTime = new Date().toLocaleString("th-TH");
+    const statusThai = app.status === 'approved' ? 'อนุมัติแล้ว (เป็นไรเดอร์ประจำตลาด)' : (app.status === 'pending' ? 'รอการพิจารณา' : 'ปฏิเสธ');
+
+    const content = `
+        <div class="a4-header">
+            <div class="a4-title">ใบสมัครและประวัติไรเดอร์ร่วมทีม (Rider Profile & Application)</div>
+            <div class="a4-meta">
+                ตลาดสดฮับวิศิษฐ์ชัย • รหัสใบสมัคร: ${app.id} • วันที่ยื่น: ${thaiDate}
+            </div>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 16px; font-weight: bold; color: #1e293b;">${app.fullName} ${app.nickname ? `(${app.nickname})` : ''}</span>
+                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เบอร์โทรศัพท์: <strong>${app.phone}</strong> | LINE ID: <strong>${app.lineId || '-'}</strong></div>
+                </div>
+                <div style="text-align: right;">
+                    <span style="display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; background: ${app.status === 'approved' ? '#dcfce7; color: #166534;' : '#fef3c7; color: #92400e;'}">
+                        สถานะ: ${statusThai}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <table class="a4-table" style="margin-bottom: 14px;">
+            <thead>
+                <tr>
+                    <th colspan="2" style="background: #e2e8f0; color: #0f172a; text-align: left;">1. ข้อมูลส่วนบุคคลและการติดต่อ</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="width: 35%; font-weight: bold;">ชื่อ-นามสกุล (ชื่อเล่น):</td>
+                    <td>${app.fullName} ${app.nickname ? `(${app.nickname})` : ''}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold;">หมายเลขบัตรประจำตัวประชาชน:</td>
+                    <td>${app.idCard || '-'}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold;">ที่อยู่พักอาศัยปัจจุบัน:</td>
+                    <td>${app.address || 'อำเภอบ้านบึง จังหวัดชลบุรี'}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold;">โซนพื้นที่ที่สะดวกจัดส่ง:</td>
+                    <td>${app.zone || 'รอบตลาดสดวิศิษฐ์ชัย ชุมชนหนองชาก และอำเภอบ้านบึง'}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table class="a4-table" style="margin-bottom: 14px;">
+            <thead>
+                <tr>
+                    <th colspan="2" style="background: #e2e8f0; color: #0f172a; text-align: left;">2. ข้อมูลยานพาหนะและใบอนุญาตขับขี่</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="width: 35%; font-weight: bold;">รุ่นรถจักรยานยนต์ / สี:</td>
+                    <td>${app.motorcycleModel || '-'} ${app.motorcycleColor ? `(สี ${app.motorcycleColor})` : ''}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold;">หมายเลขทะเบียนรถ:</td>
+                    <td><strong>${app.plate || '-'}</strong></td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold;">ใบอนุญาตขับขี่รถจักรยานยนต์:</td>
+                    <td>${app.drivingLicense || 'มีใบอนุญาตขับขี่ถูกต้อง'}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold;">อุปกรณ์ประจำตัวสำหรับวิ่งงาน:</td>
+                    <td>${(app.equipments && app.equipments.length > 0) ? app.equipments.join(', ') : 'มีกล่อง/กระเป๋าเก็บความเย็น, มีหมวกกันน็อก'}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table class="a4-table" style="margin-bottom: 14px;">
+            <thead>
+                <tr>
+                    <th colspan="2" style="background: #e2e8f0; color: #0f172a; text-align: left;">3. กะเวลาทำงานและช่องทางรับเงินค่ารอบ</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="width: 35%; font-weight: bold;">ช่วงเวลาที่สะดวกรับงาน:</td>
+                    <td>${(app.shifts && app.shifts.length > 0) ? app.shifts.join(', ') : 'รอบเช้า (06:00-11:00), รอบเที่ยง (11:00-15:00)'}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold;">บัญชีพร้อมเพย์รับเงินค่ารอบ (0% GP):</td>
+                    <td><strong>${app.promptPayNumber || app.phone || '-'}</strong> (${app.promptPayBank || 'พร้อมเพย์'})</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px; margin-top: 15px;">
+            <div style="font-size: 10.5px; font-weight: bold; color: #475569; margin-bottom: 4px;">คำรับรองของผู้สมัคร:</div>
+            <div style="font-size: 9.5px; color: #64748b; line-height: 1.5;">
+                ผู้สมัครขอรับรองว่าข้อความข้างต้นเป็นความจริงทุกประการ พร้อมปฏิบัติตามกฎระเบียบความปลอดภัย การรักษาความสดของสินค้า และส่งมอบเงินสด COD เข้าฮับตลาดสดวิศิษฐ์ชัยครบถ้วนตรงเวลาในทุกรอบการวิ่ง
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 30px; padding: 0 35px; font-size: 11px;">
+                <div style="text-align: center;">
+                    <div>ลงชื่อ............................................................</div>
+                    <div style="margin-top: 4px;">(${app.fullName})</div>
+                    <div style="color: #64748b; font-size: 10px;">ผู้สมัคร</div>
+                </div>
+                <div style="text-align: center;">
+                    <div>ลงชื่อ............................................................</div>
+                    <div style="margin-top: 4px;">(ผู้จัดการตลาดฮับวิศิษฐ์ชัย)</div>
+                    <div style="color: #64748b; font-size: 10px;">ผู้อนุมัติ</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    executePrintHtml(`ใบสมัครไรเดอร์_${app.fullName}_${app.id}`, content, false);
+}
+
+// ── 9. พิมพ์ทำเนียบไรเดอร์กระดาษ A4
+function printA4RiderRosterDirectory() {
+    const riders = loadCommunityRiders();
+    const thaiDate = formatThaiDateDisplay(getReportDateKey(Date.now()));
+    const printTime = new Date().toLocaleString("th-TH");
+
+    let tableRows = "";
+    riders.forEach((r, idx) => {
+        tableRows += `
+            <tr>
+                <td class="text-center">${idx + 1}</td>
+                <td><strong>${r.name}</strong> ${r.rating ? `(⭐${r.rating})` : ''}</td>
+                <td class="text-center">${r.phone}</td>
+                <td class="text-center font-bold font-mono">${r.plate || '-'}</td>
+                <td>${r.motorcycleModel || '-'}</td>
+                <td>${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}</td>
+                <td class="text-center font-mono">${r.promptPay || r.phone || '-'}</td>
+                <td class="text-center font-bold">
+                    ${r.status === 'available' ? '🟢 พร้อมรับงาน' : r.status === 'on_delivery' ? '🟡 กำลังส่งของ' : '🔴 พักรอบ'}
+                </td>
+            </tr>
+        `;
+    });
+
+    const content = `
+        <div class="a4-header">
+            <div class="a4-title">ทำเนียบไรเดอร์ชุมชนประจำตลาดสดฮับวิศิษฐ์ชัย (Community Rider Directory)</div>
+            <div class="a4-meta">
+                ตลาดสดฮับวิศิษฐ์ชัย • ข้อมูล ณ วันที่: ${thaiDate} • เวลาพิมพ์: ${printTime}
+            </div>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div>จำนวนไรเดอร์ในทะเบียน:</div>
+                <div style="font-size: 15px; font-weight: bold;">${riders.length} คน</div>
+            </div>
+            <div class="summary-box">
+                <div>สถานะพร้อมรับงาน:</div>
+                <div style="font-size: 15px; font-weight: bold; color: #047857;">${riders.filter(r => r.status === 'available').length} คน</div>
+            </div>
+            <div class="summary-box">
+                <div>สถานะกำลังออกส่ง:</div>
+                <div style="font-size: 15px; font-weight: bold; color: #b45309;">${riders.filter(r => r.status === 'on_delivery').length} คน</div>
+            </div>
+            <div class="summary-box">
+                <div>สถานะพักรอบ:</div>
+                <div style="font-size: 15px; font-weight: bold; color: #64748b;">${riders.filter(r => r.status === 'offline').length} คน</div>
+            </div>
+        </div>
+
+        <table class="a4-table">
+            <thead>
+                <tr>
+                    <th class="text-center" style="width: 35px;">ที่</th>
+                    <th>ชื่อไรเดอร์</th>
+                    <th class="text-center">เบอร์โทรศัพท์</th>
+                    <th class="text-center">ทะเบียนรถ</th>
+                    <th>รุ่นรถจักรยานยนต์</th>
+                    <th>โซนพื้นที่จัดส่ง</th>
+                    <th class="text-center">พร้อมเพย์รับเงิน</th>
+                    <th class="text-center">สถานะ</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableRows || '<tr><td colspan="8" class="text-center">ไม่มีข้อมูลไรเดอร์ในระบบ</td></tr>'}
+            </tbody>
+        </table>
+
+        <div style="margin-top: 30px; display: flex; justify-content: flex-end; padding-right: 40px; font-size: 11px;">
+            <div style="text-align: center;">
+                <div>ลงชื่อ............................................................</div>
+                <div style="margin-top: 4px;">(ผู้จัดการฮับวิศิษฐ์ชัย)</div>
+                <div style="color: #64748b; font-size: 10px;">ผู้ดูแลทำเนียบคนขับ</div>
+            </div>
+        </div>
+    `;
+
+    executePrintHtml(`ทำเนียบไรเดอร์_ตลาดฮับวิศิษฐ์ชัย`, content, false);
+}
+
+// ── 10. พิมพ์ระเบียบปฏิบัติและกติกาค่ารอบกระดาษ A4
+function printA4RiderRulesSheet() {
+    const s = loadRiderFleetSettings();
+    const thaiDate = formatThaiDateDisplay(getReportDateKey(Date.now()));
+
+    const content = `
+        <div class="a4-header">
+            <div class="a4-title">ระเบียบปฏิบัติและโครงสร้างค่าตอบแทนไรเดอร์ชุมชน (Rider Operations & Compensation)</div>
+            <div class="a4-meta">
+                ตลาดสดฮับวิศิษฐ์ชัย • ประจำปี 2026 • อัปเดตล่าสุด: ${thaiDate}
+            </div>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div>ค่ารอบมาตรฐาน:</div>
+                <div style="font-size: 16px; font-weight: bold; color: #047857;">฿${s.baseFee || 40} / เที่ยว</div>
+            </div>
+            <div class="summary-box">
+                <div>เบี้ยเลี้ยงสู้ฝน (ฝนตก):</div>
+                <div style="font-size: 16px; font-weight: bold; color: #0284c7;">+฿${s.rainSurchargeAmount || 15} / เที่ยว</div>
+            </div>
+            <div class="summary-box">
+                <div>โบนัสเป้าหมายความขยัน:</div>
+                <div style="font-size: 16px; font-weight: bold; color: #d97706;">วิ่งครบ ${s.dailyBonusTrips || 10} เที่ยว (+฿${s.dailyBonusAmount || 100})</div>
+            </div>
+            <div class="summary-box">
+                <div>เพดานเงินสด COD ในมือ:</div>
+                <div style="font-size: 16px; font-weight: bold; color: #b91c1c;">ไม่เกิน ฿${(s.maxCodLimit || 2500).toLocaleString()}</div>
+            </div>
+        </div>
+
+        <table class="a4-table" style="margin-bottom: 16px;">
+            <thead>
+                <tr>
+                    <th style="width: 50px; text-align: center;">ข้อที่</th>
+                    <th style="width: 180px;">หมวดหมู่ระเบียบปฏิบัติ</th>
+                    <th>รายละเอียดและแนวทางปฏิบัติ</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="text-center font-bold">1</td>
+                    <td><strong>การรับงานและการแต่งกาย</strong></td>
+                    <td>แต่งกายสุภาพ สวมหมวกกันน็อกทุกครั้ง พกพากระเป๋า/กล่องเก็บความเย็นสำหรับใส่ของสดอนามัย เพื่อรักษาความสดของเนื้อไก่ ผัก และอาหารทะเล</td>
+                </tr>
+                <tr>
+                    <td class="text-center font-bold">2</td>
+                    <td><strong>การตรวจสอบสินค้าก่อนออกส่ง</strong></td>
+                    <td>ตรวจสอบรหัสออเดอร์ (#TH-xxxx) และสลิปที่ติดหน้าถุง ตรวจนับจำนวนถุงให้ตรงกับใบส่งของก่อนออกจากจุดแพ็กฮับกลาง</td>
+                </tr>
+                <tr>
+                    <td class="text-center font-bold">3</td>
+                    <td><strong>การเก็บเงินสดและการทอนเงินคืน</strong></td>
+                    <td>กรณีออเดอร์เก็บเงินปลายทาง (COD) ให้เรียกเก็บเงินตามยอดบิลอย่างถูกต้อง หากมีซองเงินทอนคืนกรณีของขาด ให้ส่งมอบให้ลูกค้าพร้อมอธิบาย</td>
+                </tr>
+                <tr>
+                    <td class="text-center font-bold">4</td>
+                    <td><strong>การนำส่งเงินสด COD เข้าฮับ</strong></td>
+                    <td>เมื่อยอดเงินสด COD ในมือสะสมถึงเพดาน <strong>฿${(s.maxCodLimit || 2500).toLocaleString()}</strong> ไรเดอร์ต้องนำเงินสดกลับมาส่งมอบที่ฮับกลางทันทีเพื่อความปลอดภัย</td>
+                </tr>
+                <tr>
+                    <td class="text-center font-bold">5</td>
+                    <td><strong>การจ่ายเงินค่ารอบ (0% GP)</strong></td>
+                    <td>ตลาดฮับไม่หักหัวคิวค่ารอบไรเดอร์ ค่ารอบทั้งหมดจะถูกโอนตรงเข้าบัญชีพร้อมเพย์ของไรเดอร์เมื่อเสร็จสิ้นรอบวัน พร้อมพิมพ์สลิปสรุปยอดให้เก็บไว้</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 10.5px; color: #475569; background: #f8fafc;">
+            <div style="font-weight: bold; margin-bottom: 4px;">ช่องทางติดต่อประสานงานด่วน:</div>
+            <div>• ฝ่ายจัดส่งและผู้จัดการฮับวิศิษฐ์ชัย: 089-123-4567 (เฮียส่ง) | LINE: @talathub</div>
+            <div>• ที่ตั้งศูนย์กระจายสินค้า: ตลาดสดวิศิษฐ์ชัย ตำบลบ้านหนองชาก อำเภอบ้านบึง จังหวัดชลบุรี</div>
+        </div>
+    `;
+
+    executePrintHtml(`ระเบียบไรเดอร์_ตลาดฮับวิศิษฐ์ชัย`, content, false);
+}
+
 window.executePrintHtml = executePrintHtml;
 window.printThermalRiderSlip = printThermalRiderSlip;
 window.printThermalVendorSlip = printThermalVendorSlip;
@@ -3947,6 +4235,10 @@ window.printA4RidersSummary = printA4RidersSummary;
 window.printA4VendorsSummary = printA4VendorsSummary;
 window.printA4OrdersAuditLedger = printA4OrdersAuditLedger;
 window.printDailyReport = printDailyReport;
+window.printA4RiderApplication = printA4RiderApplication;
+window.printA4RiderRosterDirectory = printA4RiderRosterDirectory;
+window.printA4RiderRulesSheet = printA4RiderRulesSheet;
+
 
 // ── Sample Generator: ปิดใช้งานในโหมดทดสอบจริง
 function generateSampleDailyOrders() {
@@ -7887,6 +8179,24 @@ let _adminRiderStatusFilter = "all";
 let _adminRiderAppFilter = "all";
 let _adminRiderRadarMap = null;
 let _showAdminRiderAppsHistory = false;
+let _adminRiderSubTab = "live"; // 'live' | 'roster' | 'settlement' | 'settings'
+let _adminRiderRosterView = "roster"; // 'roster' | 'applications'
+
+function switchAdminRiderSubTab(tabKey) {
+    _adminRiderSubTab = tabKey;
+    renderAdminRiders();
+    if (tabKey === 'live') {
+        setTimeout(() => initAdminRiderRadarMap(), 150);
+    }
+}
+
+function switchAdminRiderRosterView(viewKey) {
+    _adminRiderRosterView = viewKey;
+    renderAdminRiders();
+}
+
+window.switchAdminRiderSubTab = switchAdminRiderSubTab;
+window.switchAdminRiderRosterView = switchAdminRiderRosterView;
 
 const DEFAULT_COMMUNITY_RIDERS = [];
 
@@ -8614,12 +8924,10 @@ function renderAdminRiders() {
     let offlineCount = 0;
 
     const riderDataList = riders.map(r => {
-        // Status counts
         if (r.status === "on_delivery") deliveringCount++;
         else if (r.status === "offline") offlineCount++;
         else availableCount++;
 
-        // Match with daily report
         const rep = reportRiders.find(x => x.riderName === r.name || x.riderPhone === r.phone);
         const trips = rep ? (rep.tripsCount || 0) : (r.tripsCountToday || 0);
         const feeEarned = rep ? (rep.riderFeeEarned || 0) : (trips * (r.baseFee || settings.baseFee || 40));
@@ -8655,221 +8963,14 @@ function renderAdminRiders() {
         return true;
     });
 
-    container.innerHTML = `
-        <div class="space-y-4 max-w-full">
-            <!-- Top Banner -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
-                <div>
-                    <h3 class="font-extrabold text-base sm:text-lg text-slate-800 flex items-center gap-2">
-                        <span class="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                            <span class="material-symbols-outlined text-lg">sports_motorsports</span>
-                        </span>
-                        <span>ศูนย์บริหารงานไรเดอร์ชุมชน & ค่ารอบจัดส่ง (Fleet Operations)</span>
-                    </h3>
-                    <p class="text-xs text-slate-500 mt-0.5">จัดการทำเนียบไรเดอร์ ตรวจสอบและอนุมัติใบสมัคร ติดตามยอดเงินสด COD ในมือ และดูเรดาร์ GPS</p>
-                </div>
-                <div class="flex items-center gap-2 flex-wrap">
-                    <button onclick="openRiderPayoutModal()" class="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all" title="เปิดหน้าต่างสรุปจ่ายเงินค่ารอบและโอนเงินผ่านพร้อมเพย์">
-                        <span class="material-symbols-outlined text-sm font-bold">payments</span>
-                        <span>💸 สรุปจ่ายค่ารอบ</span>
-                    </button>
-                    <button onclick="clearFleetTestData()" class="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-extrabold rounded-xl text-xs shadow-sm flex items-center gap-1 active:scale-95 transition-all" title="ล้างข้อมูลจำลอง/ทดสอบในระบบออกทั้งหมด">
-                        <span class="material-symbols-outlined text-sm font-bold text-rose-600">delete_sweep</span>
-                        <span>🧹 ล้างข้อมูลทดสอบ</span>
-                    </button>
-                    <button onclick="openRiderRegisterModal()" class="px-3 py-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white font-bold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
-                        <span class="material-symbols-outlined text-sm font-bold">how_to_reg</span>
-                        <span>ฟอร์มสมัครไรเดอร์</span>
-                    </button>
-                    <button onclick="openAddRiderModal()" class="px-3 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
-                        <span class="material-symbols-outlined text-sm">person_add</span>
-                        <span>+ เพิ่มไรเดอร์ใหม่</span>
-                    </button>
-                    <button onclick="renderAdminRiders(); initAdminRiderRadarMap(); showToast('🔄 อัปเดตข้อมูลไรเดอร์เรียบร้อย');" class="p-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl shadow-xs active:scale-95 transition-all" title="รีเฟรชข้อมูล">
-                        <span class="material-symbols-outlined text-base">refresh</span>
-                    </button>
-                </div>
-            </div>
+    // Sub-Tab Content Generator
+    let subTabContentHtml = "";
 
-            <!-- ========================================== -->
-            <!-- SECTION: RIDER APPLICATIONS (ใบสมัครร่วมทีมไรเดอร์) -->
-            <!-- ========================================== -->
-            <div class="border ${pendingApps.length > 0 ? 'border-amber-400 bg-gradient-to-br from-amber-50/50 via-sky-50/30 to-white' : 'border-slate-200 bg-white'} rounded-3xl p-4 sm:p-5 shadow-xs space-y-3.5">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-200/80">
-                    <div class="flex items-center gap-2.5">
-                        <span class="w-10 h-10 rounded-2xl ${pendingApps.length > 0 ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-slate-950 shadow-md animate-pulse' : 'bg-emerald-100 text-emerald-700'} flex items-center justify-center font-black text-lg">
-                            <span class="material-symbols-outlined text-xl">${pendingApps.length > 0 ? 'assignment_late' : 'how_to_reg'}</span>
-                        </span>
-                        <div>
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <h4 class="font-extrabold text-sm sm:text-base text-slate-900">ใบสมัครร่วมทีมไรเดอร์ (Rider Applications)</h4>
-                                ${pendingApps.length > 0 ? `
-                                    <span class="bg-amber-500 text-slate-950 font-black text-[10px] px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1">
-                                        <span class="w-2 h-2 rounded-full bg-slate-950 animate-ping"></span>
-                                        <span>รออนุมัติ ${pendingApps.length} คน</span>
-                                    </span>
-                                ` : `
-                                    <span class="bg-emerald-100 text-emerald-800 font-bold text-[10px] px-2 py-0.5 rounded-full">อนุมัติครบแล้ว</span>
-                                `}
-                            </div>
-                            <p class="text-[11px] text-slate-500 mt-0.5">ผู้สมัครกรอกข้อมูลเข้ามา ตรวจสอบรายละเอียด กดอนุมัติ หรือทดสอบสร้างใบสมัครจำลองได้ทันที</p>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-1.5 self-start sm:self-auto flex-wrap">
-                        <button onclick="openRiderRegisterModal()" class="px-3 py-1.5 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white font-bold rounded-xl text-xs flex items-center gap-1 transition-all shadow-xs active:scale-95">
-                            <span class="material-symbols-outlined text-sm font-bold">add</span>
-                            <span>เปิดฟอร์มสมัครไรเดอร์</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Applications Filter Tabs -->
-                <div class="flex items-center gap-1.5 overflow-x-auto text-xs pb-0.5">
-                    <button onclick="filterAdminRiderApps('all')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderAppFilter === 'all' ? 'bg-purple-700 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
-                        ทั้งหมด (${applications.length})
-                    </button>
-                    <button onclick="filterAdminRiderApps('pending')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderAppFilter === 'pending' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
-                        ⏳ รออนุมัติ (${pendingApps.length})
-                    </button>
-                    <button onclick="filterAdminRiderApps('approved')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderAppFilter === 'approved' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
-                        ✓ อนุมัติแล้ว (${approvedApps.length})
-                    </button>
-                    <button onclick="filterAdminRiderApps('rejected')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderAppFilter === 'rejected' ? 'bg-rose-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
-                        ✕ ปฏิเสธ (${rejectedApps.length})
-                    </button>
-                </div>
-
-                <!-- Applications List -->
-                ${displayedApps.length === 0 ? `
-                    <div class="py-6 px-4 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center space-y-2">
-                        <span class="material-symbols-outlined text-3xl text-slate-400">inbox</span>
-                        <div class="font-bold text-xs text-slate-700">ไม่มีใบสมัครในหมวดหมู่นี้ในขณะนี้</div>
-                        <p class="text-[11px] text-slate-500">เมื่อมีผู้สมัครกรอกฟอร์มเข้ามา รายชื่อจะปรากฏที่นี่เพื่อให้แอดมินตรวจสอบและอนุมัติทันที</p>
-                        <button onclick="openRiderRegisterModal()" class="px-3.5 py-1.5 bg-gradient-to-r from-sky-600 to-blue-700 text-white font-bold rounded-xl text-xs shadow-sm active:scale-95 transition-all inline-flex items-center gap-1">
-                            <span class="material-symbols-outlined text-sm">how_to_reg</span>
-                            <span>เปิดฟอร์มสมัครไรเดอร์</span>
-                        </button>
-                    </div>
-                ` : `
-                    <div class="space-y-3">
-                        ${displayedApps.map(app => `
-                            <div id="rider-app-card-${app.id}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
-                                <!-- App Header -->
-                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
-                                    <div class="flex items-start gap-3">
-                                        <div class="w-11 h-11 rounded-2xl bg-gradient-to-br ${app.status === 'pending' ? 'from-amber-400 to-orange-500' : app.status === 'approved' ? 'from-emerald-500 to-teal-600' : 'from-rose-400 to-red-600'} text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
-                                            🛵
-                                        </div>
-                                        <div>
-                                            <div class="flex items-center gap-2 flex-wrap">
-                                                <span class="font-black text-sm text-slate-900">${app.fullName} ${app.nickname ? `(${app.nickname})` : ''}</span>
-                                                <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${app.id}</span>
-                                                ${app.status === 'pending' ? `
-                                                    <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⏳ รอการอนุมัติ</span>
-                                                ` : app.status === 'approved' ? `
-                                                    <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✓ อนุมัติแล้ว</span>
-                                                ` : `
-                                                    <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✕ ปฏิเสธ</span>
-                                                `}
-                                            </div>
-                                            <div class="text-[11px] text-slate-500 flex items-center gap-2.5 flex-wrap mt-0.5 font-mono">
-                                                <a href="tel:${app.phone}" class="text-sky-700 font-bold hover:underline flex items-center gap-0.5">
-                                                    <span class="material-symbols-outlined text-xs">call</span>
-                                                    <span>${app.phone}</span>
-                                                </a>
-                                                <span>•</span>
-                                                <span class="text-emerald-700 font-bold flex items-center gap-0.5">
-                                                    <span class="material-symbols-outlined text-xs">chat</span>
-                                                    <span>LINE: ${app.lineId || '-'}</span>
-                                                </span>
-                                                <span>•</span>
-                                                <span class="text-slate-500">เลข ปชช: ${app.idCard || '-'}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <!-- Action Buttons -->
-                                    <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
-                                        <button onclick="viewRiderAppDetail('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="ดูข้อมูลใบสมัครฉบับเต็ม">
-                                            <span class="material-symbols-outlined text-xs">visibility</span>
-                                            <span>ดูใบสมัครเต็ม</span>
-                                        </button>
-                                        <button onclick="openEditRiderAppModal('${app.id}')" class="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="แก้ไขข้อมูลใบสมัครนี้">
-                                            <span class="material-symbols-outlined text-xs">edit</span>
-                                            <span>แก้ไข</span>
-                                        </button>
-
-                                        ${app.status === 'pending' ? `
-                                            <button onclick="approveRiderApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติให้เป็นไรเดอร์ในระบบ">
-                                                <span class="material-symbols-outlined text-xs font-bold">check_circle</span>
-                                                <span>อนุมัติ</span>
-                                            </button>
-                                            <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
-                                                <span class="material-symbols-outlined text-xs font-bold">sports_motorsports</span>
-                                                <span>อนุมัติ & รับงานทันที 🚀</span>
-                                            </button>
-                                            <button onclick="rejectRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all cursor-pointer">
-                                                <span>ปฏิเสธ</span>
-                                            </button>
-                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all cursor-pointer" title="ลบใบสมัครนี้">
-                                                <span class="material-symbols-outlined text-sm">delete</span>
-                                            </button>
-                                        ` : app.status === 'approved' ? `
-                                            <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
-                                                <span class="material-symbols-outlined text-xs">two_wheeler</span>
-                                                <span>สลับเข้ารับงาน</span>
-                                            </button>
-                                            <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all cursor-pointer" title="เปลี่ยนสถานะกลับไปรอพิจารณาใหม่">
-                                                <span class="material-symbols-outlined text-xs">replay</span>
-                                                <span>รอพิจารณา</span>
-                                            </button>
-                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all cursor-pointer" title="ลบประวัติ">
-                                                <span class="material-symbols-outlined text-sm">delete</span>
-                                            </button>
-                                        ` : `
-                                            <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
-                                                <span class="material-symbols-outlined text-xs">replay</span>
-                                                <span>พิจารณาใหม่</span>
-                                            </button>
-                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all cursor-pointer" title="ลบประวัติ">
-                                                <span class="material-symbols-outlined text-sm">delete</span>
-                                            </button>
-                                        `}
-                                    </div>
-                                </div>
-
-                                <!-- App Details 4-Column Grid -->
-                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-[11px] bg-slate-50/80 p-3 rounded-xl border border-slate-200/80">
-                                    <div class="space-y-0.5">
-                                        <span class="text-slate-400 font-bold block">🏍️ ข้อมูลรถ & ทะเบียน:</span>
-                                        <div class="font-bold text-slate-800">${app.motorcycleModel || '-'} ${app.motorcycleColor ? `(${app.motorcycleColor})` : ''}</div>
-                                        <div class="font-mono font-black text-slate-700">ทะเบียน: ${app.plate || '-'}</div>
-                                        <div class="text-[10px] text-slate-500">ใบขับขี่: ${app.drivingLicense || '-'}</div>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span class="text-slate-400 font-bold block">📍 โซนที่สะดวก & ที่พัก:</span>
-                                        <div class="font-bold text-slate-800">${app.zone || 'รอบตลาดวิศิษฐ์ชัย'}</div>
-                                        <div class="text-[10px] text-slate-500 line-clamp-2">${app.address || 'บ้านบึง จ.ชลบุรี'}</div>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span class="text-slate-400 font-bold block">⏰ ช่วงเวลารับงาน & อุปกรณ์:</span>
-                                        <div class="font-bold text-slate-800">${(app.shifts && app.shifts.join(', ')) || 'รอบเช้า-เที่ยง'}</div>
-                                        <div class="mt-1 flex flex-wrap gap-1">
-                                            ${(app.equipments || []).map(eq => `<span class="bg-white border border-slate-200 text-slate-700 px-1.5 py-0.2 rounded text-[10px]">✓ ${eq}</span>`).join('')}
-                                        </div>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span class="text-slate-400 font-bold block">💵 บัญชีรับเงินค่ารอบ:</span>
-                                        <div class="font-mono font-black text-emerald-800 text-xs">${app.promptPayNumber || '-'}</div>
-                                        <div class="text-[10px] text-slate-600">ธนาคาร: ${app.promptPayBank || 'พร้อมเพย์'}</div>
-                                        <div class="text-[9px] text-slate-400 mt-1">ส่งเมื่อ: ${formatRiderAppDate(app.appliedAt)}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `}
-            </div>
-
+    // ─────────────────────────────────────────────────────────────
+    // SUB-TAB 1: 📡 มอนิเตอร์สด & เรดาร์ GPS (LIVE OPERATIONS)
+    // ─────────────────────────────────────────────────────────────
+    if (_adminRiderSubTab === "live") {
+        subTabContentHtml = `
             <!-- Fleet Live KPIs (4 Summary Cards) -->
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
                 <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
@@ -8909,7 +9010,7 @@ function renderAdminRiders() {
                     </div>
                 </div>
 
-                <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
+                <div onclick="toggleRainSurcharge()" class="bg-white p-3 sm:p-4 rounded-2xl border cursor-pointer hover:shadow-sm transition-all space-y-1 ${settings.rainSurcharge ? 'bg-gradient-to-br from-sky-50 to-indigo-50/60 border-sky-300' : 'border-slate-200/80'}">
                     <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
                         <span>โหมดสภาพอากาศ & โบนัส</span>
                         <span class="material-symbols-outlined text-base ${settings.rainSurcharge ? 'text-sky-600 animate-bounce' : 'text-amber-500'}">
@@ -8920,7 +9021,7 @@ function renderAdminRiders() {
                         ${settings.rainSurcharge ? `🌧️ ฝนตก (+฿${settings.rainSurchargeAmount}/เที่ยว)` : '☀️ อากาศแจ่มใสปกติ'}
                     </div>
                     <div class="text-[10px] sm:text-[11px] text-slate-400">
-                        ค่ารอบฐาน ฿${settings.baseFee} • โบนัสเป้า ฿${settings.dailyBonusAmount}
+                        คลิกเพื่อสลับโหมดฝนตก 1-Click
                     </div>
                 </div>
             </div>
@@ -8948,7 +9049,7 @@ function renderAdminRiders() {
                 </div>
             </div>
 
-            <!-- Main Content: 2-Column Responsive Layout -->
+            <!-- 2-Column Responsive Layout -->
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 <!-- Left: Rider Cards (Span 7) -->
                 <div class="lg:col-span-7 space-y-3">
@@ -8981,7 +9082,7 @@ function renderAdminRiders() {
                                                 <span>📱 ${r.phone}</span>
                                             </a>
                                             <span>•</span>
-                                            <span class="text-emerald-700 font-bold">💳 พร้อมเพย์: ${r.promptPay || r.phone || '-'}</span>
+                                            <span class="text-emerald-700 font-bold">💳 ${r.promptPay || r.phone || '-'}</span>
                                         </div>
                                         <div class="text-[11px] text-slate-400 mt-0.5">
                                             📍 ${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}
@@ -9056,7 +9157,7 @@ function renderAdminRiders() {
                                         <span>เข้าสู่ระบบรับงาน</span>
                                     </button>
                                     <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="พิมพ์สลิปสรุปยอด 80x80">
-                                        <span class="material-symbols-outlined text-xs text-sky-700">receipt</span>
+                                        <span class="material-symbols-outlined text-xs text-sky-700">receipt_long</span>
                                         <span>สลิป 80mm</span>
                                     </button>
                                     <button onclick="settleRiderCod('${r.id}')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="บันทึกการส่งมอบเงินสด COD เข้าฮับ">
@@ -9079,7 +9180,7 @@ function renderAdminRiders() {
                     `).join("")}
                 </div>
 
-                <!-- Right: Radar Map & Dynamic Fleet Settings (Span 5) -->
+                <!-- Right: Radar Map & Quick Weather Toggle (Span 5) -->
                 <div class="lg:col-span-5 space-y-4">
                     <!-- Live Radar GPS Map -->
                     <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
@@ -9106,7 +9207,7 @@ function renderAdminRiders() {
                         </div>
 
                         <!-- Map Leaflet Container -->
-                        <div id="admin-rider-radar-map" style="height: 300px; width: 100%;" class="rounded-2xl border border-slate-200 shadow-inner z-0 overflow-hidden"></div>
+                        <div id="admin-rider-radar-map" style="height: 320px; width: 100%;" class="rounded-2xl border border-slate-200 shadow-inner z-0 overflow-hidden"></div>
 
                         <div class="flex items-center justify-between text-[10px] text-slate-500 flex-wrap gap-1 pt-1 border-t border-slate-100">
                             <div class="flex items-center gap-2 flex-wrap">
@@ -9118,83 +9219,514 @@ function renderAdminRiders() {
                             <span class="text-slate-400">คลิกที่หมุดเพื่อดูข้อมูล</span>
                         </div>
                     </div>
+                </div>
+            </div>
+        `;
+    }
 
-                    <!-- Dynamic Compensation & Surcharges Config -->
-                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                        <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-                            <div class="flex items-center gap-2">
-                                <span class="w-7 h-7 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-bold text-sm">
-                                    <span class="material-symbols-outlined text-base">tune</span>
-                                </span>
-                                <div>
-                                    <h4 class="font-extrabold text-sm text-slate-800">ตั้งค่าค่ารอบ & โบนัสความเร็ว</h4>
-                                    <div class="text-[10px] text-slate-400">คำนวณและปรับเปลี่ยนแบบ Real-time</div>
+    // ─────────────────────────────────────────────────────────────
+    // SUB-TAB 2: 📋 ทำเนียบคนขับ & ใบสมัคร (ROSTER & APPLICATIONS)
+    // ─────────────────────────────────────────────────────────────
+    else if (_adminRiderSubTab === "roster") {
+        subTabContentHtml = `
+            <!-- Action Bar & Segment Controls -->
+            <div class="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                    <div>
+                        <h4 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-purple-600 text-xl">contact_page</span>
+                            <span>ศูนย์บริหารงานบุคคลและทำเนียบไรเดอร์ (Fleet HR & Roster)</span>
+                        </h4>
+                        <p class="text-xs text-slate-500 mt-0.5">จัดการข้อมูลคนขับประจำตลาด ตรวจสอบเอกสาร และคัดเลือกใบสมัครร่วมทีม</p>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button onclick="printA4RiderRosterDirectory()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all" title="พิมพ์ทำเนียบไรเดอร์กระดาษ A4 เข้าแฟ้ม">
+                            <span class="material-symbols-outlined text-sm font-bold text-slate-700">description</span>
+                            <span>📄 พิมพ์ทำเนียบ A4</span>
+                        </button>
+                        <button onclick="openRiderRegisterModal()" class="px-3 py-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white font-bold rounded-xl text-xs shadow-sm flex items-center gap-1.5 active:scale-95 transition-all">
+                            <span class="material-symbols-outlined text-sm">how_to_reg</span>
+                            <span>ฟอร์มสมัครไรเดอร์</span>
+                        </button>
+                        <button onclick="openAddRiderModal()" class="px-3.5 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
+                            <span class="material-symbols-outlined text-sm font-bold">person_add</span>
+                            <span>+ เพิ่มไรเดอร์ใหม่</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Segment Switcher: ทำเนียบไรเดอร์ vs ใบสมัครงาน -->
+                <div class="flex items-center gap-2">
+                    <button onclick="switchAdminRiderRosterView('roster')" class="px-4 py-2 rounded-xl font-extrabold text-xs transition-all flex items-center gap-1.5 ${_adminRiderRosterView === 'roster' ? 'bg-purple-700 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        <span class="material-symbols-outlined text-sm">badge</span>
+                        <span>1. ทำเนียบไรเดอร์ประจำตลาด (${riders.length} คน)</span>
+                    </button>
+                    <button onclick="switchAdminRiderRosterView('applications')" class="px-4 py-2 rounded-xl font-extrabold text-xs transition-all flex items-center gap-1.5 ${_adminRiderRosterView === 'applications' ? 'bg-purple-700 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        <span class="material-symbols-outlined text-sm">assignment</span>
+                        <span>2. ใบสมัครร่วมทีม (${applications.length} ใบ)</span>
+                        ${pendingApps.length > 0 ? `<span class="bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded-full text-[10px] font-black animate-pulse">รอ ${pendingApps.length}</span>` : ''}
+                    </button>
+                </div>
+            </div>
+
+            ${_adminRiderRosterView === 'roster' ? `
+                <!-- ROSTER VIEW: LIST OF ALL ACTIVE RIDERS -->
+                <div class="space-y-3">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                        ${riders.length === 0 ? `
+                            <div class="col-span-full py-12 text-center bg-white rounded-3xl border border-slate-200 space-y-2">
+                                <span class="material-symbols-outlined text-4xl text-slate-300">person_off</span>
+                                <div class="font-bold text-sm text-slate-600">ยังไม่มีไรเดอร์ในทะเบียน</div>
+                                <button onclick="openAddRiderModal()" class="px-4 py-2 bg-purple-700 text-white font-bold rounded-xl text-xs shadow-md">เพิ่มไรเดอร์คนแรก</button>
+                            </div>
+                        ` : riders.map(r => `
+                            <div class="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all p-4 space-y-3">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-100 to-indigo-100 text-purple-800 flex items-center justify-center text-xl font-black shadow-2xs shrink-0">
+                                            ${r.avatar || '🛵'}
+                                        </div>
+                                        <div>
+                                            <div class="font-extrabold text-sm text-slate-900">${r.name}</div>
+                                            <div class="text-[11px] text-slate-500 font-mono">📱 ${r.phone}</div>
+                                        </div>
+                                    </div>
+                                    <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full ${r.status === 'available' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : r.status === 'on_delivery' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-600'}">
+                                        ${r.status === 'available' ? '🟢 พร้อม' : r.status === 'on_delivery' ? '🟡 ส่งของ' : '🔴 พัก'}
+                                    </span>
+                                </div>
+
+                                <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[11px] space-y-1">
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-500">ทะเบียนรถ:</span>
+                                        <span class="font-mono font-black text-slate-800">${r.plate || '-'}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-500">รุ่นจักรยานยนต์:</span>
+                                        <span class="font-bold text-slate-700">${r.motorcycleModel || '-'}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-500">พร้อมเพย์:</span>
+                                        <span class="font-mono font-bold text-emerald-700">${r.promptPay || r.phone || '-'}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-500">โซนที่สะดวก:</span>
+                                        <span class="font-medium text-slate-600 truncate max-w-[150px]">${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
+                                    <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1" title="พิมพ์สลิป 80mm">
+                                        <span class="material-symbols-outlined text-xs">receipt_long</span>
+                                        <span>สลิป 80mm</span>
+                                    </button>
+                                    <div class="flex items-center gap-1">
+                                        <button onclick="openEditRiderModal('${r.id}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-xs">edit</span>
+                                            <span>แก้ไข</span>
+                                        </button>
+                                        <button onclick="deleteCommunityRider('${r.id}')" class="p-1 text-rose-500 hover:bg-rose-50 rounded-lg" title="ลบไรเดอร์">
+                                            <span class="material-symbols-outlined text-base">delete</span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : `
+                <!-- APPLICATIONS VIEW -->
+                <div class="space-y-3">
+                    <!-- Filter Tabs -->
+                    <div class="flex items-center gap-1.5 overflow-x-auto text-xs pb-0.5">
+                        <button onclick="filterAdminRiderApps('all')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderAppFilter === 'all' ? 'bg-purple-700 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                            ทั้งหมด (${applications.length})
+                        </button>
+                        <button onclick="filterAdminRiderApps('pending')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderAppFilter === 'pending' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                            ⏳ รออนุมัติ (${pendingApps.length})
+                        </button>
+                        <button onclick="filterAdminRiderApps('approved')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderAppFilter === 'approved' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                            ✓ อนุมัติแล้ว (${approvedApps.length})
+                        </button>
+                        <button onclick="filterAdminRiderApps('rejected')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminRiderAppFilter === 'rejected' ? 'bg-rose-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                            ✕ ปฏิเสธ (${rejectedApps.length})
+                        </button>
+                    </div>
 
-                        <!-- Weather Surcharge 1-Click Toggle -->
-                        <div onclick="toggleRainSurcharge()" class="p-3 rounded-2xl border cursor-pointer transition-all ${settings.rainSurcharge ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white border-sky-400 shadow-md' : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'}">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-2.5">
-                                    <span class="text-2xl">${settings.rainSurcharge ? '🌧️' : '☀️'}</span>
-                                    <div>
-                                        <div class="font-extrabold text-xs">
-                                            ${settings.rainSurcharge ? 'เปิดโหมดฝนตกหนัก (+฿' + settings.rainSurchargeAmount + ' / เที่ยว)' : 'โหมดฝนตก / สภาพอากาศรุนแรง'}
+                    <!-- Applications List -->
+                    ${displayedApps.length === 0 ? `
+                        <div class="py-8 px-4 bg-white border border-dashed border-slate-200 rounded-3xl text-center space-y-2">
+                            <span class="material-symbols-outlined text-4xl text-slate-300">inbox</span>
+                            <div class="font-bold text-sm text-slate-700">ไม่มีใบสมัครในหมวดหมู่นี้ในขณะนี้</div>
+                        </div>
+                    ` : `
+                        <div class="space-y-3">
+                            ${displayedApps.map(app => `
+                                <div id="rider-app-card-${app.id}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
+                                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
+                                        <div class="flex items-start gap-3">
+                                            <div class="w-11 h-11 rounded-2xl bg-gradient-to-br ${app.status === 'pending' ? 'from-amber-400 to-orange-500' : app.status === 'approved' ? 'from-emerald-500 to-teal-600' : 'from-rose-400 to-red-600'} text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
+                                                🛵
+                                            </div>
+                                            <div>
+                                                <div class="flex items-center gap-2 flex-wrap">
+                                                    <span class="font-black text-sm text-slate-900">${app.fullName} ${app.nickname ? `(${app.nickname})` : ''}</span>
+                                                    <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${app.id}</span>
+                                                    ${app.status === 'pending' ? `
+                                                        <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⏳ รอการอนุมัติ</span>
+                                                    ` : app.status === 'approved' ? `
+                                                        <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✓ อนุมัติแล้ว</span>
+                                                    ` : `
+                                                        <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✕ ปฏิเสธ</span>
+                                                    `}
+                                                </div>
+                                                <div class="text-[11px] text-slate-500 flex items-center gap-2.5 flex-wrap mt-0.5 font-mono">
+                                                    <a href="tel:${app.phone}" class="text-sky-700 font-bold hover:underline flex items-center gap-0.5">
+                                                        <span class="material-symbols-outlined text-xs">call</span>
+                                                        <span>${app.phone}</span>
+                                                    </a>
+                                                    <span>•</span>
+                                                    <span class="text-emerald-700 font-bold flex items-center gap-0.5">
+                                                        <span class="material-symbols-outlined text-xs">chat</span>
+                                                        <span>LINE: ${app.lineId || '-'}</span>
+                                                    </span>
+                                                    <span>•</span>
+                                                    <span class="text-slate-500">เลข ปชช: ${app.idCard || '-'}</span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div class="text-[10px] ${settings.rainSurcharge ? 'text-sky-100' : 'text-slate-400'}">
-                                            ${settings.rainSurcharge ? 'เพิ่มค่ารอบให้ไรเดอร์อัตโนมัติทุกเที่ยวที่วิ่งช่วงฝน' : 'คลิกเพื่อเปิดโหมดเพิ่มค่ารอบพิเศษสู้ฝน'}
+
+                                        <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
+                                            <button onclick="printA4RiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
+                                                <span class="material-symbols-outlined text-xs">print</span>
+                                                <span>พิมพ์ A4</span>
+                                            </button>
+                                            <button onclick="viewRiderAppDetail('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                                <span class="material-symbols-outlined text-xs">visibility</span>
+                                                <span>ดูรายละเอียด</span>
+                                            </button>
+
+                                            ${app.status === 'pending' ? `
+                                                <button onclick="approveRiderApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                                    <span class="material-symbols-outlined text-xs font-bold">check_circle</span>
+                                                    <span>อนุมัติ</span>
+                                                </button>
+                                                <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                                    <span class="material-symbols-outlined text-xs font-bold">sports_motorsports</span>
+                                                    <span>อนุมัติ & รับงานทันที 🚀</span>
+                                                </button>
+                                                <button onclick="rejectRiderApplication('${app.id}')" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all">
+                                                    <span>ปฏิเสธ</span>
+                                                </button>
+                                            ` : app.status === 'approved' ? `
+                                                <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
+                                                    <span class="material-symbols-outlined text-xs">two_wheeler</span>
+                                                    <span>สลับเข้ารับงาน</span>
+                                                </button>
+                                                <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all">
+                                                    <span class="material-symbols-outlined text-xs">replay</span>
+                                                    <span>รอพิจารณา</span>
+                                                </button>
+                                            ` : `
+                                                <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
+                                                    <span class="material-symbols-outlined text-xs">replay</span>
+                                                    <span>พิจารณาใหม่</span>
+                                                </button>
+                                            `}
+                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="ลบประวัติ">
+                                                <span class="material-symbols-outlined text-sm">delete</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-[11px] bg-slate-50/80 p-3 rounded-xl border border-slate-200/80">
+                                        <div>
+                                            <span class="text-slate-400 font-bold block">🏍️ ข้อมูลรถ & ทะเบียน:</span>
+                                            <div class="font-bold text-slate-800">${app.motorcycleModel || '-'} ${app.motorcycleColor ? `(${app.motorcycleColor})` : ''}</div>
+                                            <div class="font-mono font-black text-slate-700">ทะเบียน: ${app.plate || '-'}</div>
+                                            <div class="text-[10px] text-slate-500">ใบขับขี่: ${app.drivingLicense || '-'}</div>
+                                        </div>
+                                        <div>
+                                            <span class="text-slate-400 font-bold block">📍 โซนที่สะดวก:</span>
+                                            <div class="font-bold text-slate-800">${app.zone || 'รอบตลาดวิศิษฐ์ชัย'}</div>
+                                            <div class="text-[10px] text-slate-500 line-clamp-2">${app.address || 'บ้านบึง จ.ชลบุรี'}</div>
+                                        </div>
+                                        <div>
+                                            <span class="text-slate-400 font-bold block">⏰ ช่วงเวลารับงาน & อุปกรณ์:</span>
+                                            <div class="font-bold text-slate-800">${(app.shifts && app.shifts.join(', ')) || 'รอบเช้า-เที่ยง'}</div>
+                                            <div class="mt-1 flex flex-wrap gap-1">
+                                                ${(app.equipments || []).map(eq => `<span class="bg-white border border-slate-200 text-slate-700 px-1.5 py-0.2 rounded text-[10px]">✓ ${eq}</span>`).join('')}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span class="text-slate-400 font-bold block">💵 บัญชีรับเงินค่ารอบ:</span>
+                                            <div class="font-mono font-black text-emerald-800 text-xs">${app.promptPayNumber || '-'}</div>
+                                            <div class="text-[10px] text-slate-600">ธนาคาร: ${app.promptPayBank || 'พร้อมเพย์'}</div>
+                                            <div class="text-[9px] text-slate-400 mt-1">ส่งเมื่อ: ${formatRiderAppDate(app.appliedAt)}</div>
                                         </div>
                                     </div>
                                 </div>
-                                <span class="material-symbols-outlined text-xl ${settings.rainSurcharge ? 'text-white' : 'text-slate-400'}">
-                                    ${settings.rainSurcharge ? 'toggle_on' : 'toggle_off'}
-                                </span>
+                            `).join('')}
+                        </div>
+                    `}
+                </div>
+            `}
+        `;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SUB-TAB 3: 💰 เคลียร์เงิน COD & ค่ารอบ (COD SETTLEMENT & PAYOUTS)
+    // ─────────────────────────────────────────────────────────────
+    else if (_adminRiderSubTab === "settlement") {
+        subTabContentHtml = `
+            <!-- Top Summary Banner -->
+            <div class="bg-gradient-to-r from-slate-900 via-purple-950 to-indigo-950 text-white p-5 rounded-3xl shadow-md space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <div class="text-xs text-purple-300 font-bold flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-sm">account_balance_wallet</span>
+                            <span>ศูนย์เคลียร์เงินสด COD และจ่ายค่ารอบไรเดอร์ (Daily Settlement)</span>
+                        </div>
+                        <h4 class="text-xl sm:text-2xl font-black mt-1">ยอดเงินสด COD ในมือรวม: <span class="text-amber-400">฿${totalInHandCod.toLocaleString()}</span></h4>
+                        <p class="text-xs text-slate-300 mt-0.5">รวมเที่ยววิ่งส่งสำเร็จวันนี้ ${totalCompletedTrips} เที่ยว • ค่ารอบสะสมที่ต้องจ่าย ฿${totalRiderFeesEarned.toLocaleString()}</p>
+                    </div>
+
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button onclick="printA4RidersSummary('${targetDateKey}')" class="px-3 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold rounded-xl text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer" title="พิมพ์ใบสรุปค่ารอบไรเดอร์ A4 ส่งฝ่ายบัญชี">
+                            <span class="material-symbols-outlined text-sm">description</span>
+                            <span>📄 พิมพ์สรุป A4 (ส่งบัญชี)</span>
+                        </button>
+                        <button onclick="openRiderPayoutModal()" class="px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-sm font-bold">qr_code_2</span>
+                            <span>💸 สรุปจ่ายค่ารอบพร้อมเพย์</span>
+                        </button>
+                    </div>
+                </div>
+
+                ${totalInHandCod >= settings.maxCodLimit ? `
+                    <div class="p-3 bg-rose-500/20 border border-rose-500/40 rounded-2xl flex items-center justify-between gap-2 text-xs animate-pulse">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-rose-400 text-base">warning</span>
+                            <span class="font-bold text-rose-200">มียอดเงินสด COD ค้างส่งเกินเกณฑ์ความปลอดภัย ฿${settings.maxCodLimit.toLocaleString()} โปรดเรียกไรเดอร์กลับมาเคลียร์เงินเข้าฮับทันที</span>
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+
+            <!-- Settlement List per Rider -->
+            <div class="bg-white rounded-3xl border border-slate-200 shadow-xs p-4 sm:p-5 space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div>
+                        <h4 class="font-extrabold text-sm text-slate-800">รายชื่อไรเดอร์และสถานะเคลียร์เงินสดประจำวัน</h4>
+                        <div class="text-[11px] text-slate-400">ตรวจสอบยอดเงินในมือ เคลียร์เงินสดเข้าฮับ และฉีกสลิป 80mm ให้ไรเดอร์</div>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    ${riderDataList.length === 0 ? `
+                        <div class="py-8 text-center text-slate-400 text-xs">ไม่มีข้อมูลไรเดอร์ในระบบ</div>
+                    ` : riderDataList.map(r => `
+                        <div class="p-4 rounded-2xl border ${r.isCodExceeded ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 bg-slate-50/50'} flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all hover:bg-white hover:shadow-xs">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-black text-base shrink-0">
+                                    ${r.avatar || '🛵'}
+                                </div>
+                                <div>
+                                    <div class="font-extrabold text-sm text-slate-900 flex items-center gap-1.5">
+                                        <span>${r.name}</span>
+                                        <span class="font-mono text-slate-400 text-xs">(${r.plate || '-'})</span>
+                                    </div>
+                                    <div class="text-[11px] text-slate-500 font-mono mt-0.5">
+                                        📱 ${r.phone} • 💳 พร้อมเพย์: ${r.promptPay || r.phone || '-'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-4 text-xs">
+                                <div class="text-right">
+                                    <div class="text-[10px] text-slate-400">วิ่งสำเร็จ</div>
+                                    <div class="font-black text-slate-800">${r.trips} เที่ยว</div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-[10px] text-slate-400">ค่ารอบสะสม</div>
+                                    <div class="font-black text-emerald-700">฿${r.feeEarned.toLocaleString()}</div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-[10px] text-slate-400">เงินสด COD ในมือ</div>
+                                    <div class="font-black ${r.inHandCod > 0 ? 'text-amber-700 font-mono' : 'text-slate-400'}">฿${r.inHandCod.toLocaleString()}</div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
+                                <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์สลิปสรุปยอดความร้อน 80mm ให้ไรเดอร์">
+                                    <span class="material-symbols-outlined text-xs text-sky-700">receipt_long</span>
+                                    <span>🧾 สลิป 80mm</span>
+                                </button>
+                                <button onclick="settleRiderCod('${r.id}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer" title="รับมอบเงินสด COD จากไรเดอร์เข้าฮับ">
+                                    <span class="material-symbols-outlined text-xs">payments</span>
+                                    <span>💵 เคลียร์เงิน COD</span>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SUB-TAB 4: ⚙️ ตั้งค่าค่ารอบ & กฎโบนัส (RATES & RULES)
+    // ─────────────────────────────────────────────────────────────
+    else if (_adminRiderSubTab === "settings") {
+        subTabContentHtml = `
+            <div class="max-w-3xl mx-auto space-y-4">
+                <!-- Action Header -->
+                <div class="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <h4 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-purple-600 text-xl">tune</span>
+                            <span>ตั้งค่าโครงสร้างค่ารอบและระเบียบปฏิบัติ (Rates & Policies)</span>
+                        </h4>
+                        <p class="text-xs text-slate-500 mt-0.5">กำหนดค่ารอบมาตรฐาน เบี้ยเลี้ยงสู้ฝน โบนัสเป้าหมาย และเพดานเงินสด COD</p>
+                    </div>
+                    <button onclick="printA4RiderRulesSheet()" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all self-start sm:self-auto cursor-pointer" title="พิมพ์ระเบียบปฏิบัติและกติกาค่ารอบกระดาษ A4 ติดบอร์ดประชาสัมพันธ์">
+                        <span class="material-symbols-outlined text-sm font-bold text-amber-400">print</span>
+                        <span>📄 พิมพ์ระเบียบ A4 ติดบอร์ด</span>
+                    </button>
+                </div>
+
+                <!-- Weather Surcharge 1-Click Toggle -->
+                <div onclick="toggleRainSurcharge()" class="p-4 rounded-3xl border cursor-pointer transition-all ${settings.rainSurcharge ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white border-sky-400 shadow-md' : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 shadow-xs'}">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="text-3xl">${settings.rainSurcharge ? '🌧️' : '☀️'}</span>
+                            <div>
+                                <div class="font-extrabold text-sm sm:text-base">
+                                    ${settings.rainSurcharge ? 'เปิดโหมดฝนตกหนัก (+฿' + settings.rainSurchargeAmount + ' / เที่ยว)' : 'โหมดฝนตก / สภาพอากาศรุนแรง (ปัจจุบันปิดอยู่)'}
+                                </div>
+                                <div class="text-xs mt-0.5 ${settings.rainSurcharge ? 'text-sky-100' : 'text-slate-400'}">
+                                    ${settings.rainSurcharge ? 'เพิ่มค่ารอบให้ไรเดอร์อัตโนมัติทุกเที่ยวที่วิ่งช่วงฝนตก' : 'คลิกเพื่อเปิดโหมดสู้ฝน เพิ่มเบี้ยเลี้ยงพิเศษให้คนขับทันที'}
+                                </div>
+                            </div>
+                        </div>
+                        <span class="material-symbols-outlined text-3xl ${settings.rainSurcharge ? 'text-white' : 'text-slate-400'}">
+                            ${settings.rainSurcharge ? 'toggle_on' : 'toggle_off'}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Config Form -->
+                <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+                    <h4 class="font-extrabold text-sm text-slate-800 border-b border-slate-100 pb-2.5">
+                        กำหนดตัวเลขอัตราค่าตอบแทน (ปรับเปลี่ยนมีผลทันที)
+                    </h4>
+
+                    <form onsubmit="saveFleetSettingsFromUI(event)" class="space-y-4 text-xs">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                            <div>
+                                <label class="font-bold text-slate-700 block mb-1">ค่ารอบมาตรฐาน (฿/เที่ยว):</label>
+                                <input type="number" id="fleet-cfg-base-fee" value="${settings.baseFee || 40}" min="10" max="200" class="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                                <span class="text-[10px] text-slate-400 mt-1 block">ค่าตอบแทนขั้นต่ำต่อเที่ยวที่ไรเดอร์ได้รับ</span>
+                            </div>
+                            <div>
+                                <label class="font-bold text-slate-700 block mb-1">โบนัสฝนตก (฿/เที่ยว):</label>
+                                <input type="number" id="fleet-cfg-rain-bonus" value="${settings.rainSurchargeAmount || 15}" min="0" max="100" class="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                                <span class="text-[10px] text-slate-400 mt-1 block">บวกเพิ่มอัตโนมัติเมื่อกดเปิดโหมดฝนตก</span>
                             </div>
                         </div>
 
-                        <form onsubmit="saveFleetSettingsFromUI(event)" class="space-y-3 text-xs pt-1">
-                            <div class="grid grid-cols-2 gap-2.5">
-                                <div>
-                                    <label class="font-bold text-slate-700 block mb-1">ค่ารอบมาตรฐาน (฿/เที่ยว):</label>
-                                    <input type="number" id="fleet-cfg-base-fee" value="${settings.baseFee || 40}" min="10" max="200" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
-                                </div>
-                                <div>
-                                    <label class="font-bold text-slate-700 block mb-1">โบนัสฝนตก (฿/เที่ยว):</label>
-                                    <input type="number" id="fleet-cfg-rain-bonus" value="${settings.rainSurchargeAmount || 15}" min="0" max="100" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-2.5">
-                                <div>
-                                    <label class="font-bold text-slate-700 block mb-1">โบนัสเป้าหมาย (ส่งครบ N เที่ยว):</label>
-                                    <input type="number" id="fleet-cfg-target-trips" value="${settings.dailyBonusTrips || 10}" min="1" max="50" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
-                                </div>
-                                <div>
-                                    <label class="font-bold text-slate-700 block mb-1">ยอดโบนัสพิเศษ (฿):</label>
-                                    <input type="number" id="fleet-cfg-bonus-amount" value="${settings.dailyBonusAmount || 100}" min="0" max="500" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
-                                </div>
-                            </div>
-
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                             <div>
-                                <label class="font-bold text-slate-700 block mb-1">วงเงินสด COD สูงสุดในมือ (เตือนเมื่อเกิน):</label>
-                                <input type="number" id="fleet-cfg-max-cod" value="${settings.maxCodLimit || 2500}" min="500" max="10000" step="100" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold font-mono text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
-                                <span class="text-[10px] text-slate-400 mt-0.5 block">ระบบจะแสดงป้ายเตือนสีแดงให้ไรเดอร์นำส่งเงินเข้าฮับทันทีเมื่อยอดสะสมเกินเกณฑ์</span>
+                                <label class="font-bold text-slate-700 block mb-1">เป้าหมายเที่ยววิ่ง (เที่ยว/วัน):</label>
+                                <input type="number" id="fleet-cfg-target-trips" value="${settings.dailyBonusTrips || 10}" min="1" max="50" class="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                                <span class="text-[10px] text-slate-400 mt-1 block">จำนวนเที่ยวขั้นต่ำเพื่อรับโบนัสขยัน</span>
                             </div>
+                            <div>
+                                <label class="font-bold text-slate-700 block mb-1">ยอดเงินโบนัสพิเศษ (฿):</label>
+                                <input type="number" id="fleet-cfg-bonus-amount" value="${settings.dailyBonusAmount || 100}" min="0" max="500" class="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                                <span class="text-[10px] text-slate-400 mt-1 block">เงินรางวัลเพิ่มพิเศษเมื่อทำยอดถึงเป้าหมาย</span>
+                            </div>
+                        </div>
 
-                            <button type="submit" class="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold rounded-xl shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5">
-                                <span class="material-symbols-outlined text-sm">save</span>
-                                <span>บันทึกการตั้งค่าค่ารอบ & เกณฑ์ COD</span>
-                            </button>
-                        </form>
-                    </div>
+                        <div>
+                            <label class="font-bold text-slate-700 block mb-1">เพดานเงินสด COD สูงสุดในมือ (฿):</label>
+                            <input type="number" id="fleet-cfg-max-cod" value="${settings.maxCodLimit || 2500}" min="500" max="10000" step="100" class="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold font-mono text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                            <span class="text-[10px] text-slate-400 mt-1 block">ระบบจะแสดงป้ายเตือนสีแดงทันทีเมื่อไรเดอร์เก็บเงินสด COD เกินยอดนี้</span>
+                        </div>
+
+                        <button type="submit" class="w-full py-3 bg-purple-700 hover:bg-purple-800 text-white font-extrabold rounded-2xl shadow-md active:scale-95 transition-all flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined text-sm font-bold">save</span>
+                            <span>บันทึกการตั้งค่าค่ารอบ & เกณฑ์ COD</span>
+                        </button>
+                    </form>
                 </div>
             </div>
+        `;
+    }
+
+    // MAIN RENDER WITH SUB-TAB NAVBAR
+    container.innerHTML = `
+        <div class="space-y-4 max-w-full animate-fade-in">
+            <!-- Header Banner -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
+                <div>
+                    <h3 class="font-extrabold text-base sm:text-lg text-slate-800 flex items-center gap-2">
+                        <span class="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                            <span class="material-symbols-outlined text-lg">sports_motorsports</span>
+                        </span>
+                        <span>ศูนย์บริหารงานไรเดอร์ชุมชน & ค่ารอบจัดส่ง (Fleet Operations)</span>
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-0.5">ระบบจัดการงานไรเดอร์ 4 หมวด: มอนิเตอร์สด เรดาร์ GPS ทำเนียบคนขับ เคลียร์เงิน และตั้งค่ารอบ</p>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="clearFleetTestData()" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-extrabold rounded-xl text-xs shadow-2xs flex items-center gap-1 active:scale-95 transition-all" title="ล้างข้อมูลจำลอง/ทดสอบในระบบออกทั้งหมด">
+                        <span class="material-symbols-outlined text-xs font-bold text-rose-600">delete_sweep</span>
+                        <span>ล้างข้อมูลทดสอบ</span>
+                    </button>
+                    <button onclick="renderAdminRiders(); if(_adminRiderSubTab === 'live') initAdminRiderRadarMap(); showToast('🔄 อัปเดตข้อมูลไรเดอร์เรียบร้อย');" class="p-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl shadow-xs active:scale-95 transition-all" title="รีเฟรชข้อมูล">
+                        <span class="material-symbols-outlined text-base">refresh</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4 Sub-Tabs Segmented Navigation Bar -->
+            <div class="bg-slate-200/80 p-1.5 rounded-2xl flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs">
+                <button onclick="switchAdminRiderSubTab('live')" class="flex-1 min-w-[150px] py-2 px-3 rounded-xl font-extrabold flex items-center justify-center gap-1.5 transition-all ${_adminRiderSubTab === 'live' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}">
+                    <span class="material-symbols-outlined text-base">radar</span>
+                    <span>1. 📡 มอนิเตอร์สด & เรดาร์</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded-full ${_adminRiderSubTab === 'live' ? 'bg-purple-900/60 text-amber-300' : 'bg-slate-300 text-slate-700'}">${availableCount + deliveringCount} คน</span>
+                </button>
+
+                <button onclick="switchAdminRiderSubTab('roster')" class="flex-1 min-w-[150px] py-2 px-3 rounded-xl font-extrabold flex items-center justify-center gap-1.5 transition-all ${_adminRiderSubTab === 'roster' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}">
+                    <span class="material-symbols-outlined text-base">groups</span>
+                    <span>2. 📋 ทำเนียบ & ใบสมัคร</span>
+                    ${pendingApps.length > 0 ? `<span class="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 animate-pulse font-black">รอ ${pendingApps.length}</span>` : `<span class="text-[10px] px-1.5 py-0.2 rounded-full ${_adminRiderSubTab === 'roster' ? 'bg-purple-900/60 text-slate-200' : 'bg-slate-300 text-slate-700'}">${riders.length} คน</span>`}
+                </button>
+
+                <button onclick="switchAdminRiderSubTab('settlement')" class="flex-1 min-w-[150px] py-2 px-3 rounded-xl font-extrabold flex items-center justify-center gap-1.5 transition-all ${_adminRiderSubTab === 'settlement' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}">
+                    <span class="material-symbols-outlined text-base">payments</span>
+                    <span>3. 💰 เคลียร์เงิน & ค่ารอบ</span>
+                    ${totalInHandCod > 0 ? `<span class="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-black">฿${totalInHandCod.toLocaleString()}</span>` : ''}
+                </button>
+
+                <button onclick="switchAdminRiderSubTab('settings')" class="flex-1 min-w-[150px] py-2 px-3 rounded-xl font-extrabold flex items-center justify-center gap-1.5 transition-all ${_adminRiderSubTab === 'settings' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}">
+                    <span class="material-symbols-outlined text-base">tune</span>
+                    <span>4. ⚙️ ตั้งค่าค่ารอบ & โบนัส</span>
+                    ${settings.rainSurcharge ? `<span class="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-400 text-slate-950 font-black">🌧️ ฝนตก</span>` : ''}
+                </button>
+            </div>
+
+            <!-- Sub-Tab Content -->
+            ${subTabContentHtml}
         </div>
     `;
+
+    // Re-initialize map if live subtab
+    if (_adminRiderSubTab === "live") {
+        setTimeout(() => initAdminRiderRadarMap(), 150);
+    }
 }
 
-// ── Search & Filter Handlers
 function handleRiderSearch(val) {
     _adminRiderSearchQuery = val;
     renderAdminRiders();
