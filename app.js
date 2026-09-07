@@ -14827,18 +14827,6 @@ function openRiderLoginModal() {
         phoneInput.value = "";
         setTimeout(() => phoneInput.focus(), 100);
     }
-
-    const select = document.getElementById("rider-select-input");
-    if (select) {
-        const riders = loadCommunityRiders();
-        if (riders && riders.length > 0) {
-            select.innerHTML = riders.map(r => `
-                <option value="${r.id}">🛵 ${r.name} (${r.plate || '-'}) • ${r.phone}${r.accessCode ? ' [รหัส: ' + r.accessCode + ']' : ''}</option>
-            `).join("");
-        } else {
-            select.innerHTML = `<option value="">-- ยังไม่มีไรเดอร์ในระบบ (สมัครใหม่ด้านล่าง) --</option>`;
-        }
-    }
 }
 window.openRiderLoginModal = openRiderLoginModal;
 
@@ -15155,31 +15143,13 @@ function updateCustomerLoyaltyBanner() {
 }
 
 function openMerchantLoginModal() {
-    const listEl = document.getElementById("merchant-stalls-login-list");
-    if (listEl) {
-        let html = "";
-        MARKET_DATA.forEach(stall => {
-            const emoji = stall.stallTag ? stall.stallTag.split(" ")[0] : "🏪";
-            const owner = stall.ownerName || "เจ้าของแผงค้า";
-            html += `
-                <button onclick="loginAsMerchantStall('${stall.stallId}')" class="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 flex items-center justify-between text-xs text-slate-800 transition-all text-left group">
-                    <div class="flex items-center gap-2">
-                        <span class="text-base">${emoji}</span>
-                        <div>
-                            <div class="font-bold text-slate-800 group-hover:text-emerald-700">${stall.stallName}</div>
-                            <div class="text-[10px] text-slate-400">${stall.stallNumber} • โซน ${stall.zone} • ${owner}</div>
-                        </div>
-                    </div>
-                    <span class="text-[11px] text-emerald-600 font-bold group-hover:translate-x-0.5 transition-transform">เข้าสู่ระบบ ></span>
-                </button>
-            `;
-        });
-        if (html === "") {
-            html = `<div class="text-slate-400 text-center py-3 text-xs italic">ยังไม่มีร้านค้าในระบบ กดปุ่มด้านล่างเพื่อเปิดแผงค้าใหม่</div>`;
-        }
-        listEl.innerHTML = html;
+    const modal = document.getElementById("merchant-login-modal");
+    if (modal) modal.classList.remove("hidden");
+    const input = document.getElementById("merchant-code-login-input");
+    if (input) {
+        input.value = "";
+        setTimeout(() => input.focus(), 100);
     }
-    document.getElementById("merchant-login-modal").classList.remove("hidden");
 }
 
 function closeMerchantLoginModal() {
