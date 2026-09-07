@@ -6409,6 +6409,9 @@ function handleRiderStartDelivery() {
 
 function handleRiderCompleteDelivery() {
     if (!state.activeOrder) {
+        state.activeOrder = loadSavedActiveOrder();
+    }
+    if (!state.activeOrder) {
         showToast("⚠️ ไม่พบออเดอร์ที่กำลังรอดำเนินการ");
         return;
     }
@@ -6416,6 +6419,9 @@ function handleRiderCompleteDelivery() {
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} น.`;
     state.activeOrder.status = "delivered";
     state.activeOrder.deliveredAt = timeStr;
+    if (!state.activeOrder.startedDeliveryAt) {
+        state.activeOrder.startedDeliveryAt = timeStr;
+    }
 
     if (state.activeOrder.stalls) {
         state.activeOrder.stalls.forEach(s => {
@@ -6431,6 +6437,7 @@ function handleRiderCompleteDelivery() {
     if (typeof renderTrackingScreen === "function") renderTrackingScreen();
     if (typeof updateHomeActiveOrderBanner === "function") updateHomeActiveOrderBanner();
     if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
     if (typeof playOrderAlertSound === "function") playOrderAlertSound();
 
     openRiderDeliveryCompleteModal();
