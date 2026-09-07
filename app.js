@@ -377,6 +377,8 @@ async function syncLatestOrderFromCloud() {
         // 2. ถ้าคลาวด์ไม่มี หรือออฟไลน์ ให้ fallback มาดูที่ localStorage ของเครื่อง
         if (!syncedOrder) {
             syncedOrder = loadSavedActiveOrder();
+        }
+
         // โหลดข้อมูล Express Orders ของแผงค้าด้วย
         try {
             const expRaw = localStorage.getItem("hsong_merchant_express_orders");
@@ -396,13 +398,16 @@ async function syncLatestOrderFromCloud() {
         if (typeof renderHubSettlement === "function") renderHubSettlement();
         if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
             
-            const hubBadge = document.getElementById("hub-badge-count");
-            if (hubBadge) {
-                hubBadge.classList.remove("hidden");
-                hubBadge.textContent = "SYNCED";
-            }
+        const hubBadge = document.getElementById("hub-badge-count");
+        if (hubBadge) {
+            hubBadge.classList.remove("hidden");
+            hubBadge.textContent = "SYNCED";
+        }
             
+        if (syncedOrder && syncedOrder.orderId) {
             showToast(`✅ ซิงค์สำเร็จ! ดึงออเดอร์ ${syncedOrder.orderId} เข้าสู่ใบจัดของแล้ว`);
+        } else if (state.merchantExpressOrders && state.merchantExpressOrders.length > 0) {
+            showToast(`✅ ซิงค์สำเร็จ! ตรวจพบงานด่วนแผงค้า ${state.merchantExpressOrders.length} รายการ`);
         } else {
             showToast("ℹ️ ระบบคลาวด์ปกติ: ยังไม่มีออเดอร์ใหม่ที่ค้างจัด");
         }
@@ -1809,6 +1814,14 @@ function switchHubTab(tabName) {
             else content.classList.add("hidden");
         }
     });
+
+    if (tabName === "picking") {
+        renderHubPickingList();
+    }
+
+    if (tabName === "settlement") {
+        renderHubSettlement();
+    }
 
     if (tabName === "monitor") {
         renderHubMonitorBoard();
