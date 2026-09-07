@@ -7986,6 +7986,27 @@ function confirmMerchantPaymentAndDispatch() {
     }, 200);
 }
 
+
+function dismissMerchantExpressOrder(orderId) {
+    if (state.merchantExpressOrders) {
+        state.merchantExpressOrders = state.merchantExpressOrders.filter(o => o && o.orderId !== orderId);
+        try {
+            localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders));
+        } catch(e) {}
+    }
+    if (state.activeOrder && state.activeOrder.orderId === orderId) {
+        state.activeOrder = null;
+        try {
+            localStorage.removeItem("hsong_active_order");
+            localStorage.removeItem("talathub_active_order");
+        } catch(e) {}
+    }
+    renderMerchantActiveDeliveries();
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
+    showToast("✓ ปิดการแสดงผลออเดอร์ที่ส่งสำเร็จแล้วเรียบร้อย");
+}
+window.dismissMerchantExpressOrder = dismissMerchantExpressOrder;
+
 function resetAndFocusMerchantForm() {
     const custName = document.getElementById("merchant-cust-name");
     if (custName) {
