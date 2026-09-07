@@ -1364,6 +1364,28 @@ function saveGranularDeliveryAddress() {
         fullTitle = `พิกัด GPS (${lat.toFixed(4)}, ${lng.toFixed(4)}) อ.บ้านบึง`;
     }
 
+    if (window._isMerchantMapPicker) {
+        window._isMerchantMapPicker = false;
+        state.merchantPinnedCoords = {
+            title: fullTitle,
+            lat: lat,
+            lng: lng,
+            distKm: distKm,
+            fee: fee,
+            subdistrict: subdistrict || "อ.บ้านบึง จ.ชลบุรี"
+        };
+        const badge = document.getElementById("merchant-pinned-badge");
+        const badgeText = document.getElementById("merchant-pinned-text");
+        if (badge) badge.classList.remove("hidden");
+        if (badgeText) badgeText.textContent = `📍 ปักหมุด: ${fullTitle} (~${distKm.toFixed(1)} กม. ค่าส่ง ฿${fee})`;
+        const extraAddr = document.getElementById("merchant-dest-address");
+        if (extraAddr && !extraAddr.value) extraAddr.value = fullTitle;
+        calculateMerchantFee();
+        closeLocationModal();
+        showToast(`📍 ปักหมุดปลายทางลูกค้าสำเร็จ! (~${distKm.toFixed(1)} กม. ค่าส่ง ฿${fee})`);
+        return;
+    }
+
     state.deliveryLocation = {
         title: fullTitle,
         fullAddress: fullTitle,
@@ -6285,9 +6307,13 @@ function handleRiderStartDelivery() {
     renderRiderScreen();
     if (typeof renderTrackingScreen === "function") renderTrackingScreen();
     if (typeof updateHomeActiveOrderBanner === "function") updateHomeActiveOrderBanner();
+    if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
     if (typeof playOrderAlertSound === "function") playOrderAlertSound();
 
-    showToast("🛵 ไรเดอร์รับของแล้ว ออกเดินทางนำส่งลูกค้า!");
+    const startMsg = (state.activeOrder.orderType === "MERCHANT_EXPRESS")
+        ? `🛵 ไรเดอร์รับของจาก "${state.activeOrder.originStall?.stallName || 'แผงค้า'}" แล้ว ออกเดินทางนำส่งลูกค้า!`
+        : "🛵 ไรเดอร์รับของแล้ว ออกเดินทางนำส่งลูกค้า!";
+    showToast(startMsg);
 }
 
 function handleRiderCompleteDelivery() {
@@ -6313,10 +6339,14 @@ function handleRiderCompleteDelivery() {
     renderRiderScreen();
     if (typeof renderTrackingScreen === "function") renderTrackingScreen();
     if (typeof updateHomeActiveOrderBanner === "function") updateHomeActiveOrderBanner();
+    if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
     if (typeof playOrderAlertSound === "function") playOrderAlertSound();
 
     openRiderDeliveryCompleteModal();
-    showToast("🎉 ไรเดอร์ส่งมอบของสดถึงมือลูกค้าเรียบร้อยแล้ว! (+฿40 ค่ารอบ)");
+    const doneMsg = (state.activeOrder.orderType === "MERCHANT_EXPRESS")
+        ? `🎉 ส่งมอบของด่วนถึงมือลูกค้าเรียบร้อยแล้ว! ${state.activeOrder.isCod ? '(เก็บเงิน COD ฿' + state.activeOrder.codAmount + ' สำเร็จ)' : ''}`
+        : "🎉 ไรเดอร์ส่งมอบของสดถึงมือลูกค้าเรียบร้อยแล้ว! (+฿40 ค่ารอบ)";
+    showToast(doneMsg);
 }
 
 function openRiderDeliveryCompleteModal() {
@@ -7405,42 +7435,575 @@ function reorderCurrentItems() {
 }
 
 // ==========================================
-// MERCHANT EXPRESS DISPATCH REQUEST
+// MERCHANT EXPRESS DISPATCH SYSTEM (แผงค้าเรียกไรเดอร์ส่งของด่วน)
 // ==========================================
+state.merchantPinnedCoords = null;
+state.merchantExpressOrders = state.merchantExpressOrders || [];
+
+function renderMerchantView() {
+    // 1. Sync Active Stall
+    let stall = null;
+    if (activeMerchantStallId) {
+        stall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.find(s => s.stallId === activeMerchantStallId);
+    }
+    if (!stall && state.activeMerchant && state.activeMerchant.stallId) {
+        stall = MARKET_DATA.find(s => s.stallId === state.activeMerchant.stallId) || ALL_100_STALLS.find(s => s.stallId === state.activeMerchant.stallId);
+    }
+    if (!stall) {
+        stall = MARKET_DATA[0];
+        activeMerchantStallId = stall.stallId;
+    }
+
+    // 2. Update Header & Badges
+    const headerIcon = document.getElementById("merchant-header-icon");
+    const headerZone = document.getElementById("merchant-header-zone-badge");
+    const headerStallNo = document.getElementById("merchant-header-stallno");
+    const headerStallName = document.getElementById("merchant-header-stallname");
+    const senderBadge = document.getElementById("merchant-sender-badge");
+    const senderName = document.getElementById("merchant-sender-name");
+    const senderPhone = document.getElementById("merchant-sender-phone");
+
+    const emoji = stall.stallTag ? stall.stallTag.split(" ")[0] : "🏪";
+    if (headerIcon) headerIcon.textContent = emoji;
+    if (headerZone) headerZone.textContent = stall.zone ? `โซน ${stall.zone.charAt(0)} • ${stall.category || 'ตลาดสด'}` : "โซนตลาดสด";
+    if (headerStallNo) headerStallNo.textContent = stall.stallNumber || "แผง A01";
+    if (headerStallName) headerStallName.textContent = stall.stallName || "แผงค้าในตลาด";
+    if (senderBadge) senderBadge.textContent = `${stall.stallNumber || 'แผงค้า'} • ${stall.zone || 'ตลาดสด'}`;
+    if (senderName) senderName.textContent = `${stall.stallName} (${stall.stallNumber || 'แผงค้า'})`;
+    if (senderPhone) senderPhone.textContent = `${stall.ownerName || 'เจ้าของร้าน'} (${stall.phone || '081-999-8888'})`;
+
+    // 3. Populate Stall Selector
+    const selectEl = document.getElementById("merchant-stall-select");
+    if (selectEl) {
+        let html = "";
+        MARKET_DATA.forEach(s => {
+            const isSel = s.stallId === stall.stallId ? "selected" : "";
+            html += `<option value="${s.stallId}" ${isSel}>${s.stallName} (${s.stallNumber || 'แผงค้า'} • โซน ${s.zone || 'A'})</option>`;
+        });
+        selectEl.innerHTML = html;
+    }
+
+    calculateMerchantFee();
+    renderMerchantActiveDeliveries();
+}
+
+function onMerchantStallSelectChanged(stallId) {
+    activeMerchantStallId = stallId;
+    const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
+    if (stall) {
+        state.activeMerchant = {
+            isLoggedIn: true,
+            stallId: stall.stallId,
+            stallName: stall.stallName,
+            stallNumber: stall.stallNumber
+        };
+        saveMerchantToStorage(state.activeMerchant);
+    }
+    renderMerchantView();
+}
+
 function calculateMerchantFee() {
-    const fee = document.getElementById("merchant-destination-select").value;
-    document.getElementById("merchant-calc-fee").textContent = `฿${fee}`;
+    const destSelect = document.getElementById("merchant-destination-select");
+    const feeEl = document.getElementById("merchant-calc-fee");
+    const distDesc = document.getElementById("merchant-calc-dist-desc");
+
+    if (state.merchantPinnedCoords) {
+        const distKm = state.merchantPinnedCoords.distKm;
+        const fee = state.merchantPinnedCoords.fee;
+        if (feeEl) feeEl.textContent = `฿${fee}`;
+        if (distDesc) distDesc.textContent = `พิกัดดาวเทียม ~${distKm.toFixed(1)} กม. จากตลาดวิศิษฐ์ชัย`;
+        return;
+    }
+
+    if (destSelect) {
+        const fee = destSelect.value || "25";
+        const selectedOpt = destSelect.options[destSelect.selectedIndex];
+        const dist = selectedOpt ? (selectedOpt.dataset.dist || "1.8") : "1.8";
+        if (feeEl) feeEl.textContent = `฿${fee}`;
+        if (distDesc) distDesc.textContent = `ระยะทาง ~${dist} กม. จากตลาดวิศิษฐ์ชัย`;
+    }
 }
 
 function toggleMerchantCodInput(checkbox) {
     const box = document.getElementById("merchant-cod-box");
+    if (!box) return;
     if (checkbox.checked) {
         box.classList.remove("hidden");
+        const amtInput = document.getElementById("merchant-cod-amount");
+        if (amtInput && !amtInput.value) amtInput.focus();
     } else {
         box.classList.add("hidden");
     }
 }
 
-function submitMerchantCall() {
-    const stallSelect = document.getElementById("merchant-stall-select");
-    const stallText = stallSelect.options[stallSelect.selectedIndex].text;
+function openMerchantDestinationMap() {
+    window._isMerchantMapPicker = true;
+    openLocationModal();
+}
 
-    showToast(`เรียกไรเดอร์มารับของที่ "${stallText}" เรียบร้อยแล้ว!`);
+function clearMerchantPinnedLocation() {
+    state.merchantPinnedCoords = null;
+    const badge = document.getElementById("merchant-pinned-badge");
+    if (badge) badge.classList.add("hidden");
+    calculateMerchantFee();
+}
+
+function submitMerchantCall() {
+    const itemDescInput = document.getElementById("merchant-item-desc");
+    const custNameInput = document.getElementById("merchant-cust-name");
+    const custPhoneInput = document.getElementById("merchant-cust-phone");
+    const extraAddrInput = document.getElementById("merchant-dest-address");
+    const destSelect = document.getElementById("merchant-destination-select");
+    const codChk = document.getElementById("merchant-cod-chk");
+    const codAmountInput = document.getElementById("merchant-cod-amount");
+
+    const itemDesc = itemDescInput ? itemDescInput.value.trim() : "";
+    const custName = custNameInput ? custNameInput.value.trim() : "";
+    const custPhone = custPhoneInput ? custPhoneInput.value.trim() : "";
+    const extraAddr = extraAddrInput ? extraAddrInput.value.trim() : "";
+    const isCod = codChk ? codChk.checked : false;
+    const codAmount = isCod ? (parseInt(codAmountInput?.value) || 0) : 0;
+
+    if (!itemDesc) {
+        showToast("⚠️ กรุณาระบุประเภทและจำนวนสินค้าที่ต้องการส่ง");
+        if (itemDescInput) itemDescInput.focus();
+        return;
+    }
+
+    if (!custName) {
+        showToast("⚠️ กรุณาระบุชื่อลูกค้าผู้รับของ");
+        if (custNameInput) custNameInput.focus();
+        return;
+    }
+
+    if (!custPhone) {
+        showToast("⚠️ กรุณาระบุเบอร์โทรศัพท์ลูกค้า เพื่อให้ไรเดอร์ติดต่อได้");
+        if (custPhoneInput) custPhoneInput.focus();
+        return;
+    }
+
+    const currentStall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || MARKET_DATA[0];
+    const selectedOpt = destSelect ? destSelect.options[destSelect.selectedIndex] : null;
+    const distKm = state.merchantPinnedCoords ? state.merchantPinnedCoords.distKm : (selectedOpt ? parseFloat(selectedOpt.dataset.dist || "1.8") : 1.8);
+    const fee = state.merchantPinnedCoords ? state.merchantPinnedCoords.fee : (selectedOpt ? parseInt(selectedOpt.value || "25") : 25);
+    const fullAddress = state.merchantPinnedCoords 
+        ? (state.merchantPinnedCoords.title + (extraAddr ? ` (${extraAddr})` : "")) 
+        : `${selectedOpt?.dataset.sub || "ชุมชนบ้านหนองชาก"} ${extraAddr ? '(' + extraAddr + ')' : ''}`;
+
+    const orderId = "EXP-" + Date.now().toString().slice(-4);
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const expressOrder = {
+        orderId: orderId,
+        orderType: "MERCHANT_EXPRESS",
+        createdAt: now.toISOString(),
+        time: `${timeStr} น.`,
+        originStall: {
+            stallId: currentStall.stallId,
+            stallName: currentStall.stallName,
+            stallNumber: currentStall.stallNumber || "แผงค้า",
+            zone: currentStall.zone || "A",
+            ownerName: currentStall.ownerName || "เจ้าของร้าน",
+            ownerPhone: currentStall.phone || "081-999-8888"
+        },
+        customerName: custName,
+        customerPhone: custPhone,
+        address: fullAddress,
+        houseNumber: extraAddr,
+        subdistrict: state.merchantPinnedCoords?.subdistrict || "อ.บ้านบึง จ.ชลบุรี",
+        lat: state.merchantPinnedCoords?.lat || 13.3080,
+        lng: state.merchantPinnedCoords?.lng || 101.1214,
+        distanceKm: distKm,
+        deliveryFee: fee,
+        isCod: isCod,
+        codAmount: codAmount,
+        itemDesc: itemDesc,
+        grandTotal: isCod ? codAmount : fee,
+        paymentDesc: isCod ? `เก็บเงินปลายทาง COD ฿${codAmount}` : `แผงค้าออกค่าส่ง ฿${fee}`,
+        status: "waiting_rider",
+        assignedRider: null,
+        stalls: [{
+            name: currentStall.stallName,
+            stallNumber: currentStall.stallNumber || "แผงค้า",
+            items: [{ name: itemDesc, price: isCod ? codAmount : 0, actualPrice: isCod ? codAmount : 0, picked: true }]
+        }]
+    };
+
+    state.activeOrder = expressOrder;
+    state.merchantExpressOrders = state.merchantExpressOrders || [];
+    state.merchantExpressOrders.unshift(expressOrder);
+
+    try {
+        localStorage.setItem("hsong_active_order", JSON.stringify(expressOrder));
+        localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
+    } catch(e) {}
+
+    if (typeof syncOrderToCloud === "function") {
+        syncOrderToCloud(expressOrder);
+    }
+
+    if (itemDescInput) itemDescInput.value = "";
+    if (custNameInput) custNameInput.value = "";
+    if (custPhoneInput) custPhoneInput.value = "";
+    if (extraAddrInput) extraAddrInput.value = "";
+    if (codChk) {
+        codChk.checked = false;
+        toggleMerchantCodInput(codChk);
+    }
+    clearMerchantPinnedLocation();
+
+    showToast(`🚀 แจ้งฮับสำเร็จ! สร้างงานส่งด่วน ${orderId} จาก "${currentStall.stallName}" เรียบร้อย`);
 
     const queueBadge = document.getElementById("hub-queue-count");
-    if (queueBadge) {
-        queueBadge.textContent = parseInt(queueBadge.textContent || "2") + 1;
-    }
+    if (queueBadge) queueBadge.textContent = "1";
     const hubBadge = document.getElementById("hub-badge-count");
     if (hubBadge) {
         hubBadge.classList.remove("hidden");
         hubBadge.textContent = "NEW";
     }
 
-    setTimeout(() => {
-        switchRole("hub");
-    }, 1200);
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
+    renderMerchantActiveDeliveries();
 }
+
+function renderMerchantActiveDeliveries() {
+    const container = document.getElementById("merchant-active-deliveries-container");
+    if (!container) return;
+
+    const orders = state.merchantExpressOrders || [];
+    const activeOrders = orders.filter(o => o.originStall?.stallId === activeMerchantStallId || !o.originStall);
+
+    if (activeOrders.length === 0 && (!state.activeOrder || state.activeOrder.orderType !== "MERCHANT_EXPRESS")) {
+        container.innerHTML = "";
+        return;
+    }
+
+    const order = (state.activeOrder && state.activeOrder.orderType === "MERCHANT_EXPRESS") ? state.activeOrder : activeOrders[0];
+    if (!order) {
+        container.innerHTML = "";
+        return;
+    }
+
+    const rider = order.assignedRider || {
+        name: "กำลังค้นหาไรเดอร์ในตลาด...",
+        phone: "-",
+        plate: "-",
+        avatar: "🛵"
+    };
+
+    let statusText = "⏳ รอกำลังพลจากฮับ";
+    let statusClass = "bg-amber-100 text-amber-800 border-amber-300";
+    if (order.status === "assigned") {
+        statusText = "🛵 ไรเดอร์กำลังมารับของที่แผง";
+        statusClass = "bg-sky-100 text-sky-800 border-sky-300 animate-pulse";
+    } else if (order.status === "delivering") {
+        statusText = "📦 ไรเดอร์รับของแล้ว กำลังนำส่งลูกค้า";
+        statusClass = "bg-purple-100 text-purple-800 border-purple-300 animate-pulse";
+    } else if (order.status === "delivered") {
+        statusText = "✅ ส่งถึงมือลูกค้าเรียบร้อยแล้ว";
+        statusClass = "bg-emerald-100 text-emerald-800 border-emerald-300";
+    }
+
+    container.innerHTML = `
+        <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-3xl p-4 shadow-xl border-2 border-orange-500/80 space-y-3.5 animate-fade-in">
+            <!-- Header -->
+            <div class="flex items-center justify-between border-b border-white/10 pb-2.5">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-md">⚡</span>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[10px] bg-white/20 text-orange-200 font-mono px-2 py-0.5 rounded-full">${order.orderId}</span>
+                            <span class="text-[10px] text-slate-300">${order.time || 'เมื่อสักครู่'}</span>
+                        </div>
+                        <h4 class="font-extrabold text-sm text-white mt-0.5">สถานะงานส่งด่วนของแผงคุณ</h4>
+                    </div>
+                </div>
+                <span class="text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${statusClass}">
+                    ${statusText}
+                </span>
+            </div>
+
+            <!-- Order info summary -->
+            <div class="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-1.5 text-xs">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="text-[10px] text-slate-400">สินค้าที่ส่ง:</div>
+                        <div class="font-bold text-white text-xs">${order.itemDesc || 'ของสด'}</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[10px] text-slate-400">ปลายทาง:</div>
+                        <div class="font-bold text-emerald-300 text-xs">${order.customerName || 'ลูกค้า'}</div>
+                    </div>
+                </div>
+                <div class="text-[10px] text-slate-300 truncate">📍 ${order.address}</div>
+                ${order.isCod ? `
+                    <div class="text-[11px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">payments</span>
+                        <span>ยอดเก็บเงินปลายทาง (COD): ฿${order.codAmount}</span>
+                    </div>
+                ` : ''}
+            </div>
+
+            <!-- Assigned Rider Box (2-Way Communication) -->
+            <div class="bg-white/10 rounded-2xl p-3 border border-white/15 space-y-2">
+                <div class="text-[10px] font-bold text-orange-200 uppercase tracking-wider flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs">two_wheeler</span>
+                    <span>ข้อมูลไรเดอร์ผู้รับงาน (ช่องทางติดต่อ):</span>
+                </div>
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-10 h-10 rounded-full bg-emerald-700 text-white font-black flex items-center justify-center text-lg shrink-0 shadow-md">
+                            ${rider.avatar || '🛵'}
+                        </div>
+                        <div class="truncate">
+                            <div class="font-black text-white text-xs truncate">${rider.name}</div>
+                            <div class="text-[10px] text-slate-300">ทะเบียน: ${rider.plate || 'รถตลาดวิศิษฐ์ชัย'} • เบอร์โทร: ${rider.phone || '-'}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons: Call, Chat, Radar, Slip -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                <button type="button" onclick="callRiderFromMerchant('${rider.phone}')" class="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px]">
+                    <span class="material-symbols-outlined text-sm">call</span>
+                    <span>โทรหาไรเดอร์</span>
+                </button>
+                <button type="button" onclick="openMerchantRiderChat('${order.orderId}')" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px]">
+                    <span class="material-symbols-outlined text-sm">chat</span>
+                    <span>แชทกับไรเดอร์</span>
+                </button>
+                <button type="button" onclick="viewOrderOnRadar('${order.orderId}')" class="p-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px]">
+                    <span class="material-symbols-outlined text-sm">radar</span>
+                    <span>ดูเรดาร์สด</span>
+                </button>
+                <button type="button" onclick="printMerchantExpressSlip('${order.orderId}')" class="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all text-[11px]">
+                    <span class="material-symbols-outlined text-sm">print</span>
+                    <span>สลิป 80mm</span>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function callRiderFromMerchant(phone) {
+    if (!phone || phone === "-") {
+        showToast("⏳ ฮับกำลังจัดสรรไรเดอร์ประจำตลาดให้ กรุณารอสักครู่");
+        return;
+    }
+    const clean = phone.replace(/[^0-9]/g, "");
+    window.location.href = `tel:${clean}`;
+}
+
+function callMerchantFromRider(phone) {
+    if (!phone || phone === "-") {
+        showToast("⚠️ ไม่พบเบอร์โทรศัพท์ของร้านค้า");
+        return;
+    }
+    const clean = phone.replace(/[^0-9]/g, "");
+    window.location.href = `tel:${clean}`;
+}
+
+function callMerchantFromRiderUI() {
+    const order = state.activeOrder;
+    if (order && order.originStall && order.originStall.ownerPhone) {
+        callMerchantFromRider(order.originStall.ownerPhone);
+    } else {
+        showToast("⚠️ ไม่พบเบอร์โทรศัพท์ของแผงค้า");
+    }
+}
+
+function openMerchantRiderChat(orderId) {
+    openRiderChatModal();
+}
+
+function viewOrderOnRadar(orderId) {
+    switchRole("rider");
+    const subTabRadarBtn = document.getElementById("fleet-subtab-radar-btn");
+    if (subTabRadarBtn) subTabRadarBtn.click();
+    showToast(`📡 กำลังแสดงเรดาร์ GPS ติดตามไรเดอร์สำหรับงาน ${orderId}`);
+}
+
+function assignExpressOrderToRider(riderId = "R1") {
+    if (!state.activeOrder) return;
+    const rider = (RIDER_DATABASE && RIDER_DATABASE.length > 0) ? RIDER_DATABASE[0] : {
+        id: "R1",
+        name: "สมศักดิ์ ขับไว (Rider ประจำฮับ)",
+        phone: "082-111-2233",
+        plate: "กข-1234 ชลบุรี",
+        avatar: "🛵"
+    };
+
+    state.activeOrder.assignedRider = rider;
+    state.activeOrder.status = "assigned";
+
+    if (state.merchantExpressOrders) {
+        const found = state.merchantExpressOrders.find(o => o.orderId === state.activeOrder.orderId);
+        if (found) {
+            found.assignedRider = rider;
+            found.status = "assigned";
+        }
+    }
+
+    try {
+        localStorage.setItem("hsong_active_order", JSON.stringify(state.activeOrder));
+    } catch(e) {}
+
+    showToast(`🛵 จ่ายงานด่วน ${state.activeOrder.orderId} ให้ "${rider.name}" เรียบร้อยแล้ว!`);
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
+    renderMerchantActiveDeliveries();
+    if (typeof renderRiderScreen === "function") renderRiderScreen();
+}
+
+function printMerchantExpressSlip(orderId) {
+    const order = (state.activeOrder && state.activeOrder.orderId === orderId) 
+        ? state.activeOrder 
+        : (state.merchantExpressOrders || []).find(o => o.orderId === orderId);
+
+    if (!order) {
+        showToast("⚠️ ไม่พบข้อมูลออเดอร์งานด่วนนี้");
+        return;
+    }
+
+    const origin = order.originStall || {};
+    const rider = order.assignedRider || { name: "กำลังจัดสรรไรเดอร์", plate: "-", phone: "-" };
+    const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+
+    let slipHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>ใบส่งของด่วน 80mm - ${order.orderId}</title>
+        <style>
+            @page { size: 80mm auto; margin: 0; }
+            body { font-family: 'Sarabun', 'Tahoma', sans-serif; width: 72mm; margin: 0 auto; padding: 4mm 0; font-size: 11px; line-height: 1.35; color: #000; background: #fff; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .font-bold { font-weight: bold; }
+            .title { font-size: 14px; font-weight: 900; margin-bottom: 2px; }
+            .badge { display: inline-block; background: #000; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; margin: 3px 0; }
+            .divider { border-bottom: 1px dashed #444; margin: 5px 0; }
+            .double-divider { border-bottom: 2px solid #000; margin: 6px 0; }
+            .row { display: flex; justify-content: space-between; margin: 2px 0; }
+            .label { color: #333; }
+            .value { font-weight: bold; text-align: right; max-width: 65%; word-break: break-word; }
+            .box { border: 1px solid #000; border-radius: 4px; padding: 4px; margin: 4px 0; }
+        </style>
+    </head>
+    <body>
+        <div class="text-center">
+            <div class="title">⚡ ใบส่งของสดด่วน (Express)</div>
+            <div>ศูนย์กระจายสินค้าตลาดวิศิษฐ์ชัย อ.บ้านบึง</div>
+            <div class="badge"># ${order.orderId}</div>
+            <div style="font-size:10px; color:#555;">วันที่ ${dateStr} • เวลา ${order.time || ''}</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- 1. จุดรับของ (แผงค้า) -->
+        <div class="box">
+            <div class="font-bold">🏪 จุดรับของ (แผงค้าผู้ส่ง):</div>
+            <div>${origin.stallName || 'แผงค้า'} (${origin.stallNumber || 'แผงทั่วไป'})</div>
+            <div>ผู้ส่ง: ${origin.ownerName || 'เจ้าของแผง'} (โทร ${origin.ownerPhone || '-'})</div>
+        </div>
+
+        <!-- 2. จุดส่งของ (ลูกค้า) -->
+        <div class="box">
+            <div class="font-bold">📍 จุดส่งของ (ลูกค้าปลายทาง):</div>
+            <div>ผู้รับ: ${order.customerName || 'ลูกค้า'}</div>
+            <div>โทร: ${order.customerPhone || '-'}</div>
+            <div style="font-size:10px;">${order.address}</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- รายการสินค้า -->
+        <div class="row font-bold">
+            <span>รายการสินค้า</span>
+            <span>จำนวน/ราคา</span>
+        </div>
+        <div class="row">
+            <span>${order.itemDesc || 'ของสดตามสั่ง'}</span>
+            <span>1 ชุด</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ค่าจัดส่งและ COD -->
+        <div class="row">
+            <span class="label">ระยะทางจากตลาด:</span>
+            <span class="value">~${order.distanceKm || 1.8} กม.</span>
+        </div>
+        <div class="row">
+            <span class="label">ค่าบริการจัดส่ง:</span>
+            <span class="value">฿${order.deliveryFee || 25}</span>
+        </div>
+        ${order.isCod ? `
+        <div class="row" style="font-size:13px; font-weight:bold;">
+            <span>💰 เก็บเงินปลายทาง (COD):</span>
+            <span>฿${order.codAmount}</span>
+        </div>
+        ` : `
+        <div class="row font-bold">
+            <span>การชำระเงิน:</span>
+            <span>แผงค้าชำระแล้ว</span>
+        </div>
+        `}
+
+        <div class="double-divider"></div>
+
+        <!-- ไรเดอร์ -->
+        <div class="row">
+            <span class="label">ไรเดอร์ผู้จัดส่ง:</span>
+            <span class="value">${rider.name}</span>
+        </div>
+        <div class="row">
+            <span class="label">เบอร์โทร / ทะเบียน:</span>
+            <span class="value">${rider.phone} (${rider.plate})</span>
+        </div>
+
+        <div class="divider"></div>
+        <div class="text-center" style="font-size:10px; margin-top:6px;">
+            🙏 ขอบคุณที่ใช้บริการไรเดอร์ตลาดวิศิษฐ์ชัย<br>
+            โทรแจ้งปัญหาฮับ: 081-999-8888
+        </div>
+
+        <script>
+            window.onload = function() {
+                window.print();
+                setTimeout(() => window.close(), 1000);
+            };
+        </script>
+    </body>
+    </html>
+    `;
+
+    const printWin = window.open('', '_blank', 'width=380,height=600');
+    if (printWin) {
+        printWin.document.open();
+        printWin.document.write(slipHtml);
+        printWin.document.close();
+    } else {
+        showToast("⚠️ กรุณาอนุญาตป๊อปอัปเพื่อพิมพ์สลิป");
+    }
+}
+window.renderMerchantView = renderMerchantView;
+window.onMerchantStallSelectChanged = onMerchantStallSelectChanged;
+window.calculateMerchantFee = calculateMerchantFee;
+window.toggleMerchantCodInput = toggleMerchantCodInput;
+window.openMerchantDestinationMap = openMerchantDestinationMap;
+window.clearMerchantPinnedLocation = clearMerchantPinnedLocation;
+window.submitMerchantCall = submitMerchantCall;
+window.renderMerchantActiveDeliveries = renderMerchantActiveDeliveries;
+window.callRiderFromMerchant = callRiderFromMerchant;
+window.callMerchantFromRider = callMerchantFromRider;
+window.callMerchantFromRiderUI = callMerchantFromRiderUI;
+window.openMerchantRiderChat = openMerchantRiderChat;
+window.viewOrderOnRadar = viewOrderOnRadar;
+window.assignExpressOrderToRider = assignExpressOrderToRider;
+window.printMerchantExpressSlip = printMerchantExpressSlip;
 
 
 
@@ -7743,10 +8306,20 @@ function switchRole(targetRole) {
 
     if (targetRole === "merchant") {
         if (!state.activeMerchant || !state.activeMerchant.isLoggedIn) {
-            openMerchantLoginModal();
-            return;
+            const defaultStall = MARKET_DATA[0];
+            if (defaultStall) {
+                activeMerchantStallId = defaultStall.stallId;
+                state.activeMerchant = {
+                    isLoggedIn: true,
+                    stallId: defaultStall.stallId,
+                    stallName: defaultStall.stallName,
+                    stallNumber: defaultStall.stallNumber
+                };
+                saveMerchantToStorage(state.activeMerchant);
+            }
         }
         setActiveRoleView("merchant");
+        if (typeof renderMerchantView === "function") renderMerchantView();
         return;
     }
 
@@ -11686,6 +12259,113 @@ function renderHubPickingList() {
 
     if (queueBadge) queueBadge.textContent = "1";
 
+    if (order.orderType === "MERCHANT_EXPRESS") {
+        const origin = order.originStall || {};
+        const isAssigned = !!order.assignedRider;
+        const riderName = order.assignedRider ? order.assignedRider.name : "ยังไม่ได้จ่ายงาน";
+        container.innerHTML = `
+            <div class="bg-white rounded-3xl p-4 sm:p-5 border-2 border-orange-400 shadow-lg space-y-4 animate-fade-in text-xs">
+                <!-- Header badge -->
+                <div class="flex items-center justify-between border-b border-orange-100 pb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="w-9 h-9 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-center text-lg shadow-sm">⚡</span>
+                        <div>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-[10px] bg-orange-100 text-orange-800 font-extrabold px-2 py-0.5 rounded-full">งานด่วนแผงค้าเรียกไรเดอร์</span>
+                                <span class="text-[10px] bg-slate-800 text-white font-mono px-2 py-0.5 rounded-full">${order.orderId}</span>
+                            </div>
+                            <h3 class="font-extrabold text-slate-800 text-sm mt-0.5">รับของจากแผงค้าในตลาดไปส่งลูกค้า</h3>
+                        </div>
+                    </div>
+                    <span class="text-xs font-black text-orange-600 bg-orange-50 px-2.5 py-1 rounded-xl border border-orange-200">
+                        ${order.status === "delivered" ? "✅ ส่งสำเร็จ" : (isAssigned ? "🛵 จ่ายงานแล้ว" : "⏳ รอกำลังพล")}
+                    </span>
+                </div>
+
+                <!-- 2 Boxes: Origin Stall & Destination Customer -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <!-- Pickup Box -->
+                    <div class="bg-orange-50/70 p-3 rounded-2xl border border-orange-200 space-y-1.5">
+                        <div class="font-bold text-orange-950 flex items-center gap-1 text-[11px]">
+                            <span class="material-symbols-outlined text-sm text-orange-600">storefront</span>
+                            <span>จุดรับของ (หน้าแผงค้าในตลาด):</span>
+                        </div>
+                        <div class="font-extrabold text-slate-900 text-xs">${origin.stallName || 'แผงค้าในตลาด'} (${origin.stallNumber || 'แผงค้า'})</div>
+                        <div class="text-[11px] text-slate-600">ผู้ส่ง: ${origin.ownerName || 'เจ้าของแผง'} โซน ${origin.zone || 'A'}</div>
+                        <div class="pt-1 flex items-center gap-1.5">
+                            <a href="tel:${origin.ownerPhone || '0819998888'}" class="px-2 py-1 bg-white hover:bg-orange-100 text-orange-800 border border-orange-300 rounded-lg text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-xs">call</span>
+                                <span>โทรหาแผงค้า (${origin.ownerPhone || '-'})</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Dropoff Box -->
+                    <div class="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200 space-y-1.5">
+                        <div class="font-bold text-emerald-950 flex items-center gap-1 text-[11px]">
+                            <span class="material-symbols-outlined text-sm text-emerald-600">person_pin</span>
+                            <span>จุดส่งของ (บ้านลูกค้าปลายทาง):</span>
+                        </div>
+                        <div class="font-extrabold text-slate-900 text-xs">${order.customerName || 'ลูกค้า'}</div>
+                        <div class="text-[11px] text-slate-600 truncate">${order.address || 'ตามพิกัดจัดส่ง'}</div>
+                        <div class="text-[10px] text-emerald-800 font-bold">ระยะทาง ~${order.distanceKm || 1.8} กม. • ค่าส่ง ฿${order.deliveryFee || 25}</div>
+                        <div class="pt-1 flex items-center gap-1.5">
+                            <a href="tel:${order.customerPhone || '0812345678'}" class="px-2 py-1 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-xs">call</span>
+                                <span>โทรหาลูกค้า (${order.customerPhone || '-'})</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Item & COD Info -->
+                <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <div>
+                        <span class="text-slate-500 text-[10px]">สินค้าที่ต้องรับ:</span>
+                        <div class="font-extrabold text-slate-800">${order.itemDesc || 'ของสดตามสั่ง'}</div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        ${order.isCod ? `
+                            <span class="bg-amber-100 border border-amber-300 text-amber-900 font-black px-2.5 py-1 rounded-xl text-xs flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm">payments</span>
+                                <span>เก็บ COD ฿${order.codAmount}</span>
+                            </span>
+                        ` : `
+                            <span class="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-xl text-xs">ชำระค่าส่งแล้ว</span>
+                        `}
+                    </div>
+                </div>
+
+                <!-- Dispatch Actions -->
+                <div class="pt-2 border-t border-slate-100 space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-slate-600 font-medium">ไรเดอร์ผู้รับผิดชอบงานนี้:</span>
+                        <span class="font-bold text-slate-800">${riderName}</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        ${!isAssigned ? `
+                            <button type="button" onclick="assignExpressOrderToRider('R1')" class="py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                                <span class="material-symbols-outlined text-sm">two_wheeler</span>
+                                <span>🚀 จ่ายงานให้ไรเดอร์สมศักดิ์ (พร้อมรับงาน)</span>
+                            </button>
+                        ` : `
+                            <button type="button" onclick="switchRole('rider')" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                                <span class="material-symbols-outlined text-sm">visibility</span>
+                                <span>ดูหน้าจอไรเดอร์ (${riderName})</span>
+                            </button>
+                        `}
+                        <button type="button" onclick="printMerchantExpressSlip('${order.orderId}')" class="py-2.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-sm">print</span>
+                            <span>พิมพ์สลิปส่งด่วน 80mm</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
     const customerName = order.customerName || "ลูกค้าทั่วไป";
     const customerPhone = order.customerPhone || "-";
     const address = order.address || "ตามพิกัดจัดส่ง";
@@ -12262,11 +12942,33 @@ function renderRiderScreen() {
     const orderLng = order.lng || (state.deliveryLocation && state.deliveryLocation.lng) || MARKET_ORIGIN.lng;
     const orderPhone = order.customerPhone || (state.customer && state.customer.phone) || "-";
 
-    if (badge) badge.textContent = `ออเดอร์ ${order.orderId}`;
-    if (totalBadge) totalBadge.textContent = `฿${order.grandTotal || order.total || 0} (${order.paymentDesc || 'ชำระแล้ว'})`;
-    if (destName) destName.textContent = order.customerName || "ลูกค้าประจำ";
-    if (phoneBadge) phoneBadge.textContent = orderPhone;
-    if (callBtnText) callBtnText.textContent = `โทรหาลูกค้า (${orderPhone})`;
+    const callMerchantBtn = document.getElementById("rider-call-merchant-btn");
+    const callMerchantText = document.getElementById("rider-call-merchant-text");
+
+    if (order.orderType === "MERCHANT_EXPRESS") {
+        const origin = order.originStall || {};
+        if (badge) badge.textContent = `⚡ งานด่วน ${order.orderId}`;
+        if (totalBadge) totalBadge.textContent = order.isCod ? `฿${order.codAmount} (เก็บ COD)` : `฿${order.deliveryFee || 25} (ค่าส่งชำระแล้ว)`;
+        if (destName) destName.textContent = `${order.customerName || 'ลูกค้า'} (จาก: ${origin.stallName || 'แผงค้า'})`;
+        if (phoneBadge) phoneBadge.textContent = orderPhone;
+        if (callBtnText) callBtnText.textContent = `โทรหาลูกค้า (${orderPhone})`;
+        if (destDetail) destDetail.textContent = `🏪 รับของที่: ${origin.stallName || 'แผงค้า'} (${origin.stallNumber || 'แผงค้า'}) โทร ${origin.ownerPhone || '-'} | 📍 ส่ง: ${order.address}`;
+        if (noteText) noteText.textContent = `สินค้า: ${order.itemDesc || '-'} ${order.isCod ? '• ยอดเก็บเงินสด COD: ฿' + order.codAmount : '• ค่าบริการจัดส่งชำระแล้ว'}`;
+
+        if (callMerchantBtn) {
+            callMerchantBtn.classList.remove("hidden");
+            if (callMerchantText) callMerchantText.textContent = `โทรหาแผงค้า (${origin.ownerPhone || '-'})`;
+        }
+    } else {
+        if (badge) badge.textContent = `ออเดอร์ ${order.orderId}`;
+        if (totalBadge) totalBadge.textContent = `฿${order.grandTotal || order.total || 0} (${order.paymentDesc || 'ชำระแล้ว'})`;
+        if (destName) destName.textContent = order.customerName || "ลูกค้าประจำ";
+        if (phoneBadge) phoneBadge.textContent = orderPhone;
+        if (callBtnText) callBtnText.textContent = `โทรหาลูกค้า (${orderPhone})`;
+        if (destDetail) destDetail.textContent = `ที่อยู่: ${order.address || 'ตามพิกัดที่ลูกค้าระบุ'}`;
+        if (noteText) noteText.textContent = order.landmark || order.deliveryNote || "-";
+        if (callMerchantBtn) callMerchantBtn.classList.add("hidden");
+    }
 
     if (destHouse) {
         if (order.houseNumber) {
@@ -12278,8 +12980,6 @@ function renderRiderScreen() {
     if (destSubdistrict) {
         destSubdistrict.textContent = order.subdistrict || "อำเภอบ้านบึง จังหวัดชลบุรี";
     }
-    if (destDetail) destDetail.textContent = `ที่อยู่: ${order.address || 'ตามพิกัดที่ลูกค้าระบุ'}`;
-    if (noteText) noteText.textContent = order.landmark || order.deliveryNote || "-";
     if (gpsCoords) gpsCoords.textContent = `${Number(orderLat).toFixed(6)}, ${Number(orderLng).toFixed(6)}`;
 
     // Direct Turn-by-Turn GPS navigation link into Google Maps
@@ -12326,7 +13026,11 @@ function renderRiderScreen() {
         if (btnComplete) {
             btnComplete.className = "p-3 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1 text-xs ring-2 ring-emerald-400 ring-offset-2 animate-pulse active:scale-95 transition-all";
         }
-        if (btnCompleteText) btnCompleteText.textContent = "2. ส่งมอบสำเร็จ (แตะเมื่อถึง)";
+        if (btnCompleteText) {
+            btnCompleteText.textContent = (order.orderType === "MERCHANT_EXPRESS" && order.isCod)
+                ? `2. ส่งมอบสำเร็จ (รับ COD ฿${order.codAmount})`
+                : "2. ส่งมอบสำเร็จ (แตะเมื่อถึง)";
+        }
         if (btnCompleteIcon) btnCompleteIcon.textContent = "check_circle";
 
         if (completedBanner) completedBanner.classList.add("hidden");
@@ -12354,12 +13058,14 @@ function renderRiderScreen() {
         // "picking" or initial status
         if (statusBadge) {
             statusBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800";
-            statusBadge.textContent = "📦 รอรับของสดจากฮับ";
+            statusBadge.textContent = (order.orderType === "MERCHANT_EXPRESS") ? "📦 รับของที่หน้าแผงค้า" : "📦 รอรับของสดจากฮับ";
         }
         if (btnStart) {
             btnStart.className = "p-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 text-xs active:scale-95 transition-all";
         }
-        if (btnStartText) btnStartText.textContent = "1. รับของแล้ว ออกส่ง";
+        if (btnStartText) {
+            btnStartText.textContent = (order.orderType === "MERCHANT_EXPRESS") ? "1. ถึงแผงค้าและรับของแล้ว 🛵💨" : "1. รับของแล้ว ออกส่ง";
+        }
         if (btnStartIcon) btnStartIcon.textContent = "two_wheeler";
 
         if (btnComplete) {
@@ -13320,6 +14026,15 @@ function saveMerchantStallData() {
     }
 
     saveMarketDataToStorage();
+
+    state.activeMerchant = {
+        isLoggedIn: true,
+        stallId: stallObj.stallId,
+        stallName: stallObj.stallName,
+        stallNumber: stallObj.stallNumber
+    };
+    saveMerchantToStorage(state.activeMerchant);
+    if (typeof renderMerchantView === "function") renderMerchantView();
 
     closeMerchantPortalModal();
 
