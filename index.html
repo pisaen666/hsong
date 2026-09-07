@@ -4066,7 +4066,7 @@
                         <button type="button" onclick="closeRiderRegisterModal()" class="w-full sm:w-1/3 py-3 bg-slate-200/90 hover:bg-slate-300 text-slate-700 font-bold rounded-2xl active:scale-95 transition-all text-xs text-center">
                             ยกเลิก
                         </button>
-                        <button type="submit" form="rider-register-form" onclick="if(document.getElementById('rider-register-form')){if(document.getElementById('rider-register-form').requestSubmit) document.getElementById('rider-register-form').requestSubmit(); else handleRiderRegisterSubmit(event);}" class="w-full sm:w-2/3 py-3 bg-gradient-to-r from-sky-500 via-blue-600 to-sky-600 hover:from-sky-600 hover:to-blue-700 text-white font-black rounded-2xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer">
+                        <button type="button" onclick="handleRiderRegisterSubmit(event)" class="w-full sm:w-2/3 py-3 bg-gradient-to-r from-sky-500 via-blue-600 to-sky-600 hover:from-sky-600 hover:to-blue-700 text-white font-black rounded-2xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer">
                             <span class="material-symbols-outlined text-base font-bold">send</span>
                             <span>ส่งใบสมัครให้แอดมินอนุมัติ 🚀</span>
                         </button>
@@ -4358,6 +4358,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.17_rider_detail_actions"></script>
+    <script src="app.js?v=9.18_rider_pending_top_banner"></script>
 </body>
 </html>
