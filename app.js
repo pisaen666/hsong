@@ -319,6 +319,15 @@ function saveActiveOrderToStorage(order) {
         if (order) {
             if (!order.savedAt) order.savedAt = Date.now();
             localStorage.setItem("talathub_active_order", JSON.stringify(order));
+            if (order.orderType === "MERCHANT_EXPRESS" || (order.orderId && order.orderId.startsWith("EXP-"))) {
+                localStorage.setItem("hsong_active_order", JSON.stringify(order));
+                let expOrders = [];
+                try { expOrders = JSON.parse(localStorage.getItem("hsong_merchant_express_orders") || "[]"); } catch(e) {}
+                const idx = expOrders.findIndex(o => o.orderId === order.orderId);
+                if (idx >= 0) expOrders[idx] = order;
+                else expOrders.unshift(order);
+                localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(expOrders.slice(0, 20)));
+            }
             archiveOrderToHistory(order);
         } else {
             localStorage.removeItem("talathub_active_order");
@@ -9251,6 +9260,8 @@ window.openAssignRiderModal = openAssignRiderModal;
 window.closeAssignRiderModal = closeAssignRiderModal;
 window.selectAndAssignRider = selectAndAssignRider;
 window.markExpressDeliveredByHub = markExpressDeliveredByHub;
+window.clearHubSettlementVendor = clearHubSettlementVendor;
+window.renderHubSettlement = renderHubSettlement;
 
 
 
@@ -14166,69 +14177,134 @@ function renderHubSettlement() {
     if (!container) return;
 
     const order = state.activeOrder;
-    if (!order || !order.stalls || order.stalls.length === 0) {
+    let expressOrders = (state.merchantExpressOrders || []).slice();
+    if (expressOrders.length === 0) {
+        try {
+            expressOrders = JSON.parse(localStorage.getItem("hsong_merchant_express_orders") || "[]");
+        } catch(e) {}
+    }
+
+    const hasGrocery = !!(order && order.stalls && order.stalls.length > 0);
+    const hasExpress = expressOrders.length > 0;
+
+    if (!hasGrocery && !hasExpress) {
         container.innerHTML = `
-            <div class="bg-white rounded-3xl p-6 text-center border border-slate-200 shadow-sm space-y-2">
-                <div class="text-2xl">💰</div>
-                <h4 class="font-bold text-sm text-slate-700">ยังไม่มีรายการยอดเคลียร์เงินแม่ค้า</h4>
-                <p class="text-[11px] text-slate-500">ยอดเงินเคลียร์แผงค้าจะคำนวณอัตโนมัติตามสินค้าที่หยิบจริง</p>
+            <div class="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm space-y-2">
+                <div class="text-3xl">💰</div>
+                <h4 class="font-bold text-sm text-slate-700">ยังไม่มีรายการยอดเคลียร์เงิน</h4>
+                <p class="text-[11px] text-slate-500">ยอดเงินเคลียร์แผงค้าและค่ารอบไรเดอร์จะคำนวณอัตโนมัติตามสินค้าและงานที่เกิดขึ้นจริง</p>
             </div>
         `;
         return;
     }
 
-    let vendorListHtml = "";
-    let vendorTotal = 0;
+    let html = "";
 
-    order.stalls.forEach(stall => {
-        const activeItems = (stall.items || []).filter(item => !item.outOfStock);
-        const oosItems = (stall.items || []).filter(item => item.outOfStock);
-        const stallItemsTotal = activeItems.reduce((sum, item) => sum + (item.actualPrice !== undefined ? item.actualPrice : item.price), 0);
-        vendorTotal += stallItemsTotal;
+    // 1. สรุปยอดจ่ายแผงค้า (Grocery Orders)
+    if (hasGrocery) {
+        let vendorListHtml = "";
+        let vendorTotal = 0;
+        order.stalls.forEach(stall => {
+            const activeItems = (stall.items || []).filter(item => !item.outOfStock);
+            const oosItems = (stall.items || []).filter(item => item.outOfStock);
+            const stallItemsTotal = activeItems.reduce((sum, item) => sum + (item.actualPrice !== undefined ? item.actualPrice : item.price), 0);
+            vendorTotal += stallItemsTotal;
 
-        vendorListHtml += `
-            <div class="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
-                <div>
-                    <div class="font-bold text-slate-800 text-xs">${stall.name}</div>
-                    <div class="text-[10px] text-slate-500">
-                        หยิบจริง ${activeItems.length} รายการ ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length})</span>` : ''}
+            vendorListHtml += `
+                <div class="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
+                    <div>
+                        <div class="font-bold text-slate-800 text-xs">${stall.name}</div>
+                        <div class="text-[10px] text-slate-500">
+                            หยิบจริง ${activeItems.length} รายการ ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length})</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-black text-emerald-700 text-xs">฿${stallItemsTotal}</div>
+                        <button type="button" onclick="clearHubSettlementVendor('${stall.name.replace(/'/g, "\\'")}', this)" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">โอนเคลียร์เงิน</button>
                     </div>
                 </div>
-                <div class="text-right">
-                    <div class="font-black text-emerald-700 text-xs">฿${stallItemsTotal}</div>
-                    <button onclick="clearHubSettlementVendor('${stall.name.replace(/'/g, "\\'")}')" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-0.5 rounded-lg font-bold mt-1 shadow-xs transition-all">โอนเคลียร์เงิน</button>
+            `;
+        });
+
+        html += `
+            <div class="bg-white rounded-3xl p-4 shadow-card border border-slate-200 space-y-3 mb-4 text-left">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <h3 class="font-bold text-sm text-slate-800 flex items-center gap-1">
+                        <span class="material-symbols-outlined text-emerald-700 text-base">account_balance_wallet</span>
+                        <span>สรุปยอดจ่ายแผงค้า (${order.orderId})</span>
+                    </h3>
+                    <span class="text-[11px] text-slate-500 font-medium">รวม ฿${vendorTotal}</span>
+                </div>
+                <div class="space-y-2">
+                    ${vendorListHtml}
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-r from-emerald-800 to-slate-900 text-white rounded-3xl p-4 shadow-card space-y-2 mb-4 text-left">
+                <div class="text-xs text-emerald-300 font-bold">รายรับรวมระบบจัดส่ง (ค่าสินค้า + ค่าบริการรวมบิล + ค่าส่ง)</div>
+                <div class="text-2xl font-black">฿${order.grandTotal || order.total || 185} <span class="text-xs font-normal text-slate-300">บาท</span></div>
+                <div class="text-[11px] text-slate-300 flex justify-between pt-2 border-t border-slate-700">
+                    <span>ยอดรวมร้านค้า: ฿${vendorTotal}</span>
+                    <span>ค่าส่ง+บริการรวมแผง: ฿${Math.max(20, (order.grandTotal || order.total || 185) - vendorTotal)}</span>
                 </div>
             </div>
         `;
-    });
+    }
 
-    container.innerHTML = `
-        <div class="bg-white rounded-3xl p-4 shadow-card border border-slate-200 space-y-3">
-            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-                <h3 class="font-bold text-sm text-slate-800 flex items-center gap-1">
-                    <span class="material-symbols-outlined text-emerald-700 text-base">account_balance_wallet</span>
-                    <span>สรุปยอดจ่ายแม่ค้า (${order.orderId})</span>
-                </h3>
-                <span class="text-[11px] text-slate-500 font-medium">ตลาดวิศิษฐ์ชัย</span>
-            </div>
+    // 2. สรุปยอดเคลียร์งานด่วนแผงค้า (Express Orders Settlement)
+    if (hasExpress) {
+        let expressRows = "";
+        let expressFeeTotal = 0;
+        expressOrders.forEach((exp) => {
+            const fee = Number(exp.deliveryFee || 20);
+            expressFeeTotal += fee;
+            const rider = exp.assignedRider || { name: "กำลังจัดสรร", phone: "-" };
+            expressRows += `
+                <div class="flex justify-between items-center p-3 bg-orange-50/60 rounded-2xl border border-orange-200">
+                    <div class="space-y-0.5">
+                        <div class="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                            <span>⚡ ${exp.orderId}</span>
+                            <span class="text-[10px] text-orange-800 font-bold bg-orange-100 px-2 py-0.2 rounded-full">${exp.originStall?.stallName || 'แผงค้า'}</span>
+                        </div>
+                        <div class="text-[10px] text-slate-600">
+                            🛵 ไรเดอร์: <strong>${rider.name}</strong> • ผู้รับ: คุณ${exp.customerName || 'ลูกค้า'}
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="font-black text-emerald-700 text-xs">฿${fee}</div>
+                        <button type="button" onclick="clearHubSettlementVendor('ไรเดอร์: ${rider.name.replace(/'/g, "\\'")} (งาน ${exp.orderId})', this)" class="text-[10px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
+                            โอนให้ไรเดอร์
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
 
-            <div class="space-y-2">
-                ${vendorListHtml}
+        html += `
+            <div class="bg-white rounded-3xl p-4 shadow-card border border-orange-200 space-y-3 text-left">
+                <div class="flex items-center justify-between pb-2 border-b border-orange-100">
+                    <h3 class="font-bold text-sm text-orange-950 flex items-center gap-1">
+                        <span class="material-symbols-outlined text-orange-600 text-base">two_wheeler</span>
+                        <span>สรุปยอดเคลียร์ค่ารอบงานด่วน (Express Fleet Settlement)</span>
+                    </h3>
+                    <span class="text-[11px] text-orange-700 font-bold">รวมค่าส่ง ฿${expressFeeTotal}</span>
+                </div>
+                <div class="space-y-2">
+                    ${expressRows}
+                </div>
             </div>
-        </div>
+        `;
+    }
 
-        <div class="bg-gradient-to-r from-emerald-800 to-slate-900 text-white rounded-3xl p-4 shadow-card space-y-2">
-            <div class="text-xs text-emerald-300 font-bold">รายรับรวมระบบจัดส่ง (ค่าสินค้า + ค่าบริการรวมบิล + ค่าส่ง)</div>
-            <div class="text-2xl font-black">฿${order.grandTotal || order.total || 185} <span class="text-xs font-normal text-slate-300">บาท</span></div>
-            <div class="text-[11px] text-slate-300 flex justify-between pt-2 border-t border-slate-700">
-                <span>ยอดรวมร้านค้า: ฿${vendorTotal}</span>
-                <span>ค่าส่ง+บริการรวมแผง: ฿${Math.max(20, (order.grandTotal || order.total || 185) - vendorTotal)}</span>
-            </div>
-        </div>
-    `;
+    container.innerHTML = html;
 }
 
-function clearHubSettlementVendor(vendorName) {
+function clearHubSettlementVendor(vendorName, btn = null) {
+    if (btn) {
+        btn.disabled = true;
+        btn.className = "text-[10px] bg-slate-200 text-slate-500 px-2.5 py-1 rounded-lg font-bold mt-1 cursor-default";
+        btn.textContent = "✓ โอนแล้ว";
+    }
     showToast(`✓ โอนเงินผ่าน PromptPay เคลียร์ยอดให้ "${vendorName}" สำเร็จแล้ว!`);
 }
 
