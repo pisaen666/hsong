@@ -1376,8 +1376,10 @@ function saveGranularDeliveryAddress() {
         };
         const badge = document.getElementById("merchant-pinned-badge");
         const badgeText = document.getElementById("merchant-pinned-text");
+        const badgeSub = document.getElementById("merchant-pinned-sub");
         if (badge) badge.classList.remove("hidden");
-        if (badgeText) badgeText.textContent = `📍 ปักหมุด: ${fullTitle} (~${distKm.toFixed(1)} กม. ค่าส่ง ฿${fee})`;
+        if (badgeText) badgeText.textContent = `📍 ปักหมุด: ${fullTitle}`;
+        if (badgeSub) badgeSub.textContent = `ระยะทาง ~${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee}`;
         const extraAddr = document.getElementById("merchant-dest-address");
         if (extraAddr && !extraAddr.value) extraAddr.value = fullTitle;
         calculateMerchantFee();
@@ -7503,31 +7505,25 @@ function onMerchantStallSelectChanged(stallId) {
 }
 
 function calculateMerchantFee() {
-    const destSelect = document.getElementById("merchant-destination-select");
     const feeEl = document.getElementById("merchant-calc-fee");
     const distDesc = document.getElementById("merchant-calc-dist-desc");
     const btnFeeDisplay = document.getElementById("merchant-btn-fee-display");
-
-    let fee = 20;
-    let dist = "0.8";
+    const pinBtnText = document.getElementById("merchant-map-pin-btn-text");
 
     if (state.merchantPinnedCoords) {
-        dist = state.merchantPinnedCoords.distKm.toFixed(1);
-        fee = state.merchantPinnedCoords.fee;
+        const distKm = state.merchantPinnedCoords.distKm;
+        const fee = state.merchantPinnedCoords.fee;
         if (feeEl) feeEl.textContent = `฿${fee}`;
         if (btnFeeDisplay) btnFeeDisplay.textContent = `฿${fee}`;
-        if (distDesc) distDesc.textContent = `พิกัดดาวเทียม ~${dist} กม. จากตลาดวิศิษฐ์ชัย`;
+        if (distDesc) distDesc.textContent = `ระยะทางปักหมุดจริง ~${distKm.toFixed(1)} กม. จากตลาดวิศิษฐ์ชัย`;
+        if (pinBtnText) pinBtnText.textContent = `📍 ปักหมุดแล้ว (~${distKm.toFixed(1)} กม. ค่าส่ง ฿${fee}) แตะเพื่อเปลี่ยน`;
         return;
     }
 
-    if (destSelect) {
-        fee = parseInt(destSelect.value || "20");
-        const selectedOpt = destSelect.options[destSelect.selectedIndex];
-        dist = selectedOpt ? (selectedOpt.dataset.dist || "0.8") : "0.8";
-        if (feeEl) feeEl.textContent = `฿${fee}`;
-        if (btnFeeDisplay) btnFeeDisplay.textContent = `฿${fee}`;
-        if (distDesc) distDesc.textContent = `ระยะทาง ~${dist} กม. จากตลาดวิศิษฐ์ชัย`;
-    }
+    if (feeEl) feeEl.textContent = "฿0";
+    if (btnFeeDisplay) btnFeeDisplay.textContent = "฿0";
+    if (distDesc) distDesc.textContent = "กรุณากดปุ่มปักหมุดแผนที่ดาวเทียมด้านบน";
+    if (pinBtnText) pinBtnText.textContent = "📍 กดเปิดแผนที่เพื่อปักหมุดจุดส่งของ (ดาวเทียมจริง)";
 }
 
 function toggleMerchantCodInput(checkbox) {
@@ -7544,13 +7540,13 @@ function clearMerchantPinnedLocation() {
     const badge = document.getElementById("merchant-pinned-badge");
     if (badge) badge.classList.add("hidden");
     calculateMerchantFee();
+    showToast("รีเซ็ตตำแหน่งปักหมุดเรียบร้อย");
 }
 
 function submitMerchantCall() {
     const custNameInput = document.getElementById("merchant-cust-name");
     const custPhoneInput = document.getElementById("merchant-cust-phone");
     const extraAddrInput = document.getElementById("merchant-dest-address");
-    const destSelect = document.getElementById("merchant-destination-select");
 
     const custName = custNameInput ? custNameInput.value.trim() : "";
     const custPhone = custPhoneInput ? custPhoneInput.value.trim() : "";
@@ -7571,10 +7567,10 @@ function submitMerchantCall() {
         return;
     }
 
-    // 3. ตรวจสอบปลายทางส่งสินค้า & ระยะทาง
-    const selectedOpt = destSelect ? destSelect.options[destSelect.selectedIndex] : null;
-    if (!state.merchantPinnedCoords && (!selectedOpt || !selectedOpt.value)) {
-        showToast("⚠️ กรุณาเลือกโซนปลายทางส่งสินค้า หรือกดปักหมุดแผนที่");
+    // 3. ตรวจสอบการปักหมุดแผนที่ (บังคับปักหมุด 100%)
+    if (!state.merchantPinnedCoords) {
+        showToast("⚠️ กรุณากดปุ่ม 'ปักหมุดแผนที่ดาวเทียม' เพื่อระบุตำแหน่งบ้านลูกค้าก่อน");
+        openMerchantDestinationMap();
         return;
     }
 
@@ -7586,11 +7582,9 @@ function submitMerchantCall() {
     }
 
     const currentStall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || MARKET_DATA[0];
-    const distKm = state.merchantPinnedCoords ? state.merchantPinnedCoords.distKm : (selectedOpt ? parseFloat(selectedOpt.dataset.dist || "0.8") : 0.8);
-    const fee = state.merchantPinnedCoords ? state.merchantPinnedCoords.fee : (selectedOpt ? parseInt(selectedOpt.value || "20") : 20);
-    const zoneTitle = state.merchantPinnedCoords 
-        ? state.merchantPinnedCoords.title 
-        : (selectedOpt?.dataset.sub || "ชุมชนตลาดวิศิษฐ์ชัย / หนองชาก");
+    const distKm = state.merchantPinnedCoords.distKm;
+    const fee = state.merchantPinnedCoords.fee;
+    const zoneTitle = state.merchantPinnedCoords.title || "พิกัดปักหมุดแผนที่";
     const fullAddress = `${extraAddr} (${zoneTitle})`;
 
     const orderId = "EXP-" + Date.now().toString().slice(-4);
@@ -7615,9 +7609,9 @@ function submitMerchantCall() {
         customerPhone: custPhone,
         address: fullAddress,
         houseNumber: extraAddr,
-        subdistrict: state.merchantPinnedCoords?.subdistrict || zoneTitle || "อ.บ้านบึง จ.ชลบุรี",
-        lat: state.merchantPinnedCoords?.lat || 13.3080,
-        lng: state.merchantPinnedCoords?.lng || 101.1214,
+        subdistrict: state.merchantPinnedCoords.subdistrict || zoneTitle || "อ.บ้านบึง จ.ชลบุรี",
+        lat: state.merchantPinnedCoords.lat || 13.3080,
+        lng: state.merchantPinnedCoords.lng || 101.1214,
         distanceKm: distKm,
         deliveryFee: fee,
         isCod: false,
