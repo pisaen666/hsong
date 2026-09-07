@@ -14833,7 +14833,7 @@ function openRiderLoginModal() {
         const riders = loadCommunityRiders();
         if (riders && riders.length > 0) {
             select.innerHTML = riders.map(r => `
-                <option value="${r.id}">🛵 ${r.name} (${r.plate || '-'}) • ${r.phone}</option>
+                <option value="${r.id}">🛵 ${r.name} (${r.plate || '-'}) • ${r.phone}${r.accessCode ? ' [รหัส: ' + r.accessCode + ']' : ''}</option>
             `).join("");
         } else {
             select.innerHTML = `<option value="">-- ยังไม่มีไรเดอร์ในระบบ (สมัครใหม่ด้านล่าง) --</option>`;
@@ -14869,33 +14869,70 @@ window.handleRiderLoginSubmit = handleRiderLoginSubmit;
 
 function handleRiderPhoneLoginSubmit() {
     const input = document.getElementById("rider-login-phone-input");
-    const raw = input ? input.value.trim().replace(/[-\s]/g, "") : "";
+    const raw = input ? input.value.trim() : "";
     if (!raw) {
-        showToast("⚠️ กรุณากรอกเบอร์โทรศัพท์ที่ลงทะเบียนไว้");
+        showToast("⚠️ กรุณากรอกรหัสไรเดอร์ 6 หลัก หรือเบอร์โทรศัพท์");
         return;
     }
 
+    const cleanRaw = raw.replace(/[-\s]/g, "");
+    const upperRaw = cleanRaw.toUpperCase();
+
     const riders = loadCommunityRiders();
-    const r = riders.find(x => (x.phone || "").replace(/[-\s]/g, "") === raw);
+
+    // 1. ตรวจสอบในรายชื่อไรเดอร์ที่ได้รับการอนุมัติแล้ว (ตรวจทั้งรหัสผ่าน 6 หลัก, เบอร์โทร, หรือ ID)
+    let r = riders.find(x => 
+        (x.accessCode && x.accessCode.trim().toUpperCase() === upperRaw) ||
+        (x.phone && x.phone.replace(/[-\s]/g, "") === cleanRaw) ||
+        (x.id && x.id.trim().toUpperCase() === upperRaw)
+    );
     if (r) {
         loginRiderWithProfile(r);
         return;
     }
 
-    // Check applications for helpful feedback
+    // 2. ตรวจสอบในข้อมูลใบสมัคร (Rider Applications)
     const apps = loadRiderApplications();
-    const app = apps.find(x => (x.phone || "").replace(/[-\s]/g, "") === raw);
+    const app = apps.find(x => 
+        (x.accessCode && x.accessCode.trim().toUpperCase() === upperRaw) ||
+        (x.phone && x.phone.replace(/[-\s]/g, "") === cleanRaw) ||
+        (x.id && x.id.trim().toUpperCase() === upperRaw)
+    );
+
     if (app) {
         if (app.status === "pending") {
-            showToast(`⏳ ใบสมัครเบอร์ ${raw} อยู่ระหว่างรอแอดมินอนุมัติ กรุณารอการตรวจสอบสักครู่ครับ`);
+            showToast(`⏳ ใบสมัครของคุณ (${app.fullName || raw}) อยู่ระหว่างรอแอดมินอนุมัติ กรุณารอการตรวจสอบสักครู่ครับ`);
             return;
         } else if (app.status === "rejected") {
-            showToast(`❌ ใบสมัครเบอร์ ${raw} ไม่ผ่านการอนุมัติ สามารถสมัครใหม่หรือติดต่อแอดมินได้ครับ`);
+            showToast(`❌ ใบสมัครของคุณ (${app.fullName || raw}) ไม่ผ่านการอนุมัติ สามารถสมัครใหม่หรือติดต่อแอดมินได้ครับ`);
+            return;
+        } else if (app.status === "approved") {
+            // หากได้รับอนุมัติแล้วแต่ยังไม่มีข้อมูลใน community riders ให้ซิงค์ข้อมูลและล็อกอินทันที
+            const displayName = app.nickname ? `${app.fullName} (${app.nickname})` : app.fullName;
+            let riderTarget = {
+                id: `RIDER-${Date.now().toString().slice(-4)}`,
+                name: displayName,
+                phone: app.phone,
+                plate: app.plate || "-",
+                zone: app.zone || "รอบตลาดวิศิษฐ์ชัย",
+                status: "available",
+                baseFee: 40,
+                lat: Number(((typeof MARKET_ORIGIN !== 'undefined' && MARKET_ORIGIN.lat) || 15.2285) + (Math.random() - 0.5) * 0.01).toFixed(4),
+                lng: Number(((typeof MARKET_ORIGIN !== 'undefined' && MARKET_ORIGIN.lng) || 104.8565) + (Math.random() - 0.5) * 0.01).toFixed(4),
+                avatar: "🛵",
+                motorcycleModel: app.motorcycleModel || "",
+                promptPay: app.promptPayNumber || app.phone || "",
+                accessCode: app.accessCode,
+                codSettledToday: 0
+            };
+            riders.unshift(riderTarget);
+            saveCommunityRiders(riders);
+            loginRiderWithProfile(riderTarget);
             return;
         }
     }
 
-    showToast("⚠️ ไม่พบเบอร์โทรศัพท์นี้ในระบบไรเดอร์ กรุณาสมัครเป็นไรเดอร์ก่อนครับ");
+    showToast(`⚠️ ไม่พบรหัสไรเดอร์หรือเบอร์โทรศัพท์ "${raw}" ในระบบ กรุณาตรวจสอบรหัสหรือสมัครเป็นไรเดอร์ก่อนครับ`);
 }
 window.handleRiderPhoneLoginSubmit = handleRiderPhoneLoginSubmit;
 
