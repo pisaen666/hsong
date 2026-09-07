@@ -1106,11 +1106,24 @@
                                 <span class="material-symbols-outlined text-base">moped</span>
                             </span>
                             <div>
-                                <h3 class="font-extrabold text-slate-800 text-xs sm:text-sm">ฟอร์มเรียกไรเดอร์ส่งของด่วน (On-Demand)</h3>
-                                <div class="text-[10px] text-slate-400">ส่งตรงจากแผงค้าในตลาดวิศิษฐ์ชัยถึงหน้าบ้านลูกค้า</div>
+                                <h3 class="font-extrabold text-slate-800 text-xs sm:text-sm">ฟอร์มเรียกไรเดอร์ส่งของ (ร้านค้าจัดเตรียมสินค้าเอง)</h3>
+                                <div class="text-[10px] text-slate-400">ร้านค้าแพ็คของเรียบร้อย เรียกไรเดอร์ฮับมารับเพื่อนำไปส่งลูกค้า</div>
                             </div>
                         </div>
                         <span class="text-[10px] bg-orange-100 text-orange-800 font-extrabold px-2 py-0.5 rounded-full">บริการด่วน</span>
+                    </div>
+
+                    <!-- คำชี้แจงนโยบายฮับ -->
+                    <div class="p-3 bg-amber-50/70 rounded-2xl border border-amber-200/80 text-[11px] text-amber-900 space-y-1">
+                        <div class="font-extrabold flex items-center gap-1.5 text-amber-950">
+                            <span class="material-symbols-outlined text-sm text-amber-600">info</span>
+                            <span>คำชี้แจงการใช้บริการเรียกไรเดอร์:</span>
+                        </div>
+                        <p class="text-slate-600 leading-relaxed text-[11px]">
+                            • ทางร้านค้าเป็นผู้จัดเตรียมและแพ็คสินค้าของตนเองเรียบร้อยแล้ว ปุ่มนี้มีไว้สำหรับ<strong>เรียกไรเดอร์ของฮับมารับของไปส่งเท่านั้น</strong><br>
+                            • <strong class="text-rose-700">ไม่มีบริการเก็บเงินปลายทาง (COD):</strong> ทางฮับไม่มีนโยบายเก็บเงินปลายทางแทนร้านค้า<br>
+                            • <strong class="text-slate-800">กรุณากรอกข้อมูลผู้รับและที่อยู่จัดส่งให้ครบถ้วนทุกช่อง</strong> ระบบจึงจะส่งคำขอไปยังฮับเพื่อประสานงานไรเดอร์ให้
+                        </p>
                     </div>
 
                     <!-- 2.1 ข้อมูลแผงค้าผู้ส่ง (Sender Profile) -->
@@ -1140,101 +1153,69 @@
                         </div>
                     </div>
 
-                    <!-- 2.2 รายละเอียดสินค้าที่ต้องการส่ง -->
-                    <div class="space-y-1.5">
-                        <label class="block font-bold text-slate-700 text-xs flex items-center gap-1">
-                            <span class="material-symbols-outlined text-amber-600 text-sm">inventory_2</span>
-                            <span>รายการและจำนวนสินค้าที่ต้องการส่ง <span class="text-rose-500">*</span></span>
-                        </label>
-                        <input type="text" id="merchant-item-desc" placeholder="เช่น อกไก่สด 2 กก. + สันใน 1 กก. (แพ็คใส่ถุงเรียบร้อย)" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all">
-                    </div>
-
-                    <!-- 2.3 ข้อมูลลูกค้าปลายทาง & ที่อยู่จัดส่ง -->
+                    <!-- 2.2 ข้อมูลลูกค้าปลายทาง & ที่อยู่จัดส่ง (ต้องครบถ้วน) -->
                     <div class="space-y-2.5 pt-2 border-t border-slate-100">
                         <div class="flex items-center justify-between">
                             <label class="font-bold text-slate-700 text-xs flex items-center gap-1">
                                 <span class="material-symbols-outlined text-emerald-600 text-sm">person_pin</span>
-                                <span>ข้อมูลลูกค้าปลายทางผู้รับของ</span>
+                                <span>ข้อมูลผู้รับและที่อยู่จัดส่ง <span class="text-rose-500 font-bold">*จำเป็นต้องครบถ้วน</span></span>
                             </label>
-                            <span class="text-[10px] text-slate-400">ระบุเพื่อเปิดทางให้ไรเดอร์ติดต่อได้สะดวก</span>
+                            <span class="text-[10px] text-slate-400">ระบบจะส่งข้อมูลให้ฮับเพื่อจ่ายงาน</span>
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <div>
-                                <label class="text-[10px] text-slate-500 mb-0.5 block">ชื่อลูกค้า / ผู้รับ <span class="text-rose-500">*</span></label>
-                                <input type="text" id="merchant-cust-name" placeholder="เช่น คุณอรพิน" class="w-full p-2 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 transition-all">
+                                <label class="text-[10px] text-slate-600 mb-0.5 block font-semibold">ชื่อลูกค้า / ผู้รับ <span class="text-rose-500">*</span></label>
+                                <input type="text" id="merchant-cust-name" placeholder="เช่น คุณอรพิน" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
                             </div>
                             <div>
-                                <label class="text-[10px] text-slate-500 mb-0.5 block">เบอร์โทรศัพท์ลูกค้า <span class="text-rose-500">*</span></label>
-                                <input type="tel" id="merchant-cust-phone" placeholder="เช่น 081-234-5678" class="w-full p-2 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 transition-all">
+                                <label class="text-[10px] text-slate-600 mb-0.5 block font-semibold">เบอร์โทรศัพท์ลูกค้า <span class="text-rose-500">*</span></label>
+                                <input type="tel" id="merchant-cust-phone" placeholder="เช่น 081-234-5678" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
                             </div>
                         </div>
 
                         <!-- Destination Area Selector & Map Pin Button -->
                         <div class="space-y-1.5">
-                            <label class="text-[10px] text-slate-600 block">ปลายทางส่งสินค้า & คำนวณระยะทาง:</label>
+                            <label class="text-[10px] text-slate-600 block font-semibold">ปลายทางส่งสินค้า & คำนวณระยะทาง <span class="text-rose-500">*</span></label>
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <div class="sm:col-span-2">
-                                    <select id="merchant-destination-select" onchange="calculateMerchantFee()" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium">
+                                    <select id="merchant-destination-select" onchange="calculateMerchantFee()" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium focus:bg-white focus:border-emerald-500">
                                         <option value="20" data-dist="0.8" data-sub="ชุมชนตลาดวิศิษฐ์ชัย / หนองชาก">ชุมชนตลาดวิศิษฐ์ชัย / หนองชาก (~800 ม.) - ค่าส่ง ฿20</option>
                                         <option value="25" data-dist="1.8" data-sub="ชุมชนบ้านหนองชาก">ชุมชนบ้านหนองชาก (~1.8 กม.) - ค่าส่ง ฿25</option>
                                         <option value="30" data-dist="2.8" data-sub="โซนบ้านบึงรอบนอก">โซนบ้านบึงรอบนอก (~2.8 กม.) - ค่าส่ง ฿30</option>
                                         <option value="35" data-dist="3.8" data-sub="หนองชาก - เนินโมก">หนองชาก - เนินโมก (~3.8 กม.) - ค่าส่ง ฿35</option>
                                     </select>
                                 </div>
-                                <button type="button" onclick="openMerchantDestinationMap()" class="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl font-bold flex items-center justify-center gap-1 text-xs active:scale-95 transition-all shadow-2xs cursor-pointer" title="เปิดแผนที่ดาวเทียมเพื่อปักหมุดบ้านลูกค้าละเอียด">
+                                <button type="button" onclick="openMerchantDestinationMap()" class="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl font-bold flex items-center justify-center gap-1 text-xs active:scale-95 transition-all shadow-2xs cursor-pointer" title="เปิดแผนที่เพื่อปักหมุดตำแหน่งบ้านลูกค้า">
                                     <span class="material-symbols-outlined text-sm">satellite_alt</span>
                                     <span>ปักหมุดแผนที่</span>
                                 </button>
                             </div>
                             <div id="merchant-pinned-badge" class="hidden text-[10px] text-emerald-800 bg-emerald-100/80 p-1.5 rounded-lg border border-emerald-300 font-bold flex items-center justify-between">
-                                <span id="merchant-pinned-text">📍 ปักหมุดแผนที่ดาวเทียมแล้ว</span>
-                                <button type="button" onclick="clearMerchantPinnedLocation()" class="text-rose-600 hover:underline">รีเซ็ต</button>
+                                <span id="merchant-pinned-text">📍 ปักหมุดแผนที่เรียบร้อย</span>
+                                <button type="button" onclick="clearMerchantPinnedLocation()" class="text-rose-600 hover:underline cursor-pointer">รีเซ็ต</button>
                             </div>
                         </div>
 
                         <div>
-                            <label class="text-[10px] text-slate-500 mb-0.5 block">บ้านเลขที่ / ซอย / จุดสังเกตเพิ่มเติม:</label>
-                            <input type="text" id="merchant-dest-address" placeholder="เช่น บ้านเลขที่ 124/5 ซอย 3 ตรงข้ามเสาธงโรงเรียน" class="w-full p-2 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 transition-all">
+                            <label class="text-[10px] text-slate-600 mb-0.5 block font-semibold">บ้านเลขที่ / ซอย / จุดสังเกตที่ชัดเจน <span class="text-rose-500">*</span></label>
+                            <input type="text" id="merchant-dest-address" placeholder="ระบุบ้านเลขที่ ซอย หรือจุดสังเกต เช่น บ้านเลขที่ 124/5 ซอย 3 ตรงข้ามเสาธง" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
                         </div>
                     </div>
 
-                    <!-- 2.4 การเก็บเงินปลายทาง (COD) -->
-                    <div class="p-3 bg-amber-50/80 rounded-2xl border border-amber-200 space-y-2">
-                        <div class="flex items-center justify-between">
-                            <label class="flex items-center gap-2 cursor-pointer select-none">
-                                <input type="checkbox" id="merchant-cod-chk" onchange="toggleMerchantCodInput(this)" class="w-4 h-4 rounded text-orange-600 focus:ring-orange-500 cursor-pointer">
-                                <div>
-                                    <div class="font-extrabold text-amber-900 text-xs flex items-center gap-1">
-                                        <span class="material-symbols-outlined text-sm text-amber-700">payments</span>
-                                        <span>ให้ไรเดอร์ช่วยเก็บเงินสดปลายทาง (COD)</span>
-                                    </div>
-                                    <div class="text-[10px] text-amber-700">ไรเดอร์จะนำเงินสดกลับมามอบให้ร้านค้า หรือโอนผ่านบัญชีของฮับ</div>
-                                </div>
-                            </label>
-                        </div>
-                        <div id="merchant-cod-box" class="hidden pl-6 pt-1 space-y-1">
-                            <div class="flex items-center gap-2">
-                                <span class="text-xs font-extrabold text-slate-700">฿</span>
-                                <input type="number" id="merchant-cod-amount" placeholder="ระบุยอดเงิน เช่น 350" class="w-36 p-2 rounded-xl border border-amber-300 text-xs font-black text-slate-900 bg-white focus:ring-1 focus:ring-amber-500">
-                                <span class="text-[11px] text-slate-600">บาท</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 2.5 สรุปค่าบริการจัดส่ง & ปุ่มส่งคำขอ -->
+                    <!-- 2.3 สรุปค่าบริการจัดส่ง & ปุ่มส่งคำขอ -->
                     <div class="pt-2 border-t border-slate-100 space-y-3">
                         <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200 flex items-center justify-between">
                             <div class="space-y-0.5">
                                 <div class="text-[10px] text-slate-500">อัตราค่าจัดส่งตามระยะทางจริง:</div>
                                 <div class="font-extrabold text-slate-800 text-xs flex items-center gap-1">
                                     <span class="material-symbols-outlined text-emerald-600 text-sm">route</span>
-                                    <span id="merchant-calc-dist-desc">ระยะทาง ~1.8 กม. จากตลาดวิศิษฐ์ชัย</span>
+                                    <span id="merchant-calc-dist-desc">ระยะทาง ~0.8 กม. จากตลาดวิศิษฐ์ชัย</span>
                                 </div>
                             </div>
                             <div class="text-right">
-                                <div class="font-black text-lg text-emerald-700" id="merchant-calc-fee">฿25</div>
-                                <div class="text-[9px] text-slate-400">จ่ายสดหรือหักยอด COD</div>
+                                <div class="font-black text-lg text-emerald-700" id="merchant-calc-fee">฿20</div>
+                                <div class="text-[9px] text-slate-400">ชำระค่าส่งกับไรเดอร์/ฮับ</div>
                             </div>
                         </div>
 
@@ -4073,6 +4054,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.2_merchant_express_dispatch"></script>
+    <script src="app.js?v=9.3_merchant_express_nocod"></script>
 </body>
 </html>

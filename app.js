@@ -6344,7 +6344,7 @@ function handleRiderCompleteDelivery() {
 
     openRiderDeliveryCompleteModal();
     const doneMsg = (state.activeOrder.orderType === "MERCHANT_EXPRESS")
-        ? `🎉 ส่งมอบของด่วนถึงมือลูกค้าเรียบร้อยแล้ว! ${state.activeOrder.isCod ? '(เก็บเงิน COD ฿' + state.activeOrder.codAmount + ' สำเร็จ)' : ''}`
+        ? `🎉 ส่งมอบของจากร้านค้าถึงมือลูกค้าเรียบร้อยแล้ว! (ค่าส่ง ฿${state.activeOrder.deliveryFee || 20})`
         : "🎉 ไรเดอร์ส่งมอบของสดถึงมือลูกค้าเรียบร้อยแล้ว! (+฿40 ค่ารอบ)";
     showToast(doneMsg);
 }
@@ -7525,15 +7525,7 @@ function calculateMerchantFee() {
 }
 
 function toggleMerchantCodInput(checkbox) {
-    const box = document.getElementById("merchant-cod-box");
-    if (!box) return;
-    if (checkbox.checked) {
-        box.classList.remove("hidden");
-        const amtInput = document.getElementById("merchant-cod-amount");
-        if (amtInput && !amtInput.value) amtInput.focus();
-    } else {
-        box.classList.add("hidden");
-    }
+    // No-op: Hub has no policy for COD
 }
 
 function openMerchantDestinationMap() {
@@ -7549,50 +7541,56 @@ function clearMerchantPinnedLocation() {
 }
 
 function submitMerchantCall() {
-    const itemDescInput = document.getElementById("merchant-item-desc");
     const custNameInput = document.getElementById("merchant-cust-name");
     const custPhoneInput = document.getElementById("merchant-cust-phone");
     const extraAddrInput = document.getElementById("merchant-dest-address");
     const destSelect = document.getElementById("merchant-destination-select");
-    const codChk = document.getElementById("merchant-cod-chk");
-    const codAmountInput = document.getElementById("merchant-cod-amount");
 
-    const itemDesc = itemDescInput ? itemDescInput.value.trim() : "";
     const custName = custNameInput ? custNameInput.value.trim() : "";
     const custPhone = custPhoneInput ? custPhoneInput.value.trim() : "";
     const extraAddr = extraAddrInput ? extraAddrInput.value.trim() : "";
-    const isCod = codChk ? codChk.checked : false;
-    const codAmount = isCod ? (parseInt(codAmountInput?.value) || 0) : 0;
 
-    if (!itemDesc) {
-        showToast("⚠️ กรุณาระบุประเภทและจำนวนสินค้าที่ต้องการส่ง");
-        if (itemDescInput) itemDescInput.focus();
-        return;
-    }
-
+    // 1. ตรวจสอบชื่อลูกค้า / ผู้รับ
     if (!custName) {
-        showToast("⚠️ กรุณาระบุชื่อลูกค้าผู้รับของ");
+        showToast("⚠️ กรุณาระบุชื่อลูกค้า / ผู้รับของให้ชัดเจน");
         if (custNameInput) custNameInput.focus();
         return;
     }
 
-    if (!custPhone) {
-        showToast("⚠️ กรุณาระบุเบอร์โทรศัพท์ลูกค้า เพื่อให้ไรเดอร์ติดต่อได้");
+    // 2. ตรวจสอบเบอร์โทรศัพท์ลูกค้า (ต้องมีอย่างน้อย 9-10 หลัก)
+    const cleanPhone = custPhone.replace(/[^0-9]/g, "");
+    if (!custPhone || cleanPhone.length < 9) {
+        showToast("⚠️ กรุณาระบุเบอร์โทรศัพท์ลูกค้าให้ถูกต้อง (9-10 หลัก) เพื่อให้ไรเดอร์ติดต่อได้");
         if (custPhoneInput) custPhoneInput.focus();
         return;
     }
 
-    const currentStall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || MARKET_DATA[0];
+    // 3. ตรวจสอบปลายทางส่งสินค้า & ระยะทาง
     const selectedOpt = destSelect ? destSelect.options[destSelect.selectedIndex] : null;
-    const distKm = state.merchantPinnedCoords ? state.merchantPinnedCoords.distKm : (selectedOpt ? parseFloat(selectedOpt.dataset.dist || "1.8") : 1.8);
-    const fee = state.merchantPinnedCoords ? state.merchantPinnedCoords.fee : (selectedOpt ? parseInt(selectedOpt.value || "25") : 25);
-    const fullAddress = state.merchantPinnedCoords 
-        ? (state.merchantPinnedCoords.title + (extraAddr ? ` (${extraAddr})` : "")) 
-        : `${selectedOpt?.dataset.sub || "ชุมชนบ้านหนองชาก"} ${extraAddr ? '(' + extraAddr + ')' : ''}`;
+    if (!state.merchantPinnedCoords && (!selectedOpt || !selectedOpt.value)) {
+        showToast("⚠️ กรุณาเลือกโซนปลายทางส่งสินค้า หรือกดปักหมุดแผนที่");
+        return;
+    }
+
+    // 4. ตรวจสอบที่อยู่จัดส่ง / บ้านเลขที่ / ซอย / จุดสังเกตอย่างละเอียด
+    if (!extraAddr) {
+        showToast("⚠️ กรุณาระบุที่อยู่จัดส่ง / บ้านเลขที่ / ซอย / จุดสังเกตให้ครบถ้วน");
+        if (extraAddrInput) extraAddrInput.focus();
+        return;
+    }
+
+    const currentStall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || MARKET_DATA[0];
+    const distKm = state.merchantPinnedCoords ? state.merchantPinnedCoords.distKm : (selectedOpt ? parseFloat(selectedOpt.dataset.dist || "0.8") : 0.8);
+    const fee = state.merchantPinnedCoords ? state.merchantPinnedCoords.fee : (selectedOpt ? parseInt(selectedOpt.value || "20") : 20);
+    const zoneTitle = state.merchantPinnedCoords 
+        ? state.merchantPinnedCoords.title 
+        : (selectedOpt?.dataset.sub || "ชุมชนตลาดวิศิษฐ์ชัย / หนองชาก");
+    const fullAddress = `${extraAddr} (${zoneTitle})`;
 
     const orderId = "EXP-" + Date.now().toString().slice(-4);
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const defaultItemDesc = "พัสดุ/สินค้าจากร้านค้า (ร้านแพ็คเรียบร้อย)";
 
     const expressOrder = {
         orderId: orderId,
@@ -7611,22 +7609,22 @@ function submitMerchantCall() {
         customerPhone: custPhone,
         address: fullAddress,
         houseNumber: extraAddr,
-        subdistrict: state.merchantPinnedCoords?.subdistrict || "อ.บ้านบึง จ.ชลบุรี",
+        subdistrict: state.merchantPinnedCoords?.subdistrict || zoneTitle || "อ.บ้านบึง จ.ชลบุรี",
         lat: state.merchantPinnedCoords?.lat || 13.3080,
         lng: state.merchantPinnedCoords?.lng || 101.1214,
         distanceKm: distKm,
         deliveryFee: fee,
-        isCod: isCod,
-        codAmount: codAmount,
-        itemDesc: itemDesc,
-        grandTotal: isCod ? codAmount : fee,
-        paymentDesc: isCod ? `เก็บเงินปลายทาง COD ฿${codAmount}` : `แผงค้าออกค่าส่ง ฿${fee}`,
+        isCod: false,
+        codAmount: 0,
+        itemDesc: defaultItemDesc,
+        grandTotal: fee,
+        paymentDesc: `ค่าบริการจัดส่ง ฿${fee} (ชำระตรงกับไรเดอร์/ฮับ - ไม่มี COD)`,
         status: "waiting_rider",
         assignedRider: null,
         stalls: [{
             name: currentStall.stallName,
             stallNumber: currentStall.stallNumber || "แผงค้า",
-            items: [{ name: itemDesc, price: isCod ? codAmount : 0, actualPrice: isCod ? codAmount : 0, picked: true }]
+            items: [{ name: defaultItemDesc, price: fee, actualPrice: fee, picked: true }]
         }]
     };
 
@@ -7643,17 +7641,12 @@ function submitMerchantCall() {
         syncOrderToCloud(expressOrder);
     }
 
-    if (itemDescInput) itemDescInput.value = "";
     if (custNameInput) custNameInput.value = "";
     if (custPhoneInput) custPhoneInput.value = "";
     if (extraAddrInput) extraAddrInput.value = "";
-    if (codChk) {
-        codChk.checked = false;
-        toggleMerchantCodInput(codChk);
-    }
     clearMerchantPinnedLocation();
 
-    showToast(`🚀 แจ้งฮับสำเร็จ! สร้างงานส่งด่วน ${orderId} จาก "${currentStall.stallName}" เรียบร้อย`);
+    showToast(`🚀 แจ้งฮับสำเร็จ! ส่งคำขอเรียกไรเดอร์ ${orderId} จาก "${currentStall.stallName}" ไปยังฮับเรียบร้อย`);
 
     const queueBadge = document.getElementById("hub-queue-count");
     if (queueBadge) queueBadge.textContent = "1";
@@ -7686,7 +7679,7 @@ function renderMerchantActiveDeliveries() {
     }
 
     const rider = order.assignedRider || {
-        name: "กำลังค้นหาไรเดอร์ในตลาด...",
+        name: "กำลังจัดสรรไรเดอร์ในตลาด...",
         phone: "-",
         plate: "-",
         avatar: "🛵"
@@ -7716,7 +7709,7 @@ function renderMerchantActiveDeliveries() {
                             <span class="text-[10px] bg-white/20 text-orange-200 font-mono px-2 py-0.5 rounded-full">${order.orderId}</span>
                             <span class="text-[10px] text-slate-300">${order.time || 'เมื่อสักครู่'}</span>
                         </div>
-                        <h4 class="font-extrabold text-sm text-white mt-0.5">สถานะงานส่งด่วนของแผงคุณ</h4>
+                        <h4 class="font-extrabold text-sm text-white mt-0.5">สถานะงานส่งของของแผงคุณ</h4>
                     </div>
                 </div>
                 <span class="text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${statusClass}">
@@ -7728,21 +7721,19 @@ function renderMerchantActiveDeliveries() {
             <div class="bg-white/5 rounded-2xl p-3 border border-white/10 space-y-1.5 text-xs">
                 <div class="flex justify-between items-start">
                     <div>
-                        <div class="text-[10px] text-slate-400">สินค้าที่ส่ง:</div>
-                        <div class="font-bold text-white text-xs">${order.itemDesc || 'ของสด'}</div>
+                        <div class="text-[10px] text-slate-400">สถานะพัสดุ:</div>
+                        <div class="font-bold text-amber-300 text-xs">📦 ร้านค้าจัดเตรียมและแพ็คเรียบร้อย</div>
                     </div>
                     <div class="text-right">
-                        <div class="text-[10px] text-slate-400">ปลายทาง:</div>
-                        <div class="font-bold text-emerald-300 text-xs">${order.customerName || 'ลูกค้า'}</div>
+                        <div class="text-[10px] text-slate-400">ผู้รับ:</div>
+                        <div class="font-bold text-emerald-300 text-xs">${order.customerName || 'ลูกค้า'} (${order.customerPhone || '-'})</div>
                     </div>
                 </div>
-                <div class="text-[10px] text-slate-300 truncate">📍 ${order.address}</div>
-                ${order.isCod ? `
-                    <div class="text-[11px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
-                        <span class="material-symbols-outlined text-xs">payments</span>
-                        <span>ยอดเก็บเงินปลายทาง (COD): ฿${order.codAmount}</span>
-                    </div>
-                ` : ''}
+                <div class="text-[10px] text-slate-300 truncate">📍 ที่อยู่จัดส่ง: ${order.address}</div>
+                <div class="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-white/10">
+                    <span>ระยะทาง ~${order.distanceKm || 0.8} กม. • ค่าส่ง ฿${order.deliveryFee || 20}</span>
+                    <span class="text-emerald-400 font-bold">ไม่มีเก็บเงินปลายทาง (COD)</span>
+                </div>
             </div>
 
             <!-- Assigned Rider Box (2-Way Communication) -->
@@ -7919,38 +7910,31 @@ function printMerchantExpressSlip(orderId) {
 
         <div class="divider"></div>
 
-        <!-- รายการสินค้า -->
+        <!-- รายละเอียดการนำส่ง -->
         <div class="row font-bold">
-            <span>รายการสินค้า</span>
-            <span>จำนวน/ราคา</span>
+            <span>รายการนำส่ง:</span>
+            <span>พัสดุ/สินค้าจากร้านค้า</span>
         </div>
         <div class="row">
-            <span>${order.itemDesc || 'ของสดตามสั่ง'}</span>
-            <span>1 ชุด</span>
+            <span class="label">สถานะการแพ็ค:</span>
+            <span class="value">ร้านค้าแพ็คเรียบร้อยแล้ว</span>
         </div>
 
         <div class="divider"></div>
 
-        <!-- ค่าจัดส่งและ COD -->
+        <!-- ค่าจัดส่ง (ไม่มี COD) -->
         <div class="row">
             <span class="label">ระยะทางจากตลาด:</span>
-            <span class="value">~${order.distanceKm || 1.8} กม.</span>
+            <span class="value">~${order.distanceKm || 0.8} กม.</span>
         </div>
-        <div class="row">
+        <div class="row" style="font-size:12px; font-weight:bold;">
             <span class="label">ค่าบริการจัดส่ง:</span>
-            <span class="value">฿${order.deliveryFee || 25}</span>
+            <span class="value">฿${order.deliveryFee || 20}</span>
         </div>
-        ${order.isCod ? `
-        <div class="row" style="font-size:13px; font-weight:bold;">
-            <span>💰 เก็บเงินปลายทาง (COD):</span>
-            <span>฿${order.codAmount}</span>
+        <div class="row" style="font-size:9.5px; color:#555;">
+            <span>นโยบายฮับ:</span>
+            <span>ไม่มีบริการเก็บเงินปลายทาง (COD)</span>
         </div>
-        ` : `
-        <div class="row font-bold">
-            <span>การชำระเงิน:</span>
-            <span>แผงค้าชำระแล้ว</span>
-        </div>
-        `}
 
         <div class="double-divider"></div>
 
@@ -12318,21 +12302,17 @@ function renderHubPickingList() {
                     </div>
                 </div>
 
-                <!-- Item & COD Info -->
+                <!-- Parcel & Delivery Fee Info (No COD) -->
                 <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                     <div>
-                        <span class="text-slate-500 text-[10px]">สินค้าที่ต้องรับ:</span>
-                        <div class="font-extrabold text-slate-800">${order.itemDesc || 'ของสดตามสั่ง'}</div>
+                        <span class="text-slate-500 text-[10px]">สถานะสิ่งของที่นำส่ง:</span>
+                        <div class="font-extrabold text-slate-800">📦 ร้านค้าจัดเตรียมและแพ็คของเองเรียบร้อย</div>
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
-                        ${order.isCod ? `
-                            <span class="bg-amber-100 border border-amber-300 text-amber-900 font-black px-2.5 py-1 rounded-xl text-xs flex items-center gap-1">
-                                <span class="material-symbols-outlined text-sm">payments</span>
-                                <span>เก็บ COD ฿${order.codAmount}</span>
-                            </span>
-                        ` : `
-                            <span class="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-xl text-xs">ชำระค่าส่งแล้ว</span>
-                        `}
+                        <span class="bg-emerald-100 border border-emerald-300 text-emerald-900 font-black px-2.5 py-1 rounded-xl text-xs flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm text-emerald-700">payments</span>
+                            <span>ค่าจัดส่ง ฿${order.deliveryFee || 20} (ไม่มี COD)</span>
+                        </span>
                     </div>
                 </div>
 
@@ -12948,12 +12928,12 @@ function renderRiderScreen() {
     if (order.orderType === "MERCHANT_EXPRESS") {
         const origin = order.originStall || {};
         if (badge) badge.textContent = `⚡ งานด่วน ${order.orderId}`;
-        if (totalBadge) totalBadge.textContent = order.isCod ? `฿${order.codAmount} (เก็บ COD)` : `฿${order.deliveryFee || 25} (ค่าส่งชำระแล้ว)`;
+        if (totalBadge) totalBadge.textContent = `฿${order.deliveryFee || 20} (ค่าจัดส่ง)`;
         if (destName) destName.textContent = `${order.customerName || 'ลูกค้า'} (จาก: ${origin.stallName || 'แผงค้า'})`;
         if (phoneBadge) phoneBadge.textContent = orderPhone;
         if (callBtnText) callBtnText.textContent = `โทรหาลูกค้า (${orderPhone})`;
         if (destDetail) destDetail.textContent = `🏪 รับของที่: ${origin.stallName || 'แผงค้า'} (${origin.stallNumber || 'แผงค้า'}) โทร ${origin.ownerPhone || '-'} | 📍 ส่ง: ${order.address}`;
-        if (noteText) noteText.textContent = `สินค้า: ${order.itemDesc || '-'} ${order.isCod ? '• ยอดเก็บเงินสด COD: ฿' + order.codAmount : '• ค่าบริการจัดส่งชำระแล้ว'}`;
+        if (noteText) noteText.textContent = `พัสดุ: ร้านค้าแพ็คเรียบร้อยแล้ว • ค่าจัดส่ง ฿${order.deliveryFee || 20} (ไม่มีบริการ COD)`;
 
         if (callMerchantBtn) {
             callMerchantBtn.classList.remove("hidden");
@@ -13027,9 +13007,7 @@ function renderRiderScreen() {
             btnComplete.className = "p-3 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1 text-xs ring-2 ring-emerald-400 ring-offset-2 animate-pulse active:scale-95 transition-all";
         }
         if (btnCompleteText) {
-            btnCompleteText.textContent = (order.orderType === "MERCHANT_EXPRESS" && order.isCod)
-                ? `2. ส่งมอบสำเร็จ (รับ COD ฿${order.codAmount})`
-                : "2. ส่งมอบสำเร็จ (แตะเมื่อถึง)";
+            btnCompleteText.textContent = "2. ส่งมอบสำเร็จ (แตะเมื่อถึง)";
         }
         if (btnCompleteIcon) btnCompleteIcon.textContent = "check_circle";
 
