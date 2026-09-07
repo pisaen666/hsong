@@ -7618,6 +7618,10 @@ state.merchantPinnedCoords = null;
 state.merchantExpressOrders = loadSavedMerchantExpressOrders();
 
 function renderMerchantView() {
+    if (!state.activeMerchant || !state.activeMerchant.isLoggedIn) {
+        openMerchantLoginModal();
+        return;
+    }
     // 1. Sync Active Stall
     let stall = null;
     if (activeMerchantStallId) {
@@ -9616,9 +9620,14 @@ function logoutCustomer() {
 function logoutMerchant() {
     state.activeMerchant = null;
     activeMerchantStallId = null;
+    try {
+        localStorage.removeItem("talathub_logged_in_merchant");
+        localStorage.removeItem("hsong_logged_in_merchant");
+    } catch(e) {}
     saveMerchantToStorage(null);
     renderAuthHeaderButtons();
     setActiveRoleView("customer");
+    goToMarketScreen();
     showToast("🚪 ออกจากระบบร้านค้าเรียบร้อยแล้ว");
 }
 
@@ -9676,17 +9685,8 @@ function switchRole(targetRole) {
 
     if (targetRole === "merchant") {
         if (!state.activeMerchant || !state.activeMerchant.isLoggedIn) {
-            const defaultStall = MARKET_DATA[0];
-            if (defaultStall) {
-                activeMerchantStallId = defaultStall.stallId;
-                state.activeMerchant = {
-                    isLoggedIn: true,
-                    stallId: defaultStall.stallId,
-                    stallName: defaultStall.stallName,
-                    stallNumber: defaultStall.stallNumber
-                };
-                saveMerchantToStorage(state.activeMerchant);
-            }
+            openMerchantLoginModal();
+            return;
         }
         setActiveRoleView("merchant");
         if (typeof renderMerchantView === "function") renderMerchantView();
