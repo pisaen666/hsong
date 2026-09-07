@@ -1138,6 +1138,8 @@ function applyResolvedGPSLocation(lat, lng, accuracy, sourceName) {
         setTimeout(() => {
             if (locationPickerMap) locationPickerMap.invalidateSize();
         }, 150);
+    } else {
+        initLocationPickerMap(lat, lng);
     }
 
     // Update modal elements
@@ -1231,7 +1233,7 @@ function closeLocationModal() {
     document.getElementById("location-modal").classList.add("hidden");
 }
 
-function detectCurrentLocationGPS(forceOpenModal = false) {
+function detectCurrentLocationGPS(forceOpenModal = true) {
     const isModalOpen = !document.getElementById("location-modal")?.classList.contains("hidden");
     const shouldKeepModalOpen = forceOpenModal || isModalOpen;
 
