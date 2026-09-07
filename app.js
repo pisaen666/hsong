@@ -1573,7 +1573,19 @@ async function handleTrackingDeepLink() {
             if (state.activeOrder && state.activeOrder.orderId && 
                 (state.activeOrder.orderId === trackId || state.activeOrder.orderId.replace(/^#/, '') === cleanKey)) {
                 // ข้อมูลพร้อมแล้ว
-            } else if (isFirebaseReady()) {
+            } else {
+                // ค้นหาจาก Express Orders ของร้านค้าในเครื่อง
+                try {
+                    const expOrders = JSON.parse(localStorage.getItem("hsong_merchant_express_orders") || "[]");
+                    const foundExp = expOrders.find(o => o.orderId === trackId || o.orderId.replace(/^#/, '') === cleanKey);
+                    if (foundExp) {
+                        state.activeOrder = foundExp;
+                        try { localStorage.setItem("talathub_active_order", JSON.stringify(foundExp)); } catch(e) {}
+                    }
+                } catch(e) {}
+            }
+            
+            if ((!state.activeOrder || state.activeOrder.orderId !== trackId) && isFirebaseReady()) {
                 // 2. ดึงจาก Firebase Cloud
                 try {
                     const snap = await db.ref(`orders/${toFirebaseKey(trackId)}`).once("value");
@@ -1591,7 +1603,12 @@ async function handleTrackingDeepLink() {
                 }
             }
 
-            // นำลูกค้าไปที่หน้า Tracking ทันที
+            // นำลูกค้าไปที่หน้า Tracking ทันที (รองรับ Guest เปิดดูจากลิงก์ LINE)
+            if (!state.customer) {
+                state.customer = { isLoggedIn: true, name: state.activeOrder?.customerName || "ลูกค้า", phone: state.activeOrder?.customerPhone || "" };
+            } else {
+                state.customer.isLoggedIn = true;
+            }
             switchRole("customer");
             goToTrackingScreen();
             
@@ -5994,8 +6011,10 @@ function renderTrackingScreen() {
 
     const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
-    // ถ้าไม่มีออเดอร์ หรือลูกค้าออกจากระบบแล้ว ให้เคลียร์หน้าจอติดตาม
-    if (!order || !isCustomerLoggedIn) {
+    // ถ้าไม่มีออเดอร์ หรือลูกค้าออกจากระบบแล้ว (ยกเว้นกรณี Express Order หรือเปิดผ่านลิงก์ ?track=) ให้เคลียร์หน้าจอติดตาม
+    const isTrackDeepLink = !!(new URLSearchParams(window.location.search).get("track") || new URLSearchParams(window.location.search).get("order"));
+    const isExpressOrder = !!(order && order.orderId && order.orderId.startsWith("EXP-"));
+    if (!order || (!isCustomerLoggedIn && !isTrackDeepLink && !isExpressOrder)) {
         setVal("tracking-order-id", "ไม่มีออเดอร์ค้างส่ง");
         const statusTitle = document.getElementById("tracking-status-title");
         const statusDesc = document.getElementById("tracking-status-desc");
@@ -6889,7 +6908,13 @@ function sendRiderChatMessage() {
 
     // Realistic Rider Auto-response
     setTimeout(() => {
-        const riderResponses = [
+        const isMerchant = state.currentRole === "merchant";
+        const riderResponses = isMerchant ? [
+            "รับทราบครับแผงค้า! กำลังขับเข้าไปรับของสดที่หน้าร้านเลยครับ 🛵💨",
+            "โอเคครับผม ตอนนี้ใกล้ถึงหน้าร้านแล้วครับ เดี๋ยวเข้าไปรับของครับ 👍",
+            "ได้เลยครับ กำลังมุ่งหน้าไปรับที่แผงค้าครับ ขอบคุณครับ 🙏",
+            "รับทราบครับผม แพ็คของเรียบร้อยแล้วใช่ไหมครับ เดี๋ยวรีบไปรับครับ!"
+        ] : [
             "รับทราบครับคุณลูกค้า! กำลังรีบนำส่งให้อย่างดีเลยครับ 🛵💨",
             "โอเคครับผม ตอนนี้ใกล้ถึงปากซอยแล้วครับ อีกประมาณ 5 นาทีถึงครับ 👍",
             "ได้เลยครับ เดี๋ยวไปถึงแล้วจะแขวนและโทรแจ้งทันทีครับ 🙏",
@@ -6903,9 +6928,18 @@ function sendRiderChatMessage() {
 function sendQuickRiderMessage(msgText) {
     appendChatMessage(msgText, "user");
     setTimeout(() => {
-        appendChatMessage("รับทราบข้อความเรียบร้อยครับผม! กำลังรีบขับไปส่งให้นะครับ 🛵💨", "rider");
+        const isMerchant = state.currentRole === "merchant";
+        const reply = isMerchant 
+            ? "รับทราบครับแผงค้า! กำลังรีบขับเข้าไปรับของสดที่หน้าร้านครับ 🛵💨"
+            : "รับทราบข้อความเรียบร้อยครับผม! กำลังรีบขับไปส่งให้นะครับ 🛵💨";
+        appendChatMessage(reply, "rider");
     }, 600);
 }
+
+window.openRiderChatModal = openRiderChatModal;
+window.closeRiderChatModal = closeRiderChatModal;
+window.sendRiderChatMessage = sendRiderChatMessage;
+window.sendQuickRiderMessage = sendQuickRiderMessage;
 
 function appendChatMessage(message, sender = "user") {
     const container = document.getElementById("rider-chat-messages");
@@ -8094,7 +8128,7 @@ function renderMerchantActiveDeliveries() {
                     <span>แชร์ LINE ลูกค้า</span>
                 </button>
                 <!-- 2. โทรหาไรเดอร์ -->
-                <button type="button" onclick="callRiderFromMerchant('${rider.phone}')" class="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
+                <button type="button" onclick="callRiderFromMerchant('${order.orderId}')" class="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">call</span>
                     <span>โทรหาไรเดอร์</span>
                 </button>
@@ -8157,36 +8191,111 @@ function shareMerchantTrackingToLine(orderId) {
     const origin = order.originStall || {};
     const rider = order.assignedRider || { name: "ฮับกำลังจัดสรรไรเดอร์", phone: "-" };
     const trackingUrl = `${window.location.origin}${window.location.pathname}?track=${order.orderId}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(trackingUrl)}`;
 
     const text = `🛵 [ตลาดฮับวิศิษฐ์ชัย] แจ้งสถานะการจัดส่งของสด\n` +
         `🏪 ร้านค้า: ${origin.stallName || 'แผงค้าในตลาด'} (${origin.stallNumber || 'แผงค้า'})\n` +
         `📦 รหัสงาน: ${order.orderId}\n` +
-        `👤 ผู้รับ: คุณ${order.customerName || 'ลูกค้า'}\n` +
+        `👤 ผู้รับ: คุณ${order.customerName || 'ลูกค้า'} (${order.customerPhone || '-'})\n` +
         `📍 ที่อยู่จัดส่ง: ${order.address || '-'}\n` +
         `🛵 ไรเดอร์ผู้ส่ง: ${rider.name} (โทร: ${rider.phone || '-'})\n` +
         `🔗 ตรวจสอบพิกัดและสถานะไรเดอร์สด: ${trackingUrl}`;
 
-    if (typeof isMobileDevice === "function" && isMobileDevice()) {
-        const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
-        window.open(lineUrl, '_blank');
-    } else {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(() => {
-                showToast("📋 คัดลอกข้อความสำหรับส่งให้ลูกค้าทาง LINE เรียบร้อยแล้ว!");
-            }).catch(() => {
-                if (typeof showLinePcModal === "function") {
-                    showLinePcModal("ข้อความติดตามออเดอร์สำหรับส่งให้ลูกค้าใน LINE", text);
-                } else {
-                    alert(text);
-                }
-            });
-        } else {
-            if (typeof showLinePcModal === "function") {
-                showLinePcModal("ข้อความติดตามออเดอร์สำหรับส่งให้ลูกค้าใน LINE", text);
-            } else {
-                alert(text);
+    let modal = document.getElementById("merchant-share-line-modal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "merchant-share-line-modal";
+        modal.className = "fixed inset-0 bg-black/80 backdrop-blur-sm z-[120] flex items-center justify-center p-3 sm:p-4 animate-fade-in";
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove("hidden");
+
+    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-3xl max-w-sm w-full p-5 space-y-3.5 shadow-2xl animate-scale-up text-left text-slate-800 text-xs">
+            <div class="flex items-center justify-between border-b pb-2.5">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-[#06C755] text-white flex items-center justify-center font-bold text-base shadow-sm">💬</span>
+                    <div>
+                        <h3 class="font-extrabold text-sm text-slate-900">แชร์สถานะให้ลูกค้าทาง LINE</h3>
+                        <div class="text-[10px] text-slate-500 font-mono">รหัสงาน: ${order.orderId}</div>
+                    </div>
+                </div>
+                <button type="button" onclick="document.getElementById('merchant-share-line-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold">✕</button>
+            </div>
+
+            <!-- Customer Card -->
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 space-y-1">
+                <div class="flex items-center justify-between font-bold">
+                    <span class="text-slate-800">👤 คุณ${order.customerName || 'ลูกค้า'}</span>
+                    <span class="text-emerald-600 font-mono text-[11px]">${order.customerPhone || '-'}</span>
+                </div>
+                <div class="text-[11px] text-slate-500 truncate">📍 ${order.address}</div>
+                <div class="text-[10px] text-slate-400">🛵 ไรเดอร์: ${rider.name} (${rider.phone || '-'})</div>
+            </div>
+
+            <!-- Pre-formatted text box -->
+            <div class="space-y-1">
+                <div class="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                    <span>ข้อความที่พร้อมส่ง:</span>
+                    <button type="button" onclick="copyMerchantShareText()" class="text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5 text-[10px] font-bold">
+                        <span class="material-symbols-outlined text-xs">content_copy</span>
+                        <span>คัดลอกข้อความ</span>
+                    </button>
+                </div>
+                <textarea id="merchant-share-textarea" readonly class="w-full h-24 p-2 bg-slate-100 border border-slate-200 rounded-xl text-[10.5px] font-sans text-slate-700 resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed">${text}</textarea>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="space-y-2 pt-1">
+                <a href="${lineUrl}" target="_blank" class="w-full py-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
+                    <span class="material-symbols-outlined text-base">send</span>
+                    <span>เปิด LINE เพื่อส่งให้ลูกค้าทันที</span>
+                </a>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" onclick="copyMerchantShareText()" class="py-2.5 bg-slate-800 hover:bg-black text-white rounded-xl font-bold flex items-center justify-center gap-1 active:scale-95 transition-all text-xs">
+                        <span class="material-symbols-outlined text-xs">content_copy</span>
+                        <span>คัดลอกข้อความ</span>
+                    </button>
+                    <a href="${trackingUrl}" target="_blank" class="py-2.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl font-bold flex items-center justify-center gap-1 active:scale-95 transition-all text-xs">
+                        <span class="material-symbols-outlined text-xs">open_in_new</span>
+                        <span>ทดสอบลิงก์สด</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- QR code quick scan -->
+            <div class="pt-2 border-t border-slate-100 flex items-center justify-center gap-3 text-[10px] text-slate-500">
+                <img src="${qrCodeUrl}" alt="QR ติดตาม" class="w-11 h-11 rounded-lg border border-slate-200 shadow-xs">
+                <div>
+                    <div class="font-bold text-slate-700">หรือให้ลูกค้าสแกน QR บนมือถือ</div>
+                    <div>เพื่อเปิดหน้าติดตามสดได้ทันที</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function copyMerchantShareText() {
+    const textarea = document.getElementById("merchant-share-textarea");
+    const text = textarea ? textarea.value : "";
+    if (!text) return;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast("📋 คัดลอกข้อความสำหรับส่งให้ลูกค้าทาง LINE เรียบร้อยแล้ว!");
+        }).catch(() => {
+            if (textarea) {
+                textarea.select();
+                document.execCommand("copy");
+                showToast("📋 คัดลอกข้อความเรียบร้อย!");
             }
-        }
+        });
+    } else if (textarea) {
+        textarea.select();
+        document.execCommand("copy");
+        showToast("📋 คัดลอกข้อความเรียบร้อย!");
     }
 }
 
@@ -8273,13 +8382,85 @@ function cancelMerchantExpressOrder(orderId) {
     if (typeof renderHubPickingList === "function") renderHubPickingList();
 }
 
-function callRiderFromMerchant(phone) {
-    if (!phone || phone === "-") {
-        showToast("⏳ ฮับกำลังจัดสรรไรเดอร์ประจำตลาดให้ กรุณารอสักครู่");
-        return;
+function callRiderFromMerchant(param) {
+    let order = null;
+    if (typeof param === "string" && param.startsWith("EXP-")) {
+        order = (state.merchantExpressOrders || []).find(o => o.orderId === param);
     }
-    const clean = phone.replace(/[^0-9]/g, "");
-    window.location.href = `tel:${clean}`;
+    if (!order && state.activeOrder) order = state.activeOrder;
+
+    const rider = (order && order.assignedRider) ? order.assignedRider : null;
+    let phone = rider && rider.phone && rider.phone !== "-" ? rider.phone : (param && param !== "-" && !param.startsWith("EXP-") ? param : null);
+
+    let modal = document.getElementById("merchant-call-rider-modal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "merchant-call-rider-modal";
+        modal.className = "fixed inset-0 bg-black/80 backdrop-blur-sm z-[120] flex items-center justify-center p-4 animate-fade-in";
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove("hidden");
+
+    if (phone) {
+        const cleanPhone = phone.replace(/[^0-9]/g, "");
+        modal.innerHTML = `
+            <div class="bg-white rounded-3xl max-w-xs w-full p-5 space-y-4 shadow-2xl animate-scale-up text-center text-slate-800 text-xs">
+                <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-3xl shadow-inner">
+                    📞
+                </div>
+                <div>
+                    <h3 class="font-extrabold text-base text-slate-900">โทรติดต่อไรเดอร์ผู้จัดส่ง</h3>
+                    <p class="text-slate-500 text-[11px] mt-0.5">${rider ? rider.name : 'ไรเดอร์ประจำตลาด'} (${rider ? (rider.plate || 'รถจัดส่ง') : 'รถจัดส่ง'})</p>
+                </div>
+                <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
+                    <div class="text-[10px] text-emerald-800 font-bold">เบอร์โทรศัพท์ไรเดอร์:</div>
+                    <div class="text-xl font-black text-emerald-700 tracking-wider font-mono mt-0.5">${phone}</div>
+                </div>
+                <div class="space-y-2 pt-1">
+                    <a href="tel:${cleanPhone}" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
+                        <span class="material-symbols-outlined text-base">call</span>
+                        <span>แตะเพื่อโทรออกทันที</span>
+                    </a>
+                    <button type="button" onclick="navigator.clipboard.writeText('${phone}'); showToast('📋 คัดลอกเบอร์ ${phone} สำเร็จ!');" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs">
+                        คัดลอกเบอร์โทร
+                    </button>
+                    <button type="button" onclick="document.getElementById('merchant-call-rider-modal').classList.add('hidden')" class="w-full py-2 text-slate-400 hover:text-slate-600 font-medium text-xs">
+                        ปิดหน้าต่าง
+                    </button>
+                </div>
+            </div>
+        `;
+        if (typeof isMobileDevice === "function" && isMobileDevice()) {
+            window.location.href = `tel:${cleanPhone}`;
+        }
+    } else {
+        modal.innerHTML = `
+            <div class="bg-white rounded-3xl max-w-xs w-full p-5 space-y-4 shadow-2xl animate-scale-up text-center text-slate-800 text-xs">
+                <div class="w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto text-3xl shadow-inner">
+                    ⏳
+                </div>
+                <div>
+                    <h3 class="font-extrabold text-base text-slate-900">ฮับกำลังจัดสรรไรเดอร์</h3>
+                    <p class="text-slate-500 text-[11px] mt-1 leading-relaxed">
+                        ขณะนี้ออเดอร์อยู่ในคิวจัดสรรไรเดอร์ประจำตลาด หากมีเรื่องด่วน สามารถโทรติดต่อฮับกลางได้โดยตรง
+                    </p>
+                </div>
+                <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 text-[11px]">
+                    <span class="text-slate-500">ศูนย์ประสานงานฮับ:</span>
+                    <div class="font-black text-slate-800 text-base font-mono">081-999-8888</div>
+                </div>
+                <div class="space-y-2 pt-1">
+                    <a href="tel:0819998888" class="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
+                        <span class="material-symbols-outlined text-base">call</span>
+                        <span>โทรติดต่อฮับกลาง (081-999-8888)</span>
+                    </a>
+                    <button type="button" onclick="document.getElementById('merchant-call-rider-modal').classList.add('hidden')" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs">
+                        ปิดหน้าต่าง
+                    </button>
+                </div>
+            </div>
+        `;
+    }
 }
 
 function callMerchantFromRider(phone) {
@@ -8301,14 +8482,280 @@ function callMerchantFromRiderUI() {
 }
 
 function openMerchantRiderChat(orderId) {
-    openRiderChatModal();
+    const orders = state.merchantExpressOrders || [];
+    const order = orders.find(o => o.orderId === orderId) || (state.activeOrder?.orderId === orderId ? state.activeOrder : orders[0]);
+    if (!order) {
+        openRiderChatModal();
+        return;
+    }
+
+    const rider = order.assignedRider || { name: "ไรเดอร์ประจำตลาด (กำลังจัดสรร)", phone: "-" };
+    const modal = document.getElementById("rider-chat-modal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+
+    // Customize header for merchant
+    const riderNameEl = document.getElementById("chat-rider-name");
+    const riderSubtitleEl = document.getElementById("chat-rider-subtitle");
+    const orderBadgeEl = document.getElementById("chat-order-badge");
+    const destTextEl = document.getElementById("chat-dest-text");
+
+    if (riderNameEl) riderNameEl.textContent = rider.name;
+    if (riderSubtitleEl) riderSubtitleEl.textContent = `แชทระหว่างแผงค้า (${order.originStall?.stallName || 'แผงค้า'}) ➔ ไรเดอร์`;
+    if (orderBadgeEl) orderBadgeEl.textContent = order.orderId;
+    if (destTextEl) destTextEl.textContent = `📍 ส่ง: คุณ${order.customerName || 'ลูกค้า'} (${order.address || 'ตามพิกัด'})`;
+
+    // Populate merchant quick replies
+    const quickReplyContainer = modal.querySelector(".no-scrollbar");
+    if (quickReplyContainer) {
+        quickReplyContainer.innerHTML = `
+            <button type="button" onclick="sendQuickRiderMessage('📦 ของสดแพ็คเสร็จแล้ว มารับหน้าร้านได้เลยครับ')" class="shrink-0 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold border border-emerald-200 transition-colors active:scale-95">
+                📦 แพ็คเสร็จแล้ว มารับได้เลย
+            </button>
+            <button type="button" onclick="sendQuickRiderMessage('🏪 ร้านอยู่โซน ${order.originStall?.zone || 'A'} แผง ${order.originStall?.stallNumber || 'แผงค้า'} ครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
+                🏪 พิกัดแผง ${order.originStall?.stallNumber || 'แผงค้า'}
+            </button>
+            <button type="button" onclick="sendQuickRiderMessage('📞 ลูกค้าฝากแจ้งว่าช่วยโทรหาก่อนถึง 5 นาทีครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
+                📞 โทรหาลูกค้าก่อนถึง 5 นาที
+            </button>
+            <button type="button" onclick="sendQuickRiderMessage('🛵 ขอบคุณมากครับ ขับขี่ปลอดภัยครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
+                🛵 ขับขี่ปลอดภัยครับ
+            </button>
+        `;
+    }
+
+    // Set greeting in chat box
+    const chatMessages = document.getElementById("rider-chat-messages");
+    if (chatMessages) {
+        chatMessages.innerHTML = `
+            <div class="text-center my-3">
+                <span class="bg-slate-200/70 text-slate-600 text-[10px] px-2.5 py-1 rounded-full">
+                    เชื่อมต่อห้องแชทตรงกับไรเดอร์สำหรับงาน ${order.orderId}
+                </span>
+            </div>
+            <div class="flex items-start gap-2 max-w-[85%] animate-fade-in">
+                <div class="w-7 h-7 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs shrink-0 shadow">🛵</div>
+                <div class="bg-white p-2.5 rounded-2xl rounded-tl-xs shadow-xs border border-slate-100 text-xs text-slate-800">
+                    สวัสดีครับแผงค้า ${order.originStall?.stallName || ''}! กำลังเตรียมเข้าไปรับของที่แผงนะครับ มีโน้ตอะไรแจ้งเพิ่มเติมพิมพ์บอกตรงนี้ได้เลยครับ 🙏
+                </div>
+            </div>
+        `;
+    }
+
+    const callBtn = document.getElementById("chat-rider-call-btn");
+    if (callBtn) {
+        callBtn.onclick = (e) => {
+            if (e) e.stopPropagation();
+            callRiderFromMerchant(order.orderId);
+        };
+    }
+
+    const input = document.getElementById("rider-chat-input");
+    if (input) setTimeout(() => input.focus(), 200);
 }
 
 function viewOrderOnRadar(orderId) {
-    switchRole("rider");
-    const subTabRadarBtn = document.getElementById("fleet-subtab-radar-btn");
-    if (subTabRadarBtn) subTabRadarBtn.click();
-    showToast(`📡 กำลังแสดงเรดาร์ GPS ติดตามไรเดอร์สำหรับงาน ${orderId}`);
+    const orders = state.merchantExpressOrders || [];
+    const order = orders.find(o => o.orderId === orderId) || (state.activeOrder?.orderId === orderId ? state.activeOrder : orders[0]);
+    if (!order) {
+        showToast("⚠️ ไม่พบข้อมูลคำสั่งซื้อ");
+        return;
+    }
+
+    const origin = order.originStall || {};
+    const rider = order.assignedRider || {
+        name: "กำลังจัดสรรไรเดอร์ในตลาด",
+        phone: "081-999-8888",
+        plate: "รถตลาดวิศิษฐ์ชัย",
+        avatar: "🛵"
+    };
+
+    let distDisplay = "0.8";
+    if (order.distanceKm !== undefined && order.distanceKm !== null) {
+        const parsed = parseFloat(order.distanceKm);
+        if (!isNaN(parsed) && parsed > 0 && parsed < 100) distDisplay = parsed.toFixed(1);
+    }
+
+    let statusDesc = "⏳ รอกำลังพลจากฮับ";
+    let etaMins = "15";
+    if (order.status === "assigned") {
+        statusDesc = "🛵 ไรเดอร์กำลังมารับของที่แผง";
+        etaMins = "3-5";
+    } else if (order.status === "delivering") {
+        statusDesc = "📦 ไรเดอร์กำลังเดินทางไปส่งลูกค้า";
+        etaMins = "8-12";
+    } else if (order.status === "delivered") {
+        statusDesc = "✅ ส่งถึงบ้านลูกค้าสำเร็จแล้ว";
+        etaMins = "0";
+    }
+
+    let modal = document.getElementById("merchant-radar-modal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "merchant-radar-modal";
+        modal.className = "fixed inset-0 bg-black/85 backdrop-blur-md z-[110] flex items-center justify-center p-2 sm:p-4 animate-fade-in";
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove("hidden");
+
+    modal.innerHTML = `
+        <div class="bg-slate-900 border border-white/20 text-white rounded-3xl max-w-2xl w-full h-[90vh] max-h-[700px] flex flex-col shadow-2xl overflow-hidden animate-scale-up text-left">
+            <!-- Header -->
+            <div class="bg-slate-800/90 p-3.5 border-b border-white/10 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center text-sm shadow-md">📡</span>
+                    <div>
+                        <div class="font-extrabold text-sm flex items-center gap-1.5">
+                            <span>เรดาร์สด GPS ติดตามไรเดอร์</span>
+                            <span class="text-[10px] bg-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full font-mono font-bold">${order.orderId}</span>
+                        </div>
+                        <div class="text-[10px] text-slate-300">ติดตามพิกัดการจัดส่งของสดแบบเรียลไทม์</div>
+                    </div>
+                </div>
+                <button type="button" onclick="closeMerchantRadarModal()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold transition-all cursor-pointer">✕</button>
+            </div>
+
+            <!-- Ticker metrics bar -->
+            <div class="bg-black/40 px-3 py-2 border-b border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs shrink-0">
+                <div class="bg-white/5 p-1.5 rounded-xl">
+                    <div class="text-[9px] text-slate-400">ไรเดอร์ผู้ส่ง</div>
+                    <div class="font-bold text-emerald-300 truncate text-[11px]">🛵 ${rider.name}</div>
+                </div>
+                <div class="bg-white/5 p-1.5 rounded-xl">
+                    <div class="text-[9px] text-slate-400">สถานะงาน</div>
+                    <div class="font-bold text-amber-300 text-[11px] truncate">${statusDesc}</div>
+                </div>
+                <div class="bg-white/5 p-1.5 rounded-xl">
+                    <div class="text-[9px] text-slate-400">ความเร็วเฉลี่ย</div>
+                    <div class="font-bold text-sky-300 text-[11px]">⚡ ~32 กม./ชม.</div>
+                </div>
+                <div class="bg-white/5 p-1.5 rounded-xl">
+                    <div class="text-[9px] text-slate-400">ประมาณการถึง</div>
+                    <div class="font-bold text-purple-300 text-[11px]">⏳ ~${etaMins} นาที</div>
+                </div>
+            </div>
+
+            <!-- Leaflet Satellite Map Container -->
+            <div class="flex-1 relative w-full bg-slate-950 overflow-hidden">
+                <div id="merchant-radar-leaflet-map" class="w-full h-full" style="z-index: 10;"></div>
+                <!-- Floating overlay with route info -->
+                <div class="absolute bottom-3 left-3 right-3 z-20 bg-black/75 backdrop-blur-md rounded-2xl p-2.5 border border-white/15 text-[11px] flex items-center justify-between gap-2 shadow-lg">
+                    <div class="flex items-center gap-2 truncate min-w-0">
+                        <span class="w-6 h-6 rounded-lg bg-orange-500 text-white flex items-center justify-center font-bold text-xs shrink-0">🏪</span>
+                        <span class="truncate font-bold">${origin.stallName || 'แผงค้า'}</span>
+                        <span class="text-slate-400">➔</span>
+                        <span class="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0">📍</span>
+                        <span class="truncate font-bold text-emerald-300">${order.customerName || 'ลูกค้า'}</span>
+                    </div>
+                    <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold shrink-0">~${distDisplay} กม.</span>
+                </div>
+            </div>
+
+            <!-- Actions Footer -->
+            <div class="p-3 bg-slate-800/95 border-t border-white/10 flex items-center justify-between gap-2 shrink-0">
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="callRiderFromMerchant('${order.orderId}')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">call</span>
+                        <span>โทรหาไรเดอร์</span>
+                    </button>
+                    <button type="button" onclick="closeMerchantRadarModal(); openMerchantRiderChat('${order.orderId}')" class="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">chat</span>
+                        <span>แชทไรเดอร์</span>
+                    </button>
+                </div>
+                <button type="button" onclick="closeMerchantRadarModal()" class="px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs active:scale-95 transition-all cursor-pointer">
+                    ปิดเรดาร์
+                </button>
+            </div>
+        </div>
+    `;
+
+    setTimeout(() => {
+        const mapElem = document.getElementById("merchant-radar-leaflet-map");
+        if (!mapElem || typeof L === "undefined") return;
+        if (window._merchantRadarLeafletInstance) {
+            window._merchantRadarLeafletInstance.remove();
+            window._merchantRadarLeafletInstance = null;
+        }
+
+        const startLat = MARKET_ORIGIN.lat;
+        const startLng = MARKET_ORIGIN.lng;
+        const destLat = order.lat || 13.3080;
+        const destLng = order.lng || 101.1214;
+        const midLat = (startLat + destLat) / 2;
+        const midLng = (startLng + destLng) / 2;
+
+        const map = L.map("merchant-radar-leaflet-map", {
+            zoomControl: false,
+            attributionControl: false
+        }).setView([midLat, midLng], 14);
+        window._merchantRadarLeafletInstance = map;
+
+        // Google Satellite Tile Layer
+        L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+            maxZoom: 20,
+            subdomains: ["mt0", "mt1", "mt2", "mt3"]
+        }).addTo(map);
+
+        // Stall Pin
+        const stallIcon = L.divIcon({
+            className: "custom-radar-stall-pin",
+            html: `<div style="background: linear-gradient(135deg, #f97316, #ea580c); color: #fff; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 2.5px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">🏪</div>`,
+            iconSize: [34, 34],
+            iconAnchor: [17, 17]
+        });
+        L.marker([startLat, startLng], { icon: stallIcon }).addTo(map).bindPopup(`<b>🏪 ${origin.stallName || 'แผงค้า'}</b><br>จุดรับของสด`);
+
+        // Destination Pin
+        const destIcon = L.divIcon({
+            className: "custom-radar-dest-pin",
+            html: `<div style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 2.5px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">📍</div>`,
+            iconSize: [34, 34],
+            iconAnchor: [17, 17]
+        });
+        L.marker([destLat, destLng], { icon: destIcon }).addTo(map).bindPopup(`<b>📍 บ้านคุณ${order.customerName || 'ลูกค้า'}</b><br>${order.address}`);
+
+        // Rider Position (moving along the route)
+        let riderProgress = order.status === 'delivered' ? 1.0 : (order.status === 'delivering' ? 0.65 : (order.status === 'assigned' ? 0.25 : 0.05));
+        const riderLat = startLat + (destLat - startLat) * riderProgress;
+        const riderLng = startLng + (destLng - startLng) * riderProgress;
+
+        const riderIcon = L.divIcon({
+            className: "custom-radar-rider-pin",
+            html: `<div style="position:relative; width: 40px; height: 40px; display:flex; align-items:center; justify-content:center;">
+                <div style="position:absolute; width:100%; height:100%; border-radius:50%; background:rgba(14,165,233,0.35); animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></div>
+                <div style="background: linear-gradient(135deg, #0284c7, #0369a1); color: #fff; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; border: 2.5px solid #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.5); z-index:2;">🛵</div>
+            </div>`,
+            iconSize: [40, 40],
+            iconAnchor: [20, 20]
+        });
+        L.marker([riderLat, riderLng], { icon: riderIcon }).addTo(map).bindPopup(`<b>🛵 ${rider.name}</b><br>สถานะ: ${statusDesc}`);
+
+        // Route Polyline
+        const routeCoords = [
+            [startLat, startLng],
+            [riderLat, riderLng],
+            [destLat, destLng]
+        ];
+        L.polyline(routeCoords, {
+            color: "#38bdf8",
+            weight: 4,
+            dashArray: "8, 8",
+            opacity: 0.85
+        }).addTo(map);
+
+        map.fitBounds([[startLat, startLng], [destLat, destLng]], { padding: [40, 40] });
+        map.invalidateSize();
+    }, 250);
+}
+
+function closeMerchantRadarModal() {
+    const modal = document.getElementById("merchant-radar-modal");
+    if (modal) modal.classList.add("hidden");
+    if (window._merchantRadarLeafletInstance) {
+        window._merchantRadarLeafletInstance.remove();
+        window._merchantRadarLeafletInstance = null;
+    }
 }
 
 function assignExpressOrderToRider(param1 = "R1", param2 = null) {
@@ -8388,6 +8835,14 @@ function printMerchantExpressSlip(orderId) {
     const origin = order.originStall || {};
     const rider = order.assignedRider || { name: "กำลังจัดสรรไรเดอร์", plate: "-", phone: "-" };
     const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+    const trackingUrl = `${window.location.origin}${window.location.pathname}?track=${order.orderId}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(trackingUrl)}`;
+
+    let distDisplay = "0.8";
+    if (order.distanceKm !== undefined && order.distanceKm !== null) {
+        const parsed = parseFloat(order.distanceKm);
+        if (!isNaN(parsed) && parsed > 0 && parsed < 100) distDisplay = parsed.toFixed(1);
+    }
 
     let slipHtml = `
     <!DOCTYPE html>
@@ -8397,7 +8852,7 @@ function printMerchantExpressSlip(orderId) {
         <title>ใบส่งของด่วน 80mm - ${order.orderId}</title>
         <style>
             @page { size: 80mm auto; margin: 0; }
-            body { font-family: 'Sarabun', 'Tahoma', sans-serif; width: 72mm; margin: 0 auto; padding: 4mm 0; font-size: 11px; line-height: 1.35; color: #000; background: #fff; }
+            body { font-family: 'Sarabun', 'Tahoma', sans-serif; width: 72mm; margin: 0 auto; padding: 4mm 0; font-size: 11px; line-height: 1.35; color: #000; background: #fff; page-break-inside: avoid; }
             .text-center { text-align: center; }
             .text-right { text-align: right; }
             .font-bold { font-weight: bold; }
@@ -8409,6 +8864,8 @@ function printMerchantExpressSlip(orderId) {
             .label { color: #333; }
             .value { font-weight: bold; text-align: right; max-width: 65%; word-break: break-word; }
             .box { border: 1px solid #000; border-radius: 4px; padding: 4px; margin: 4px 0; }
+            .qr-box { text-align: center; margin: 6px 0; }
+            .qr-box img { width: 90px; height: 90px; display: inline-block; }
         </style>
     </head>
     <body>
@@ -8431,7 +8888,7 @@ function printMerchantExpressSlip(orderId) {
         <!-- 2. จุดส่งของ (ลูกค้า) -->
         <div class="box">
             <div class="font-bold">📍 จุดส่งของ (ลูกค้าปลายทาง):</div>
-            <div>ผู้รับ: ${order.customerName || 'ลูกค้า'}</div>
+            <div>ผู้รับ: คุณ${order.customerName || 'ลูกค้า'}</div>
             <div>โทร: ${order.customerPhone || '-'}</div>
             <div style="font-size:10px;">${order.address}</div>
         </div>
@@ -8453,11 +8910,11 @@ function printMerchantExpressSlip(orderId) {
         <!-- ค่าจัดส่ง (ไม่มี COD) -->
         <div class="row">
             <span class="label">ระยะทางจากตลาด:</span>
-            <span class="value">~${order.distanceKm || 0.8} กม.</span>
+            <span class="value">~${distDisplay} กม.</span>
         </div>
         <div class="row" style="font-size:12px; font-weight:bold;">
             <span class="label">ค่าบริการจัดส่ง:</span>
-            <span class="value">฿${order.deliveryFee || 20}</span>
+            <span class="value">฿${order.deliveryFee || 20} (ชำระแล้ว)</span>
         </div>
         <div class="row" style="font-size:9.5px; color:#555;">
             <span>นโยบายฮับ:</span>
@@ -8477,7 +8934,13 @@ function printMerchantExpressSlip(orderId) {
         </div>
 
         <div class="divider"></div>
-        <div class="text-center" style="font-size:10px; margin-top:6px;">
+
+        <div class="qr-box">
+            <img src="${qrCodeUrl}" alt="QR สแกนติดตามสถานะ">
+            <div style="font-size:9px; color:#444; margin-top:2px;">สแกนเพื่อตรวจสอบสถานะสด & GPS</div>
+        </div>
+
+        <div class="text-center" style="font-size:10px; margin-top:4px;">
             🙏 ขอบคุณที่ใช้บริการไรเดอร์ตลาดวิศิษฐ์ชัย<br>
             โทรแจ้งปัญหาฮับ: 081-999-8888
         </div>
@@ -8485,22 +8948,67 @@ function printMerchantExpressSlip(orderId) {
         <script>
             window.onload = function() {
                 window.print();
-                setTimeout(() => window.close(), 1000);
+                setTimeout(() => window.close(), 1200);
             };
         </script>
     </body>
     </html>
     `;
 
-    const printWin = window.open('', '_blank', 'width=380,height=600');
-    if (printWin) {
+    // Try popup print window
+    let printWin = null;
+    try {
+        printWin = window.open('', '_blank', 'width=380,height=600');
+    } catch(e) {}
+
+    if (printWin && !printWin.closed) {
         printWin.document.open();
         printWin.document.write(slipHtml);
         printWin.document.close();
+        showToast("🖨️ กำลังส่งคำสั่งพิมพ์สลิป 80mm...");
     } else {
-        showToast("⚠️ กรุณาอนุญาตป๊อปอัปเพื่อพิมพ์สลิป");
+        // Fallback on-screen preview modal if popup is blocked
+        let modal = document.getElementById("merchant-slip-preview-modal");
+        if (!modal) {
+            modal = document.createElement("div");
+            modal.id = "merchant-slip-preview-modal";
+            modal.className = "fixed inset-0 bg-black/80 backdrop-blur-sm z-[130] flex items-center justify-center p-3 sm:p-4 animate-fade-in";
+            document.body.appendChild(modal);
+        }
+        modal.classList.remove("hidden");
+        modal.innerHTML = `
+            <div class="bg-white rounded-3xl max-w-sm w-full p-4 space-y-3 shadow-2xl animate-scale-up text-left text-xs max-h-[90vh] flex flex-col">
+                <div class="flex items-center justify-between border-b pb-2">
+                    <h4 class="font-extrabold text-sm text-slate-800 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-base text-emerald-600">receipt_long</span>
+                        <span>ตัวอย่างใบส่งของ 80mm</span>
+                    </h4>
+                    <button type="button" onclick="document.getElementById('merchant-slip-preview-modal').classList.add('hidden')" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold">✕</button>
+                </div>
+                <div class="flex-1 overflow-y-auto border border-slate-200 rounded-2xl p-3 bg-slate-50">
+                    <iframe id="slip-iframe" class="w-full h-96 border-none bg-white"></iframe>
+                </div>
+                <div class="pt-1 flex gap-2">
+                    <button type="button" onclick="const f=document.getElementById('slip-iframe'); if(f) f.contentWindow.print();" class="flex-1 py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
+                        <span class="material-symbols-outlined text-base">print</span>
+                        <span>พิมพ์สลิปทันที</span>
+                    </button>
+                    <button type="button" onclick="document.getElementById('merchant-slip-preview-modal').classList.add('hidden')" class="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs">
+                        ปิด
+                    </button>
+                </div>
+            </div>
+        `;
+        const iframe = document.getElementById("slip-iframe");
+        if (iframe) {
+            iframe.contentWindow.document.open();
+            iframe.contentWindow.document.write(slipHtml);
+            iframe.contentWindow.document.close();
+        }
+        showToast("🖨️ แสดงตัวอย่างสลิป 80mm (สามารถกดพิมพ์ได้ทันที)");
     }
 }
+
 window.renderMerchantView = renderMerchantView;
 window.onMerchantStallSelectChanged = onMerchantStallSelectChanged;
 window.calculateMerchantFee = calculateMerchantFee;
@@ -8514,8 +9022,13 @@ window.callMerchantFromRider = callMerchantFromRider;
 window.callMerchantFromRiderUI = callMerchantFromRiderUI;
 window.openMerchantRiderChat = openMerchantRiderChat;
 window.viewOrderOnRadar = viewOrderOnRadar;
+window.closeMerchantRadarModal = closeMerchantRadarModal;
 window.assignExpressOrderToRider = assignExpressOrderToRider;
 window.printMerchantExpressSlip = printMerchantExpressSlip;
+window.shareMerchantTrackingToLine = shareMerchantTrackingToLine;
+window.copyMerchantShareText = copyMerchantShareText;
+window.viewMerchantDeliveryProof = viewMerchantDeliveryProof;
+window.cancelMerchantExpressOrder = cancelMerchantExpressOrder;
 window.openMerchantPaymentModal = openMerchantPaymentModal;
 window.closeMerchantPaymentModal = closeMerchantPaymentModal;
 window.downloadMerchantPromptPayQR = downloadMerchantPromptPayQR;
