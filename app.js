@@ -7506,20 +7506,26 @@ function calculateMerchantFee() {
     const destSelect = document.getElementById("merchant-destination-select");
     const feeEl = document.getElementById("merchant-calc-fee");
     const distDesc = document.getElementById("merchant-calc-dist-desc");
+    const btnFeeDisplay = document.getElementById("merchant-btn-fee-display");
+
+    let fee = 20;
+    let dist = "0.8";
 
     if (state.merchantPinnedCoords) {
-        const distKm = state.merchantPinnedCoords.distKm;
-        const fee = state.merchantPinnedCoords.fee;
+        dist = state.merchantPinnedCoords.distKm.toFixed(1);
+        fee = state.merchantPinnedCoords.fee;
         if (feeEl) feeEl.textContent = `฿${fee}`;
-        if (distDesc) distDesc.textContent = `พิกัดดาวเทียม ~${distKm.toFixed(1)} กม. จากตลาดวิศิษฐ์ชัย`;
+        if (btnFeeDisplay) btnFeeDisplay.textContent = `฿${fee}`;
+        if (distDesc) distDesc.textContent = `พิกัดดาวเทียม ~${dist} กม. จากตลาดวิศิษฐ์ชัย`;
         return;
     }
 
     if (destSelect) {
-        const fee = destSelect.value || "25";
+        fee = parseInt(destSelect.value || "20");
         const selectedOpt = destSelect.options[destSelect.selectedIndex];
-        const dist = selectedOpt ? (selectedOpt.dataset.dist || "1.8") : "1.8";
+        dist = selectedOpt ? (selectedOpt.dataset.dist || "0.8") : "0.8";
         if (feeEl) feeEl.textContent = `฿${fee}`;
+        if (btnFeeDisplay) btnFeeDisplay.textContent = `฿${fee}`;
         if (distDesc) distDesc.textContent = `ระยะทาง ~${dist} กม. จากตลาดวิศิษฐ์ชัย`;
     }
 }
@@ -7592,7 +7598,7 @@ function submitMerchantCall() {
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const defaultItemDesc = "พัสดุ/สินค้าจากร้านค้า (ร้านแพ็คเรียบร้อย)";
 
-    const expressOrder = {
+    const pendingOrder = {
         orderId: orderId,
         orderType: "MERCHANT_EXPRESS",
         createdAt: now.toISOString(),
@@ -7616,9 +7622,11 @@ function submitMerchantCall() {
         deliveryFee: fee,
         isCod: false,
         codAmount: 0,
+        isPaid: false,
+        paymentStatus: "pending",
         itemDesc: defaultItemDesc,
         grandTotal: fee,
-        paymentDesc: `ค่าบริการจัดส่ง ฿${fee} (ชำระตรงกับไรเดอร์/ฮับ - ไม่มี COD)`,
+        paymentDesc: `ค่าบริการจัดส่ง ฿${fee} (ชำระล่วงหน้าเข้าฮับ)`,
         status: "waiting_rider",
         assignedRider: null,
         stalls: [{
@@ -7628,25 +7636,126 @@ function submitMerchantCall() {
         }]
     };
 
-    state.activeOrder = expressOrder;
+    state.pendingMerchantExpressOrder = pendingOrder;
+    openMerchantPaymentModal(pendingOrder);
+}
+
+// ── Controller for Merchant Express QR Payment Modal ──
+function openMerchantPaymentModal(order) {
+    if (!order) return;
+    const modal = document.getElementById("merchant-payment-modal");
+    if (!modal) return;
+
+    const orderIdEl = document.getElementById("m-pay-order-id");
+    const originEl = document.getElementById("m-pay-origin");
+    const destEl = document.getElementById("m-pay-dest");
+    const amountEl = document.getElementById("m-pay-amount");
+    const qrImg = document.getElementById("m-pay-qr-img");
+    const timeEl = document.getElementById("m-pay-time");
+
+    if (orderIdEl) orderIdEl.textContent = order.orderId;
+    if (timeEl) timeEl.textContent = `${order.time} (~${order.distanceKm} กม.)`;
+    if (originEl) originEl.textContent = `${order.originStall.stallName} (${order.originStall.stallNumber}) โซน ${order.originStall.zone}`;
+    if (destEl) destEl.textContent = `${order.customerName} - ${order.address}`;
+    if (amountEl) amountEl.textContent = `฿${order.deliveryFee}`;
+
+    if (qrImg) {
+        qrImg.src = `https://promptpay.io/0819998888/${order.deliveryFee}.png`;
+        qrImg.onerror = function() {
+            this.onerror = null;
+            this.src = "promptpay_qr.png";
+        };
+    }
+
+    clearMerchantSlip();
+    modal.classList.remove("hidden");
+}
+
+function closeMerchantPaymentModal() {
+    const modal = document.getElementById("merchant-payment-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function downloadMerchantPromptPayQR() {
+    const qrImg = document.getElementById("m-pay-qr-img");
+    if (!qrImg || !qrImg.src) return;
+    const a = document.createElement('a');
+    a.href = qrImg.src;
+    a.download = `PromptPay_Hub_Delivery_Fee.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast("💾 กำลังดาวน์โหลดรูป QR สำหรับสแกนจ่าย...");
+}
+
+let _merchantSlipBase64 = null;
+
+function handleMerchantSlipUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        _merchantSlipBase64 = e.target.result;
+        const previewBox = document.getElementById("m-pay-slip-preview-box");
+        const slipImg = document.getElementById("m-pay-slip-img");
+        if (previewBox) previewBox.classList.remove("hidden");
+        if (slipImg) slipImg.src = _merchantSlipBase64;
+        showToast("✅ แนบสลิปโอนเงินเรียบร้อย");
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearMerchantSlip() {
+    _merchantSlipBase64 = null;
+    const previewBox = document.getElementById("m-pay-slip-preview-box");
+    const slipImg = document.getElementById("m-pay-slip-img");
+    const slipInput = document.getElementById("m-pay-slip-input");
+    if (previewBox) previewBox.classList.add("hidden");
+    if (slipImg) slipImg.src = "";
+    if (slipInput) slipInput.value = "";
+}
+
+function confirmMerchantPaymentAndDispatch() {
+    const order = state.pendingMerchantExpressOrder;
+    if (!order) {
+        showToast("⚠️ ไม่พบข้อมูลคำขอเรียกรถ");
+        return;
+    }
+
+    order.isPaid = true;
+    order.paymentStatus = "paid";
+    order.paidAmount = order.deliveryFee;
+    order.paymentMethod = "PROMPTPAY_QR";
+    order.slipImage = _merchantSlipBase64 || null;
+    order.paymentDesc = `ชำระค่าส่งล่วงหน้าแล้ว ฿${order.deliveryFee} (PromptPay)`;
+    order.status = "waiting_rider";
+
+    state.activeOrder = order;
     state.merchantExpressOrders = state.merchantExpressOrders || [];
-    state.merchantExpressOrders.unshift(expressOrder);
+    state.merchantExpressOrders.unshift(order);
 
     try {
-        localStorage.setItem("hsong_active_order", JSON.stringify(expressOrder));
+        localStorage.setItem("hsong_active_order", JSON.stringify(order));
         localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
     } catch(e) {}
 
     if (typeof syncOrderToCloud === "function") {
-        syncOrderToCloud(expressOrder);
+        syncOrderToCloud(order);
     }
 
+    // ล้างฟอร์ม
+    const custNameInput = document.getElementById("merchant-cust-name");
+    const custPhoneInput = document.getElementById("merchant-cust-phone");
+    const extraAddrInput = document.getElementById("merchant-dest-address");
     if (custNameInput) custNameInput.value = "";
     if (custPhoneInput) custPhoneInput.value = "";
     if (extraAddrInput) extraAddrInput.value = "";
     clearMerchantPinnedLocation();
+    closeMerchantPaymentModal();
 
-    showToast(`🚀 แจ้งฮับสำเร็จ! ส่งคำขอเรียกไรเดอร์ ${orderId} จาก "${currentStall.stallName}" ไปยังฮับเรียบร้อย`);
+    showToast(`🎉 ชำระค่าส่ง ฿${order.deliveryFee} สำเร็จ! ส่งงาน ${order.orderId} เข้าฮับเพื่อจัดสรรไรเดอร์ทันที`);
+
+    if (typeof playOrderAlertSound === "function") playOrderAlertSound();
 
     const queueBadge = document.getElementById("hub-queue-count");
     if (queueBadge) queueBadge.textContent = "1";
@@ -7732,7 +7841,10 @@ function renderMerchantActiveDeliveries() {
                 <div class="text-[10px] text-slate-300 truncate">📍 ที่อยู่จัดส่ง: ${order.address}</div>
                 <div class="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-white/10">
                     <span>ระยะทาง ~${order.distanceKm || 0.8} กม. • ค่าส่ง ฿${order.deliveryFee || 20}</span>
-                    <span class="text-emerald-400 font-bold">ไม่มีเก็บเงินปลายทาง (COD)</span>
+                    <span class="text-emerald-400 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">verified</span>
+                        <span>ชำระค่าส่งเข้าฮับแล้ว (฿${order.deliveryFee || 20})</span>
+                    </span>
                 </div>
             </div>
 
@@ -7988,6 +8100,12 @@ window.openMerchantRiderChat = openMerchantRiderChat;
 window.viewOrderOnRadar = viewOrderOnRadar;
 window.assignExpressOrderToRider = assignExpressOrderToRider;
 window.printMerchantExpressSlip = printMerchantExpressSlip;
+window.openMerchantPaymentModal = openMerchantPaymentModal;
+window.closeMerchantPaymentModal = closeMerchantPaymentModal;
+window.downloadMerchantPromptPayQR = downloadMerchantPromptPayQR;
+window.handleMerchantSlipUpload = handleMerchantSlipUpload;
+window.clearMerchantSlip = clearMerchantSlip;
+window.confirmMerchantPaymentAndDispatch = confirmMerchantPaymentAndDispatch;
 
 
 
@@ -12292,7 +12410,7 @@ function renderHubPickingList() {
                         </div>
                         <div class="font-extrabold text-slate-900 text-xs">${order.customerName || 'ลูกค้า'}</div>
                         <div class="text-[11px] text-slate-600 truncate">${order.address || 'ตามพิกัดจัดส่ง'}</div>
-                        <div class="text-[10px] text-emerald-800 font-bold">ระยะทาง ~${order.distanceKm || 1.8} กม. • ค่าส่ง ฿${order.deliveryFee || 25}</div>
+                        <div class="text-[10px] text-emerald-800 font-bold">ระยะทาง ~${order.distanceKm || 0.8} กม. • ค่าส่ง ฿${order.deliveryFee || 20} (ชำระแล้ว)</div>
                         <div class="pt-1 flex items-center gap-1.5">
                             <a href="tel:${order.customerPhone || '0812345678'}" class="px-2 py-1 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all">
                                 <span class="material-symbols-outlined text-xs">call</span>
@@ -12302,16 +12420,16 @@ function renderHubPickingList() {
                     </div>
                 </div>
 
-                <!-- Parcel & Delivery Fee Info (No COD) -->
+                <!-- Parcel & Delivery Fee Info (Pre-Paid to Hub) -->
                 <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                     <div>
                         <span class="text-slate-500 text-[10px]">สถานะสิ่งของที่นำส่ง:</span>
                         <div class="font-extrabold text-slate-800">📦 ร้านค้าจัดเตรียมและแพ็คของเองเรียบร้อย</div>
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
-                        <span class="bg-emerald-100 border border-emerald-300 text-emerald-900 font-black px-2.5 py-1 rounded-xl text-xs flex items-center gap-1">
-                            <span class="material-symbols-outlined text-sm text-emerald-700">payments</span>
-                            <span>ค่าจัดส่ง ฿${order.deliveryFee || 20} (ไม่มี COD)</span>
+                        <span class="bg-emerald-100 border border-emerald-300 text-emerald-950 font-black px-3 py-1 rounded-xl text-xs flex items-center gap-1.5 shadow-2xs">
+                            <span class="material-symbols-outlined text-sm text-emerald-700">verified</span>
+                            <span>ชำระค่าจัดส่งแล้ว ฿${order.deliveryFee || 20} (โอนเข้าฮับ)</span>
                         </span>
                     </div>
                 </div>
