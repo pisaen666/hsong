@@ -102,11 +102,6 @@
                             <span class="inline sm:hidden">เปิดร้าน</span>
                         </button>
 
-                        <!-- Merchant Login Button -->
-                        <button onclick="openMerchantLoginModal()" id="btn-merchant-login" class="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-md active:scale-95 transition-all">
-                            <span class="material-symbols-outlined text-sm font-bold">store</span>
-                            <span class="hidden xs:inline sm:inline">ร้านค้า</span>
-                        </button>
 
                         <!-- Rider Register Button -->
                         <button onclick="openRiderRegisterModal()" id="btn-rider-register" class="px-2 sm:px-3 md:px-3.5 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-md active:scale-95 transition-all">
@@ -1438,9 +1433,10 @@
                     <span>2. สถิติภาพรวม & ยอดสะสม</span>
                 </button>
                 <span class="text-slate-300 shrink-0">|</span>
-                <button onclick="switchAdminTab('stalls')" id="admin-tab-stalls" class="admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5">
+                <button onclick="switchAdminTab('stalls')" id="admin-tab-stalls" class="admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5 relative">
                     <span class="material-symbols-outlined text-base text-slate-400">storefront</span>
                     <span>3. จัดการ 100 แผงค้า & พร้อมเพย์</span>
+                    <span id="admin-stalls-badge" class="hidden ml-1 px-1.5 py-0.2 text-[10px] font-black bg-rose-500 text-white rounded-full animate-pulse">0</span>
                 </button>
                 <span class="text-slate-300 shrink-0">|</span>
                 <button onclick="switchAdminTab('riders')" id="admin-tab-riders" class="admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5 relative">
@@ -2761,22 +2757,52 @@
                 </button>
             </div>
 
-            <!-- Choice 1: Edit Existing Stall -->
-            <div class="space-y-2">
-                <label class="text-[11px] font-bold text-slate-700 flex items-center gap-1">
-                    <span class="material-symbols-outlined text-emerald-600 text-sm">login</span>
-                    <span>1. เลือกร้านค้าของคุณเพื่อเข้าแก้ไขข้อมูล:</span>
+            <!-- Method 1: Enter 6-digit Merchant Code or Phone -->
+            <div class="space-y-2 p-3.5 bg-emerald-50/70 border border-emerald-200/90 rounded-2xl">
+                <label class="block text-xs font-bold text-slate-800 flex items-center justify-between">
+                    <span class="flex items-center gap-1.5 text-emerald-900">
+                        <span class="material-symbols-outlined text-base text-emerald-600 font-bold">key</span>
+                        <span>1. กรอกรหัสแผงค้า 6 หลัก หรือเบอร์โทร:</span>
+                    </span>
+                    <span class="text-[10px] text-emerald-600 font-mono bg-emerald-100/80 px-1.5 py-0.5 rounded font-bold">เช่น ct4578</span>
                 </label>
-                <div id="merchant-stalls-login-list" class="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">pin</span>
+                    <input type="text" id="merchant-code-login-input" placeholder="กรอกรหัส 6 หลัก (เช่น CT4578) หรือเบอร์โทรศัพท์" class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-emerald-300 font-bold font-mono text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 uppercase outline-none bg-white shadow-xs">
+                </div>
+                <button type="button" onclick="handleMerchantCodeLoginSubmit()" class="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-sm font-bold">login</span>
+                    <span>เข้าสู่ระบบแผงค้า (Role 3)</span>
+                </button>
+            </div>
+
+            <!-- Divider -->
+            <div class="relative flex py-0.5 items-center">
+                <div class="flex-grow border-t border-slate-200"></div>
+                <span class="flex-shrink mx-2 text-[10px] text-slate-400 font-bold">หรือเลือกแผงค้าเดิมในระบบ</span>
+                <div class="flex-grow border-t border-slate-200"></div>
+            </div>
+
+            <!-- Choice 2: Edit Existing Stall -->
+            <div class="space-y-1.5">
+                <label class="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-amber-600 text-sm">store</span>
+                    <span>2. แผงค้าเดิมในตลาดสด:</span>
+                </label>
+                <div id="merchant-stalls-login-list" class="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto pr-1">
                     <!-- Populated dynamically by openMerchantLoginModal() -->
                 </div>
             </div>
 
-            <!-- Choice 2: Register New Stall Partner -->
-            <div class="pt-2 border-t border-slate-100">
-                <button onclick="registerNewMerchantStall()" class="w-full bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold py-3 rounded-2xl shadow-md text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
-                    <span class="material-symbols-outlined text-lg">add_business</span>
-                    <span>✨ สมัครเปิดแผงค้าใหม่ (กรอกฟอร์มเทมเพลต)</span>
+            <!-- Choice 3: Register New Stall & Check Status -->
+            <div class="pt-2 border-t border-slate-100 flex items-center gap-2">
+                <button onclick="closeMerchantLoginModal(); registerNewMerchantStall();" class="flex-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm">add_business</span>
+                    <span>ลงทะเบียนเปิดร้านใหม่</span>
+                </button>
+                <button onclick="closeMerchantLoginModal(); openStatusCheckModal('merchant');" class="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm text-amber-600">verified</span>
+                    <span>ตรวจสถานะรับรหัส</span>
                 </button>
             </div>
         </div>
@@ -3107,9 +3133,9 @@
                             <span class="material-symbols-outlined text-sm">arrow_back</span>
                             <span>ย้อนกลับ</span>
                         </button>
-                        <button type="button" onclick="saveMerchantStallData()" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold rounded-xl shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
-                            <span class="material-symbols-outlined text-sm">save</span>
-                            <span>💾 บันทึกและเปิดร้านค้าทันที</span>
+                        <button type="button" onclick="submitMerchantApplication()" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold rounded-xl shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
+                            <span class="material-symbols-outlined text-sm">send</span>
+                            <span>📤 ส่งข้อมูลให้แอดมินพิจารณา</span>
                         </button>
                     </div>
                 </div>
@@ -3126,9 +3152,9 @@
                         <span class="material-symbols-outlined text-sm">visibility</span>
                         <span>ดูตัวอย่างหน้าร้าน</span>
                     </button>
-                    <button onclick="saveMerchantStallData()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-bold shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
-                        <span class="material-symbols-outlined text-sm">save</span>
-                        <span>💾 บันทึกและเปิดร้านค้าทันที</span>
+                    <button onclick="submitMerchantApplication()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-bold shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-sm">send</span>
+                        <span>📤 ส่งข้อมูลให้แอดมินพิจารณา</span>
                     </button>
                 </div>
             </div>
@@ -4175,26 +4201,29 @@
                 </button>
             </div>
 
-            <!-- Method 1: Login via Phone Number -->
-            <div class="space-y-2">
-                <label class="block text-xs font-bold text-slate-800 flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sky-600 text-base">smartphone</span>
-                    <span>1. กรอกเบอร์มือถือที่ลงทะเบียนไว้:</span>
+            <!-- Method 1: Login via 6-digit Rider Code or Phone -->
+            <div class="space-y-2 p-3 bg-sky-50/70 border border-sky-200/90 rounded-2xl">
+                <label class="block text-xs font-bold text-slate-800 flex items-center justify-between">
+                    <span class="flex items-center gap-1 text-sky-900">
+                        <span class="material-symbols-outlined text-base text-sky-600 font-bold">key</span>
+                        <span>1. กรอกรหัสไรเดอร์ 6 หลัก หรือเบอร์โทร:</span>
+                    </span>
+                    <span class="text-[10px] text-sky-600 font-mono bg-sky-100/80 px-1.5 py-0.5 rounded font-bold">เช่น ct4578</span>
                 </label>
                 <div class="relative">
-                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">call</span>
-                    <input type="tel" id="rider-login-phone-input" placeholder="เช่น 089xxxxxxx" class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 font-bold font-mono text-xs text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none">
+                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">pin</span>
+                    <input type="text" id="rider-login-phone-input" placeholder="กรอกรหัส 6 หลัก (เช่น CT4578) หรือเบอร์โทร" class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-sky-300 font-bold font-mono text-xs text-slate-800 focus:ring-2 focus:ring-sky-500 uppercase outline-none bg-white shadow-xs">
                 </div>
-                <button type="button" onclick="handleRiderPhoneLoginSubmit()" class="w-full py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5">
-                    <span class="material-symbols-outlined text-sm">login</span>
-                    <span>เข้าสู่ระบบด้วยเบอร์โทร</span>
+                <button type="button" onclick="handleRiderPhoneLoginSubmit()" class="w-full py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-sm font-bold">login</span>
+                    <span>เข้าสู่ระบบรับงาน (Role 4)</span>
                 </button>
             </div>
 
             <!-- Divider -->
             <div class="relative flex py-1 items-center">
                 <div class="flex-grow border-t border-slate-200"></div>
-                <span class="flex-shrink mx-2 text-[10px] text-slate-400 font-bold">หรือเลือกจากรายชื่อไรเดอร์</span>
+                <span class="flex-shrink mx-2 text-[10px] text-slate-400 font-bold">หรือเลือกจากรายชื่อไรเดอร์ในระบบ</span>
                 <div class="flex-grow border-t border-slate-200"></div>
             </div>
 
@@ -4213,18 +4242,102 @@
                 </button>
             </div>
 
-            <!-- Bottom CTA: Register as New Rider -->
-            <div class="pt-2 border-t border-slate-100">
-                <div class="bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-50 border border-sky-200 p-3 rounded-2xl text-center space-y-1.5">
-                    <div class="text-[11px] font-bold text-slate-800 flex items-center justify-center gap-1">
-                        <span>✨ ยังไม่ได้ลงทะเบียนเป็นไรเดอร์?</span>
-                    </div>
-                    <p class="text-[10px] text-slate-500">สมัครร่วมทีมส่งของสดกับเฮียส่ง ค่ารอบดี มีงานทุกวัน</p>
-                    <button type="button" onclick="closeRiderLoginModal(); openRiderRegisterModal();" class="w-full py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-black rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1">
+            <!-- Bottom CTA: Register as New Rider & Check Status -->
+            <div class="pt-2 border-t border-slate-100 space-y-2">
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="closeRiderLoginModal(); openRiderRegisterModal();" class="flex-1 py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold rounded-xl text-[11px] shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1">
                         <span class="material-symbols-outlined text-sm font-bold">how_to_reg</span>
-                        <span>สมัครเป็นไรเดอร์ที่นี่</span>
+                        <span>สมัครเป็นไรเดอร์ใหม่</span>
+                    </button>
+                    <button type="button" onclick="closeRiderLoginModal(); openStatusCheckModal('rider');" class="flex-1 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl text-[11px] active:scale-95 transition-all flex items-center justify-center gap-1">
+                        <span class="material-symbols-outlined text-sm text-amber-600">verified</span>
+                        <span>ตรวจสถานะรับรหัส</span>
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SIMULATED SMS / LINE NOTIFICATION MODAL    -->
+    <!-- ========================================== -->
+    <div id="simulated-sms-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl p-5 sm:p-6 max-w-sm w-full shadow-2xl space-y-4 border border-slate-200 text-center animate-scale-up">
+            <div class="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-2xl shadow-sm">
+                📲
+            </div>
+            <div>
+                <span class="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1">
+                    ระบบส่งรหัสผ่านอัตโนมัติ (SMS / LINE)
+                </span>
+                <h3 class="font-black text-base text-slate-900" id="sms-modal-title">ส่งรหัสเข้าสู่ระบบเรียบร้อย</h3>
+                <p class="text-xs text-slate-500 mt-1" id="sms-modal-subtitle">
+                    สร้างรหัส 6 หลักและส่งแจ้งเตือนไปยังผู้สมัครแล้ว
+                </p>
+            </div>
+            <div class="bg-slate-900 text-emerald-400 p-4 rounded-2xl text-left font-mono text-xs space-y-2 border border-slate-800 shadow-inner">
+                <div class="text-[10px] text-slate-400 font-sans border-b border-slate-800 pb-1 flex justify-between">
+                    <span>📩 ส่งถึง: <strong class="text-white" id="sms-modal-phone">08x-xxx-xxxx</strong></span>
+                    <span class="text-emerald-400 font-bold">ส่งสำเร็จ 100%</span>
+                </div>
+                <div id="sms-modal-message" class="text-xs leading-relaxed text-slate-200">
+                    ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับ! การลงทะเบียนได้รับการอนุมัติแล้ว รหัสเข้าสู่ระบบ 6 หลักของคุณคือ <strong class="text-amber-300 text-base font-black tracking-wider" id="sms-modal-code">CT4578</strong>
+                </div>
+            </div>
+            <div class="space-y-2 pt-1">
+                <button onclick="copyGeneratedCode()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">content_copy</span>
+                    <span>คัดลอกรหัสผ่าน 6 หลัก</span>
+                </button>
+                <button onclick="testLoginWithGeneratedCode()" id="sms-modal-login-btn" class="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">login</span>
+                    <span>ทดสอบเข้าสู่ระบบด้วยรหัสนี้ทันที</span>
+                </button>
+                <button onclick="closeSimulatedSmsModal()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                    ปิดหน้าต่าง
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- APPLICATION STATUS CHECK MODAL             -->
+    <!-- ========================================== -->
+    <div id="status-check-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl p-5 sm:p-6 max-w-sm w-full shadow-2xl space-y-4 border border-slate-200 text-left animate-scale-up">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="w-9 h-9 rounded-2xl bg-amber-500/20 text-amber-600 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-xl">verified_user</span>
+                    </span>
+                    <div>
+                        <h3 class="font-extrabold text-sm text-slate-900" id="status-check-modal-title">ตรวจสอบสถานะการลงทะเบียน</h3>
+                        <p class="text-[11px] text-slate-500">เฮียส่ง Partner Verification</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeStatusCheckModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <div class="space-y-2">
+                <label class="block text-xs font-bold text-slate-800 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-amber-600 text-sm">phone_iphone</span>
+                    <span>กรอกเบอร์โทรศัพท์ที่ใช้ลงทะเบียน:</span>
+                </label>
+                <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">call</span>
+                    <input type="tel" id="status-check-phone-input" placeholder="เช่น 089xxxxxxx" class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 font-bold font-mono text-xs text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none bg-slate-50 focus:bg-white">
+                </div>
+                <button type="button" onclick="handleCheckApplicationStatusSubmit()" class="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-slate-950 font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-sm font-bold">search</span>
+                    <span>ค้นหาข้อมูลใบสมัคร & รับรหัส</span>
+                </button>
+            </div>
+
+            <!-- Result Box -->
+            <div id="status-check-result" class="hidden">
+                <!-- Dynamically populated -->
             </div>
         </div>
     </div>
@@ -4235,6 +4348,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.15_merchant_register_button"></script>
+    <script src="app.js?v=9.16_admin_approval_code"></script>
 </body>
 </html>

@@ -9930,6 +9930,7 @@ function renderAdminView() {
         disp.textContent = `${state.activeAdmin.name} (${state.activeAdmin.role})`;
     }
     updateAdminRiderBadges();
+    updateAdminStallsBadge();
     switchAdminTab(_activeAdminTab || "report");
 }
 
@@ -10052,8 +10053,68 @@ function renderAdminStalls() {
         );
     }
 
+    const merchantApps = loadMerchantApplications();
+    const pendingMerchantApps = merchantApps.filter(a => a.status === "pending");
+    updateAdminStallsBadge();
+
+    let pendingSectionHtml = "";
+    if (pendingMerchantApps.length > 0) {
+        pendingSectionHtml = `
+            <div class="bg-gradient-to-br from-amber-50 to-orange-50/70 border-2 border-amber-300/80 rounded-2xl p-4 space-y-3 shadow-xs">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center text-sm shadow-xs">
+                            ⏳
+                        </span>
+                        <div>
+                            <h4 class="font-black text-sm text-slate-900 flex items-center gap-2">
+                                <span>คำขอเปิดแผงค้าใหม่รอการพิจารณา</span>
+                                <span class="bg-rose-500 text-white text-[10px] font-black px-2 py-0.2 rounded-full">${pendingMerchantApps.length} ร้านค้า</span>
+                            </h4>
+                            <p class="text-[11px] text-slate-500">ตรวจสอบข้อมูลร้านและกดอนุมัติเพื่อสุ่มสร้างรหัส 6 หลักส่งให้ผู้สมัคร</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    ${pendingMerchantApps.map(app => `
+                        <div class="bg-white rounded-xl p-3.5 border border-amber-200 shadow-xs space-y-2">
+                            <div class="flex items-start justify-between gap-2">
+                                <div>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-xs bg-emerald-100 text-emerald-900 font-black px-2 py-0.5 rounded-lg">${app.stallData.stallNumber || 'แผงใหม่'}</span>
+                                        <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">${app.stallData.zone || 'ตลาดสด'}</span>
+                                    </div>
+                                    <h5 class="font-extrabold text-sm text-slate-900 mt-1">${app.stallData.stallName}</h5>
+                                    <div class="text-[11px] text-slate-500">เจ้าของ: <strong>${app.stallData.ownerName}</strong> • โทร: <strong>${app.stallData.phone}</strong></div>
+                                </div>
+                                <img src="${app.stallData.stallImage || 'images/banner_1.jpg'}" class="w-16 h-16 rounded-xl object-cover border border-slate-200 shrink-0">
+                            </div>
+
+                            <div class="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg">
+                                <div><strong>จุดเด่น:</strong> ${app.stallData.highlight || 'ของสดคัดเกรด'}</div>
+                                <div class="truncate text-[10px] text-slate-400 mt-0.5">สินค้า: ${(app.stallData.products || []).map(p => p.name).filter(Boolean).join(', ') || '-'}</div>
+                            </div>
+
+                            <div class="flex items-center gap-2 pt-1">
+                                <button onclick="approveMerchantApplication('${app.id}')" class="flex-1 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                                    <span class="material-symbols-outlined text-sm">check_circle</span>
+                                    <span>อนุมัติ & สร้างรหัส 6 หลัก</span>
+                                </button>
+                                <button onclick="rejectMerchantApplication('${app.id}')" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                                    ปฏิเสธ
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
     container.innerHTML = `
         <div class="space-y-4">
+            ${pendingSectionHtml}
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200">
                 <div>
                     <h3 class="font-extrabold text-base text-slate-800 flex items-center gap-2">
@@ -10794,10 +10855,23 @@ function approveRiderApplication(appId) {
         saveCommunityRiders(riders);
     }
 
+    if (!app.accessCode) {
+        app.accessCode = generate6DigitAccessCode();
+        saveRiderApplications(apps);
+    }
+    if (!existing) {
+        newRider.accessCode = app.accessCode;
+        saveCommunityRiders(riders);
+    } else {
+        existing.accessCode = app.accessCode;
+        saveCommunityRiders(riders);
+    }
+
     updateAdminRiderBadges();
-    showToast(`🎉 อนุมัติ ${displayName} เป็นไรเดอร์เรียบร้อยแล้ว! ไรเดอร์สามารถล็อกอินรับงานได้ทันที`);
+    showToast(`🎉 อนุมัติ ${displayName} เป็นไรเดอร์สำเร็จ! รหัสผ่าน: ${app.accessCode}`);
     closeRiderAppDetailModal();
     renderAdminRiders();
+    openSimulatedSmsModal(app.phone, app.accessCode, displayName, "rider");
     setTimeout(() => initAdminRiderRadarMap(), 150);
 }
 window.approveRiderApplication = approveRiderApplication;
@@ -14802,16 +14876,11 @@ function renderAuthHeaderButtons() {
                 </button>
             </div>
         `;
-    } else {
-        html += `
-            <button onclick="openMerchantLoginModal()" id="btn-merchant-login" class="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0">
-                <span class="material-symbols-outlined text-sm font-bold">store</span>
-                <span class="hidden xs:inline sm:inline">ร้านค้า</span>
-            </button>
-        `;
-    }
 
-    // 3. Rider Section (สมัครไรเดอร์ หรือสถานะล็อกอินไรเดอร์)
+
+        }
+
+// 3. Rider Section (สมัครไรเดอร์ หรือสถานะล็อกอินไรเดอร์)
     if (state.activeRider && state.activeRider.isLoggedIn) {
         html += `
             <div class="flex items-center gap-1 sm:gap-1.5 bg-sky-950/90 border border-sky-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
@@ -15542,16 +15611,45 @@ function saveMerchantStallData() {
         catalog: catalogGroups
     };
 
-    // Update MARKET_DATA
+    // ตรวจสอบว่าเป็นแผงค้าที่ลงทะเบียนใหม่หรือไม่
+    if (activeMerchantStallId && activeMerchantStallId.startsWith("stall_new_")) {
+        const apps = loadMerchantApplications();
+        const existingAppIdx = apps.findIndex(a => a.id === activeMerchantStallId);
+        const appRecord = {
+            id: activeMerchantStallId,
+            submittedAt: new Date().toISOString(),
+            status: "pending",
+            stallData: stallObj,
+            accessCode: null
+        };
+        if (existingAppIdx >= 0) apps[existingAppIdx] = appRecord;
+        else apps.unshift(appRecord);
+        saveMerchantApplications(apps);
+
+        updateAdminStallsBadge();
+        closeMerchantPortalModal();
+        showToast(`📤 ส่งข้อมูลเปิดร้าน "${stallName}" ให้แอดมินพิจารณาแล้ว!`);
+
+        // เปิดหน้าต่างตรวจสอบสถานะการสมัคร
+        setTimeout(() => {
+            openStatusCheckModal("merchant");
+            const phoneInput = document.getElementById("status-check-phone-input");
+            if (phoneInput) {
+                phoneInput.value = phone;
+                handleCheckApplicationStatusSubmit();
+            }
+        }, 300);
+        return;
+    }
+
+    // กรณีแก้ไขข้อมูลร้านค้าเดิมที่มีอยู่แล้ว
     const existingIndex = MARKET_DATA.findIndex(s => s.stallId === activeMerchantStallId);
     if (existingIndex >= 0) {
         MARKET_DATA[existingIndex] = stallObj;
     } else {
-        // เพิ่มเข้าสู่ Pool ร้านค้า (ต่อท้าย เพื่อเข้าสู่ระบบสุ่มหมุนเวียนแสดงผลตามหมวดหมู่)
         MARKET_DATA.push(stallObj);
     }
 
-    // Update ALL_100_STALLS
     const allIndex = ALL_100_STALLS.findIndex(s => s.stallId === activeMerchantStallId);
     if (allIndex >= 0) {
         ALL_100_STALLS[allIndex] = stallObj;
@@ -15572,13 +15670,12 @@ function saveMerchantStallData() {
 
     closeMerchantPortalModal();
 
-    // ไม่นำขึ้นแสดงที่หน้าโฮมเพจทันที แต่ให้เป็นไปตามระบบสุ่มแสดงตามหมวดหมู่ที่กำหนดไว้
     state.currentSingleStall = null;
     renderDirectoryList();
     renderFavoriteStallsBar();
     renderCatalog();
     updateStallRotationUI();
-    showToast(`🎉 ลงทะเบียนเปิดร้าน "${stallName}" สำเร็จ! ข้อมูลแผงค้าเข้าสู่ระบบหมุนเวียนสุ่มแสดงตามหมวดหมู่แล้วครับ`);
+    showToast(`🎉 บันทึกข้อมูลร้าน "${stallName}" สำเร็จเรียบร้อยแล้ว!`);
 }
 
 function previewMerchantLiveStore() {
@@ -15877,3 +15974,363 @@ if (document.readyState === 'loading') {
     initTalatHubApp();
 }
 
+
+
+// ==========================================
+// 6-DIGIT RANDOM ACCESS CODE GENERATOR & APPROVAL LIFECYCLE
+// ==========================================
+function generate6DigitAccessCode() {
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const char1 = letters.charAt(Math.floor(Math.random() * letters.length));
+    const char2 = letters.charAt(Math.floor(Math.random() * letters.length));
+
+    let digits = "";
+    let isValid = false;
+    while (!isValid) {
+        const d1 = Math.floor(Math.random() * 10);
+        const d2 = Math.floor(Math.random() * 10);
+        const d3 = Math.floor(Math.random() * 10);
+        const d4 = Math.floor(Math.random() * 10);
+
+        const allSame = (d1 === d2 && d2 === d3 && d3 === d4);
+        const isIncreasing = (d2 === d1 + 1 && d3 === d2 + 1 && d4 === d3 + 1);
+        const isDecreasing = (d2 === d1 - 1 && d3 === d2 - 1 && d4 === d3 - 1);
+
+        if (!allSame && !isIncreasing && !isDecreasing) {
+            digits = "" + d1 + d2 + d3 + d4;
+            isValid = true;
+        }
+    }
+    return char1 + char2 + digits;
+}
+window.generate6DigitAccessCode = generate6DigitAccessCode;
+
+let _lastGeneratedSmsInfo = null;
+
+function openSimulatedSmsModal(phone, codeVal, name, roleType) {
+    _lastGeneratedSmsInfo = { phone: phone, code: codeVal, name: name, roleType: roleType };
+    const modal = document.getElementById("simulated-sms-modal");
+    if (!modal) return;
+
+    const phoneEl = document.getElementById("sms-modal-phone");
+    const codeEl = document.getElementById("sms-modal-code");
+    const msgEl = document.getElementById("sms-modal-message");
+    const titleEl = document.getElementById("sms-modal-title");
+    const subtitleEl = document.getElementById("sms-modal-subtitle");
+
+    if (phoneEl) phoneEl.textContent = phone || "08x-xxx-xxxx";
+    if (codeEl) codeEl.textContent = codeVal;
+
+    const roleName = roleType === "merchant" ? "แผงค้า" : "ไรเดอร์";
+    const roleNum = roleType === "merchant" ? "Role 3 (แผงค้า)" : "Role 4 (ไรเดอร์)";
+
+    if (titleEl) titleEl.textContent = "ส่งรหัสเข้าสู่ระบบ" + roleName + "เรียบร้อย";
+    if (subtitleEl) subtitleEl.textContent = "ส่ง SMS & LINE แจ้งเตือนไปยัง " + name + " สำเร็จแล้ว";
+    if (msgEl) {
+        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + name + "</strong>! การลงทะเบียนเปิดร้าน/รับงานได้รับการอนุมัติแล้ว รหัสเข้าสู่ระบบ 6 หลักของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + codeVal + "</strong> นำรหัสนี้ไปใส่ใน " + roleNum + " เพื่อเริ่มปฏิบัติงานได้ทันทีครับ";
+    }
+
+    modal.classList.remove("hidden");
+}
+window.openSimulatedSmsModal = openSimulatedSmsModal;
+
+function closeSimulatedSmsModal() {
+    const modal = document.getElementById("simulated-sms-modal");
+    if (modal) modal.classList.add("hidden");
+}
+window.closeSimulatedSmsModal = closeSimulatedSmsModal;
+
+function copyGeneratedCode() {
+    if (_lastGeneratedSmsInfo && _lastGeneratedSmsInfo.code) {
+        navigator.clipboard.writeText(_lastGeneratedSmsInfo.code).then(() => {
+            showToast("📋 คัดลอกรหัส " + _lastGeneratedSmsInfo.code + " แล้ว!");
+        }).catch(() => {
+            showToast("รหัสของคุณคือ: " + _lastGeneratedSmsInfo.code);
+        });
+    }
+}
+window.copyGeneratedCode = copyGeneratedCode;
+
+function testLoginWithGeneratedCode() {
+    if (!_lastGeneratedSmsInfo) return;
+    const { code, roleType } = _lastGeneratedSmsInfo;
+    closeSimulatedSmsModal();
+
+    if (roleType === "merchant") {
+        openMerchantLoginModal();
+        const input = document.getElementById("merchant-code-login-input");
+        if (input) {
+            input.value = code;
+            handleMerchantCodeLoginSubmit();
+        }
+    } else {
+        openRiderLoginModal();
+        const input = document.getElementById("rider-login-phone-input");
+        if (input) {
+            input.value = code;
+            handleRiderPhoneLoginSubmit();
+        }
+    }
+}
+window.testLoginWithGeneratedCode = testLoginWithGeneratedCode;
+
+function loadMerchantApplications() {
+    try {
+        const raw = localStorage.getItem("talathub_merchant_applications");
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        return [];
+    }
+}
+window.loadMerchantApplications = loadMerchantApplications;
+
+function saveMerchantApplications(apps) {
+    try {
+        localStorage.setItem("talathub_merchant_applications", JSON.stringify(apps));
+    } catch (e) {}
+}
+window.saveMerchantApplications = saveMerchantApplications;
+
+function updateAdminStallsBadge() {
+    const badge = document.getElementById("admin-stalls-badge");
+    if (!badge) return;
+    const apps = loadMerchantApplications();
+    const pendingCount = apps.filter(a => a.status === "pending").length;
+    if (pendingCount > 0) {
+        badge.textContent = pendingCount;
+        badge.classList.remove("hidden");
+    } else {
+        badge.classList.add("hidden");
+    }
+}
+window.updateAdminStallsBadge = updateAdminStallsBadge;
+
+let _currentStatusCheckType = "all";
+
+function openStatusCheckModal(type = "all") {
+    _currentStatusCheckType = type;
+    const modal = document.getElementById("status-check-modal");
+    const title = document.getElementById("status-check-modal-title");
+    if (title) {
+        if (type === "merchant") title.textContent = "ตรวจสอบสถานะการเปิดแผงค้า";
+        else if (type === "rider") title.textContent = "ตรวจสอบสถานะการสมัครไรเดอร์";
+        else title.textContent = "ตรวจสอบสถานะการลงทะเบียน";
+    }
+    const resultBox = document.getElementById("status-check-result");
+    if (resultBox) resultBox.classList.add("hidden");
+    const input = document.getElementById("status-check-phone-input");
+    if (input) input.value = "";
+    if (modal) modal.classList.remove("hidden");
+}
+window.openStatusCheckModal = openStatusCheckModal;
+
+function closeStatusCheckModal() {
+    const modal = document.getElementById("status-check-modal");
+    if (modal) modal.classList.add("hidden");
+}
+window.closeStatusCheckModal = closeStatusCheckModal;
+
+function handleCheckApplicationStatusSubmit() {
+    const input = document.getElementById("status-check-phone-input");
+    const resultBox = document.getElementById("status-check-result");
+    if (!input || !resultBox) return;
+
+    const rawPhone = input.value.trim().replace(/[-\s]/g, "");
+    if (!rawPhone) {
+        alert("กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครครับ");
+        input.focus();
+        return;
+    }
+
+    const merchantApps = loadMerchantApplications();
+    const riderApps = loadRiderApplications();
+
+    const mApp = merchantApps.find(a => a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === rawPhone);
+    const rApp = riderApps.find(a => a.phone && a.phone.replace(/[-\s]/g, "") === rawPhone);
+
+    let html = "";
+
+    if (!mApp && !rApp) {
+        html = `
+            <div class="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 space-y-1">
+                <div class="font-bold flex items-center gap-1 text-rose-900">
+                    <span class="material-symbols-outlined text-sm text-rose-600">error</span>
+                    <span>ไม่พบประวัติการสมัครด้วยเบอร์ ${input.value.trim()}</span>
+                </div>
+                <div class="text-[11px] text-rose-700">กรุณาตรวจสอบเบอร์โทรศัพท์อีกครั้ง หรือกดปุ่มลงทะเบียนเปิดร้าน/สมัครไรเดอร์ใหม่ครับ</div>
+            </div>
+        `;
+    } else {
+        html += `<div class="space-y-2.5 pt-2 border-t border-slate-100">`;
+
+        if (mApp) {
+            const isApproved = mApp.status === "approved";
+            const isPending = mApp.status === "pending";
+            const statusColor = isApproved ? "emerald" : (isPending ? "amber" : "rose");
+            const statusText = isApproved ? "✅ อนุมัติแล้ว (พร้อมใช้งาน)" : (isPending ? "⏳ รอแอดมินพิจารณาอนุมัติ" : "❌ ไม่ผ่านการอนุมัติ");
+
+            html += `
+                <div class="p-3.5 bg-${statusColor}-50/80 border border-${statusColor}-200 rounded-2xl space-y-2 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="font-black text-slate-800 flex items-center gap-1">
+                            <span>🏪 แผงค้า:</span>
+                            <span class="text-emerald-800 font-extrabold">${mApp.stallData.stallName}</span>
+                        </span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900">${statusText}</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500">หมายเลขแผง: ${mApp.stallData.stallNumber} • เจ้าของ: ${mApp.stallData.ownerName}</div>
+                    ${isApproved && mApp.accessCode ? `
+                        <div class="p-2.5 bg-slate-900 text-white rounded-xl flex items-center justify-between font-mono">
+                            <div>
+                                <div class="text-[9px] text-slate-400 font-sans">รหัสเข้าสู่ระบบแผงค้า 6 หลัก:</div>
+                                <div class="text-base font-black text-amber-300 tracking-wider">${mApp.accessCode}</div>
+                            </div>
+                            <button onclick="closeStatusCheckModal(); openMerchantLoginModal(); document.getElementById('merchant-code-login-input').value='${mApp.accessCode}'; handleMerchantCodeLoginSubmit();" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-sans font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
+                                เข้าสู่ระบบทันที >
+                            </button>
+                        </div>
+                    ` : ""}
+                </div>
+            `;
+        }
+
+        if (rApp) {
+            const isApproved = rApp.status === "approved";
+            const isPending = rApp.status === "pending";
+            const statusColor = isApproved ? "sky" : (isPending ? "amber" : "rose");
+            const statusText = isApproved ? "✅ อนุมัติแล้ว (พร้อมรับงาน)" : (isPending ? "⏳ รอแอดมินพิจารณาอนุมัติ" : "❌ ไม่ผ่านการอนุมัติ");
+
+            html += `
+                <div class="p-3.5 bg-${statusColor}-50/80 border border-${statusColor}-200 rounded-2xl space-y-2 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="font-black text-slate-800 flex items-center gap-1">
+                            <span>🛵 ไรเดอร์:</span>
+                            <span class="text-sky-800 font-extrabold">${rApp.fullName}</span>
+                        </span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900">${statusText}</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500">ยานพาหนะ: ${rApp.vehiclePlate || '-'} • เบอร์โทร: ${rApp.phone}</div>
+                    ${isApproved && rApp.accessCode ? `
+                        <div class="p-2.5 bg-slate-900 text-white rounded-xl flex items-center justify-between font-mono">
+                            <div>
+                                <div class="text-[9px] text-slate-400 font-sans">รหัสเข้าสู่ระบบไรเดอร์ 6 หลัก:</div>
+                                <div class="text-base font-black text-amber-300 tracking-wider">${rApp.accessCode}</div>
+                            </div>
+                            <button onclick="closeStatusCheckModal(); openRiderLoginModal(); document.getElementById('rider-login-phone-input').value='${rApp.accessCode}'; handleRiderPhoneLoginSubmit();" class="px-2.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-sans font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
+                                เข้าสู่ระบบทันที >
+                            </button>
+                        </div>
+                    ` : ""}
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+    }
+
+    resultBox.innerHTML = html;
+    resultBox.classList.remove("hidden");
+}
+window.handleCheckApplicationStatusSubmit = handleCheckApplicationStatusSubmit;
+
+function approveMerchantApplication(appId) {
+    const apps = loadMerchantApplications();
+    const app = apps.find(a => a.id === appId);
+    if (!app) {
+        showToast("⚠️ ไม่พบข้อมูลใบสมัคร");
+        return;
+    }
+
+    const code = generate6DigitAccessCode();
+    app.status = "approved";
+    app.accessCode = code;
+    app.approvedAt = new Date().toISOString();
+    saveMerchantApplications(apps);
+
+    // Create stall in market data & all stalls
+    const stallObj = { ...app.stallData, accessCode: code };
+    const existingIndex = MARKET_DATA.findIndex(s => s.stallId === stallObj.stallId);
+    if (existingIndex >= 0) MARKET_DATA[existingIndex] = stallObj;
+    else MARKET_DATA.push(stallObj);
+
+    const allIndex = ALL_100_STALLS.findIndex(s => s.stallId === stallObj.stallId);
+    if (allIndex >= 0) ALL_100_STALLS[allIndex] = stallObj;
+    else ALL_100_STALLS.push(stallObj);
+
+    saveMarketDataToStorage();
+
+    updateAdminStallsBadge();
+    renderAdminStalls();
+
+    showToast("🎉 อนุมัติเปิดร้าน \"" + stallObj.stallName + "\" สำเร็จ! รหัสผ่าน: " + code);
+    openSimulatedSmsModal(stallObj.phone, code, stallObj.stallName, "merchant");
+}
+window.approveMerchantApplication = approveMerchantApplication;
+
+function rejectMerchantApplication(appId) {
+    if (!confirm("คุณต้องการปฏิเสธคำขอเปิดร้านค้านี้ใช่หรือไม่?")) return;
+    const apps = loadMerchantApplications();
+    const app = apps.find(a => a.id === appId);
+    if (!app) return;
+    app.status = "rejected";
+    app.rejectedAt = new Date().toISOString();
+    saveMerchantApplications(apps);
+    updateAdminStallsBadge();
+    renderAdminStalls();
+    showToast("ปฏิเสธคำขอเปิดร้านค้าเรียบร้อยแล้ว");
+}
+window.rejectMerchantApplication = rejectMerchantApplication;
+
+function handleMerchantCodeLoginSubmit() {
+    const inputEl = document.getElementById("merchant-code-login-input");
+    if (!inputEl) return;
+    const query = inputEl.value.trim().toUpperCase();
+    if (!query) {
+        showToast("⚠️ กรุณากรอกรหัสแผงค้า 6 หลัก หรือเบอร์โทรศัพท์");
+        inputEl.focus();
+        return;
+    }
+
+    const cleanQuery = query.replace(/[-\s]/g, "");
+
+    // 1. Search in approved merchant applications
+    const apps = loadMerchantApplications();
+    let matchedApp = apps.find(a => a.status === "approved" && (
+        (a.accessCode && a.accessCode.toUpperCase() === query) ||
+        (a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === cleanQuery)
+    ));
+
+    // 2. Search in MARKET_DATA or ALL_100_STALLS
+    let matchedStall = MARKET_DATA.find(s => (
+        (s.accessCode && s.accessCode.toUpperCase() === query) ||
+        (s.phone && s.phone.replace(/[-\s]/g, "") === cleanQuery) ||
+        (s.stallNumber && s.stallNumber.toUpperCase() === query)
+    ));
+
+    if (!matchedStall && matchedApp && matchedApp.stallData) {
+        matchedStall = matchedApp.stallData;
+    }
+
+    if (!matchedStall) {
+        const pendingApp = apps.find(a => a.status === "pending" && (
+            (a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === cleanQuery)
+        ));
+        if (pendingApp) {
+            alert("⏳ ใบสมัครร้าน \"" + pendingApp.stallData.stallName + "\" ของคุณยังอยู่ระหว่างการพิจารณาโดยแอดมิน\n\nเมื่อแอดมินอนุมัติแล้ว จะได้รับรหัสผ่าน 6 หลักเพื่อเข้าใช้งานครับ");
+            return;
+        }
+
+        alert("⚠️ ไม่พบรหัสแผงค้าหรือเบอร์โทร \"" + query + "\" ในระบบที่ผ่านการอนุมัติ\n\nกรุณาตรวจสอบรหัส 6 หลักของคุณ หรือกดปุ่ม \"ตรวจสถานะรับรหัส\" ด้านล่างครับ");
+        return;
+    }
+
+    closeMerchantLoginModal();
+    loginAsMerchantStall(matchedStall.stallId);
+    showToast("🎉 ยืนยันรหัสถูกต้อง! เข้าสู่ระบบแผงค้า " + matchedStall.stallName + " เรียบร้อยแล้ว");
+}
+window.handleMerchantCodeLoginSubmit = handleMerchantCodeLoginSubmit;
+
+window.submitMerchantApplication = saveMerchantStallData;
+window.saveMerchantStallData = saveMerchantStallData;
