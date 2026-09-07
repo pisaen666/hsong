@@ -255,6 +255,8 @@ function clearAllTestData() {
     localStorage.removeItem("talathub_wallet_transactions");
     localStorage.removeItem("talathub_rating_reviews");
     localStorage.removeItem("talathub_mock_orders");
+    localStorage.removeItem("hsong_merchant_express_orders");
+    localStorage.removeItem("hsong_active_order");
 
     // ล้าง Firebase orders ทั้งหมด
     if (isFirebaseReady()) {
@@ -270,6 +272,7 @@ function clearAllTestData() {
     state.cart = [];
     state.deliveryLocation = null;
     state.activeRider = null;
+    state.merchantExpressOrders = [];
 
     // อัปเดต UI
     const hubBadge = document.getElementById("hub-badge-count");
@@ -279,6 +282,7 @@ function clearAllTestData() {
     renderCatalog();
     if (typeof renderHubPickingList === "function") renderHubPickingList();
     if (typeof renderHubSettlement === "function") renderHubSettlement();
+    if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
     renderTrackingScreen();
     if (typeof renderRiderScreen === "function") renderRiderScreen();
     renderAuthHeaderButtons();
@@ -364,16 +368,24 @@ async function syncLatestOrderFromCloud() {
         // 2. ถ้าคลาวด์ไม่มี หรือออฟไลน์ ให้ fallback มาดูที่ localStorage ของเครื่อง
         if (!syncedOrder) {
             syncedOrder = loadSavedActiveOrder();
-        }
+        // โหลดข้อมูล Express Orders ของแผงค้าด้วย
+        try {
+            const expRaw = localStorage.getItem("hsong_merchant_express_orders");
+            if (expRaw) {
+                state.merchantExpressOrders = JSON.parse(expRaw);
+            }
+        } catch(e) {}
 
         // 3. นำข้อมูลมาอัปเดตลง State และอัปเดตหน้าจอ Hub
         if (syncedOrder && syncedOrder.orderId) {
             state.activeOrder = syncedOrder;
             try { localStorage.setItem("talathub_active_order", JSON.stringify(syncedOrder)); } catch (e) {}
+        }
 
-            // อัปเดตหน้าจอ Hub ทันที
-            if (typeof renderHubPickingList === "function") renderHubPickingList();
-            if (typeof renderHubSettlement === "function") renderHubSettlement();
+        // อัปเดตหน้าจอ Hub ทันที
+        if (typeof renderHubPickingList === "function") renderHubPickingList();
+        if (typeof renderHubSettlement === "function") renderHubSettlement();
+        if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
             
             const hubBadge = document.getElementById("hub-badge-count");
             if (hubBadge) {
@@ -8758,17 +8770,205 @@ function closeMerchantRadarModal() {
     }
 }
 
+function callContactDirect(phone, name, subtitle) {
+    if (!phone || phone === "-") {
+        showToast("⚠️ ไม่พบเบอร์โทรศัพท์");
+        return;
+    }
+    const clean = phone.replace(/[^\d]/g, '');
+    if (typeof isMobileDevice === "function" && isMobileDevice()) {
+        window.location.href = `tel:${clean}`;
+        return;
+    }
+
+    let modal = document.getElementById("hub-call-contact-modal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "hub-call-contact-modal";
+        modal.className = "fixed inset-0 bg-black/80 backdrop-blur-sm z-[140] flex items-center justify-center p-4 animate-fade-in";
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove("hidden");
+    modal.innerHTML = `
+        <div class="bg-white rounded-3xl max-w-xs w-full p-5 space-y-4 shadow-2xl animate-scale-up text-center text-slate-800 text-xs">
+            <div class="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-2xl shadow-inner">
+                📞
+            </div>
+            <div>
+                <h3 class="font-black text-sm text-slate-900">${name || 'ติดต่อ'}</h3>
+                <p class="text-slate-500 text-[10px] mt-0.5">${subtitle || 'เบอร์โทรศัพท์ติดต่อ'}</p>
+            </div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-2.5">
+                <div class="text-[10px] text-emerald-800 font-bold">หมายเลขโทรศัพท์:</div>
+                <div class="text-lg font-black text-emerald-700 tracking-wider font-mono mt-0.5">${phone}</div>
+            </div>
+            <div class="space-y-2 pt-1">
+                <a href="tel:${clean}" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
+                    <span class="material-symbols-outlined text-sm">call</span>
+                    <span>แตะเพื่อโทรออกทันที</span>
+                </a>
+                <button type="button" onclick="navigator.clipboard.writeText('${phone}'); showToast('📋 คัดลอกเบอร์ ${phone} สำเร็จ!');" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs cursor-pointer">
+                    คัดลอกเบอร์โทร
+                </button>
+                <button type="button" onclick="document.getElementById('hub-call-contact-modal').classList.add('hidden')" class="w-full py-1 text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer">
+                    ปิดหน้าต่าง
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function openAssignRiderModal(orderId) {
+    let targetOrder = (state.merchantExpressOrders || []).find(o => o.orderId === orderId);
+    if (!targetOrder && state.activeOrder && state.activeOrder.orderId === orderId) {
+        targetOrder = state.activeOrder;
+    }
+    if (!targetOrder) {
+        showToast("⚠️ ไม่พบข้อมูลคำสั่งซื้อ");
+        return;
+    }
+
+    let fleet = typeof loadCommunityRiders === "function" ? loadCommunityRiders() : [];
+    if (fleet.length === 0) {
+        fleet = [
+            { id: "R1", name: "สมศักดิ์ ขับไว (Rider ประจำฮับ)", phone: "082-111-2233", plate: "กข-1234 ชลบุรี", avatar: "🛵", status: "available" },
+            { id: "R2", name: "วินัย ใจถึง (Rider ชุมชน)", phone: "089-222-3344", plate: "1กข-5678 ชลบุรี", avatar: "🛵", status: "available" },
+            { id: "R3", name: "ปรีชา สายฟ้า (Rider ตลาด)", phone: "086-333-4455", plate: "2กง-9999 ชลบุรี", avatar: "🛵", status: "available" }
+        ];
+    }
+
+    let modal = document.getElementById("hub-assign-rider-modal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "hub-assign-rider-modal";
+        modal.className = "fixed inset-0 bg-black/80 backdrop-blur-sm z-[130] flex items-center justify-center p-3 sm:p-4 animate-fade-in";
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove("hidden");
+
+    let ridersHtml = "";
+    fleet.forEach((r) => {
+        const isCurrent = targetOrder.assignedRider && (targetOrder.assignedRider.name === r.name || targetOrder.assignedRider.id === r.id);
+        ridersHtml += `
+            <div class="p-3 rounded-2xl border ${isCurrent ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-200 bg-white hover:border-emerald-300'} flex items-center justify-between gap-3 transition-all">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-10 h-10 rounded-full bg-emerald-700 text-white font-bold flex items-center justify-center text-lg shrink-0 shadow-sm">
+                        ${r.avatar || '🛵'}
+                    </div>
+                    <div class="truncate">
+                        <div class="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 truncate">
+                            <span>${r.name}</span>
+                            ${isCurrent ? '<span class="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded-full font-bold">กำลังรับงานนี้</span>' : ''}
+                        </div>
+                        <div class="text-[10px] text-slate-500">ทะเบียน: ${r.plate || '-'} • โทร: ${r.phone || '-'}</div>
+                    </div>
+                </div>
+                <button type="button" onclick="selectAndAssignRider('${targetOrder.orderId}', '${encodeURIComponent(JSON.stringify(r))}')" class="px-3 py-1.5 ${isCurrent ? 'bg-slate-200 text-slate-600' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} rounded-xl text-xs font-bold shrink-0 active:scale-95 transition-all shadow-xs cursor-pointer">
+                    ${isCurrent ? 'จ่ายงานอยู่' : 'เลือกคนนี้ 🚀'}
+                </button>
+            </div>
+        `;
+    });
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-3xl max-w-md w-full p-5 space-y-4 shadow-2xl animate-scale-up text-left text-xs max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between border-b pb-2.5 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">🛵</span>
+                    <div>
+                        <h3 class="font-extrabold text-sm text-slate-900">จัดสรรงานให้ไรเดอร์ในระบบ</h3>
+                        <div class="text-[10px] text-slate-500 font-mono">รหัสงาน: ${targetOrder.orderId}</div>
+                    </div>
+                </div>
+                <button type="button" onclick="closeAssignRiderModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold cursor-pointer">✕</button>
+            </div>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 shrink-0 space-y-1 text-[11px]">
+                <div class="flex items-center justify-between font-bold text-slate-800">
+                    <span>🏪 รับที่: ${targetOrder.originStall?.stallName || 'แผงค้า'}</span>
+                    <span class="text-emerald-700">➔ 📍 ส่ง: ${targetOrder.customerName || 'ลูกค้า'}</span>
+                </div>
+                <div class="text-[10px] text-slate-500 truncate">${targetOrder.address}</div>
+            </div>
+
+            <div class="text-[11px] font-bold text-slate-700 shrink-0 flex items-center justify-between">
+                <span>เลือกไรเดอร์ที่พร้อมรับงาน (${fleet.length} คน):</span>
+                <span class="text-emerald-600 text-[10px]">● ไรเดอร์ออนไลน์</span>
+            </div>
+
+            <div class="flex-1 overflow-y-auto space-y-2 pr-1">
+                ${ridersHtml}
+            </div>
+
+            <div class="pt-2 border-t border-slate-100 flex items-center justify-end shrink-0">
+                <button type="button" onclick="closeAssignRiderModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95 transition-all text-xs cursor-pointer">
+                    ปิด
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function closeAssignRiderModal() {
+    const modal = document.getElementById("hub-assign-rider-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function selectAndAssignRider(orderId, encodedRider) {
+    try {
+        const rider = JSON.parse(decodeURIComponent(encodedRider));
+        assignExpressOrderToRider(orderId, rider);
+        closeAssignRiderModal();
+    } catch(e) {
+        console.error("selectAndAssignRider error", e);
+    }
+}
+
+function markExpressDeliveredByHub(orderId) {
+    let targetOrder = null;
+    if (state.merchantExpressOrders) {
+        targetOrder = state.merchantExpressOrders.find(o => o.orderId === orderId);
+    }
+    if (!targetOrder && state.activeOrder && state.activeOrder.orderId === orderId) {
+        targetOrder = state.activeOrder;
+    }
+    if (!targetOrder) return;
+
+    if (!confirm(`ยืนยันว่าไรเดอร์จัดส่งงาน ${orderId} สำเร็จเรียบร้อยแล้วใช่หรือไม่?`)) return;
+
+    targetOrder.status = "delivered";
+    targetOrder.deliveredAt = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น.";
+
+    if (state.activeOrder && state.activeOrder.orderId === targetOrder.orderId) {
+        state.activeOrder.status = "delivered";
+        state.activeOrder.deliveredAt = targetOrder.deliveredAt;
+    }
+
+    try {
+        if (state.merchantExpressOrders) {
+            localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
+        }
+        localStorage.setItem("hsong_active_order", JSON.stringify(targetOrder));
+        localStorage.setItem("talathub_active_order", JSON.stringify(targetOrder));
+    } catch(e) {}
+
+    showToast(`✅ ยืนยันงาน ${orderId} ส่งมอบสำเร็จเรียบร้อยแล้ว!`);
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
+    if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
+    if (typeof renderRiderScreen === "function") renderRiderScreen();
+}
+
 function assignExpressOrderToRider(param1 = "R1", param2 = null) {
     let orderId = null;
-    let riderId = "R1";
+    let riderChoice = null;
     if (typeof param1 === "string" && param1.startsWith("EXP-")) {
         orderId = param1;
-        riderId = param2 || "R1";
+        riderChoice = param2;
     } else if (typeof param2 === "string" && param2.startsWith("EXP-")) {
         orderId = param2;
-        riderId = param1 || "R1";
+        riderChoice = param1;
     } else {
-        riderId = param1 || "R1";
+        riderChoice = param1;
         orderId = param2;
     }
 
@@ -8784,13 +8984,24 @@ function assignExpressOrderToRider(param1 = "R1", param2 = null) {
     }
     if (!targetOrder) return;
 
-    const rider = (RIDER_DATABASE && RIDER_DATABASE.length > 0) ? RIDER_DATABASE[0] : {
-        id: "R1",
-        name: "สมศักดิ์ ขับไว (Rider ประจำฮับ)",
-        phone: "082-111-2233",
-        plate: "กข-1234 ชลบุรี",
-        avatar: "🛵"
-    };
+    let rider = null;
+    if (riderChoice && typeof riderChoice === "object" && riderChoice.name) {
+        rider = riderChoice;
+    } else {
+        const communityRiders = typeof loadCommunityRiders === "function" ? loadCommunityRiders() : [];
+        if (typeof riderChoice === "string" && riderChoice !== "R1") {
+            rider = communityRiders.find(r => r.id === riderChoice || r.name.includes(riderChoice));
+        }
+        if (!rider) {
+            rider = communityRiders.find(r => r.status === 'available') || communityRiders[0] || (RIDER_DATABASE && RIDER_DATABASE.length > 0 ? RIDER_DATABASE[0] : {
+                id: "R1",
+                name: "สมศักดิ์ ขับไว (Rider ประจำฮับ)",
+                phone: "082-111-2233",
+                plate: "กข-1234 ชลบุรี",
+                avatar: "🛵"
+            });
+        }
+    }
 
     targetOrder.assignedRider = rider;
     targetOrder.status = "assigned";
@@ -9035,6 +9246,11 @@ window.downloadMerchantPromptPayQR = downloadMerchantPromptPayQR;
 window.handleMerchantSlipUpload = handleMerchantSlipUpload;
 window.clearMerchantSlip = clearMerchantSlip;
 window.confirmMerchantPaymentAndDispatch = confirmMerchantPaymentAndDispatch;
+window.callContactDirect = callContactDirect;
+window.openAssignRiderModal = openAssignRiderModal;
+window.closeAssignRiderModal = closeAssignRiderModal;
+window.selectAndAssignRider = selectAndAssignRider;
+window.markExpressDeliveredByHub = markExpressDeliveredByHub;
 
 
 
@@ -13328,7 +13544,42 @@ function renderHubPickingList() {
     expressOrders.forEach((expOrder) => {
         const origin = expOrder.originStall || {};
         const isAssigned = !!expOrder.assignedRider;
+        const rider = expOrder.assignedRider || { name: "ยังไม่ได้จ่ายงาน", phone: "-", plate: "-" };
         const riderName = expOrder.assignedRider ? expOrder.assignedRider.name : "ยังไม่ได้จ่ายงาน";
+
+        // Format distance cleanly to 1 decimal place (Fixing unformatted long float like 1.237882383938307)
+        let distDisplay = "0.8";
+        if (expOrder.distanceKm !== undefined && expOrder.distanceKm !== null) {
+            const parsed = parseFloat(expOrder.distanceKm);
+            if (!isNaN(parsed) && parsed > 0 && parsed < 100) distDisplay = parsed.toFixed(1);
+        }
+
+        // Format stall title cleanly without duplicated (แผง A01)
+        let stallTitle = origin.stallName || 'แผงค้าในตลาด';
+        if (origin.stallNumber && !stallTitle.includes(origin.stallNumber)) {
+            stallTitle += ` (${origin.stallNumber})`;
+        }
+
+        // Format address cleanly without duplication
+        let cleanAddress = expOrder.address || 'ตามพิกัดจัดส่ง';
+        const parenMatch = cleanAddress.match(/^(.*?)\s*\((.*?)\)$/);
+        if (parenMatch && parenMatch[1].trim() === parenMatch[2].trim()) {
+            cleanAddress = parenMatch[1].trim();
+        }
+
+        // Status badge & style
+        let statusBadge = "⏳ รอกำลังพล";
+        let statusClass = "text-orange-600 bg-orange-50 border-orange-200";
+        if (expOrder.status === "delivered") {
+            statusBadge = "✅ ส่งสำเร็จ";
+            statusClass = "text-emerald-700 bg-emerald-50 border-emerald-300";
+        } else if (expOrder.status === "delivering") {
+            statusBadge = "📦 ไรเดอร์กำลังส่ง";
+            statusClass = "text-sky-700 bg-sky-50 border-sky-300";
+        } else if (isAssigned) {
+            statusBadge = "🛵 จ่ายงานแล้ว";
+            statusClass = "text-emerald-700 bg-emerald-50 border-emerald-300";
+        }
 
         finalHtml += `
             <div class="bg-white rounded-3xl p-4 sm:p-5 border-2 border-orange-400 shadow-lg space-y-4 animate-fade-in text-xs mb-4 text-left">
@@ -13344,8 +13595,8 @@ function renderHubPickingList() {
                             <h3 class="font-extrabold text-slate-800 text-sm mt-0.5">รับของจากแผงค้าในตลาดไปส่งลูกค้า</h3>
                         </div>
                     </div>
-                    <span class="text-xs font-black text-orange-600 bg-orange-50 px-2.5 py-1 rounded-xl border border-orange-200">
-                        ${expOrder.status === "delivered" ? "✅ ส่งสำเร็จ" : (isAssigned ? "🛵 จ่ายงานแล้ว" : "⏳ รอกำลังพล")}
+                    <span class="text-xs font-black ${statusClass} px-2.5 py-1 rounded-xl border">
+                        ${statusBadge}
                     </span>
                 </div>
 
@@ -13357,13 +13608,13 @@ function renderHubPickingList() {
                             <span class="material-symbols-outlined text-sm text-orange-600">storefront</span>
                             <span>จุดรับของ (หน้าแผงค้าในตลาด):</span>
                         </div>
-                        <div class="font-extrabold text-slate-900 text-xs">${origin.stallName || 'แผงค้าในตลาด'} (${origin.stallNumber || 'แผงค้า'})</div>
+                        <div class="font-extrabold text-slate-900 text-xs">${stallTitle}</div>
                         <div class="text-[11px] text-slate-600">ผู้ส่ง: ${origin.ownerName || 'เจ้าของแผง'} โซน ${origin.zone || 'A'}</div>
                         <div class="pt-1 flex items-center gap-1.5">
-                            <a href="tel:${origin.ownerPhone || '0819998888'}" class="px-2 py-1 bg-white hover:bg-orange-100 text-orange-800 border border-orange-300 rounded-lg text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all">
+                            <button type="button" onclick="callContactDirect('${origin.ownerPhone || '0819998888'}', '${stallTitle}', 'แผงค้าต้นทาง')" class="px-2.5 py-1 bg-white hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-xl text-[10.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-xs">call</span>
                                 <span>โทรหาแผงค้า (${origin.ownerPhone || '-'})</span>
-                            </a>
+                            </button>
                         </div>
                     </div>
 
@@ -13374,13 +13625,13 @@ function renderHubPickingList() {
                             <span>จุดส่งของ (บ้านลูกค้าปลายทาง):</span>
                         </div>
                         <div class="font-extrabold text-slate-900 text-xs">${expOrder.customerName || 'ลูกค้า'}</div>
-                        <div class="text-[11px] text-slate-600 truncate">${expOrder.address || 'ตามพิกัดจัดส่ง'}</div>
-                        <div class="text-[10px] text-emerald-800 font-bold">ระยะทาง ~${expOrder.distanceKm || 0.8} กม. • ค่าส่ง ฿${expOrder.deliveryFee || 20} (ชำระแล้ว)</div>
+                        <div class="text-[11px] text-slate-600 truncate">${cleanAddress}</div>
+                        <div class="text-[10px] text-emerald-800 font-bold">ระยะทาง ~${distDisplay} กม. • ค่าส่ง ฿${expOrder.deliveryFee || 20} (ชำระแล้ว)</div>
                         <div class="pt-1 flex items-center gap-1.5">
-                            <a href="tel:${expOrder.customerPhone || '0812345678'}" class="px-2 py-1 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all">
+                            <button type="button" onclick="callContactDirect('${expOrder.customerPhone || '0812345678'}', 'คุณ${expOrder.customerName || 'ลูกค้า'}', 'ลูกค้าปลายทาง')" class="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-[10.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-xs">call</span>
                                 <span>โทรหาลูกค้า (${expOrder.customerPhone || '-'})</span>
-                            </a>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -13400,29 +13651,62 @@ function renderHubPickingList() {
                 </div>
 
                 <!-- Dispatch Actions -->
-                <div class="pt-2 border-t border-slate-100 space-y-2">
+                <div class="pt-2 border-t border-slate-100 space-y-2.5">
                     <div class="flex items-center justify-between text-xs">
                         <span class="text-slate-600 font-medium">ไรเดอร์ผู้รับผิดชอบงานนี้:</span>
-                        <span class="font-bold text-slate-800">${riderName}</span>
+                        <span class="font-bold ${isAssigned ? 'text-emerald-700' : 'text-slate-500'}">
+                            ${isAssigned ? `🛵 ${rider.name} (${rider.plate || '-'}) • 📞 ${rider.phone || '-'}` : 'ยังไม่ได้จ่ายงาน'}
+                        </span>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        ${!isAssigned ? `
-                            <button type="button" onclick="assignExpressOrderToRider('${expOrder.orderId}', 'R1')" class="py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                    ${!isAssigned ? `
+                        <!-- Unassigned State: 1-Click quick dispatch or Select Rider + Print Slip -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <button type="button" onclick="assignExpressOrderToRider('${expOrder.orderId}', 'R1')" class="py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
                                 <span class="material-symbols-outlined text-sm">two_wheeler</span>
                                 <span>🚀 จ่ายงานให้ไรเดอร์สมศักดิ์ (พร้อมรับงาน)</span>
                             </button>
-                        ` : `
-                            <button type="button" onclick="switchRole('rider')" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
-                                <span class="material-symbols-outlined text-sm">visibility</span>
-                                <span>ดูหน้าจอไรเดอร์ (${riderName})</span>
+                            <button type="button" onclick="openAssignRiderModal('${expOrder.orderId}')" class="py-2.5 px-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow-2xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
+                                <span class="material-symbols-outlined text-sm">group</span>
+                                <span>👥 เลือกไรเดอร์คนอื่น</span>
                             </button>
-                        `}
-                        <button type="button" onclick="printMerchantExpressSlip('${expOrder.orderId}')" class="py-2.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer">
-                            <span class="material-symbols-outlined text-sm">print</span>
-                            <span>พิมพ์สลิปส่งด่วน 80mm</span>
-                        </button>
-                    </div>
+                            <button type="button" onclick="printMerchantExpressSlip('${expOrder.orderId}')" class="py-2.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer text-xs">
+                                <span class="material-symbols-outlined text-sm">print</span>
+                                <span>🖨️ พิมพ์สลิปส่งด่วน 80mm</span>
+                            </button>
+                        </div>
+                    ` : `
+                        <!-- Assigned State: Full Coordinator Operations Controls -->
+                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                            <button type="button" onclick="callContactDirect('${rider.phone}', '${rider.name}', 'ไรเดอร์ผู้จัดส่ง')" class="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                <span class="material-symbols-outlined text-sm">call</span>
+                                <span>โทรหาไรเดอร์</span>
+                            </button>
+                            <button type="button" onclick="viewOrderOnRadar('${expOrder.orderId}')" class="py-2.5 px-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                <span class="material-symbols-outlined text-sm">radar</span>
+                                <span>ดูเรดาร์สด GPS</span>
+                            </button>
+                            <button type="button" onclick="openAssignRiderModal('${expOrder.orderId}')" class="py-2.5 px-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                <span class="material-symbols-outlined text-sm">swap_horiz</span>
+                                <span>เปลี่ยนไรเดอร์</span>
+                            </button>
+                            <button type="button" onclick="printMerchantExpressSlip('${expOrder.orderId}')" class="py-2.5 px-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                <span class="material-symbols-outlined text-sm">print</span>
+                                <span>สลิป 80mm</span>
+                            </button>
+                            ${expOrder.status !== "delivered" ? `
+                                <button type="button" onclick="markExpressDeliveredByHub('${expOrder.orderId}')" class="py-2.5 px-2 bg-slate-900 hover:bg-black text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                    <span class="material-symbols-outlined text-sm">check_circle</span>
+                                    <span>บันทึกส่งสำเร็จ</span>
+                                </button>
+                            ` : `
+                                <button type="button" onclick="viewMerchantDeliveryProof('${expOrder.orderId}')" class="py-2.5 px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                    <span class="material-symbols-outlined text-sm">photo_camera</span>
+                                    <span>ดูรูปหลักฐาน</span>
+                                </button>
+                            `}
+                        </div>
+                    `}
                 </div>
             </div>
         `;
