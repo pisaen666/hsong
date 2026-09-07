@@ -1156,11 +1156,11 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <div>
                                 <label class="text-[10px] text-slate-600 mb-0.5 block font-semibold">ชื่อลูกค้า / ผู้รับ <span class="text-rose-500">*</span></label>
-                                <input type="text" id="merchant-cust-name" placeholder="เช่น คุณอรพิน" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
+                                <input type="text" id="merchant-cust-name" oninput="calculateMerchantFee()" placeholder="เช่น คุณอรพิน" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
                             </div>
                             <div>
                                 <label class="text-[10px] text-slate-600 mb-0.5 block font-semibold">เบอร์โทรศัพท์ลูกค้า <span class="text-rose-500">*</span></label>
-                                <input type="tel" id="merchant-cust-phone" placeholder="เช่น 081-234-5678" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
+                                <input type="tel" id="merchant-cust-phone" oninput="calculateMerchantFee()" placeholder="เช่น 081-234-5678" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
                             </div>
                         </div>
 
@@ -1200,11 +1200,11 @@
 
                         <div>
                             <label class="text-[10px] text-slate-600 mb-0.5 block font-semibold">บ้านเลขที่ / ซอย / จุดสังเกตที่ชัดเจน <span class="text-rose-500">*</span></label>
-                            <input type="text" id="merchant-dest-address" placeholder="ระบุบ้านเลขที่ ซอย หรือจุดสังเกต เช่น บ้านเลขที่ 124/5 ซอย 3 ตรงข้ามเสาธง" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
+                            <input type="text" id="merchant-dest-address" oninput="calculateMerchantFee()" placeholder="ระบุบ้านเลขที่ ซอย หรือจุดสังเกต เช่น บ้านเลขที่ 124/5 ซอย 3 ตรงข้ามเสาธง" class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
                         </div>
                     </div>
 
-                    <!-- 2.3 สรุปค่าบริการจัดส่ง & ปุ่มส่งคำขอ -->
+                    <!-- 2.3 สรุปค่าบริการจัดส่ง & ปุ่มส่งคำขอ (Call To Action นำไปสู่ขั้นตอนต่อไป) -->
                     <div class="pt-2 border-t border-slate-100 space-y-3">
                         <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200 flex items-center justify-between">
                             <div class="space-y-0.5">
@@ -1220,9 +1220,10 @@
                             </div>
                         </div>
 
-                        <button type="button" onclick="submitMerchantCall()" class="w-full py-3.5 px-4 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold rounded-2xl shadow-lg hover:shadow-xl flex items-center justify-center gap-2 text-xs sm:text-sm active:scale-[0.98] transition-all cursor-pointer">
-                            <span class="material-symbols-outlined text-lg">payments</span>
-                            <span id="merchant-submit-btn-text">ไปยังขั้นตอนชำระค่าส่ง (<span id="merchant-btn-fee-display">฿0</span>) & เรียกไรเดอร์ 🚀</span>
+                        <!-- Dynamic Action Button: Steps Guide -->
+                        <button type="button" id="merchant-submit-btn" onclick="submitMerchantCall()" class="w-full py-3.5 px-4 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold rounded-2xl shadow-lg hover:shadow-xl flex items-center justify-center gap-2 text-xs sm:text-sm active:scale-[0.98] transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-lg" id="merchant-submit-btn-icon">pin_drop</span>
+                            <span id="merchant-submit-btn-text">📍 ขั้นตอนถัดไป: ปักหมุดแผนที่ดาวเทียมเพื่อคำนวณค่าส่ง 🗺️</span>
                         </button>
                     </div>
                 </div>
@@ -1718,7 +1719,7 @@
     <!-- MERCHANT EXPRESS PROMPTPAY MODAL (แผงค้าโอนค่าส่งเข้าฮับ) -->
     <!-- ========================================== -->
     <div id="merchant-payment-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in">
-        <div class="bg-white rounded-3xl p-4 sm:p-5 max-w-sm w-full shadow-2xl space-y-3.5 animate-scale-up text-center border border-slate-200 max-h-[95vh] overflow-y-auto">
+        <div class="bg-white rounded-3xl p-4 sm:p-5 max-w-sm w-full shadow-2xl space-y-3 animate-scale-up text-center border border-slate-200 max-h-[95vh] overflow-y-auto">
             
             <!-- Modal Header -->
             <div class="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -1727,11 +1728,29 @@
                         <span class="material-symbols-outlined text-xs">qr_code_2</span>
                         <span>PromptPay</span>
                     </span>
-                    <span class="text-xs font-bold text-slate-800">โอนชำระค่าส่งเข้าฮับ</span>
+                    <span class="text-xs font-bold text-slate-800">ขั้นตอนที่ 2: โอนชำระค่าส่งเข้าฮับ</span>
                 </div>
                 <button onclick="closeMerchantPaymentModal()" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer">
                     <span class="material-symbols-outlined text-base">close</span>
                 </button>
+            </div>
+
+            <!-- Step Progress Indicator -->
+            <div class="bg-slate-100/90 rounded-2xl p-2 flex items-center justify-between text-[10px] font-bold border border-slate-200">
+                <div class="flex items-center gap-1 text-emerald-700">
+                    <span class="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px]">✓</span>
+                    <span>1. กรอกข้อมูล</span>
+                </div>
+                <span class="text-slate-300">➔</span>
+                <div class="flex items-center gap-1 text-orange-700 font-extrabold bg-orange-100 px-2 py-0.5 rounded-lg">
+                    <span class="w-4 h-4 rounded-full bg-orange-600 text-white flex items-center justify-center text-[9px] animate-pulse">2</span>
+                    <span>2. ชำระค่าส่ง</span>
+                </div>
+                <span class="text-slate-300">➔</span>
+                <div class="flex items-center gap-1 text-slate-400">
+                    <span class="w-4 h-4 rounded-full bg-slate-300 text-slate-600 flex items-center justify-center text-[9px]">3</span>
+                    <span>3. ส่งงานเข้าฮับ</span>
+                </div>
             </div>
 
             <!-- Route Summary (ต้นทาง -> ปลายทาง) -->
@@ -1755,9 +1774,15 @@
             <!-- Authentic PromptPay QR Card -->
             <div class="bg-white rounded-2xl border-2 border-slate-300 shadow-md overflow-hidden max-w-[260px] mx-auto p-2 transition-transform hover:scale-[1.01]">
                 <img id="m-pay-qr-img" src="promptpay_qr.png" alt="Thai QR Payment ค่าจัดส่งฮับ" class="w-full h-auto object-contain rounded-xl select-none" loading="eager">
-                <div class="mt-1.5 pt-1.5 border-t border-slate-100 text-[10px] text-slate-600">
-                    <div>บัญชีฮับ: <strong>ตลาดวิศิษฐ์ชัย (พร้อมเพย์)</strong></div>
-                    <div class="font-mono text-slate-800 font-bold">081-999-8888</div>
+                <div class="mt-1.5 pt-1.5 border-t border-slate-100 text-[10px] text-slate-600 flex items-center justify-between">
+                    <div class="text-left">
+                        <div>บัญชีฮับ: <strong>ตลาดวิศิษฐ์ชัย</strong></div>
+                        <div class="font-mono text-slate-900 font-extrabold text-xs">081-999-8888</div>
+                    </div>
+                    <button type="button" onclick="copyHubPromptPayNumber()" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 border border-slate-300 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer" title="คัดลอกเบอร์พร้อมเพย์">
+                        <span class="material-symbols-outlined text-xs">content_copy</span>
+                        <span>คัดลอก</span>
+                    </button>
                 </div>
             </div>
 
@@ -1765,7 +1790,7 @@
             <div class="bg-emerald-50 text-emerald-950 p-2.5 rounded-2xl text-xs flex items-center justify-between border border-emerald-200">
                 <span class="font-bold flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm text-emerald-700">payments</span>
-                    <span>ค่าจัดส่งที่ต้องชำระ:</span>
+                    <span>ค่าจัดส่งที่ต้องชำระ (ไม่มี COD):</span>
                 </span>
                 <span class="font-black text-lg text-emerald-700" id="m-pay-amount">฿20</span>
             </div>
@@ -1797,13 +1822,17 @@
                 </div>
             </div>
 
-            <!-- Final Confirm Button -->
-            <div class="space-y-1.5 pt-1">
+            <!-- Final Confirm Button & Back Button -->
+            <div class="space-y-2 pt-1">
                 <button onclick="confirmMerchantPaymentAndDispatch()" class="w-full bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold py-3 rounded-2xl shadow-md text-xs sm:text-sm flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all cursor-pointer">
                     <span class="material-symbols-outlined text-base">verified</span>
                     <span>ยืนยันการโอนเงิน & ส่งงานเข้าฮับทันที 🚀</span>
                 </button>
-                <p class="text-[10px] text-slate-400">เมื่อยืนยันแล้ว ฮับจะจัดสรรไรเดอร์มารับของที่แผงทันที</p>
+                <button type="button" onclick="closeMerchantPaymentModal()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-xs">arrow_back</span>
+                    <span>ย้อนกลับไปแก้ไขข้อมูลผู้รับ</span>
+                </button>
+                <p class="text-[10px] text-slate-400">เมื่อยืนยันแล้ว ฮับจะจัดสรรไรเดอร์มารับของที่แผงของคุณทันที</p>
             </div>
         </div>
     </div>
@@ -4149,6 +4178,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.5_merchant_map_pin_only"></script>
+    <script src="app.js?v=9.6_merchant_next_steps_flow"></script>
 </body>
 </html>

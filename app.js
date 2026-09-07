@@ -7509,6 +7509,9 @@ function calculateMerchantFee() {
     const distDesc = document.getElementById("merchant-calc-dist-desc");
     const btnFeeDisplay = document.getElementById("merchant-btn-fee-display");
     const pinBtnText = document.getElementById("merchant-map-pin-btn-text");
+    const submitBtn = document.getElementById("merchant-submit-btn");
+    const submitBtnText = document.getElementById("merchant-submit-btn-text");
+    const submitBtnIcon = document.getElementById("merchant-submit-btn-icon");
 
     if (state.merchantPinnedCoords) {
         const distKm = state.merchantPinnedCoords.distKm;
@@ -7517,6 +7520,12 @@ function calculateMerchantFee() {
         if (btnFeeDisplay) btnFeeDisplay.textContent = `฿${fee}`;
         if (distDesc) distDesc.textContent = `ระยะทางปักหมุดจริง ~${distKm.toFixed(1)} กม. จากตลาดวิศิษฐ์ชัย`;
         if (pinBtnText) pinBtnText.textContent = `📍 ปักหมุดแล้ว (~${distKm.toFixed(1)} กม. ค่าส่ง ฿${fee}) แตะเพื่อเปลี่ยน`;
+        
+        if (submitBtnText) submitBtnText.innerHTML = `ไปยังขั้นตอนที่ 2: โอนชำระค่าส่ง (<span id="merchant-btn-fee-display">฿${fee}</span>) & เรียกไรเดอร์ 🚀`;
+        if (submitBtnIcon) submitBtnIcon.textContent = "payments";
+        if (submitBtn) {
+            submitBtn.className = "w-full py-3.5 px-4 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold rounded-2xl shadow-lg hover:shadow-xl ring-2 ring-orange-400 ring-offset-2 flex items-center justify-center gap-2 text-xs sm:text-sm active:scale-[0.98] transition-all cursor-pointer";
+        }
         return;
     }
 
@@ -7524,6 +7533,12 @@ function calculateMerchantFee() {
     if (btnFeeDisplay) btnFeeDisplay.textContent = "฿0";
     if (distDesc) distDesc.textContent = "กรุณากดปุ่มปักหมุดแผนที่ดาวเทียมด้านบน";
     if (pinBtnText) pinBtnText.textContent = "📍 กดเปิดแผนที่เพื่อปักหมุดจุดส่งของ (ดาวเทียมจริง)";
+
+    if (submitBtnText) submitBtnText.innerHTML = `📍 ขั้นตอนถัดไป: ปักหมุดแผนที่ดาวเทียมเพื่อคำนวณค่าส่ง 🗺️`;
+    if (submitBtnIcon) submitBtnIcon.textContent = "pin_drop";
+    if (submitBtn) {
+        submitBtn.className = "w-full py-3.5 px-4 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold rounded-2xl shadow-lg hover:shadow-xl flex items-center justify-center gap-2 text-xs sm:text-sm active:scale-[0.98] transition-all cursor-pointer";
+    }
 }
 
 function toggleMerchantCodInput(checkbox) {
@@ -7554,7 +7569,7 @@ function submitMerchantCall() {
 
     // 1. ตรวจสอบชื่อลูกค้า / ผู้รับ
     if (!custName) {
-        showToast("⚠️ กรุณาระบุชื่อลูกค้า / ผู้รับของให้ชัดเจน");
+        showToast("⚠️ ขั้นตอนที่ 1: กรุณาระบุชื่อลูกค้า / ผู้รับของให้ชัดเจน");
         if (custNameInput) custNameInput.focus();
         return;
     }
@@ -7562,21 +7577,21 @@ function submitMerchantCall() {
     // 2. ตรวจสอบเบอร์โทรศัพท์ลูกค้า (ต้องมีอย่างน้อย 9-10 หลัก)
     const cleanPhone = custPhone.replace(/[^0-9]/g, "");
     if (!custPhone || cleanPhone.length < 9) {
-        showToast("⚠️ กรุณาระบุเบอร์โทรศัพท์ลูกค้าให้ถูกต้อง (9-10 หลัก) เพื่อให้ไรเดอร์ติดต่อได้");
+        showToast("⚠️ ขั้นตอนที่ 1: กรุณาระบุเบอร์โทรศัพท์ลูกค้า (9-10 หลัก) เพื่อให้ไรเดอร์ติดต่อได้");
         if (custPhoneInput) custPhoneInput.focus();
         return;
     }
 
-    // 3. ตรวจสอบการปักหมุดแผนที่ (บังคับปักหมุด 100%)
+    // 3. ตรวจสอบการปักหมุดแผนที่ (ถ้ายังไม่ได้ปักหมุด ให้เปิดแผนที่ทันทีเพื่อนำไปสู่ขั้นตอนต่อไป)
     if (!state.merchantPinnedCoords) {
-        showToast("⚠️ กรุณากดปุ่ม 'ปักหมุดแผนที่ดาวเทียม' เพื่อระบุตำแหน่งบ้านลูกค้าก่อน");
+        showToast("📍 กำลังเปิดแผนที่ดาวเทียม กรุณาแตะปักหมุดตำแหน่งบ้านลูกค้าเพื่อคำนวณระยะทาง & ค่าส่ง...");
         openMerchantDestinationMap();
         return;
     }
 
     // 4. ตรวจสอบที่อยู่จัดส่ง / บ้านเลขที่ / ซอย / จุดสังเกตอย่างละเอียด
     if (!extraAddr) {
-        showToast("⚠️ กรุณาระบุที่อยู่จัดส่ง / บ้านเลขที่ / ซอย / จุดสังเกตให้ครบถ้วน");
+        showToast("⚠️ กรุณาระบุบ้านเลขที่ / ซอย / จุดสังเกตที่ชัดเจนก่อนไปยังขั้นตอนชำระเงิน");
         if (extraAddrInput) extraAddrInput.focus();
         return;
     }
@@ -7632,6 +7647,7 @@ function submitMerchantCall() {
 
     state.pendingMerchantExpressOrder = pendingOrder;
     openMerchantPaymentModal(pendingOrder);
+    showToast(`💳 เข้าสู่ขั้นตอนที่ 2: โอนชำระค่าจัดส่ง ฿${fee} เข้าฮับผ่าน PromptPay`);
 }
 
 // ── Controller for Merchant Express QR Payment Modal ──
@@ -7668,6 +7684,19 @@ function openMerchantPaymentModal(order) {
 function closeMerchantPaymentModal() {
     const modal = document.getElementById("merchant-payment-modal");
     if (modal) modal.classList.add("hidden");
+}
+
+function copyHubPromptPayNumber() {
+    const phone = "0819998888";
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(phone).then(() => {
+            showToast("📋 คัดลอกเลขพร้อมเพย์ฮับ 081-999-8888 สำเร็จ!");
+        }).catch(() => {
+            showToast("เบอร์พร้อมเพย์ฮับ: 081-999-8888");
+        });
+    } else {
+        showToast("เบอร์พร้อมเพย์ฮับ: 081-999-8888");
+    }
 }
 
 function downloadMerchantPromptPayQR() {
@@ -7728,9 +7757,13 @@ function confirmMerchantPaymentAndDispatch() {
     state.merchantExpressOrders = state.merchantExpressOrders || [];
     state.merchantExpressOrders.unshift(order);
 
+    state.orders = state.orders || [];
+    state.orders.unshift(order);
+
     try {
         localStorage.setItem("hsong_active_order", JSON.stringify(order));
         localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
+        localStorage.setItem("talathub_order_history", JSON.stringify(state.orders.slice(0, 30)));
     } catch(e) {}
 
     if (typeof syncOrderToCloud === "function") {
@@ -7747,7 +7780,7 @@ function confirmMerchantPaymentAndDispatch() {
     clearMerchantPinnedLocation();
     closeMerchantPaymentModal();
 
-    showToast(`🎉 ชำระค่าส่ง ฿${order.deliveryFee} สำเร็จ! ส่งงาน ${order.orderId} เข้าฮับเพื่อจัดสรรไรเดอร์ทันที`);
+    showToast(`🎉 ขั้นตอนที่ 2 สำเร็จ! ชำระค่าส่ง ฿${order.deliveryFee} เรียบร้อย เข้าสู่ขั้นตอนที่ 3: ส่งงาน ${order.orderId} เข้าฮับทันที`);
 
     if (typeof playOrderAlertSound === "function") playOrderAlertSound();
 
@@ -7761,6 +7794,23 @@ function confirmMerchantPaymentAndDispatch() {
 
     if (typeof renderHubPickingList === "function") renderHubPickingList();
     renderMerchantActiveDeliveries();
+
+    // เลื่อนจอไปยังขั้นตอนที่ 3 (การ์ดติดตามสถานะงานแบบสด)
+    setTimeout(() => {
+        const activeContainer = document.getElementById("merchant-active-deliveries-container");
+        if (activeContainer) {
+            activeContainer.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }, 200);
+}
+
+function resetAndFocusMerchantForm() {
+    const custName = document.getElementById("merchant-cust-name");
+    if (custName) {
+        custName.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        custName.focus();
+    }
+    showToast("📝 พร้อมกรอกข้อมูลเรียกไรเดอร์สำหรับออเดอร์ใหม่แล้วครับ");
 }
 
 function renderMerchantActiveDeliveries() {
@@ -7803,6 +7853,15 @@ function renderMerchantActiveDeliveries() {
 
     container.innerHTML = `
         <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-3xl p-4 shadow-xl border-2 border-orange-500/80 space-y-3.5 animate-fade-in">
+            <!-- Step 3 Progress Banner -->
+            <div class="bg-orange-500/20 border border-orange-400/40 rounded-2xl px-3 py-1.5 flex items-center justify-between text-[11px]">
+                <div class="flex items-center gap-1.5 text-orange-200 font-extrabold">
+                    <span class="w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs">3</span>
+                    <span>ขั้นตอนที่ 3: สถานะงานเรียกไรเดอร์แบบเรียลไทม์</span>
+                </div>
+                <span class="text-[10px] bg-white/15 text-orange-300 px-2 py-0.5 rounded-full font-bold">ส่งงานเข้าฮับสำเร็จ</span>
+            </div>
+
             <!-- Header -->
             <div class="flex items-center justify-between border-b border-white/10 pb-2.5">
                 <div class="flex items-center gap-2">
@@ -7812,7 +7871,7 @@ function renderMerchantActiveDeliveries() {
                             <span class="text-[10px] bg-white/20 text-orange-200 font-mono px-2 py-0.5 rounded-full">${order.orderId}</span>
                             <span class="text-[10px] text-slate-300">${order.time || 'เมื่อสักครู่'}</span>
                         </div>
-                        <h4 class="font-extrabold text-sm text-white mt-0.5">สถานะงานส่งของของแผงคุณ</h4>
+                        <h4 class="font-extrabold text-sm text-white mt-0.5">งานส่งของแผงคุณ (${order.originStall?.stallName || 'แผงค้า'})</h4>
                     </div>
                 </div>
                 <span class="text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${statusClass}">
@@ -7863,21 +7922,30 @@ function renderMerchantActiveDeliveries() {
 
             <!-- Action Buttons: Call, Chat, Radar, Slip -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
-                <button type="button" onclick="callRiderFromMerchant('${rider.phone}')" class="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px]">
+                <button type="button" onclick="callRiderFromMerchant('${rider.phone}')" class="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">call</span>
                     <span>โทรหาไรเดอร์</span>
                 </button>
-                <button type="button" onclick="openMerchantRiderChat('${order.orderId}')" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px]">
+                <button type="button" onclick="openMerchantRiderChat('${order.orderId}')" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">chat</span>
                     <span>แชทกับไรเดอร์</span>
                 </button>
-                <button type="button" onclick="viewOrderOnRadar('${order.orderId}')" class="p-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px]">
+                <button type="button" onclick="viewOrderOnRadar('${order.orderId}')" class="p-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">radar</span>
                     <span>ดูเรดาร์สด</span>
                 </button>
-                <button type="button" onclick="printMerchantExpressSlip('${order.orderId}')" class="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all text-[11px]">
+                <button type="button" onclick="printMerchantExpressSlip('${order.orderId}')" class="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">print</span>
                     <span>สลิป 80mm</span>
+                </button>
+            </div>
+
+            <!-- New Order CTA Button -->
+            <div class="pt-2 border-t border-white/10 flex items-center justify-between">
+                <span class="text-[10px] text-slate-300">มีออเดอร์ลูกค้าคนอื่นอีกไหม?</span>
+                <button type="button" onclick="resetAndFocusMerchantForm()" class="px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-xs">add</span>
+                    <span>ส่งของออเดอร์ถัดไป ➕</span>
                 </button>
             </div>
         </div>
