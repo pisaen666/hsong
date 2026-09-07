@@ -95,10 +95,11 @@
                 <!-- Right: Compact Authentication Buttons (ลูกค้า & ร้านค้า & สมัครไรเดอร์) -->
                 <div class="flex items-center gap-1 sm:gap-1.5 md:gap-2 shrink-0">
                     <div class="flex items-center gap-1 sm:gap-1.5 md:gap-2" id="top-auth-buttons-container">
-                        <!-- Customer Login Button -->
-                        <button onclick="openCustomerLoginModal()" id="btn-customer-login" class="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-xs active:scale-95 transition-all">
-                            <span class="material-symbols-outlined text-sm">person</span>
-                            <span class="hidden xs:inline sm:inline">ลูกค้า</span>
+                        <!-- Merchant Register Button (ลงทะเบียนเปิดร้าน - ย้ายมาจากแผงค้า) -->
+                        <button onclick="registerNewMerchantStall()" id="btn-merchant-register" class="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-xs active:scale-95 transition-all shrink-0" title="ลงทะเบียนเปิดร้านค้าใหม่ (Stall Setup Form)">
+                            <span class="material-symbols-outlined text-sm">storefront</span>
+                            <span class="hidden sm:inline">ลงทะเบียนเปิดร้าน</span>
+                            <span class="inline sm:hidden">เปิดร้าน</span>
                         </button>
 
                         <!-- Merchant Login Button -->
@@ -4234,6 +4235,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.14_merchant_logout_perfect"></script>
+    <script src="app.js?v=9.15_merchant_register_button"></script>
 </body>
 </html>

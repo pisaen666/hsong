@@ -14761,26 +14761,28 @@ function renderAuthHeaderButtons() {
 
     let html = "";
 
-    // 1. Customer Section
+    // 1. Merchant Register Button (ลงทะเบียนเปิดร้าน - ย้ายมาจากปุ่มแผงค้า)
+    html += `
+        <button onclick="registerNewMerchantStall()" id="btn-merchant-register" class="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-xs active:scale-95 transition-all shrink-0" title="ลงทะเบียนเปิดร้านค้าใหม่ (Stall Setup Form)">
+            <span class="material-symbols-outlined text-sm">storefront</span>
+            <span class="hidden sm:inline">ลงทะเบียนเปิดร้าน</span>
+            <span class="inline sm:hidden">เปิดร้าน</span>
+        </button>
+    `;
+
+    // Customer Session Status (if customer is logged in)
     if (state.customer && state.customer.isLoggedIn) {
         const iconName = state.customer.type === "line" ? "chat" : "smartphone";
         html += `
-            <div class="flex items-center gap-1.5 bg-emerald-950/90 border border-emerald-500/40 px-2.5 md:px-3.5 py-1 md:py-1.5 rounded-xl text-xs md:text-sm shadow-xs">
-                <span class="text-[11px] md:text-xs text-emerald-300 font-bold flex items-center gap-1">
-                    <span class="material-symbols-outlined text-sm md:text-base text-emerald-400">${iconName}</span>
-                    <span>${state.customer.identifier}</span>
+            <div class="flex items-center gap-1 sm:gap-1.5 bg-emerald-950/90 border border-emerald-500/40 px-2 sm:px-2.5 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
+                <span class="text-[11px] sm:text-xs text-emerald-300 font-bold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm text-emerald-400">${iconName}</span>
+                    <span class="truncate max-w-[70px] sm:max-w-none">${state.customer.identifier}</span>
                 </span>
-                <button onclick="logoutCustomer()" class="text-[10px] md:text-xs text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all" title="ออกจากระบบลูกค้า">
-                    ออกจากระบบ
+                <button onclick="logoutCustomer()" class="text-[10px] text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 py-0.5 rounded font-bold transition-all" title="ออกจากระบบลูกค้า">
+                    ออก
                 </button>
             </div>
-        `;
-    } else {
-        html += `
-            <button onclick="openCustomerLoginModal()" id="btn-customer-login" class="px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-xs active:scale-95 transition-all shrink-0">
-                <span class="material-symbols-outlined text-sm">person</span>
-                <span class="hidden xs:inline sm:inline">ลูกค้า</span>
-            </button>
         `;
     }
 
@@ -15165,6 +15167,7 @@ function registerNewMerchantStall() {
     document.getElementById("merchant-portal-modal").classList.remove("hidden");
     showToast("📝 เริ่มกรอกเทมเพลตข้อมูลร้านค้าของคุณได้เลยครับ");
 }
+window.registerNewMerchantStall = registerNewMerchantStall;
 
 function updateMerchantProductPreview(index, url) {
     const preview = document.getElementById(`m-p-preview-${index}`);
