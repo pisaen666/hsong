@@ -10776,7 +10776,8 @@ window.loginRiderById = loginRiderById;
 function approveAndLoginRider(appId) {
     approveRiderApplication(appId);
     const apps = loadRiderApplications();
-    const app = apps.find(x => x.id === appId || (x.phone || "").replace(/[-\s]/g, "") === (appId || "").replace(/[-\s]/g, ""));
+    const cleanId = String(appId || "").trim();
+    const app = apps.find(x => x.id === cleanId || (x.phone || "").replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, ""));
     if (!app) return;
     const riders = loadCommunityRiders();
     const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
@@ -10784,8 +10785,9 @@ function approveAndLoginRider(appId) {
     if (r) {
         closeRiderAppDetailModal();
         closeRiderRegisterModal();
+        closeSimulatedSmsModal();
         loginRiderWithProfile(r);
-        showToast(`🎉 อนุมัติและเข้าสู่ระบบเป็น ${r.name} เรียบร้อยแล้ว!`);
+        showToast(`🎉 อนุมัติและเข้าสู่ระบบเป็น ${r.name} เรียบร้อยแล้ว! (รหัส: ${app.accessCode || r.accessCode})`);
     }
 }
 window.approveAndLoginRider = approveAndLoginRider;
@@ -10807,6 +10809,9 @@ function approveRiderApplication(appId) {
         return;
     }
 
+    if (!app.accessCode) {
+        app.accessCode = generate6DigitAccessCode();
+    }
     app.status = "approved";
     app.approvedAt = new Date().toISOString();
     saveRiderApplications(apps);
@@ -10815,6 +10820,7 @@ function approveRiderApplication(appId) {
     if (_lastSubmittedRiderApp && (_lastSubmittedRiderApp.id === app.id || _lastSubmittedRiderApp.phone === app.phone)) {
         _lastSubmittedRiderApp.status = "approved";
         _lastSubmittedRiderApp.approvedAt = app.approvedAt;
+        _lastSubmittedRiderApp.accessCode = app.accessCode;
     }
 
     // Update status badge on success view if open in DOM
@@ -10827,11 +10833,11 @@ function approveRiderApplication(appId) {
     // Create or update in community riders
     const riders = loadCommunityRiders();
     const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
-    const existing = riders.find(r => (r.phone || "").replace(/[-\s]/g, "") === cleanPhone);
+    let riderTarget = riders.find(r => (r.phone || "").replace(/[-\s]/g, "") === cleanPhone);
     const displayName = app.nickname ? `${app.fullName} (${app.nickname})` : app.fullName;
 
-    if (!existing) {
-        const newRider = {
+    if (!riderTarget) {
+        riderTarget = {
             id: `RIDER-${Date.now().toString().slice(-4)}`,
             name: displayName,
             phone: app.phone,
@@ -10844,28 +10850,17 @@ function approveRiderApplication(appId) {
             avatar: "🛵",
             motorcycleModel: app.motorcycleModel || "",
             promptPay: app.promptPayNumber || app.phone || "",
+            accessCode: app.accessCode,
             codSettledToday: 0
         };
-        riders.unshift(newRider);
-        saveCommunityRiders(riders);
+        riders.unshift(riderTarget);
     } else {
-        existing.name = displayName;
-        existing.plate = app.plate || existing.plate;
-        existing.zone = app.zone || existing.zone;
-        saveCommunityRiders(riders);
+        riderTarget.name = displayName;
+        riderTarget.plate = app.plate || riderTarget.plate;
+        riderTarget.zone = app.zone || riderTarget.zone;
+        riderTarget.accessCode = app.accessCode;
     }
-
-    if (!app.accessCode) {
-        app.accessCode = generate6DigitAccessCode();
-        saveRiderApplications(apps);
-    }
-    if (!existing) {
-        newRider.accessCode = app.accessCode;
-        saveCommunityRiders(riders);
-    } else {
-        existing.accessCode = app.accessCode;
-        saveCommunityRiders(riders);
-    }
+    saveCommunityRiders(riders);
 
     updateAdminRiderBadges();
     showToast(`🎉 อนุมัติ ${displayName} เป็นไรเดอร์สำเร็จ! รหัสผ่าน: ${app.accessCode}`);
@@ -10887,6 +10882,7 @@ function rejectRiderApplication(appId) {
         saveRiderApplications(apps);
         updateAdminRiderBadges();
         showToast(`❌ ปฏิเสธใบสมัครของ ${app.fullName} เรียบร้อยแล้ว`);
+        closeRiderAppDetailModal();
         renderAdminRiders();
     }
 }
@@ -12241,6 +12237,39 @@ function viewRiderAppDetail(appId) {
                 <div>${statusBadge}</div>
             </div>
 
+            ${app.status === 'approved' ? `
+            <div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 p-3.5 rounded-2xl space-y-2 shadow-xs">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">🔑</span>
+                        <div>
+                            <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">รหัสผ่าน 6 หลักสำหรับเข้าสู่ระบบ (ACCESS CODE)</div>
+                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${app.accessCode || '-'}</div>
+                        </div>
+                    </div>
+                    <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">พร้อมใช้งาน</span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-emerald-200/60">
+                    <button type="button" onclick="sendRealSmsToApplicant('${app.phone}', '${app.accessCode}', '${app.fullName}', 'rider')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
+                        <span class="material-symbols-outlined text-sm">sms</span>
+                        <span>ส่ง SMS จริง</span>
+                    </button>
+                    <button type="button" onclick="sendLineNotificationToApplicant('${app.lineId || app.phone}', '${app.accessCode}', '${app.fullName}', 'rider')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
+                        <span>💬</span>
+                        <span>ส่งแจ้ง LINE</span>
+                    </button>
+                    <button type="button" onclick="copyApprovalNotificationMessage('${app.phone}', '${app.accessCode}', '${app.fullName}', 'rider')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
+                        <span class="material-symbols-outlined text-sm">content_copy</span>
+                        <span>คัดลอกข้อความ</span>
+                    </button>
+                    <a href="tel:${app.phone}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
+                        <span class="material-symbols-outlined text-sm">call</span>
+                        <span>โทรหา</span>
+                    </a>
+                </div>
+            </div>
+            ` : ''}
+
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
                     <div class="text-[10px] font-bold text-slate-400">ข้อมูลส่วนตัว & ใบอนุญาต</div>
@@ -12281,45 +12310,45 @@ function viewRiderAppDetail(appId) {
     if (footer) {
         footer.innerHTML = `
             <div class="flex items-center gap-1.5 flex-wrap">
-                <button onclick="openEditRiderAppModal('${app.id}'); closeRiderAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลใบสมัครนี้">
+                <button type="button" onclick="openEditRiderAppModal('${app.id}'); closeRiderAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลใบสมัครนี้">
                     <span class="material-symbols-outlined text-sm">edit</span>
                     <span>แก้ไขข้อมูล</span>
                 </button>
                 ${app.status === 'rejected' ? `
-                    <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1">
+                    <button type="button" onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>พิจารณาใหม่</span>
                     </button>
                 ` : app.status === 'approved' ? `
-                    <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1">
+                    <button type="button" onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>ย้อนกลับไปรอพิจารณา</span>
                     </button>
-                    <button onclick="approveAndLoginRider('${app.id}'); closeRiderAppDetailModal();" class="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
-                        <span class="material-symbols-outlined text-sm">sports_motorsports</span>
-                        <span>สลับเข้ารับงาน</span>
-                    </button>
                 ` : ''}
-                <button onclick="deleteRiderApplication('${app.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
+                <button type="button" onclick="deleteRiderApplication('${app.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
                     <span class="material-symbols-outlined text-base">delete</span>
                 </button>
             </div>
 
             <div class="flex items-center gap-1.5 flex-wrap">
                 ${app.status === 'pending' ? `
-                    <button onclick="rejectRiderApplication('${app.id}'); closeRiderAppDetailModal();" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="rejectRiderApplication('${app.id}')" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
                         ปฏิเสธ
                     </button>
-                    <button onclick="approveRiderApplication('${app.id}'); closeRiderAppDetailModal();" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติเป็นไรเดอร์ในระบบ">
+                    <button type="button" onclick="approveRiderApplication('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติเป็นไรเดอร์ในระบบและสร้างรหัสผ่าน 6 หลัก">
                         <span class="material-symbols-outlined text-sm font-bold">check_circle</span>
                         <span>อนุมัติเป็นไรเดอร์</span>
                     </button>
-                    <button onclick="approveAndLoginRider('${app.id}'); closeRiderAppDetailModal();" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและทดสอบเข้าสู่ระบบรับงานทันที">
+                    <button type="button" onclick="approveAndLoginRider('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
                         <span class="material-symbols-outlined text-sm font-bold">sports_motorsports</span>
                         <span>อนุมัติ & รับงานทันที 🚀</span>
                     </button>
                 ` : `
-                    <button onclick="closeRiderAppDetailModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="approveAndLoginRider('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าระบบรับงานเป็นไรเดอร์คนนี้ทันที">
+                        <span class="material-symbols-outlined text-sm font-bold">sports_motorsports</span>
+                        <span>เข้าสู่ระบบรับงานทันที 🚀</span>
+                    </button>
+                    <button type="button" onclick="closeRiderAppDetailModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
                         ปิดหน้าต่าง
                     </button>
                 `}
@@ -12330,7 +12359,6 @@ function viewRiderAppDetail(appId) {
     modal.style.zIndex = "9999";
     modal.classList.remove("hidden");
 }
-
 function closeRiderAppDetailModal() {
     const modal = document.getElementById("rider-app-detail-modal");
     if (modal) modal.classList.add("hidden");
@@ -16073,6 +16101,66 @@ function testLoginWithGeneratedCode() {
     }
 }
 window.testLoginWithGeneratedCode = testLoginWithGeneratedCode;
+
+function getApprovalNotificationText(phone, code, name, roleType) {
+    const roleTitle = roleType === "merchant" ? "เปิดร้านค้า" : "ร่วมทีมไรเดอร์";
+    const roleTarget = roleType === "merchant" ? "3. แผงค้า" : "4. ไรเดอร์";
+    return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัคร${roleTitle}ของคุณได้รับการอนุมัติเรียบร้อยแล้ว!\n🔑 รหัสผ่าน 6 หลักเข้าใช้งาน: ${code}\n(หรือล็อกอินด้วยเบอร์โทร: ${phone || '-'})` +
+        `\n\nนำรหัสนี้ไปเข้าสู่ระบบที่เมนู "${roleTarget}" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nเริ่มเปิดร้าน/รับงานได้ทันทีครับ!`;
+}
+window.getApprovalNotificationText = getApprovalNotificationText;
+
+function sendRealSmsToApplicant(phone, code, name, roleType) {
+    const cleanPhone = String(phone || "").replace(/[^0-9]/g, "");
+    if (!cleanPhone) {
+        showToast("⚠️ ไม่พบเบอร์โทรศัพท์ของผู้สมัคร");
+        return;
+    }
+    const text = getApprovalNotificationText(cleanPhone, code, name, roleType);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const separator = isIOS ? "&" : "?";
+    const smsUrl = `sms:${cleanPhone}${separator}body=${encodeURIComponent(text)}`;
+    window.location.href = smsUrl;
+    showToast(`📱 กำลังเปิดแอป SMS เพื่อส่งข้อความหา ${cleanPhone}...`);
+}
+window.sendRealSmsToApplicant = sendRealSmsToApplicant;
+
+function sendLineNotificationToApplicant(lineTarget, code, name, roleType) {
+    const text = getApprovalNotificationText("", code, name, roleType);
+    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
+    window.open(lineUrl, "_blank");
+    showToast("💬 กำลังเปิด LINE เพื่อส่งข้อความแจ้งเตือน...");
+}
+window.sendLineNotificationToApplicant = sendLineNotificationToApplicant;
+
+function copyApprovalNotificationMessage(phone, code, name, roleType) {
+    const text = getApprovalNotificationText(phone, code, name, roleType);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast("📋 คัดลอกข้อความแจ้งผลและรหัสผ่านเรียบร้อยแล้ว!");
+        }).catch(() => {
+            prompt("คัดลอกข้อความนี้เพื่อส่งต่อ:", text);
+        });
+    } else {
+        prompt("คัดลอกข้อความนี้เพื่อส่งต่อ:", text);
+    }
+}
+window.copyApprovalNotificationMessage = copyApprovalNotificationMessage;
+
+function sendRealSmsFromModal() {
+    if (!_lastGeneratedSmsInfo) return;
+    const { phone, code, name, roleType } = _lastGeneratedSmsInfo;
+    sendRealSmsToApplicant(phone, code, name, roleType);
+}
+window.sendRealSmsFromModal = sendRealSmsFromModal;
+
+function sendLineFromModal() {
+    if (!_lastGeneratedSmsInfo) return;
+    const { phone, code, name, roleType } = _lastGeneratedSmsInfo;
+    sendLineNotificationToApplicant(phone, code, name, roleType);
+}
+window.sendLineFromModal = sendLineFromModal;
+
 
 function loadMerchantApplications() {
     try {

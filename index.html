@@ -4261,7 +4261,7 @@
     <!-- ========================================== -->
     <!-- SIMULATED SMS / LINE NOTIFICATION MODAL    -->
     <!-- ========================================== -->
-    <div id="simulated-sms-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
+    <div id="simulated-sms-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4 hidden animate-fade-in">
         <div class="bg-white rounded-3xl p-5 sm:p-6 max-w-sm w-full shadow-2xl space-y-4 border border-slate-200 text-center animate-scale-up">
             <div class="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-2xl shadow-sm">
                 📲
@@ -4285,15 +4285,25 @@
                 </div>
             </div>
             <div class="space-y-2 pt-1">
-                <button onclick="copyGeneratedCode()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" onclick="sendRealSmsFromModal()" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer" title="เปิดแอป SMS ในเครื่องเพื่อส่งหาผู้สมัครจริง">
+                        <span class="material-symbols-outlined text-sm">sms</span>
+                        <span>ส่ง SMS จริง</span>
+                    </button>
+                    <button type="button" onclick="sendLineFromModal()" class="py-2.5 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer" title="เปิดแอป LINE เพื่อส่งแจ้งเตือน">
+                        <span>💬</span>
+                        <span>ส่งแจ้ง LINE</span>
+                    </button>
+                </div>
+                <button type="button" onclick="copyGeneratedCode()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
                     <span class="material-symbols-outlined text-sm">content_copy</span>
-                    <span>คัดลอกรหัสผ่าน 6 หลัก</span>
+                    <span>คัดลอกรหัส & ข้อความ</span>
                 </button>
-                <button onclick="testLoginWithGeneratedCode()" id="sms-modal-login-btn" class="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                <button type="button" onclick="testLoginWithGeneratedCode()" id="sms-modal-login-btn" class="w-full py-2.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
                     <span class="material-symbols-outlined text-sm">login</span>
-                    <span>ทดสอบเข้าสู่ระบบด้วยรหัสนี้ทันที</span>
+                    <span>เข้าสู่ระบบด้วยรหัสนี้ทันที 🚀</span>
                 </button>
-                <button onclick="closeSimulatedSmsModal()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                <button type="button" onclick="closeSimulatedSmsModal()" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 font-medium rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
                     ปิดหน้าต่าง
                 </button>
             </div>
@@ -4303,7 +4313,7 @@
     <!-- ========================================== -->
     <!-- APPLICATION STATUS CHECK MODAL             -->
     <!-- ========================================== -->
-    <div id="status-check-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
+    <div id="status-check-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4 hidden animate-fade-in">
         <div class="bg-white rounded-3xl p-5 sm:p-6 max-w-sm w-full shadow-2xl space-y-4 border border-slate-200 text-left animate-scale-up">
             <div class="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div class="flex items-center gap-2">
@@ -4348,6 +4358,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.16_admin_approval_code"></script>
+    <script src="app.js?v=9.17_rider_detail_actions"></script>
 </body>
 </html>
