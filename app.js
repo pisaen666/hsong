@@ -11892,6 +11892,8 @@ function renderAdminRiders() {
                                             </a>
                                             <span>•</span>
                                             <span class="text-emerald-700 font-bold">💳 ${r.promptPay || r.phone || '-'}</span>
+                                            <span>•</span>
+                                            <span class="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded font-bold font-mono text-[10px]">🔑 PIN: ${r.accessCode || r.pin || r.id.slice(-6).toUpperCase()}</span>
                                         </div>
                                         <div class="text-[11px] text-slate-400 mt-0.5">
                                             📍 ${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}
@@ -12121,6 +12123,15 @@ function renderAdminRiders() {
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">โซนที่สะดวก:</span>
                                         <span class="font-medium text-slate-600 truncate max-w-[150px]">${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}</span>
+                                    </div>
+                                    <div class="flex justify-between items-center pt-1.5 border-t border-slate-200/80 mt-1">
+                                        <span class="text-purple-900 font-bold flex items-center gap-1 text-[11px]">
+                                            <span class="material-symbols-outlined text-xs text-purple-700">key</span>
+                                            <span>รหัสเข้าสู่ระบบ (PIN):</span>
+                                        </span>
+                                        <span class="font-mono font-black text-xs text-purple-950 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md tracking-wider shadow-2xs">
+                                            ${r.accessCode || r.pin || r.id.slice(-6).toUpperCase()}
+                                        </span>
                                     </div>
                                 </div>
 
