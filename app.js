@@ -9915,6 +9915,12 @@ function switchAdminTab(tabName) {
     } else if (tabName === "analytics") {
         renderAdminAnalytics();
     } else if (tabName === "stalls") {
+        const apps = loadMerchantApplications();
+        const pendingCount = apps.filter(a => a.status === "pending").length;
+        if (pendingCount > 0) {
+            _adminStallRosterView = "applications";
+        }
+        initMerchantRealtimeSync();
         renderAdminStalls();
     } else if (tabName === "riders") {
         renderAdminRiders();
@@ -9931,6 +9937,8 @@ function renderAdminView() {
     }
     updateAdminRiderBadges();
     updateAdminStallsBadge();
+    initMerchantRealtimeSync();
+    initRiderRealtimeSync();
     switchAdminTab(_activeAdminTab || "report");
 }
 
@@ -10283,6 +10291,25 @@ function renderAdminStalls() {
             ` : `
                 <!-- SUB-VIEW 1: ACTIVE STALLS DIRECTORY (TABLE & FILTERS) -->
                 <div class="space-y-4">
+                    ${pendingMerchantApps.length > 0 ? `
+                        <div class="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-300 p-3.5 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+                            <div class="flex items-center gap-2.5">
+                                <span class="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center text-lg shadow-xs shrink-0">⏳</span>
+                                <div>
+                                    <div class="font-black text-xs sm:text-sm text-slate-900 flex items-center gap-1.5 flex-wrap">
+                                        <span>มีใบสมัครร้านค้าใหม่รอการอนุมัติ <span class="text-amber-700 underline font-black font-mono">${pendingMerchantApps.length} ใบ</span></span>
+                                        <span class="bg-amber-400 text-slate-950 px-2 py-0.2 rounded-full text-[10px] font-black">รอดำเนินการ</span>
+                                    </div>
+                                    <div class="text-[11px] text-slate-600 mt-0.5">มีร้านค้าส่งข้อมูลเปิดแผงเข้ามาใหม่ คลิกปุ่มด้านขวาเพื่อเปิดดูใบสมัครและอนุมัติสร้างรหัสผ่าน 6 หลัก</div>
+                                </div>
+                            </div>
+                            <button onclick="switchAdminStallRosterView('applications'); filterAdminMerchantApps('pending');" class="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black rounded-xl text-xs shadow-md active:scale-95 transition-all shrink-0 cursor-pointer flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm font-bold">assignment</span>
+                                <span>ดูใบสมัคร (${pendingMerchantApps.length})</span>
+                            </button>
+                        </div>
+                    ` : ''}
+
                     <!-- Search & Zone Filters -->
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
                         <div class="flex items-center gap-1.5 overflow-x-auto text-xs pb-1 sm:pb-0">
@@ -10908,6 +10935,41 @@ function initRiderRealtimeSync() {
     });
 }
 window.initRiderRealtimeSync = initRiderRealtimeSync;
+
+let _isMerchantSyncInitialized = false;
+
+function initMerchantRealtimeSync() {
+    if (!isFirebaseReady() || _isMerchantSyncInitialized) return;
+    _isMerchantSyncInitialized = true;
+
+    db.ref("merchant_applications").on("value", snapshot => {
+        try {
+            const data = snapshot.val();
+            let rawList = [];
+            if (Array.isArray(data)) {
+                rawList = data.filter(Boolean);
+            } else if (data && typeof data === "object") {
+                rawList = Object.values(data).filter(Boolean);
+            }
+
+            if (rawList.length > 0) {
+                localStorage.setItem("talathub_merchant_applications", JSON.stringify(rawList));
+                updateAdminStallsBadge();
+
+                if (state.currentRole === "admin") {
+                    if (_activeAdminTab === "stalls") {
+                        renderAdminStalls();
+                    } else if (_activeAdminTab === "report") {
+                        renderAdminReport();
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn("Error syncing merchant_applications:", err);
+        }
+    });
+}
+window.initMerchantRealtimeSync = initMerchantRealtimeSync;
 
 function updateAdminRiderBadges() {
     const apps = loadRiderApplications();
@@ -16296,14 +16358,19 @@ function saveMerchantStallData() {
     };
 
     // ตรวจสอบว่าเป็นแผงค้าที่ลงทะเบียนใหม่หรือไม่
-    if (activeMerchantStallId && activeMerchantStallId.startsWith("stall_new_")) {
+    const isNewRegistration = !activeMerchantStallId || 
+        activeMerchantStallId.startsWith("stall_new_") || 
+        activeMerchantStallId.startsWith("APP-SHOP-") ||
+        !MARKET_DATA.some(s => s.stallId === activeMerchantStallId && !s.stallId.startsWith("APP-SHOP-") && !s.stallId.startsWith("stall_new_"));
+
+    if (isNewRegistration) {
         const apps = loadMerchantApplications();
-        const existingAppIdx = apps.findIndex(a => a.id === activeMerchantStallId);
-        const appId = (existingAppIdx >= 0 && apps[existingAppIdx].id)
-            ? apps[existingAppIdx].id
+        const appId = (activeMerchantStallId && activeMerchantStallId.startsWith("APP-SHOP-"))
+            ? activeMerchantStallId
             : `APP-SHOP-${Date.now().toString().slice(-4)}`;
         stallObj.stallId = appId;
 
+        const existingAppIdx = apps.findIndex(a => a.id === appId || (a.stallData && a.stallData.phone === phone));
         const appRecord = {
             id: appId,
             submittedAt: new Date().toISOString(),
@@ -16316,9 +16383,17 @@ function saveMerchantStallData() {
         else apps.unshift(appRecord);
         saveMerchantApplications(apps);
 
+        // Switch to applications view so it appears immediately when admin views
+        _adminStallRosterView = "applications";
+        _adminMerchantAppFilter = "all";
+
         updateAdminStallsBadge();
+        if (typeof renderAdminStalls === "function") {
+            renderAdminStalls();
+        }
+
         closeMerchantPortalModal();
-        showToast(`📤 ส่งข้อมูลเปิดร้าน "${stallName}" ให้แอดมินพิจารณาแล้ว!`);
+        showToast(`📤 ส่งข้อมูลเปิดร้าน "${stallName}" (${appId}) ให้แอดมินพิจารณาแล้ว!`);
 
         // เปิดหน้าต่างตรวจสอบสถานะการสมัคร
         setTimeout(() => {
@@ -16651,7 +16726,7 @@ function autoSanitizeProductionData() {
         if (rawCustom) {
             let stalls = JSON.parse(rawCustom);
             if (Array.isArray(stalls)) {
-                stalls = stalls.filter(s => s && s.stallId && s.stallId.startsWith("stall_new_"));
+                stalls = stalls.filter(s => s && s.stallId && (s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-") || s.stallId.startsWith("stall_seed_")));
                 localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(stalls));
             }
         }
@@ -16665,7 +16740,7 @@ function autoSanitizeProductionData() {
             if (db && typeof db === "object") {
                 const cleanDb = {};
                 for (const key of Object.keys(db)) {
-                    if (key === "stall_chicken" || key.startsWith("stall_new_")) {
+                    if (key === "stall_chicken" || key.startsWith("stall_new_") || key.startsWith("APP-") || key.startsWith("stall_seed_")) {
                         cleanDb[key] = db[key];
                     }
                 }
@@ -16681,12 +16756,12 @@ function autoSanitizeProductionData() {
         localStorage.removeItem("talathub_rating_reviews");
     } catch (e) {}
 
-    // 10. Enforce MARKET_DATA & ALL_100_STALLS memory purge (only stall_chicken and stall_new_*)
-    const allowedStalls = MARKET_DATA.filter(s => s && s.stallId && (s.stallId === "stall_chicken" || s.stallId.startsWith("stall_new_")));
+    // 10. Enforce MARKET_DATA & ALL_100_STALLS memory purge (only stall_chicken, APP-*, and stall_new_*)
+    const allowedStalls = MARKET_DATA.filter(s => s && s.stallId && (s.stallId === "stall_chicken" || s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-") || s.stallId.startsWith("stall_seed_")));
     MARKET_DATA.length = 0;
     MARKET_DATA.push(...allowedStalls);
 
-    const allowedAll = ALL_100_STALLS.filter(s => s && s.stallId && (s.stallId === "stall_chicken" || s.stallId.startsWith("stall_new_")));
+    const allowedAll = ALL_100_STALLS.filter(s => s && s.stallId && (s.stallId === "stall_chicken" || s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-") || s.stallId.startsWith("stall_seed_")));
     ALL_100_STALLS.length = 0;
     ALL_100_STALLS.push(...allowedAll);
 }
@@ -16718,11 +16793,15 @@ function initTalatHubApp() {
     updateCartUI();
     initHeroBannerCarousel();
     updateAdminRiderBadges();
+    updateAdminStallsBadge();
     initRiderRealtimeSync();
+    initMerchantRealtimeSync();
     if (!isFirebaseReady()) {
         setTimeout(() => {
             initRiderRealtimeSync();
+            initMerchantRealtimeSync();
             updateAdminRiderBadges();
+            updateAdminStallsBadge();
         }, 1500);
     }
 }
