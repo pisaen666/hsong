@@ -112,26 +112,26 @@
                 </div>
             </div>
 
-            <!-- Row 2 on Mobile / Center on Desktop: Role Selector Segmented Bar (4 ปุ่มจัดชิดแถวเดียวเป็นระเบียบ) -->
-            <div id="main-role-selector-bar" class="w-full md:w-auto grid grid-cols-4 md:flex items-center gap-1 md:gap-2 bg-slate-800/90 border border-slate-700/60 p-1 md:p-1.5 rounded-xl md:rounded-2xl text-[11px] sm:text-xs md:text-sm shadow-inner">
-                <button onclick="switchRole('customer')" id="role-btn-customer" class="role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center">
+            <!-- Row 2 on Mobile / Center on Desktop: Role Selector Segmented Bar (5 บทบาทครบถ้วน 1.ลูกค้า 2.จัดส่ง 3.แผงค้า 4.ไรเดอร์ 5.แอดมิน) -->
+            <div id="main-role-selector-bar" class="w-full md:w-auto grid grid-cols-5 md:flex items-center gap-1 md:gap-1.5 bg-slate-800/90 border border-slate-700/60 p-1 md:p-1.5 rounded-xl md:rounded-2xl text-[10px] sm:text-xs md:text-sm shadow-inner">
+                <button onclick="switchRole('customer')" id="role-btn-customer" class="role-btn py-1.5 px-0.5 sm:px-1 md:px-3 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-0.5 sm:gap-1 md:gap-1.5 transition-all duration-200 text-center" title="1. ลูกค้าสั่งซื้อของสด">
                     <span class="material-symbols-outlined text-sm md:text-base">shopping_cart</span>
                     <span class="truncate">1. ลูกค้า</span>
                 </button>
-                <button onclick="switchRole('hub')" id="role-btn-hub" class="role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-1 md:gap-1.5 transition-all duration-200 text-center relative">
+                <button onclick="switchRole('hub')" id="role-btn-hub" class="role-btn py-1.5 px-0.5 sm:px-1 md:px-3 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-0.5 sm:gap-1 md:gap-1.5 transition-all duration-200 text-center relative" title="2. ศูนย์จัดของฮับ">
                     <span class="material-symbols-outlined text-sm md:text-base">inventory_2</span>
                     <span class="truncate">2. จัดส่ง</span>
                     <span id="hub-badge-count" class="bg-amber-500 text-slate-900 text-[9px] font-black px-1 rounded-full absolute -top-1 right-1 hidden">1</span>
                 </button>
-                <button onclick="switchRole('merchant')" id="role-btn-merchant" class="role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-1 md:gap-1.5 transition-all duration-200 text-center">
+                <button onclick="switchRole('merchant')" id="role-btn-merchant" class="role-btn py-1.5 px-0.5 sm:px-1 md:px-3 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-0.5 sm:gap-1 md:gap-1.5 transition-all duration-200 text-center" title="3. แผงค้าในตลาด">
                     <span class="material-symbols-outlined text-sm md:text-base">store</span>
                     <span class="truncate">3. แผงค้า</span>
                 </button>
-                <button onclick="switchRole('rider')" id="role-btn-rider" class="role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-1 md:gap-1.5 transition-all duration-200 text-center">
+                <button onclick="switchRole('rider')" id="role-btn-rider" class="role-btn py-1.5 px-0.5 sm:px-1 md:px-3 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-0.5 sm:gap-1 md:gap-1.5 transition-all duration-200 text-center" title="4. ไรเดอร์ส่งของชุมชน">
                     <span class="material-symbols-outlined text-sm md:text-base">two_wheeler</span>
                     <span class="truncate">4. ไรเดอร์</span>
                 </button>
-                <button onclick="switchRole('admin')" id="role-btn-admin" class="role-btn hidden py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-purple-300 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-1 md:gap-1.5 transition-all duration-200 text-center relative">
+                <button onclick="switchRole('admin')" id="role-btn-admin" class="role-btn py-1.5 px-0.5 sm:px-1 md:px-3 md:py-2 rounded-lg md:rounded-xl font-medium text-purple-300 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-0.5 sm:gap-1 md:gap-1.5 transition-all duration-200 text-center relative" title="5. แอดมินส่วนกลาง">
                     <span class="material-symbols-outlined text-sm md:text-base">admin_panel_settings</span>
                     <span class="truncate">5. แอดมิน</span>
                     <span id="role-admin-badge" class="hidden absolute -top-1 -right-1 flex h-3.5 w-3.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-500 text-[8px] text-white font-bold items-center justify-center">!</span></span>
@@ -222,6 +222,31 @@
                             <button type="button" onclick="goToHeroBannerSlide(0)" class="hero-dot active w-5 h-1.5 rounded-full bg-emerald-400 transition-all"></button>
                             <button type="button" onclick="goToHeroBannerSlide(1)" class="hero-dot w-1.5 h-1.5 rounded-full bg-white/50 hover:bg-white transition-all"></button>
                             <button type="button" onclick="goToHeroBannerSlide(2)" class="hero-dot w-1.5 h-1.5 rounded-full bg-white/50 hover:bg-white transition-all"></button>
+                        </div>
+                    </div>
+                <!-- 🛵 RIDER RECRUITMENT BANNER (ขั้นตอนที่ 1: ร่วมทีมไรเดอร์เฮียส่ง) -->
+                <div class="px-3 sm:px-4 pt-2 pb-1">
+                    <div class="bg-gradient-to-r from-slate-900 via-sky-950 to-blue-950 text-white rounded-2xl p-3.5 shadow-md border border-sky-500/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div class="flex items-center gap-3 w-full sm:w-auto">
+                            <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-400 to-blue-600 text-white flex items-center justify-center font-black text-xl shadow-md shrink-0">
+                                🛵
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span class="text-[9px] bg-sky-400 text-slate-950 font-black px-2 py-0.2 rounded-full uppercase">เปิดรับสมัคร</span>
+                                    <span class="text-xs font-black text-sky-200 truncate">ร่วมทีมไรเดอร์ส่งของสดเฮียส่ง</span>
+                                </div>
+                                <p class="text-[11px] text-slate-300 mt-0.5">ค่ารอบเริ่มต้น ฿40/เที่ยว • โบนัสฝนตก • รับเงินไว 0% GP</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                            <button type="button" onclick="openRiderRegisterModal()" class="flex-1 sm:flex-none px-3.5 py-2 bg-gradient-to-r from-sky-400 to-blue-500 hover:from-sky-300 hover:to-blue-400 text-slate-950 font-black rounded-xl text-xs shadow-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                                <span class="material-symbols-outlined text-sm font-bold">how_to_reg</span>
+                                <span>สมัครเป็นไรเดอร์</span>
+                            </button>
+                            <button type="button" onclick="switchRole('rider')" class="flex-1 sm:flex-none px-3 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs border border-white/20 flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                                <span>เข้าสู่ระบบรับงาน</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -937,6 +962,25 @@
                             </button>
                         </div>
                     </div>
+
+                    <!-- Cross-Role Actions on Tracking Screen (เชื่อมโยงไปยัง Role 4 และ Role 2) -->
+                    <div class="bg-slate-100/90 rounded-2xl p-2.5 border border-slate-200/80 flex items-center justify-between gap-1.5 flex-wrap text-xs">
+                        <span class="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-xs text-sky-600">swap_horiz</span>
+                            <span>มุมมองจำลอง:</span>
+                        </span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <button type="button" onclick="switchRole('rider')" class="px-2.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-[11px] shadow-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="สลับไปดูหน้าจอของไรเดอร์คนนี้ (Role 4)">
+                                <span class="material-symbols-outlined text-xs">two_wheeler</span>
+                                <span>🛵 มุมมองไรเดอร์ (Role 4)</span>
+                            </button>
+                            <button type="button" onclick="switchRole('hub')" class="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-[11px] shadow-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="สลับไปดูใบจัดของที่ฮับ (Role 2)">
+                                <span class="material-symbols-outlined text-xs">inventory_2</span>
+                                <span>📦 มุมมองฮับ (Role 2)</span>
+                            </button>
+                            <button type="button" onclick="switchRole('admin')" class="px-2.5 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-[11px] shadow-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="สลับไปดูศูนย์แอดมิน (Role 5)">
+                                <span class="material-symbols-outlined text-xs">admin_panel_settings</span>
+                                <span>🔑 แอดมิน (Role 5)</span>
                             </button>
                         </div>
                     </div>
@@ -1253,6 +1297,32 @@
                 </div>
             </div>
 
+            <!-- Cross-Role Quick Navigation Bar for Rider (เชื่อมโยงไปยังทุกบทบาท) -->
+            <div class="bg-slate-900 text-slate-300 px-3 py-2 border-b border-slate-800 flex items-center justify-between gap-2 overflow-x-auto text-[11px] shrink-0">
+                <div class="flex items-center gap-1 shrink-0 text-slate-400 font-bold">
+                    <span class="material-symbols-outlined text-xs text-sky-400">sync_alt</span>
+                    <span>สลับบทบาท:</span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="switchRole('customer')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95" title="1. สลับไปสั่งของสด">
+                        <span class="material-symbols-outlined text-xs text-emerald-400">shopping_cart</span>
+                        <span>1. ลูกค้า</span>
+                    </button>
+                    <button type="button" onclick="switchRole('hub')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95" title="2. สลับไปศูนย์จัดของฮับ">
+                        <span class="material-symbols-outlined text-xs text-amber-400">inventory_2</span>
+                        <span>2. จัดส่ง</span>
+                    </button>
+                    <button type="button" onclick="switchRole('merchant')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95" title="3. สลับไปหน้าร้านแผงค้า">
+                        <span class="material-symbols-outlined text-xs text-orange-400">store</span>
+                        <span>3. แผงค้า</span>
+                    </button>
+                    <button type="button" onclick="goToAdminRiderSettlement()" class="px-2.5 py-1 bg-gradient-to-r from-purple-800 to-indigo-800 hover:from-purple-700 hover:to-indigo-700 text-white border border-purple-400/40 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95 shadow-2xs" title="5. ไปหน้าแอดมินเพื่อเคลียร์เงิน COD & รับค่ารอบ">
+                        <span class="material-symbols-outlined text-xs text-purple-300">payments</span>
+                        <span>5. แอดมิน (เคลียร์ COD)</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Rider Content -->
             <div class="p-3.5 sm:p-4 flex-1 overflow-y-auto space-y-3.5 pb-20 text-xs max-w-3xl mx-auto w-full">
                 <!-- Active Task Card -->
@@ -1361,12 +1431,20 @@
                                 <span>จัดส่งมอบสำเร็จเรียบร้อย (+฿40 ค่ารอบ)</span>
                             </div>
                             <p class="text-xs text-emerald-100 font-medium">ลูกค้าตรวจรับของสดและเปิดให้รีวิวความสดสะสมแต้มแล้ว</p>
-                            <div class="flex items-center gap-2 pt-1">
-                                <button type="button" onclick="goToCustomerTrackingFromRiderComplete()" class="flex-1 py-2.5 px-3 bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all">
-                                    <span class="material-symbols-outlined text-base text-emerald-600">visibility</span>
-                                    <span>ดูหน้าจอลูกค้า (Customer Tracking)</span>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1">
+                                <button type="button" onclick="goToAdminRiderSettlement()" class="py-2.5 px-2 bg-gradient-to-r from-purple-800 to-indigo-900 hover:from-purple-900 hover:to-indigo-950 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer" title="นำส่งเงินสด COD ให้แอดมิน">
+                                    <span class="material-symbols-outlined text-xs">payments</span>
+                                    <span>5. เคลียร์ COD</span>
                                 </button>
-                                <button type="button" onclick="resetRiderOrderForNextJob()" class="py-2.5 px-3 bg-emerald-950/50 hover:bg-emerald-950/70 text-white font-bold rounded-xl text-xs border border-white/30 active:scale-95 transition-all">
+                                <button type="button" onclick="goToCustomerTrackingFromRiderComplete()" class="py-2.5 px-2 bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer" title="ดูหน้าจอลูกค้า">
+                                    <span class="material-symbols-outlined text-xs text-emerald-700">visibility</span>
+                                    <span>1. จอลูกค้า</span>
+                                </button>
+                                <button type="button" onclick="printThermalRiderOrderSlip()" class="py-2.5 px-2 bg-sky-100 hover:bg-sky-200 text-sky-900 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="พิมพ์สลิป 80mm">
+                                    <span class="material-symbols-outlined text-xs">receipt_long</span>
+                                    <span>สลิป 80mm</span>
+                                </button>
+                                <button type="button" onclick="resetRiderOrderForNextJob()" class="py-2.5 px-2 bg-emerald-950/60 hover:bg-emerald-950/80 text-white font-bold rounded-xl text-xs border border-white/30 active:scale-95 transition-all cursor-pointer">
                                     <span>รับงานถัดไป</span>
                                 </button>
                             </div>
@@ -1374,11 +1452,25 @@
                     </div>
                 </div>
 
-                <!-- Back to Customer View -->
-                <button type="button" onclick="switchRole('customer'); goToTrackingScreen();" class="w-full p-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs">
-                    <span class="material-symbols-outlined text-base">arrow_back</span>
-                    <span>สลับกลับไปหน้าจอลูกค้า (Customer Tracking)</span>
-                </button>
+                <!-- Bottom Multi-Role Switcher for Rider -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button type="button" onclick="switchRole('customer'); goToTrackingScreen();" class="p-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs" title="สลับกลับไปหน้าจอลูกค้า">
+                        <span class="material-symbols-outlined text-base text-emerald-600">shopping_cart</span>
+                        <span>1. หน้าจอลูกค้า</span>
+                    </button>
+                    <button type="button" onclick="switchRole('hub')" class="p-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs" title="สลับไปศูนย์จัดของฮับ">
+                        <span class="material-symbols-outlined text-base text-amber-600">inventory_2</span>
+                        <span>2. ศูนย์จัดของฮับ</span>
+                    </button>
+                    <button type="button" onclick="switchRole('merchant')" class="p-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs" title="สลับไปหน้าร้านค้า">
+                        <span class="material-symbols-outlined text-base text-orange-600">store</span>
+                        <span>3. หน้าร้านแผงค้า</span>
+                    </button>
+                    <button type="button" onclick="goToAdminRiderSettlement()" class="p-3 bg-purple-50 hover:bg-purple-100 text-purple-900 font-extrabold rounded-2xl border border-purple-200 shadow-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs" title="สลับไปหน้าแอดมิน">
+                        <span class="material-symbols-outlined text-base text-purple-700">admin_panel_settings</span>
+                        <span>5. แอดมิน (เคลียร์เงิน)</span>
+                    </button>
+                </div>
             </div>
         </section>
 
@@ -3364,21 +3456,41 @@
             <!-- Order Details Card -->
             <div class="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-3.5 space-y-2">
                 <div class="flex items-center justify-between">
-                    <span class="font-extrabold text-slate-900 text-xs" id="rider-complete-order-id">ออเดอร์ #TH-xxxx</span>
-                    <span class="text-[10px] bg-emerald-600 text-white font-extrabold px-2 py-0.5 rounded-full">✓ จัดส่งแล้ว</span>
+                    <span class="font-extrabold text-slate-900 text-xs" id="rdc-order-id">#TH-9999</span>
+                    <span id="rider-complete-order-id" class="hidden">#TH-9999</span>
+                    <span class="text-[10px] bg-emerald-600 text-white font-extrabold px-2 py-0.5 rounded-full">✓ จัดส่งสำเร็จแล้ว</span>
                 </div>
                 <div class="text-[11px] text-slate-600 space-y-1 pt-1 border-t border-emerald-200/60">
                     <div class="flex justify-between">
                         <span>ผู้รับสินค้า:</span>
-                        <strong class="text-slate-800" id="rider-complete-customer-name">ลูกค้า</strong>
+                        <strong class="text-slate-800" id="rdc-customer-name">ลูกค้า</strong>
+                        <span id="rider-complete-customer-name" class="hidden">ลูกค้า</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>เบอร์โทรศัพท์:</span>
+                        <strong class="text-slate-800 font-mono" id="rdc-customer-phone">-</strong>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>ที่อยู่จัดส่ง:</span>
+                        <span class="text-slate-700 text-right truncate max-w-[180px]" id="rdc-customer-address">อำเภอบ้านบึง ชลบุรี</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>วิธีชำระ:</span>
+                        <strong class="text-slate-800" id="rdc-payment-desc">พร้อมเพย์</strong>
                     </div>
                     <div class="flex justify-between">
                         <span>ยอดชำระ:</span>
-                        <strong class="text-emerald-800 font-bold" id="rider-complete-payment-info">฿185 (จ่ายแล้ว)</strong>
+                        <strong class="text-emerald-800 font-bold" id="rdc-order-amount">฿185</strong>
+                        <span id="rider-complete-payment-info" class="hidden">฿185</span>
                     </div>
-                    <div id="rider-complete-refund-row" class="flex justify-between text-amber-700 font-bold hidden">
-                        <span>เงินสดทอนใส่ซองแนบถุง:</span>
-                        <span id="rider-complete-refund-amount">฿0</span>
+                    <div class="flex justify-between text-slate-500 text-[10px]">
+                        <span>เวลาส่งมอบสำเร็จ:</span>
+                        <span id="rdc-delivered-time">-</span>
+                    </div>
+                    <div id="rdc-refund-box" class="flex justify-between text-amber-700 font-bold hidden bg-amber-50 p-1.5 rounded-lg border border-amber-200">
+                        <span>✉️ มีเงินทอนใส่ซองแนบถุง:</span>
+                        <span id="rdc-refund-amount">฿0</span>
+                        <span id="rider-complete-refund-row" class="hidden"><span id="rider-complete-refund-amount">฿0</span></span>
                     </div>
                 </div>
             </div>
@@ -3389,14 +3501,24 @@
                 <div class="text-lg font-black">+฿40 ค่ารอบจัดส่ง</div>
             </div>
 
-            <!-- Action Buttons -->
+            <!-- Cross-Role Collaborative Action Buttons -->
             <div class="space-y-2 pt-1">
-                <button type="button" onclick="goToCustomerTrackingFromRiderComplete()" class="w-full py-2.5 px-3 bg-slate-900 hover:bg-black text-white font-extrabold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
-                    <span class="material-symbols-outlined text-sm">visibility</span>
-                    <span>ดูหน้าจอลูกค้า (Customer Tracking)</span>
+                <button type="button" onclick="goToAdminRiderSettlementFromComplete()" class="w-full py-2.5 px-3 bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white font-extrabold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">payments</span>
+                    <span>1. ไปหน้าแอดมิน (Role 5) เคลียร์ COD & ค่ารอบ</span>
                 </button>
-                <button type="button" onclick="closeRiderDeliveryCompleteModal()" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all text-center cursor-pointer">
-                    ปิดหน้าต่าง / สแตนด์บายรับงานถัดไป
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" onclick="goToCustomerTrackingFromRiderComplete()" class="py-2.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-xs">visibility</span>
+                        <span>2. จอลูกค้า (Role 1)</span>
+                    </button>
+                    <button type="button" onclick="printThermalRiderOrderSlip()" class="py-2.5 px-2 bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-xs">receipt_long</span>
+                        <span>3. สลิป 80mm</span>
+                    </button>
+                </div>
+                <button type="button" onclick="resetRiderOrderForNextJob()" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all text-center cursor-pointer">
+                    4. สแตนด์บายรับงานรอบถัดไป
                 </button>
             </div>
         </div>
@@ -3992,6 +4114,18 @@
                         </div>
                     </div>
 
+                    <!-- Fast Test Fill Button (1-Click Sample Data) -->
+                    <div class="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-2xl p-2.5 shadow-2xs">
+                        <div class="flex items-center gap-1.5 text-[11px] font-bold text-amber-900">
+                            <span class="material-symbols-outlined text-amber-600 text-sm">flash_on</span>
+                            <span>โหมดทดสอบ: เติมข้อมูลตัวอย่างอัตโนมัติ</span>
+                        </div>
+                        <button type="button" onclick="fillSampleRiderRegistration()" class="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black rounded-xl text-[11px] shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="กรอกข้อมูลตัวอย่างให้ครบทุกช่องทันที">
+                            <span class="material-symbols-outlined text-xs">auto_fix_high</span>
+                            <span>⚡ เติมข้อมูลทดสอบด่วน</span>
+                        </button>
+                    </div>
+
                     <form id="rider-register-form" onsubmit="handleRiderRegisterSubmit(event)" novalidate class="space-y-4">
                         <!-- Section 1: Personal Info -->
                         <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
@@ -4251,34 +4385,43 @@
                             <span>เลือกดำเนินการส่งต่อไปยังขั้นตอนต่อไป:</span>
                         </div>
 
-                        <!-- Button 1: Go to Admin to Approve (Fast track for Admin / tester) -->
+                        <!-- Button 1: Go to Admin to Approve (Role 5) -->
                         <button type="button" onclick="goToAdminToApproveRiderFromSuccess()" class="w-full p-3 bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:from-purple-800 hover:to-indigo-800 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-base">admin_panel_settings</span>
-                            <span>1. ไปยังหน้าจอแอดมินเพื่อตรวจสอบและกดอนุมัติ (Admin Console)</span>
+                            <span>1. ไปหน้าแอดมิน (Role 5) เพื่อตรวจสอบ & กดอนุมัติ</span>
                         </button>
 
-                        <!-- Fast Track: Instant Approve & Login for tester/admin -->
+                        <!-- Button 2: Fast Track Instant Approve & Login to Role 4 -->
                         <button type="button" onclick="approveAndLoginCurrentSubmittedRider()" class="w-full p-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer" title="อนุมัติใบสมัครนี้ทันทีและสลับเข้าสู่ระบบรับงาน">
                             <span class="material-symbols-outlined text-base font-bold">verified</span>
-                            <span>⚡ อนุมัติใบสมัครนี้ทันที & สลับเข้าระบบรับงาน (One-Click Approve)</span>
+                            <span>⚡ 2. อนุมัติทันที & สลับเข้ารับงาน (Role 4 Fast-Track)</span>
                         </button>
 
-                        <!-- Button 2: Check Approval Status & Login -->
-                        <button type="button" onclick="checkCurrentRiderApprovalAndLogin()" class="w-full p-3 bg-gradient-to-r from-sky-500 via-blue-600 to-sky-600 hover:from-sky-600 hover:to-blue-700 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer">
+                        <!-- Button 3: Check Approval Status & Login -->
+                        <button type="button" onclick="checkCurrentRiderApprovalAndLogin()" class="w-full p-2.5 bg-gradient-to-r from-sky-500 via-blue-600 to-sky-600 hover:from-sky-600 hover:to-blue-700 text-white rounded-2xl font-black text-xs shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-base">check_circle</span>
-                            <span>2. ตรวจสอบสถานะการอนุมัติ / ถ้าอนุมัติแล้วให้เข้าสู่ระบบรับงานทันที</span>
+                            <span>3. ตรวจสอบสถานะการอนุมัติ / ล็อกอินรับงาน</span>
                         </button>
 
-                        <!-- Button 3: Go to Rider Login Modal -->
-                        <button type="button" onclick="closeRiderRegisterModal(); openRiderLoginModal();" class="w-full p-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-2xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all">
-                            <span class="material-symbols-outlined text-sm">login</span>
-                            <span>3. ไปที่ปุ่ม 4. ไรเดอร์ เพื่อเข้าสู่ระบบรับงาน</span>
-                        </button>
-
-                        <!-- Button 4: Back to Home -->
-                        <button type="button" onclick="closeRiderRegisterModal(); goToMarketScreen();" class="w-full p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs active:scale-95 transition-all">
-                            <span>กลับสู่หน้าหลักตลาดวิศิษฐ์ชัย</span>
-                        </button>
+                        <!-- Multi-role Quick Switches (Role 1, 2, 3, 4) -->
+                        <div class="grid grid-cols-2 gap-2 pt-1 text-xs">
+                            <button type="button" onclick="closeRiderRegisterModal(); switchRole('customer'); goToMarketScreen();" class="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-sm text-emerald-600">shopping_cart</span>
+                                <span>🛒 สั่งของสด (Role 1)</span>
+                            </button>
+                            <button type="button" onclick="closeRiderRegisterModal(); switchRole('hub');" class="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-sm text-amber-600">inventory_2</span>
+                                <span>📦 ศูนย์ฮับ (Role 2)</span>
+                            </button>
+                            <button type="button" onclick="closeRiderRegisterModal(); switchRole('merchant');" class="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-sm text-orange-600">store</span>
+                                <span>🏪 แผงค้า (Role 3)</span>
+                            </button>
+                            <button type="button" onclick="closeRiderRegisterModal(); openStatusCheckModal();" class="p-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-sm text-amber-600">search</span>
+                                <span>🔍 เช็กรหัส SMS</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4323,6 +4466,29 @@
                     <span class="material-symbols-outlined text-sm font-bold">login</span>
                     <span>เข้าสู่ระบบรับงาน (Role 4)</span>
                 </button>
+            </div>
+
+            <!-- Method 2: Quick Rider One-Click List -->
+            <div id="rider-quick-login-list" class="space-y-1.5 pt-1">
+                <!-- Populated dynamically via renderRiderLoginModalList() -->
+            </div>
+
+            <!-- Footer Links connecting other workflows -->
+            <div class="pt-2 border-t border-slate-100 space-y-1.5 text-xs">
+                <button type="button" onclick="closeRiderLoginModal(); openRiderRegisterModal();" class="w-full py-2 bg-slate-100 hover:bg-sky-50 text-sky-800 font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm">how_to_reg</span>
+                    <span>ยังไม่ได้เป็นไรเดอร์? กรอกฟอร์มสมัครที่นี่</span>
+                </button>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button type="button" onclick="closeRiderLoginModal(); openStatusCheckModal();" class="py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-xs">search</span>
+                        <span>เช็กรหัส SMS</span>
+                    </button>
+                    <button type="button" onclick="closeRiderLoginModal(); switchRole('admin');" class="py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-xs">admin_panel_settings</span>
+                        <span>แอดมิน (Role 5)</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -4417,6 +4583,78 @@
             <!-- Result Box -->
             <div id="status-check-result" class="hidden">
                 <!-- Dynamically populated -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- RIDER DELIVERY COMPLETE MODAL (ส่งมอบสำเร็จ)  -->
+    <!-- ========================================== -->
+    <div id="rider-delivery-complete-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 border border-slate-200 text-center animate-scale-up">
+            <div class="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center font-black text-3xl shadow-lg mx-auto animate-bounce">
+                🎉
+            </div>
+            <div>
+                <span class="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1">
+                    ส่งมอบสินค้าสำเร็จ • รับค่ารอบ ฿40
+                </span>
+                <h3 class="font-black text-base text-slate-900" id="rider-complete-order-id">ออเดอร์ OD-xxxx</h3>
+                <p class="text-xs text-slate-500 mt-0.5">สินค้าสดจากตลาดส่งถึงมือลูกค้าเรียบร้อยแล้ว</p>
+            </div>
+
+            <!-- Summary Details Box -->
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-left text-xs space-y-2">
+                <div class="flex items-center justify-between pb-1.5 border-b border-slate-200">
+                    <span class="text-slate-500">ลูกค้าผู้รับของ:</span>
+                    <span id="rider-complete-customer-name" class="font-extrabold text-slate-800">-</span>
+                </div>
+                <div class="flex items-center justify-between pb-1.5 border-b border-slate-200">
+                    <span class="text-slate-500">ยอดชำระ / เก็บเงิน:</span>
+                    <span id="rider-complete-payment-info" class="font-black font-mono text-emerald-700">฿0 (ชำระแล้ว)</span>
+                </div>
+                <div id="rider-complete-refund-row" class="flex items-center justify-between pb-1.5 border-b border-slate-200 text-rose-600 hidden">
+                    <span class="font-bold">✉️ ส่งมอบซองเงินทอน:</span>
+                    <span id="rider-complete-refund-amount" class="font-black font-mono">฿0</span>
+                </div>
+                <div class="flex items-center justify-between text-emerald-800 font-bold">
+                    <span>ค่ารอบที่ได้รับ (รอบนี้):</span>
+                    <span class="font-black text-sm bg-emerald-100 px-2 py-0.5 rounded-lg text-emerald-900">+฿40</span>
+                </div>
+            </div>
+
+            <!-- Next Action Buttons connecting all roles -->
+            <div class="space-y-2 pt-1">
+                <div class="text-[11px] font-bold text-slate-600 text-left">เลือกขั้นตอนถัดไปเชื่อมโยงแต่ละบทบาท:</div>
+                
+                <!-- 1. Go to Admin to clear COD & get delivery fee -->
+                <button type="button" onclick="goToAdminRiderSettlementFromComplete()" class="w-full py-3 bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer">
+                    <span class="material-symbols-outlined text-base">payments</span>
+                    <span>1. ไปหน้าแอดมิน (Role 5) เพื่อเคลียร์เงิน COD & รับค่ารอบ</span>
+                </button>
+
+                <!-- 2. View customer tracking screen -->
+                <button type="button" onclick="closeRiderDeliveryCompleteModal(); switchRole('customer'); goToTrackingScreen();" class="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-base text-emerald-700">visibility</span>
+                    <span>2. ดูหน้าจอติดตามของลูกค้า (Role 1 Customer Tracking)</span>
+                </button>
+
+                <!-- 3. Print thermal slip and Hub dispatch -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" onclick="printThermalRiderOrderSlip()" class="py-2.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-base">receipt_long</span>
+                        <span>พิมพ์สลิป 80mm</span>
+                    </button>
+                    <button type="button" onclick="closeRiderDeliveryCompleteModal(); switchRole('hub');" class="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-base">inventory_2</span>
+                        <span>ไปฮับจัดของ (Role 2)</span>
+                    </button>
+                </div>
+
+                <!-- 4. Next Order -->
+                <button type="button" onclick="resetRiderOrderForNextJob(); closeRiderDeliveryCompleteModal();" class="w-full py-2 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
+                    <span>🛵 เสร็จสิ้น • สแตนด์บายรอรับงานถัดไป (Role 4)</span>
+                </button>
             </div>
         </div>
     </div>

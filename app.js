@@ -3389,12 +3389,18 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
 }
 
 // ── 1. พิมพ์สลิปความร้อน 80mm: เคลียร์เงินไรเดอร์
-function printThermalRiderSlip(riderName, dateKey) {
+function printThermalRiderSlip(riderIdentifier, dateKey) {
     if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
     const report = aggregateDailyOperations(dateKey);
-    const r = report.riderSettlement.riders.find(x => x.riderName === riderName);
+    const cleanId = (riderIdentifier || "").trim();
+    const r = report.riderSettlement.riders.find(x => 
+        x.riderName === cleanId || 
+        x.riderPhone === cleanId || 
+        (x.riderId && x.riderId === cleanId) ||
+        (x.riderPhone && x.riderPhone.replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, ""))
+    );
     if (!r) {
-        showToast("⚠️ ไม่พบข้อมูลไรเดอร์ในวันที่เลือก");
+        showToast("⚠️ ไม่พบข้อมูลการวิ่งงานของไรเดอร์ในวันที่เลือก");
         return;
     }
 
@@ -3447,6 +3453,74 @@ function printThermalRiderSlip(riderName, dateKey) {
 
     executePrintHtml(`สลิปไรเดอร์_${r.riderName}_${dateKey}`, content, true);
 }
+window.printThermalRiderSlip = printThermalRiderSlip;
+
+// ── 1.1 พิมพ์สลิปความร้อน 80mm: ทำเนียบไรเดอร์/บัตรไรเดอร์ (หรือสลิปเคลียร์เงินถอดจาก ID)
+function printThermalRiderSlipFromFleet(riderId) {
+    const riders = loadCommunityRiders();
+    const rider = riders.find(r => r.id === riderId || r.phone === riderId || r.name === riderId);
+    if (!rider) {
+        showToast("⚠️ ไม่พบข้อมูลไรเดอร์ในทะเบียน");
+        return;
+    }
+
+    // ตรวจสอบว่ามีข้อมูลเคลียร์เงินในวันนี้หรือไม่
+    const dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(dateKey);
+    const settledRider = report.riderSettlement.riders.find(r => 
+        r.riderName === rider.name || 
+        r.riderPhone === rider.phone ||
+        r.riderId === rider.id
+    );
+
+    if (settledRider && settledRider.tripsCount > 0) {
+        printThermalRiderSlip(settledRider.riderName, dateKey);
+        return;
+    }
+
+    // หากยังไม่มีรอบวิ่งวันนี้ ให้พิมพ์สลิปบัตรประจำตัวและรหัสไรเดอร์ 80mm
+    const thaiDate = formatThaiDateDisplay(dateKey);
+    const printTime = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+    const content = `
+        <div class="slip-brand">
+            <div class="market-name">🏪 ตลาดสดฮับวิศิษฐ์ชัย</div>
+            <div class="market-sub">WISIT CHAI FRESH HUB MARKET</div>
+            <div class="doc-badge">[ บัตรประจำตัว & ข้อมูลไรเดอร์ ]</div>
+        </div>
+        <div class="divider-dashed"></div>
+        <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
+        <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
+        <div class="slip-row"><span class="slip-label">รหัสไรเดอร์:</span><span class="slip-value font-mono font-bold">${rider.id}</span></div>
+        <div class="slip-row"><span class="slip-label">ชื่อไรเดอร์:</span><span class="slip-value font-bold">${rider.name}</span></div>
+        <div class="slip-row"><span class="slip-label">เบอร์โทรศัพท์:</span><span class="slip-value font-mono">${rider.phone}</span></div>
+        <div class="slip-row"><span class="slip-label">ทะเบียนรถ:</span><span class="slip-value font-mono font-bold">${rider.plate || '-'}</span></div>
+        <div class="slip-row"><span class="slip-label">รุ่นจักรยานยนต์:</span><span class="slip-value">${rider.motorcycleModel || '-'}</span></div>
+        <div class="slip-row"><span class="slip-label">พร้อมเพย์:</span><span class="slip-value font-mono">${rider.promptPay || rider.phone || '-'}</span></div>
+        <div class="slip-row"><span class="slip-label">สถานะปัจจุบัน:</span><span class="slip-value font-bold">${rider.status === 'available' ? '🟢 พร้อมรับงาน' : rider.status === 'on_delivery' ? '🟡 กำลังส่งของ' : '🔴 พักรอบ'}</span></div>
+        <div class="settle-box" style="background: #f0fdf4; border-color: #86efac; margin-top: 6px;">
+            <div class="settle-title" style="color: #166534;">รหัสเข้าสู่ระบบไรเดอร์ (PIN)</div>
+            <div class="settle-amount" style="font-family: monospace; font-size: 18px; letter-spacing: 2px;">${rider.accessCode || rider.pin || rider.id.slice(-6).toUpperCase()}</div>
+            <div class="settle-sub">ใช้รหัส 6 หลักนี้เพื่อ Login เข้า Role 4 ไรเดอร์</div>
+        </div>
+        <div class="divider-dashed" style="margin-top: 8px;"></div>
+        <div class="slip-footer">
+            <div>ฮับตลาดวิศิษฐ์ชัย • ศูนย์บริการจัดส่งสินค้าสด</div>
+            <div>ติดต่อผู้จัดการฮับ: 089-123-4567</div>
+        </div>
+    `;
+    executePrintHtml(`บัตรไรเดอร์_${rider.name}`, content, true);
+}
+window.printThermalRiderSlipFromFleet = printThermalRiderSlipFromFleet;
+
+// ── 1.2 พิมพ์สลิปความร้อน 80mm: ออเดอร์ปัจจุบันที่ไรเดอร์กำลังส่ง
+function printThermalRiderOrderSlip() {
+    if (state.activeOrder && state.activeOrder.orderId) {
+        printThermalOrderSlip(state.activeOrder.orderId);
+    } else {
+        showToast("⚠️ ไม่พบข้อมูลออเดอร์ปัจจุบันที่กำลังนำส่ง");
+    }
+}
+window.printThermalRiderOrderSlip = printThermalRiderOrderSlip;
 
 // ── 2. พิมพ์สลิปความร้อน 80mm: เคลียร์เงินแผงค้า/ร้านค้า
 function printThermalVendorSlip(stallId, dateKey) {
@@ -9767,14 +9841,13 @@ function setActiveRoleView(role) {
         updateRiderRoleButtonUI();
     }
 
-    // Sync admin button in the role selector bar
+    // Keep admin button visible in the 5-role bar and sync badges
     const adminBtnInBar = document.getElementById("role-btn-admin");
     if (adminBtnInBar) {
-        if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
-            adminBtnInBar.classList.remove("hidden");
-        } else {
-            adminBtnInBar.classList.add("hidden");
-        }
+        adminBtnInBar.classList.remove("hidden");
+    }
+    if (typeof updateAdminRiderBadges === "function") {
+        updateAdminRiderBadges();
     }
 
     if (role === "hub") {
@@ -11061,6 +11134,102 @@ function formatRiderAppDate(isoStr) {
 }
 
 let _lastSubmittedRiderApp = null;
+
+// ── เติมข้อมูลผู้สมัครตัวอย่างด่วน (1-Click Sample Data for Testing)
+function fillSampleRiderRegistration() {
+    const fn = document.getElementById("reg-rider-fullname");
+    if (fn) fn.value = "สมชาย ขยันส่ง";
+    const nn = document.getElementById("reg-rider-nickname");
+    if (nn) nn.value = "พี่ชาย";
+    const ph = document.getElementById("reg-rider-phone");
+    if (ph) ph.value = "089-555-1234";
+    const ln = document.getElementById("reg-rider-line");
+    if (ln) ln.value = "somchai_rider";
+    const ic = document.getElementById("reg-rider-idcard");
+    if (ic) ic.value = "1100500123456";
+    const addr = document.getElementById("reg-rider-address");
+    if (addr) addr.value = "12/4 ซอยเทศบาล 5 ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี";
+    const model = document.getElementById("reg-rider-model");
+    if (model) model.value = "Honda Wave 110i";
+    const color = document.getElementById("reg-rider-color");
+    if (color) color.value = "แดง-ดำ";
+    const plate = document.getElementById("reg-rider-plate");
+    if (plate) plate.value = "1กข 8899 ชลบุรี";
+    const lic = document.getElementById("reg-rider-license");
+    if (lic) lic.value = "66001234 (ตลอดชีพ)";
+
+    const zn = document.getElementById("reg-rider-zone");
+    if (zn) zn.value = "รอบตลาดสด และ ต.บ้านบึง ทุกซอย";
+
+    const s1 = document.getElementById("reg-shift-morning");
+    if (s1) s1.checked = true;
+    const s2 = document.getElementById("reg-shift-noon");
+    if (s2) s2.checked = true;
+
+    const eq1 = document.getElementById("reg-eq-bag");
+    if (eq1) eq1.checked = true;
+    const eq2 = document.getElementById("reg-eq-mount");
+    if (eq2) eq2.checked = true;
+    const eq3 = document.getElementById("reg-eq-strap");
+    if (eq3) eq3.checked = true;
+    const eq4 = document.getElementById("reg-eq-helmet");
+    if (eq4) eq4.checked = true;
+
+    const pp = document.getElementById("reg-rider-promptpay");
+    if (pp) {
+        pp.value = "089-555-1234";
+        pp.dataset.autoFilled = "false";
+    }
+    const bank = document.getElementById("reg-rider-bank");
+    if (bank) bank.value = "ธ.กสิกรไทย (KBANK)";
+
+    showToast("⚡ เติมข้อมูลผู้สมัครตัวอย่างเรียบร้อย! สามารถกดส่งใบสมัครได้ทันที");
+}
+window.fillSampleRiderRegistration = fillSampleRiderRegistration;
+
+// ── สลับมุมมองไปหน้าแอดมิน (Role 5) เพื่อเคลียร์เงิน COD & ค่ารอบไรเดอร์
+function goToAdminRiderSettlementFromComplete() {
+    if (typeof closeRiderDeliveryCompleteModal === "function") {
+        closeRiderDeliveryCompleteModal();
+    }
+    const riderId = state.activeRider ? state.activeRider.riderId : null;
+    goToAdminRiderSettlement(riderId);
+}
+window.goToAdminRiderSettlementFromComplete = goToAdminRiderSettlementFromComplete;
+
+function goToAdminRiderSettlement(riderId) {
+    // 1. ตรวจสอบสถานะการเข้าสู่ระบบแอดมิน (Auto-login เพื่อความราบรื่นในการทดสอบ)
+    if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
+        state.activeAdmin = {
+            isLoggedIn: true,
+            name: "เฮียส่ง",
+            role: "Super Admin",
+            loggedInAt: Date.now()
+        };
+        saveAdminToStorage(state.activeAdmin);
+    }
+    renderAuthHeaderButtons();
+
+    // 2. สลับไปมุมมองแอดมิน Role 5
+    setActiveRoleView("admin");
+
+    // 3. สลับไปยังแท็บไรเดอร์ และซับแท็บเคลียร์เงิน COD
+    switchAdminTab("riders");
+    if (typeof switchAdminRiderSubTab === "function") {
+        switchAdminRiderSubTab("settlements");
+    }
+
+    showToast("💰 เข้าสู่หน้าเคลียร์เงินสด COD & ค่ารอบไรเดอร์ (Role 5)");
+
+    // 4. เลื่อนจอไปยังส่วนรายการเคลียร์เงิน
+    setTimeout(() => {
+        const settleSection = document.getElementById("admin-rider-subtab-settlements");
+        if (settleSection) {
+            settleSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }, 250);
+}
+window.goToAdminRiderSettlement = goToAdminRiderSettlement;
 
 function openRiderRegisterModal() {
     const modal = document.getElementById("rider-register-modal");
@@ -15445,10 +15614,53 @@ function assignSampleOrderToRider() {
 window.assignSampleOrderToRider = assignSampleOrderToRider;
 
 // Rider Login & Logout
+function renderRiderLoginModalList() {
+    const container = document.getElementById("rider-quick-login-list");
+    if (!container) return;
+
+    const riders = loadCommunityRiders();
+    if (!riders || riders.length === 0) {
+        container.innerHTML = `
+            <div class="p-3 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 text-xs">
+                <div>ยังไม่มีรายชื่อไรเดอร์ที่อนุมัติในระบบ</div>
+                <button type="button" onclick="closeRiderLoginModal(); openRiderRegisterModal();" class="mt-1.5 text-sky-600 font-bold underline hover:text-sky-800 cursor-pointer">
+                    + สมัครเป็นไรเดอร์ใหม่ทันที
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    let html = "";
+    riders.forEach(r => {
+        const code = r.accessCode || r.pin || r.id.slice(-6).toUpperCase();
+        html += `
+            <div class="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-sky-50/80 rounded-2xl border border-slate-200 transition-all">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-sm shrink-0">
+                        🛵
+                    </div>
+                    <div class="text-left">
+                        <div class="font-extrabold text-xs text-slate-900">${r.name}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">รหัส: <strong class="text-sky-700 font-bold">${code}</strong> • ทะเบียน: ${r.plate || '-'}</div>
+                    </div>
+                </div>
+                <button type="button" onclick="loginRiderWithProfile(loadCommunityRiders().find(x => x.id === '${r.id}'))" class="px-3 py-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
+                    เข้าสู่ระบบ
+                </button>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+window.renderRiderLoginModalList = renderRiderLoginModalList;
+
 function openRiderLoginModal() {
     const modal = document.getElementById("rider-login-modal");
     if (!modal) return;
     modal.classList.remove("hidden");
+
+    renderRiderLoginModalList();
 
     const phoneInput = document.getElementById("rider-login-phone-input");
     if (phoneInput) {
@@ -15593,6 +15805,233 @@ function updateRiderRoleButtonUI() {
 }
 window.updateRiderRoleButtonUI = updateRiderRoleButtonUI;
 
+// ── ไรเดอร์กด Step 1: รับของแล้ว ออกเดินทางส่งของสด ──────────────────────────────
+function handleRiderStartDelivery() {
+    if (!state.activeOrder) {
+        assignSampleOrderToRider();
+    }
+
+    const timeStr = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.";
+    state.activeOrder.status = "delivering";
+    state.activeOrder.startedDeliveryAt = timeStr;
+
+    // ซิงค์ชื่อและเบอร์ไรเดอร์
+    if (state.activeRider && state.activeRider.isLoggedIn) {
+        state.activeOrder.riderName = state.activeRider.name;
+        state.activeOrder.riderPhone = state.activeRider.phone;
+        state.activeOrder.riderPlate = state.activeRider.license;
+    }
+
+    // อัปเดตสถานะไรเดอร์ในทำเนียบกองยานเป็น on_delivery
+    try {
+        const riders = loadCommunityRiders();
+        const curRider = riders.find(r => 
+            (state.activeRider && (r.id === state.activeRider.riderId || r.phone === state.activeRider.phone)) ||
+            r.name === state.activeOrder.riderName
+        );
+        if (curRider) {
+            curRider.status = "on_delivery";
+            saveCommunityRiders(riders);
+        }
+    } catch(e) {}
+
+    saveActiveOrderToStorage(state.activeOrder);
+
+    // Render ทุกมุมมองที่เกี่ยวข้อง
+    renderRiderScreen();
+    if (typeof renderTrackingScreen === "function") renderTrackingScreen();
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
+    if (typeof initAdminRiderRadarMap === "function") initAdminRiderRadarMap();
+
+    showToast("🛵 ไรเดอร์รับของแล้ว ออกเดินทางส่งของสด! ลูกค้าสามารถติดตาม GPS ได้แบบเรียลไทม์");
+}
+window.handleRiderStartDelivery = handleRiderStartDelivery;
+
+// ── ไรเดอร์กด Step 2: ส่งมอบสำเร็จ (ถึงหน้าบ้านลูกค้า) ──────────────────────────
+function handleRiderCompleteDelivery() {
+    if (!state.activeOrder) {
+        showToast("⚠️ ไม่มีออเดอร์ที่กำลังนำส่ง");
+        return;
+    }
+
+    const timeStr = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.";
+    state.activeOrder.status = "delivered";
+    state.activeOrder.deliveredAt = timeStr;
+
+    // คืนสถานะไรเดอร์กลับมาเป็น available
+    let riderName = state.activeOrder.riderName || (state.activeRider ? state.activeRider.name : "ไรเดอร์");
+    let riderPhone = state.activeOrder.riderPhone || (state.activeRider ? state.activeRider.phone : "-");
+    try {
+        const riders = loadCommunityRiders();
+        const curRider = riders.find(r => 
+            (state.activeRider && (r.id === state.activeRider.riderId || r.phone === state.activeRider.phone)) ||
+            r.name === riderName
+        );
+        if (curRider) {
+            curRider.status = "available";
+            saveCommunityRiders(riders);
+        }
+    } catch(e) {}
+
+    // บันทึกรายการลงในสรุปผลปฏิบัติงานประจำวัน (Daily Settlements & Reports)
+    try {
+        const dateKey = getReportDateKey(Date.now());
+        const report = aggregateDailyOperations(dateKey);
+        let riderRecord = report.riderSettlement.riders.find(r => r.riderName === riderName || r.riderPhone === riderPhone);
+        const grandTotal = Number(state.activeOrder.grandTotal || state.activeOrder.total || 0);
+        const isCod = (state.activeOrder.paymentType === "cod" || state.activeOrder.paymentType === "cash");
+        const refundAmt = Number(state.activeOrder.refundCashTotal || 0);
+
+        if (!riderRecord) {
+            riderRecord = {
+                riderId: (state.activeRider && state.activeRider.riderId) || `RIDER-${Date.now().toString().slice(-4)}`,
+                riderName: riderName,
+                riderPhone: riderPhone,
+                tripsCount: 1,
+                riderFeeEarned: 40,
+                codCollected: isCod ? grandTotal : 0,
+                refundHanded: refundAmt,
+                netCashToHub: isCod ? (grandTotal - 40 - refundAmt) : (-40),
+                isSettled: false
+            };
+            report.riderSettlement.riders.push(riderRecord);
+        } else {
+            riderRecord.tripsCount = (riderRecord.tripsCount || 0) + 1;
+            riderRecord.riderFeeEarned = (riderRecord.riderFeeEarned || 0) + 40;
+            if (isCod) riderRecord.codCollected = (riderRecord.codCollected || 0) + grandTotal;
+            if (refundAmt > 0) riderRecord.refundHanded = (riderRecord.refundHanded || 0) + refundAmt;
+            riderRecord.netCashToHub = riderRecord.codCollected - riderRecord.riderFeeEarned - (riderRecord.refundHanded || 0);
+        }
+        localStorage.setItem(`talathub_daily_report_${dateKey}`, JSON.stringify(report));
+    } catch(e) {
+        console.warn("Settlement record error:", e);
+    }
+
+    saveActiveOrderToStorage(state.activeOrder);
+
+    renderRiderScreen();
+    if (typeof renderTrackingScreen === "function") renderTrackingScreen();
+    if (typeof renderHubSettlement === "function") renderHubSettlement();
+
+    openRiderDeliveryCompleteModal();
+    showToast("🎉 ส่งมอบของสดถึงมือลูกค้าสำเร็จแล้ว! ได้รับค่ารอบ +฿40");
+}
+window.handleRiderCompleteDelivery = handleRiderCompleteDelivery;
+
+// ── เปิด Modal สรุปส่งของสำเร็จ ─────────────────────────────────────────────
+function openRiderDeliveryCompleteModal() {
+    const modal = document.getElementById("rider-delivery-complete-modal");
+    if (!modal) return;
+
+    const o = state.activeOrder;
+    if (o) {
+        const orderIdEl = document.getElementById("rdc-order-id");
+        const custNameEl = document.getElementById("rdc-customer-name");
+        const custPhoneEl = document.getElementById("rdc-customer-phone");
+        const custAddrEl = document.getElementById("rdc-customer-address");
+        const payDescEl = document.getElementById("rdc-payment-desc");
+        const orderAmtEl = document.getElementById("rdc-order-amount");
+        const deliveredTimeEl = document.getElementById("rdc-delivered-time");
+        const refundBox = document.getElementById("rdc-refund-box");
+        const refundAmtEl = document.getElementById("rdc-refund-amount");
+
+        if (orderIdEl) orderIdEl.textContent = o.orderId || "#TH-9999";
+        if (custNameEl) custNameEl.textContent = o.customerName || "ลูกค้าทั่วไป";
+        if (custPhoneEl) custPhoneEl.textContent = o.customerPhone || "-";
+        if (custAddrEl) custAddrEl.textContent = o.address || "อำเภอบ้านบึง จังหวัดชลบุรี";
+
+        const pType = (o.paymentType || "promptpay").toLowerCase();
+        const isCod = pType === "cod" || pType === "cash";
+        if (payDescEl) payDescEl.textContent = isCod ? "💵 เงินสดปลายทาง (COD)" : "📱 ชำระผ่านระบบแล้ว";
+        if (orderAmtEl) orderAmtEl.textContent = `฿${(o.grandTotal || o.total || 0).toLocaleString()}`;
+        if (deliveredTimeEl) deliveredTimeEl.textContent = o.deliveredAt || (new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.");
+
+        if (refundBox) {
+            if (o.refundCashTotal && o.refundCashTotal > 0) {
+                refundBox.classList.remove("hidden");
+                if (refundAmtEl) refundAmtEl.textContent = `฿${o.refundCashTotal}`;
+            } else {
+                refundBox.classList.add("hidden");
+            }
+        }
+    }
+
+    modal.classList.remove("hidden");
+}
+window.openRiderDeliveryCompleteModal = openRiderDeliveryCompleteModal;
+
+function closeRiderDeliveryCompleteModal() {
+    const modal = document.getElementById("rider-delivery-complete-modal");
+    if (modal) modal.classList.add("hidden");
+}
+window.closeRiderDeliveryCompleteModal = closeRiderDeliveryCompleteModal;
+
+// ── สลับจากหน้าส่งมอบสำเร็จ ไปดูหน้าจอลูกค้า (Role 1) ───────────────────────
+function goToCustomerTrackingFromRiderComplete() {
+    closeRiderDeliveryCompleteModal();
+    setActiveRoleView("customer");
+    if (typeof goToTrackingScreen === "function") {
+        goToTrackingScreen();
+    }
+    if (typeof renderTrackingScreen === "function") {
+        renderTrackingScreen();
+    }
+    showToast("📱 สลับมามุมมองลูกค้า (Role 1) เพื่อดูสถานะรับของสดและรีวิวความสด");
+}
+window.goToCustomerTrackingFromRiderComplete = goToCustomerTrackingFromRiderComplete;
+
+// ── ไรเดอร์รับงานถัดไป (Reset State) ──────────────────────────────────────
+function resetRiderOrderForNextJob() {
+    closeRiderDeliveryCompleteModal();
+    // สร้างออเดอร์ใหม่พร้อมรับงาน
+    assignSampleOrderToRider();
+    showToast("🛵 ไรเดอร์สแตนด์บายพร้อมรับงานรอบถัดไปแล้ว!");
+}
+window.resetRiderOrderForNextJob = resetRiderOrderForNextJob;
+
+// ── มอบหมายงานด่วนจากแผงค้า (Role 3) ให้ไรเดอร์ ──────────────────────────────
+function assignMerchantOrderToRider(expOrderId) {
+    let expressOrders = state.merchantExpressOrders || [];
+    try {
+        if (expressOrders.length === 0) {
+            expressOrders = JSON.parse(localStorage.getItem("hsong_merchant_express_orders") || "[]");
+        }
+    } catch(e) {}
+
+    const exp = expressOrders.find(x => x.orderId === expOrderId) || expressOrders[0];
+    if (!exp) {
+        showToast("⚠️ ไม่พบงานด่วนแผงค้า");
+        return;
+    }
+
+    state.activeOrder = {
+        orderId: exp.orderId,
+        orderType: "MERCHANT_EXPRESS",
+        status: "picking",
+        grandTotal: exp.deliveryFee || 20,
+        total: exp.deliveryFee || 20,
+        deliveryFee: exp.deliveryFee || 20,
+        paymentType: "promptpay",
+        paymentDesc: "แผงค้าชำระแล้ว",
+        customerName: exp.customerName || "ผู้รับพัสดุ",
+        customerPhone: exp.customerPhone || "-",
+        address: exp.address || "อำเภอบ้านบึง ชลบุรี",
+        originStall: exp.originStall,
+        savedAt: Date.now()
+    };
+
+    if (state.activeRider && state.activeRider.isLoggedIn) {
+        state.activeOrder.riderName = state.activeRider.name;
+        state.activeOrder.riderPhone = state.activeRider.phone;
+    }
+
+    saveActiveOrderToStorage(state.activeOrder);
+    setActiveRoleView("rider");
+    renderRiderScreen();
+    showToast(`🛵 มอบหมายงานด่วน ${exp.orderId} เข้าคิวไรเดอร์เรียบร้อย!`);
+}
+window.assignMerchantOrderToRider = assignMerchantOrderToRider;
+
 function renderAuthHeaderButtons() {
     const container = document.getElementById("top-auth-buttons-container");
     if (!container) return;
@@ -15701,14 +16140,13 @@ function renderAuthHeaderButtons() {
         bottomAdminContainer.innerHTML = adminHtml;
     }
 
-    // Sync admin button in the role selector bar
+    // Keep admin button visible in the 5-role bar and sync badges
     const adminBtnInBar = document.getElementById("role-btn-admin");
     if (adminBtnInBar) {
-        if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
-            adminBtnInBar.classList.remove("hidden");
-        } else {
-            adminBtnInBar.classList.add("hidden");
-        }
+        adminBtnInBar.classList.remove("hidden");
+    }
+    if (typeof updateAdminRiderBadges === "function") {
+        updateAdminRiderBadges();
     }
 
     updateCustomerLoyaltyBanner();
