@@ -10025,159 +10025,725 @@ function renderAdminAnalytics() {
     `;
 }
 
-// ── Tab 3: Stalls Directory & Settings
+// ── Tab 3: Stalls Directory, Roster & Merchant Applications
+let _adminStallRosterView = "roster"; // 'roster' | 'applications'
+let _adminMerchantAppFilter = "all"; // 'all' | 'pending' | 'approved' | 'rejected'
+
 function filterAdminStalls(query) {
     _adminStallSearchQuery = (query || "").toLowerCase();
     renderAdminStalls();
 }
+window.filterAdminStalls = filterAdminStalls;
 
 function filterAdminStallsByZone(zone) {
     _adminStallZoneFilter = zone;
     renderAdminStalls();
 }
+window.filterAdminStallsByZone = filterAdminStallsByZone;
+
+function switchAdminStallRosterView(viewKey) {
+    _adminStallRosterView = viewKey;
+    renderAdminStalls();
+}
+window.switchAdminStallRosterView = switchAdminStallRosterView;
+
+function filterAdminMerchantApps(filterKey) {
+    _adminMerchantAppFilter = filterKey;
+    renderAdminStalls();
+}
+window.filterAdminMerchantApps = filterAdminMerchantApps;
 
 function renderAdminStalls() {
     const container = document.getElementById("admin-content-stalls");
     if (!container) return;
+
+    updateAdminStallsBadge();
+    const merchantApps = loadMerchantApplications();
+    const pendingMerchantApps = merchantApps.filter(a => a.status === "pending");
+    const approvedMerchantApps = merchantApps.filter(a => a.status === "approved");
+    const rejectedMerchantApps = merchantApps.filter(a => a.status === "rejected");
+
+    let displayedApps = merchantApps;
+    if (_adminMerchantAppFilter === "pending") displayedApps = pendingMerchantApps;
+    else if (_adminMerchantAppFilter === "approved") displayedApps = approvedMerchantApps;
+    else if (_adminMerchantAppFilter === "rejected") displayedApps = rejectedMerchantApps;
 
     let stalls = ALL_100_STALLS;
     if (_adminStallZoneFilter && _adminStallZoneFilter !== "all") {
         stalls = stalls.filter(s => s.zone === _adminStallZoneFilter);
     }
     if (_adminStallSearchQuery) {
+        const q = _adminStallSearchQuery.toLowerCase();
         stalls = stalls.filter(s =>
-            (s.stallName && s.stallName.toLowerCase().includes(_adminStallSearchQuery)) ||
-            (s.stallNumber && s.stallNumber.toLowerCase().includes(_adminStallSearchQuery)) ||
-            (s.ownerName && s.ownerName.toLowerCase().includes(_adminStallSearchQuery)) ||
-            (s.phone && s.phone.includes(_adminStallSearchQuery))
+            (s.stallName && s.stallName.toLowerCase().includes(q)) ||
+            (s.stallNumber && s.stallNumber.toLowerCase().includes(q)) ||
+            (s.ownerName && s.ownerName.toLowerCase().includes(q)) ||
+            (s.phone && s.phone.includes(q)) ||
+            (s.accessCode && s.accessCode.toLowerCase().includes(q))
         );
-    }
-
-    const merchantApps = loadMerchantApplications();
-    const pendingMerchantApps = merchantApps.filter(a => a.status === "pending");
-    updateAdminStallsBadge();
-
-    let pendingSectionHtml = "";
-    if (pendingMerchantApps.length > 0) {
-        pendingSectionHtml = `
-            <div class="bg-gradient-to-br from-amber-50 to-orange-50/70 border-2 border-amber-300/80 rounded-2xl p-4 space-y-3 shadow-xs">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center text-sm shadow-xs">
-                            ⏳
-                        </span>
-                        <div>
-                            <h4 class="font-black text-sm text-slate-900 flex items-center gap-2">
-                                <span>คำขอเปิดแผงค้าใหม่รอการพิจารณา</span>
-                                <span class="bg-rose-500 text-white text-[10px] font-black px-2 py-0.2 rounded-full">${pendingMerchantApps.length} ร้านค้า</span>
-                            </h4>
-                            <p class="text-[11px] text-slate-500">ตรวจสอบข้อมูลร้านและกดอนุมัติเพื่อสุ่มสร้างรหัส 6 หลักส่งให้ผู้สมัคร</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    ${pendingMerchantApps.map(app => `
-                        <div class="bg-white rounded-xl p-3.5 border border-amber-200 shadow-xs space-y-2">
-                            <div class="flex items-start justify-between gap-2">
-                                <div>
-                                    <div class="flex items-center gap-1.5">
-                                        <span class="text-xs bg-emerald-100 text-emerald-900 font-black px-2 py-0.5 rounded-lg">${app.stallData.stallNumber || 'แผงใหม่'}</span>
-                                        <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">${app.stallData.zone || 'ตลาดสด'}</span>
-                                    </div>
-                                    <h5 class="font-extrabold text-sm text-slate-900 mt-1">${app.stallData.stallName}</h5>
-                                    <div class="text-[11px] text-slate-500">เจ้าของ: <strong>${app.stallData.ownerName}</strong> • โทร: <strong>${app.stallData.phone}</strong></div>
-                                </div>
-                                <img src="${app.stallData.stallImage || 'images/banner_1.jpg'}" class="w-16 h-16 rounded-xl object-cover border border-slate-200 shrink-0">
-                            </div>
-
-                            <div class="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg">
-                                <div><strong>จุดเด่น:</strong> ${app.stallData.highlight || 'ของสดคัดเกรด'}</div>
-                                <div class="truncate text-[10px] text-slate-400 mt-0.5">สินค้า: ${(app.stallData.products || []).map(p => p.name).filter(Boolean).join(', ') || '-'}</div>
-                            </div>
-
-                            <div class="flex items-center gap-2 pt-1">
-                                <button onclick="approveMerchantApplication('${app.id}')" class="flex-1 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer">
-                                    <span class="material-symbols-outlined text-sm">check_circle</span>
-                                    <span>อนุมัติ & สร้างรหัส 6 หลัก</span>
-                                </button>
-                                <button onclick="rejectMerchantApplication('${app.id}')" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
-                                    ปฏิเสธ
-                                </button>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
     }
 
     container.innerHTML = `
         <div class="space-y-4">
-            ${pendingSectionHtml}
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200">
-                <div>
-                    <h3 class="font-extrabold text-base text-slate-800 flex items-center gap-2">
-                        <span class="material-symbols-outlined text-purple-700">storefront</span>
-                        <span>จัดการข้อมูล 100 แผงค้า & เบอร์พร้อมเพย์ (Vendors Directory)</span>
-                    </h3>
-                    <p class="text-xs text-slate-500">ตรวจสอบแผงค้า เจ้าของแผง และเบอร์โทรพร้อมเพย์สำหรับโอนเงินเคลียร์ยอด</p>
+            <!-- Header Box & Segment Controls (Style exactly matching Rider Fleet HR) -->
+            <div class="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                    <div>
+                        <h4 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-purple-600 text-xl">storefront</span>
+                            <span>ศูนย์บริหารงานร้านค้าและทำเนียบแผงค้า (Vendors & Merchant Roster)</span>
+                        </h4>
+                        <p class="text-xs text-slate-500 mt-0.5">จัดการข้อมูล 100 แผงค้าประจำตลาด ตรวจสอบเอกสาร และคัดเลือกใบสมัครเปิดร้านใหม่</p>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button onclick="printA4MerchantDirectory()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์ทำเนียบแผงค้ากระดาษ A4 เข้าแฟ้ม">
+                            <span class="material-symbols-outlined text-sm font-bold text-slate-700">description</span>
+                            <span>📄 พิมพ์ทำเนียบ A4</span>
+                        </button>
+                        <button onclick="registerNewMerchantStall()" class="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold rounded-xl text-xs shadow-sm flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-sm">store</span>
+                            <span>ฟอร์มสมัครร้านค้า</span>
+                        </button>
+                        <button onclick="registerNewMerchantStall()" class="px-3.5 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-sm font-bold">add_business</span>
+                            <span>+ เพิ่มแผงค้าใหม่</span>
+                        </button>
+                    </div>
                 </div>
+
+                <!-- Segment Switcher: ทำเนียบแผงค้า vs ใบสมัครเปิดร้านใหม่ -->
                 <div class="flex items-center gap-2">
-                    <input type="text" oninput="filterAdminStalls(this.value)" value="${_adminStallSearchQuery}" placeholder="🔍 ค้นหาแผงค้า, เลขแผง, เบอร์โทร..." class="border border-slate-300 rounded-xl px-3 py-1.5 text-xs bg-white w-64 focus:ring-2 focus:ring-purple-500 outline-none">
+                    <button onclick="switchAdminStallRosterView('roster')" class="px-4 py-2 rounded-xl font-extrabold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${_adminStallRosterView === 'roster' ? 'bg-purple-700 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        <span class="material-symbols-outlined text-sm">badge</span>
+                        <span>1. ทำเนียบแผงค้าประจำตลาด (${stalls.length} ร้าน)</span>
+                    </button>
+                    <button onclick="switchAdminStallRosterView('applications')" class="px-4 py-2 rounded-xl font-extrabold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${_adminStallRosterView === 'applications' ? 'bg-purple-700 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        <span class="material-symbols-outlined text-sm">assignment</span>
+                        <span>2. ใบสมัครเปิดร้านใหม่ (${merchantApps.length} ใบ)</span>
+                        ${pendingMerchantApps.length > 0 ? `<span class="bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded-full text-[10px] font-black animate-pulse">รอ ${pendingMerchantApps.length}</span>` : ''}
+                    </button>
                 </div>
             </div>
 
-            <div class="flex items-center gap-1.5 overflow-x-auto text-xs pb-1">
-                <button onclick="filterAdminStallsByZone('all')" class="px-3 py-1 rounded-xl font-bold ${_adminStallZoneFilter === 'all' ? 'bg-purple-700 text-white' : 'bg-white text-slate-700 border border-slate-200'}">ทั้งหมด (${ALL_100_STALLS.length})</button>
-                <button onclick="filterAdminStallsByZone('A')" class="px-3 py-1 rounded-xl font-bold ${_adminStallZoneFilter === 'A' ? 'bg-purple-700 text-white' : 'bg-white text-slate-700 border border-slate-200'}">โซน A ไก่/เนื้อ</button>
-                <button onclick="filterAdminStallsByZone('B')" class="px-3 py-1 rounded-xl font-bold ${_adminStallZoneFilter === 'B' ? 'bg-purple-700 text-white' : 'bg-white text-slate-700 border border-slate-200'}">โซน B ผักสด</button>
-                <button onclick="filterAdminStallsByZone('C')" class="px-3 py-1 rounded-xl font-bold ${_adminStallZoneFilter === 'C' ? 'bg-purple-700 text-white' : 'bg-white text-slate-700 border border-slate-200'}">โซน C เครื่องแกง</button>
-                <button onclick="filterAdminStallsByZone('E')" class="px-3 py-1 rounded-xl font-bold ${_adminStallZoneFilter === 'E' ? 'bg-purple-700 text-white' : 'bg-white text-slate-700 border border-slate-200'}">โซน E ซีฟู้ด</button>
-            </div>
+            ${_adminStallRosterView === 'applications' ? `
+                <!-- SUB-VIEW 2: APPLICATIONS LIST (Style matching Rider applications) -->
+                <div class="space-y-3">
+                    <!-- Filter Tabs -->
+                    <div class="flex items-center gap-1.5 overflow-x-auto text-xs pb-0.5">
+                        <button onclick="filterAdminMerchantApps('all')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${_adminMerchantAppFilter === 'all' ? 'bg-purple-700 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                            ทั้งหมด (${merchantApps.length})
+                        </button>
+                        <button onclick="filterAdminMerchantApps('pending')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${_adminMerchantAppFilter === 'pending' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                            ⏳ รออนุมัติ (${pendingMerchantApps.length})
+                        </button>
+                        <button onclick="filterAdminMerchantApps('approved')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${_adminMerchantAppFilter === 'approved' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                            ✓ อนุมัติแล้ว (${approvedMerchantApps.length})
+                        </button>
+                        <button onclick="filterAdminMerchantApps('rejected')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${_adminMerchantAppFilter === 'rejected' ? 'bg-rose-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                            ✕ ปฏิเสธ (${rejectedMerchantApps.length})
+                        </button>
+                    </div>
 
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-xs">
-                        <thead>
-                            <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                                <th class="p-3">เลขแผง / โซน</th>
-                                <th class="p-3">ชื่อร้านค้า</th>
-                                <th class="p-3">เจ้าของแผง</th>
-                                <th class="p-3">เบอร์โทรศัพท์ (พร้อมเพย์)</th>
-                                <th class="p-3 text-center">สถานะ</th>
-                                <th class="p-3 text-center">ทดสอบ QR</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            ${stalls.slice(0, 50).map(s => `
-                            <tr class="hover:bg-slate-50 transition-colors">
-                                <td class="p-3 font-mono font-bold text-slate-700">
-                                    <span class="bg-slate-100 px-2 py-0.5 rounded">${s.stallNumber || 'แผงตลาด'}</span>
-                                    <span class="text-[10px] text-slate-400 ml-1">โซน ${s.zone || '-'}</span>
-                                </td>
-                                <td class="p-3">
-                                    <div class="font-extrabold text-slate-900">${s.stallName}</div>
-                                    <div class="text-[10px] text-slate-400">${s.stallTag || s.category || ''}</div>
-                                </td>
-                                <td class="p-3 text-slate-700 font-medium">${s.ownerName || 'เจ้าของแผง'}</td>
-                                <td class="p-3 font-mono font-bold text-emerald-700">📱 ${s.phone || '089-123-4567'}</td>
-                                <td class="p-3 text-center">
-                                    <span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">เปิดทำการ</span>
-                                </td>
-                                <td class="p-3 text-center">
-                                    <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', 500, '${s.phone || '089-123-4567'}', '${s.ownerName || 'เจ้าของแผง'}', '${s.stallNumber || 'แผงตลาด'}')" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all">
-                                        เปิด QR โอน
+                    <!-- Applications Cards List -->
+                    ${displayedApps.length === 0 ? `
+                        <div class="py-12 px-4 bg-white border border-dashed border-slate-200 rounded-3xl text-center space-y-2">
+                            <span class="material-symbols-outlined text-4xl text-slate-300">inbox</span>
+                            <div class="font-bold text-sm text-slate-700">ไม่มีใบสมัครในหมวดหมู่นี้ในขณะนี้</div>
+                        </div>
+                    ` : displayedApps.map(app => {
+                        const stall = app.stallData || {};
+                        const productsList = (stall.products || []).slice(0, 3).map(p => `<span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold">✓ ${p.name || 'สินค้า'} ฿${p.price || 0}</span>`).join('');
+                        return `
+                        <div id="merchant-app-card-${app.id}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
+                            <!-- Card Header -->
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-11 h-11 rounded-2xl bg-gradient-to-br ${app.status === 'pending' ? 'from-amber-400 to-orange-500' : app.status === 'approved' ? 'from-emerald-500 to-teal-600' : 'from-rose-400 to-red-600'} text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
+                                        🏪
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <span class="font-black text-sm text-slate-900">${stall.stallName || 'แผงค้าใหม่'}</span>
+                                            <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${stall.stallNumber || app.id}</span>
+                                            ${app.status === 'pending' ? `
+                                                <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⏳ รอการอนุมัติ</span>
+                                            ` : app.status === 'approved' ? `
+                                                <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✓ อนุมัติแล้ว</span>
+                                            ` : `
+                                                <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✕ ปฏิเสธ</span>
+                                            `}
+                                            ${app.accessCode ? `
+                                                <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 text-[10px] font-mono font-black px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
+                                                    <span>🔑 รหัส:</span>
+                                                    <span class="tracking-widest">${app.accessCode}</span>
+                                                </span>
+                                            ` : ''}
+                                        </div>
+                                        <div class="text-[11px] text-slate-500 flex items-center gap-2.5 flex-wrap mt-0.5 font-mono">
+                                            <a href="tel:${stall.phone}" class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
+                                                <span class="material-symbols-outlined text-xs">call</span>
+                                                <span>${stall.phone || '-'}</span>
+                                            </a>
+                                            <span>•</span>
+                                            <span class="text-emerald-700 font-bold flex items-center gap-0.5">
+                                                <span class="material-symbols-outlined text-xs">chat</span>
+                                                <span>LINE: ${stall.lineId || stall.phone || '-'}</span>
+                                            </span>
+                                            <span>•</span>
+                                            <span class="text-slate-500 font-sans">เจ้าของ: <strong>${stall.ownerName || '-'}</strong></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Card Actions -->
+                                <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
+                                    <button onclick="printA4MerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
+                                        <span class="material-symbols-outlined text-xs">print</span>
+                                        <span>พิมพ์ A4</span>
                                     </button>
-                                </td>
-                            </tr>`).join("")}
-                        </tbody>
-                    </table>
+                                    <button onclick="viewMerchantAppDetail('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                        <span class="material-symbols-outlined text-xs">visibility</span>
+                                        <span>ดูรายละเอียด</span>
+                                    </button>
+                                    <button onclick="loginAsMerchantStall('${stall.stallId}')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้">
+                                        <span class="material-symbols-outlined text-xs">store</span>
+                                        <span>สลับเข้าร้าน</span>
+                                    </button>
+
+                                    ${app.status === 'pending' ? `
+                                        <button onclick="approveMerchantApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                            <span class="material-symbols-outlined text-xs font-bold">check_circle</span>
+                                            <span>อนุมัติ</span>
+                                        </button>
+                                        <button onclick="rejectMerchantApplication('${app.id}')" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all cursor-pointer">
+                                            ✕ ปฏิเสธ
+                                        </button>
+                                    ` : app.status === 'approved' ? `
+                                        <button onclick="reconsiderMerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="ย้อนสถานะกลับไปรอพิจารณา">
+                                            <span class="material-symbols-outlined text-xs">replay</span>
+                                            <span>รอพิจารณา</span>
+                                        </button>
+                                    ` : `
+                                        <button onclick="reconsiderMerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                            <span class="material-symbols-outlined text-xs">replay</span>
+                                            <span>พิจารณาใหม่</span>
+                                        </button>
+                                    `}
+                                    <button onclick="deleteMerchantApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
+                                        <span class="material-symbols-outlined text-base">delete</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- 4-Column Info Grid (Style matching Rider info grid) -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 bg-slate-50/70 p-3 rounded-xl border border-slate-100 text-xs">
+                                <div class="space-y-1">
+                                    <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                        <span class="material-symbols-outlined text-xs text-emerald-600">storefront</span>
+                                        <span>ข้อมูลแผง & โซน:</span>
+                                    </div>
+                                    <div class="font-extrabold text-slate-800">${stall.stallName || '-'}</div>
+                                    <div class="text-[11px] text-slate-500 font-mono">แผง: <strong class="text-slate-800">${stall.stallNumber || '-'}</strong> • โซน ${stall.zone || '-'}</div>
+                                    <div class="text-[10px] text-slate-400">หมวด: ${stall.category || stall.stallTag || 'ของสด'}</div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                        <span class="material-symbols-outlined text-xs text-amber-600">star</span>
+                                        <span>จุดเด่นร้านค้า:</span>
+                                    </div>
+                                    <div class="font-bold text-slate-700">${stall.highlight || 'ของสดคุณภาพดี'}</div>
+                                    <div class="text-[10px] text-slate-500 line-clamp-2">${stall.description || stall.story || 'ร้านค้าประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)'}</div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                        <span class="material-symbols-outlined text-xs text-purple-600">inventory_2</span>
+                                        <span>สินค้าตัวอย่าง & เมนู:</span>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1">
+                                        ${productsList || '<span class="text-slate-400 text-[10px] italic">- ยังไม่ได้ระบุ -</span>'}
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                        <span class="material-symbols-outlined text-xs text-emerald-600">account_balance_wallet</span>
+                                        <span>บัญชีรับเงินแผงค้า:</span>
+                                    </div>
+                                    <div class="font-mono font-black text-emerald-700">${stall.promptPayNumber || stall.phone || '-'}</div>
+                                    <div class="text-[10px] text-slate-500">ธนาคาร: ${stall.promptPayBank || 'พร้อมเพย์'}</div>
+                                    <div class="text-[10px] text-slate-400">ยื่นเมื่อ: ${formatRiderAppDate(app.appliedAt || app.submittedAt)}</div>
+                                </div>
+                            </div>
+                        </div>
+                        `;
+                    }).join('')}
                 </div>
-            </div>
+            ` : `
+                <!-- SUB-VIEW 1: ACTIVE STALLS DIRECTORY (TABLE & FILTERS) -->
+                <div class="space-y-4">
+                    <!-- Search & Zone Filters -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+                        <div class="flex items-center gap-1.5 overflow-x-auto text-xs pb-1 sm:pb-0">
+                            <button onclick="filterAdminStallsByZone('all')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${_adminStallZoneFilter === 'all' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">ทั้งหมด (${ALL_100_STALLS.length})</button>
+                            <button onclick="filterAdminStallsByZone('A')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${_adminStallZoneFilter === 'A' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">โซน A ไก่/เนื้อ</button>
+                            <button onclick="filterAdminStallsByZone('B')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${_adminStallZoneFilter === 'B' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">โซน B ผักสด</button>
+                            <button onclick="filterAdminStallsByZone('C')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${_adminStallZoneFilter === 'C' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">โซน C เครื่องแกง</button>
+                            <button onclick="filterAdminStallsByZone('E')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${_adminStallZoneFilter === 'E' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">โซน E ซีฟู้ด</button>
+                        </div>
+                        <div class="w-full sm:w-64 relative">
+                            <span class="material-symbols-outlined absolute left-3 top-2 text-slate-400 text-sm">search</span>
+                            <input type="text" oninput="filterAdminStalls(this.value)" value="${_adminStallSearchQuery}" placeholder="ค้นหาแผง, ร้าน, รหัสผ่าน..." class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Stalls Table (with Access Code column) -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead>
+                                    <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                        <th class="p-3">เลขแผง / โซน</th>
+                                        <th class="p-3">ชื่อร้านค้า</th>
+                                        <th class="p-3">เจ้าของแผง</th>
+                                        <th class="p-3">เบอร์โทรศัพท์</th>
+                                        <th class="p-3">รหัสผ่าน 6 หลัก</th>
+                                        <th class="p-3 text-center">สถานะ</th>
+                                        <th class="p-3 text-center">การจัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    ${stalls.slice(0, 60).map(s => `
+                                    <tr class="hover:bg-slate-50 transition-colors">
+                                        <td class="p-3 font-mono font-bold text-slate-700">
+                                            <span class="bg-slate-100 px-2 py-0.5 rounded">${s.stallNumber || 'แผงตลาด'}</span>
+                                            <span class="text-[10px] text-slate-400 ml-1">โซน ${s.zone || '-'}</span>
+                                        </td>
+                                        <td class="p-3">
+                                            <div class="font-extrabold text-slate-900">${s.stallName}</div>
+                                            <div class="text-[10px] text-slate-400">${s.stallTag || s.category || ''}</div>
+                                        </td>
+                                        <td class="p-3 text-slate-700 font-medium">${s.ownerName || 'เจ้าของแผง'}</td>
+                                        <td class="p-3 font-mono font-bold text-emerald-700">📱 ${s.phone || '-'}</td>
+                                        <td class="p-3">
+                                            ${s.accessCode ? `
+                                                <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-lg font-mono font-bold text-xs tracking-wider inline-flex items-center gap-1 cursor-pointer" onclick="navigator.clipboard.writeText('${s.accessCode}'); showToast('📋 คัดลอกรหัส ${s.accessCode} แล้ว');" title="คลิกเพื่อคัดลอกรหัส">
+                                                    <span>🔑</span>
+                                                    <span>${s.accessCode}</span>
+                                                </span>
+                                            ` : `
+                                                <span class="text-slate-400 text-[11px] italic">- ไม่มีรหัส -</span>
+                                            `}
+                                        </td>
+                                        <td class="p-3 text-center">
+                                            <span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">เปิดทำการ</span>
+                                        </td>
+                                        <td class="p-3 text-center">
+                                            <div class="flex items-center justify-center gap-1">
+                                                <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', 500, '${s.phone || '089-123-4567'}', '${s.ownerName || 'เจ้าของแผง'}', '${s.stallNumber || 'แผงตลาด'}')" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
+                                                    QR โอน
+                                                </button>
+                                                <button onclick="loginAsMerchantStall('${s.stallId}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
+                                                    เข้าร้าน
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>`).join("")}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `}
         </div>
     `;
 }
+window.renderAdminStalls = renderAdminStalls;
+
+// ── Merchant Application Detail Modal (Style matching Rider detail modal)
+function viewMerchantAppDetail(appId) {
+    const apps = loadMerchantApplications();
+    const app = apps.find(a => a.id === appId);
+    if (!app) {
+        showToast("⚠️ ไม่พบข้อมูลใบสมัคร (" + (appId || "") + ")");
+        return;
+    }
+
+    const modal = document.getElementById("merchant-app-detail-modal");
+    if (!modal) return;
+
+    const subEl = document.getElementById("merchant-app-detail-sub");
+    if (subEl) subEl.textContent = `${app.id} • ยื่นเมื่อ ${formatRiderAppDate(app.appliedAt || app.submittedAt)}`;
+
+    const body = document.getElementById("merchant-app-detail-body");
+    const footer = document.getElementById("merchant-app-detail-footer");
+
+    const stall = app.stallData || {};
+    let statusBadge = `<span class="bg-amber-100 text-amber-900 border border-amber-300 font-extrabold px-2.5 py-0.5 rounded-full text-xs">⏳ รอการตรวจสอบ & อนุมัติ</span>`;
+    if (app.status === "approved") {
+        statusBadge = `<span class="bg-emerald-100 text-emerald-900 border border-emerald-300 font-extrabold px-2.5 py-0.5 rounded-full text-xs">✓ อนุมัติแล้ว</span>`;
+    } else if (app.status === "rejected") {
+        statusBadge = `<span class="bg-rose-100 text-rose-900 border border-rose-300 font-extrabold px-2.5 py-0.5 rounded-full text-xs">✕ ปฏิเสธ</span>`;
+    }
+
+    if (body) {
+        body.innerHTML = `
+            <!-- Top Shop Profile Card -->
+            <div class="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center font-bold text-2xl shadow-xs">
+                        🏪
+                    </div>
+                    <div>
+                        <h4 class="font-black text-base text-slate-900">${stall.stallName || 'แผงค้าใหม่'}</h4>
+                        <div class="text-slate-500 font-mono text-[11px]">${stall.phone || '-'} • LINE: ${stall.lineId || stall.phone || '-'}</div>
+                    </div>
+                </div>
+                <div>${statusBadge}</div>
+            </div>
+
+            <!-- Prominent Green Box if Approved (EXACT MATCH to Image 2) -->
+            ${app.status === 'approved' ? `
+            <div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 p-3.5 rounded-2xl space-y-2 shadow-xs">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">🔑</span>
+                        <div>
+                            <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">รหัสผ่าน 6 หลักสำหรับเข้าสู่ระบบ (ACCESS CODE)</div>
+                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${app.accessCode || '-'}</div>
+                        </div>
+                    </div>
+                    <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">พร้อมใช้งาน</span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-emerald-200/60">
+                    <button type="button" onclick="sendRealSmsToApplicant('${stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
+                        <span class="material-symbols-outlined text-sm">sms</span>
+                        <span>ส่ง SMS จริง</span>
+                    </button>
+                    <button type="button" onclick="sendLineNotificationToApplicant('${stall.lineId || stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
+                        <span>💬</span>
+                        <span>ส่งแจ้ง LINE</span>
+                    </button>
+                    <button type="button" onclick="copyApprovalNotificationMessage('${stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
+                        <span class="material-symbols-outlined text-sm">content_copy</span>
+                        <span>คัดลอกข้อความ</span>
+                    </button>
+                    <a href="tel:${stall.phone}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
+                        <span class="material-symbols-outlined text-sm">call</span>
+                        <span>โทรหา</span>
+                    </a>
+                </div>
+            </div>
+            ` : ''}
+
+            <!-- 2-Column Info Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                    <div class="text-[10px] font-bold text-slate-400">ข้อมูลแผงค้า & หมวดหมู่</div>
+                    <div class="font-bold text-slate-800">เลขแผง: <span class="font-mono text-slate-700">${stall.stallNumber || '-'}</span></div>
+                    <div class="font-bold text-slate-800">โซน: <span class="font-mono text-purple-700">โซน ${stall.zone || '-'}</span></div>
+                    <div class="text-[11px] text-slate-600 mt-1">จุดเด่น: ${stall.highlight || '-'}</div>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                    <div class="text-[10px] font-bold text-slate-400">ข้อมูลผู้ลงทะเบียน & เจ้าของ</div>
+                    <div class="font-bold text-slate-800">ชื่อเจ้าของ: ${stall.ownerName || '-'}</div>
+                    <div class="font-bold text-slate-800 font-mono">เบอร์โทร: ${stall.phone || '-'}</div>
+                    <div class="text-[11px] text-slate-600 mt-1">LINE ID: ${stall.lineId || stall.phone || '-'}</div>
+                </div>
+            </div>
+
+            <!-- Products / Menu List -->
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+                <div class="text-[10px] font-bold text-slate-400">รายการสินค้าตัวอย่าง & เมนูของร้าน</div>
+                <div class="flex flex-wrap gap-1.5">
+                    ${(stall.products || []).length > 0 ? (stall.products || []).map(p => `
+                        <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px]">✓ ${p.name || 'สินค้า'} (฿${p.price || 0}${p.unit ? `/${p.unit}` : ''})</span>
+                    `).join('') : '<span class="text-slate-400 text-xs italic">- ยังไม่ได้บันทึกสินค้า -</span>'}
+                </div>
+            </div>
+
+            <!-- Payout Account Box -->
+            <div class="bg-emerald-50/70 border border-emerald-200 p-3 rounded-xl flex items-center justify-between">
+                <div>
+                    <div class="text-[10px] font-bold text-emerald-800">บัญชีรับเงินแผงค้า (พร้อมเพย์สำหรับเคลียร์ยอด)</div>
+                    <div class="font-black text-sm text-emerald-950 font-mono">${stall.promptPayNumber || stall.phone || '-'}</div>
+                    <div class="text-[10px] text-emerald-700">ธนาคาร: ${stall.promptPayBank || 'พร้อมเพย์'}</div>
+                </div>
+                <span class="material-symbols-outlined text-2xl text-emerald-600">account_balance</span>
+            </div>
+        `;
+    }
+
+    if (footer) {
+        footer.innerHTML = `
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <button type="button" onclick="openEditMerchantAppModal('${app.id}'); closeMerchantAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลแผงค้านี้">
+                    <span class="material-symbols-outlined text-sm">edit</span>
+                    <span>แก้ไขข้อมูล</span>
+                </button>
+                ${app.status === 'rejected' ? `
+                    <button type="button" onclick="reconsiderMerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">replay</span>
+                        <span>พิจารณาใหม่</span>
+                    </button>
+                ` : app.status === 'approved' ? `
+                    <button type="button" onclick="reconsiderMerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">replay</span>
+                        <span>ย้อนกลับไปรอพิจารณา</span>
+                    </button>
+                ` : ''}
+                <button type="button" onclick="deleteMerchantApplication('${app.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-1.5 flex-wrap">
+                ${app.status === 'pending' ? `
+                    <button type="button" onclick="rejectMerchantApplication('${app.id}')" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                        ปฏิเสธ
+                    </button>
+                    <button type="button" onclick="approveMerchantApplication('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสร้างรหัสผ่าน 6 หลัก">
+                        <span class="material-symbols-outlined text-sm font-bold">check_circle</span>
+                        <span>อนุมัติ & รหัส 6 หลัก</span>
+                    </button>
+                ` : `
+                    <button type="button" onclick="closeMerchantAppDetailModal(); loginAsMerchantStall('${stall.stallId}');" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้ทันที">
+                        <span class="material-symbols-outlined text-sm font-bold">store</span>
+                        <span>เข้าสู่ระบบร้านค้านี้ทันที 🚀</span>
+                    </button>
+                    <button type="button" onclick="closeMerchantAppDetailModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                        ปิดหน้าต่าง
+                    </button>
+                `}
+            </div>
+        `;
+    }
+
+    modal.style.zIndex = "9999";
+    modal.classList.remove("hidden");
+}
+window.viewMerchantAppDetail = viewMerchantAppDetail;
+
+function closeMerchantAppDetailModal() {
+    const modal = document.getElementById("merchant-app-detail-modal");
+    if (modal) modal.classList.add("hidden");
+}
+window.closeMerchantAppDetailModal = closeMerchantAppDetailModal;
+
+function openEditMerchantAppModal(appId) {
+    const apps = loadMerchantApplications();
+    const app = apps.find(a => a.id === appId);
+    if (!app) return;
+
+    const modal = document.getElementById("merchant-app-edit-modal");
+    if (!modal) return;
+
+    const stall = app.stallData || {};
+    document.getElementById("merchant-edit-id").value = app.id;
+    document.getElementById("merchant-edit-modal-sub").textContent = app.id;
+    document.getElementById("merchant-edit-modal-title").textContent = `แก้ไขใบสมัครร้าน: ${stall.stallName || ''}`;
+    document.getElementById("merchant-edit-stallname").value = stall.stallName || "";
+    document.getElementById("merchant-edit-stallnumber").value = stall.stallNumber || "";
+    document.getElementById("merchant-edit-ownername").value = stall.ownerName || "";
+    document.getElementById("merchant-edit-phone").value = stall.phone || "";
+    document.getElementById("merchant-edit-lineid").value = stall.lineId || "";
+    document.getElementById("merchant-edit-zone").value = stall.zone || "A";
+    document.getElementById("merchant-edit-accesscode").value = app.accessCode || "";
+    document.getElementById("merchant-edit-status").value = app.status || "pending";
+    document.getElementById("merchant-edit-promptpay").value = stall.promptPayNumber || stall.phone || "";
+    document.getElementById("merchant-edit-highlight").value = stall.highlight || "";
+
+    modal.style.zIndex = "9999";
+    modal.classList.remove("hidden");
+}
+window.openEditMerchantAppModal = openEditMerchantAppModal;
+
+function closeMerchantAppEditModal() {
+    const modal = document.getElementById("merchant-app-edit-modal");
+    if (modal) modal.classList.add("hidden");
+}
+window.closeMerchantAppEditModal = closeMerchantAppEditModal;
+
+function handleMerchantAppEditSubmit(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const id = document.getElementById("merchant-edit-id")?.value;
+    if (!id) return;
+
+    const apps = loadMerchantApplications();
+    const app = apps.find(a => a.id === id);
+    if (!app) return;
+
+    const stallName = document.getElementById("merchant-edit-stallname")?.value.trim();
+    const stallNumber = document.getElementById("merchant-edit-stallnumber")?.value.trim();
+    const ownerName = document.getElementById("merchant-edit-ownername")?.value.trim();
+    const phone = document.getElementById("merchant-edit-phone")?.value.trim();
+    const lineId = document.getElementById("merchant-edit-lineid")?.value.trim();
+    const zone = document.getElementById("merchant-edit-zone")?.value;
+    const accessCode = document.getElementById("merchant-edit-accesscode")?.value.trim().toUpperCase();
+    const status = document.getElementById("merchant-edit-status")?.value;
+    const promptPay = document.getElementById("merchant-edit-promptpay")?.value.trim();
+    const highlight = document.getElementById("merchant-edit-highlight")?.value.trim();
+
+    if (!stallName || !stallNumber || !ownerName || !phone) {
+        showToast("⚠️ กรุณากรอกข้อมูลสำคัญให้ครบถ้วน");
+        return;
+    }
+
+    if (!app.stallData) app.stallData = {};
+    app.stallData.stallName = stallName;
+    app.stallData.stallNumber = stallNumber;
+    app.stallData.ownerName = ownerName;
+    app.stallData.phone = phone;
+    app.stallData.lineId = lineId;
+    app.stallData.zone = zone;
+    app.stallData.promptPayNumber = promptPay;
+    app.stallData.highlight = highlight;
+    app.accessCode = accessCode || null;
+    app.status = status;
+    app.updatedAt = new Date().toISOString();
+
+    saveMerchantApplications(apps);
+
+    // Sync stall with MARKET_DATA and ALL_100_STALLS if approved
+    if (status === "approved") {
+        const stallObj = { ...app.stallData, accessCode: app.accessCode };
+        const mIdx = MARKET_DATA.findIndex(s => s.stallId === stallObj.stallId || s.phone === phone);
+        if (mIdx >= 0) MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...stallObj };
+        else MARKET_DATA.push(stallObj);
+
+        const aIdx = ALL_100_STALLS.findIndex(s => s.stallId === stallObj.stallId || s.phone === phone);
+        if (aIdx >= 0) ALL_100_STALLS[aIdx] = { ...ALL_100_STALLS[aIdx], ...stallObj };
+        else ALL_100_STALLS.push(stallObj);
+        saveMarketDataToStorage();
+    }
+
+    closeMerchantAppEditModal();
+    updateAdminStallsBadge();
+    renderAdminStalls();
+    showToast("💾 บันทึกการแก้ไขข้อมูลร้านค้าเรียบร้อยแล้ว");
+}
+window.handleMerchantAppEditSubmit = handleMerchantAppEditSubmit;
+
+function reconsiderMerchantApplication(appId) {
+    const apps = loadMerchantApplications();
+    const app = apps.find(a => a.id === appId);
+    if (!app) return;
+    app.status = "pending";
+    saveMerchantApplications(apps);
+    updateAdminStallsBadge();
+    renderAdminStalls();
+    if (document.getElementById("merchant-app-detail-modal") && !document.getElementById("merchant-app-detail-modal").classList.contains("hidden")) {
+        viewMerchantAppDetail(appId);
+    }
+    showToast("ย้อนสถานะใบสมัครกลับไปรอพิจารณาเรียบร้อย");
+}
+window.reconsiderMerchantApplication = reconsiderMerchantApplication;
+
+function deleteMerchantApplication(appId) {
+    if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบใบสมัครนี้?")) return;
+    let apps = loadMerchantApplications();
+    apps = apps.filter(a => a.id !== appId);
+    saveMerchantApplications(apps);
+    updateAdminStallsBadge();
+    renderAdminStalls();
+    closeMerchantAppDetailModal();
+    showToast("🗑️ ลบใบสมัครเรียบร้อยแล้ว");
+}
+window.deleteMerchantApplication = deleteMerchantApplication;
+
+function printA4MerchantApplication(appId) {
+    const apps = loadMerchantApplications();
+    const app = apps.find(x => x.id === appId);
+    if (!app) {
+        showToast("⚠️ ไม่พบข้อมูลใบสมัคร");
+        return;
+    }
+    const stall = app.stallData || {};
+    const thaiDate = formatThaiDateDisplay(getReportDateKey(app.appliedAt || app.submittedAt || Date.now()));
+    const statusThai = app.status === 'approved' ? 'อนุมัติแล้ว (แผงค้าประจำตลาด)' : (app.status === 'pending' ? 'รอการพิจารณา' : 'ปฏิเสธ');
+
+    const content = `
+        <div class="a4-header">
+            <div class="a4-title">ใบสมัครและทะเบียนประวัติแผงค้า (Merchant Application & Profile)</div>
+            <div class="a4-meta">
+                ตลาดสดฮับวิศิษฐ์ชัย • รหัสใบสมัคร: ${app.id} • วันที่ยื่น: ${thaiDate}
+            </div>
+        </div>
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+            <div style="font-size: 16px; font-weight: bold; color: #1e293b;">${stall.stallName || 'แผงค้าใหม่'} (เลขแผง: ${stall.stallNumber || '-'})</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เจ้าของแผง: <strong>${stall.ownerName || '-'}</strong> | เบอร์โทรศัพท์: <strong>${stall.phone || '-'}</strong> | LINE: <strong>${stall.lineId || stall.phone || '-'}</strong></div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">โซน: <strong>โซน ${stall.zone || '-'}</strong> | หมวดหมู่: <strong>${stall.category || stall.stallTag || 'ของสด'}</strong> | สถานะ: <strong>${statusThai}</strong></div>
+            ${app.accessCode ? `<div style="font-size: 12px; color: #047857; font-weight: bold; margin-top: 4px;">รหัสผ่าน 6 หลักเข้าสู่ระบบ (ACCESS CODE): ${app.accessCode}</div>` : ''}
+        </div>
+        <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+            <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; color: #334155;">จุดเด่นและรายละเอียดร้านค้า</div>
+            <div style="font-size: 11px; color: #475569;">${stall.highlight || '-'}</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">${stall.description || stall.story || '-'}</div>
+        </div>
+        <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+            <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; color: #334155;">รายการสินค้าตัวอย่าง & เมนู</div>
+            <div style="font-size: 11px; color: #475569;">${(stall.products || []).map(p => `${p.name} (฿${p.price})`).join(', ') || '-'}</div>
+        </div>
+        <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+            <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; color: #334155;">ข้อมูลการรับเงินเคลียร์ยอด (พร้อมเพย์)</div>
+            <div style="font-size: 11px; color: #475569;">เบอร์พร้อมเพย์: <strong>${stall.promptPayNumber || stall.phone || '-'}</strong> | ธนาคาร: <strong>${stall.promptPayBank || 'พร้อมเพย์'}</strong></div>
+        </div>
+        <div style="margin-top: 40px; display: flex; justify-content: space-between;">
+            <div style="text-align: center; width: 200px;">
+                <div style="border-bottom: 1px solid #94a3b8; height: 35px;"></div>
+                <div style="font-size: 11px; margin-top: 4px;">(ลงชื่อผู้สมัครเปิดแผงค้า)</div>
+            </div>
+            <div style="text-align: center; width: 200px;">
+                <div style="border-bottom: 1px solid #94a3b8; height: 35px;"></div>
+                <div style="font-size: 11px; margin-top: 4px;">(ลงชื่อผู้จัดการตลาด / เฮียส่ง)</div>
+            </div>
+        </div>
+    `;
+
+    executePrintHtml(`ใบสมัครเปิดแผงค้า_${stall.stallName}_${app.id}`, content, false);
+}
+window.printA4MerchantApplication = printA4MerchantApplication;
+
+function printA4MerchantDirectory() {
+    const stalls = ALL_100_STALLS;
+    const printTime = new Date().toLocaleString("th-TH");
+    let rowsHtml = stalls.slice(0, 100).map((s, idx) => `
+        <tr>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${s.stallNumber || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${s.stallName}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1;">โซน ${s.zone || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1;">${s.ownerName || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${s.phone || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #047857;">${s.accessCode || '-'}</td>
+        </tr>
+    `).join('');
+
+    const content = `
+        <div class="a4-header">
+            <div class="a4-title">ทำเนียบแผงค้าตลาดวิศิษฐ์ชัย (เฮียส่ง) - Vendors Directory</div>
+            <div class="a4-meta">พิมพ์เมื่อ: ${printTime} • จำนวนทั้งหมด ${stalls.length} แผงค้า</div>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 10px;">
+            <thead>
+                <tr style="background: #f1f5f9;">
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">ลำดับ</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">เลขแผง</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">ชื่อแผงค้า</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">โซน</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">เจ้าของแผง</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">เบอร์โทร</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">รหัส 6 หลัก</th>
+                </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+        </table>
+    `;
+    executePrintHtml(`ทำเนียบแผงค้าตลาดวิศิษฐ์ชัย`, content, false);
+}
+window.printA4MerchantDirectory = printA4MerchantDirectory;
 
 // ── Tab 4: Riders Roster & Comprehensive Fleet Operations
 let _adminRiderSearchQuery = "";
@@ -16255,12 +16821,72 @@ window.sendLineFromModal = sendLineFromModal;
 function loadMerchantApplications() {
     try {
         const raw = localStorage.getItem("talathub_merchant_applications");
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
     } catch (e) {
-        return [];
+        console.error("Error loading merchant applications:", e);
     }
+    const seedApps = [
+        {
+            id: "APP-SHOP-1497",
+            submittedAt: "2026-09-07T13:39:00.000Z",
+            appliedAt: "2026-09-07T13:39:00.000Z",
+            status: "approved",
+            accessCode: "NE1998",
+            stallData: {
+                stallId: "stall_seed_1",
+                stallName: "ร้านเฮียเบิ๊อก ไก่สดอนามัย",
+                stallNumber: "แผง A-14",
+                zone: "A",
+                category: "chicken",
+                ownerName: "อนุทิน ชาญวีรกุล (เบิ๊อก)",
+                phone: "0815887777",
+                lineId: "0815887777",
+                promptPayNumber: "0815887777",
+                promptPayBank: "พร้อมเพย์ e-Wallet",
+                highlight: "ไก่สดส่งตรงจากฟาร์มทุกเช้า ชำแหละสดใหม่ สะอาด ปลอดภัย",
+                description: "จำหน่ายเนื้อไก่สด อกไก่ น่องไก่ เครื่องในไก่ ราคาขายส่งและปลีก ประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)",
+                products: [
+                    { name: "อกไก่สดลอกหนัง", price: 85, unit: "กก." },
+                    { name: "น่องติดสะโพกไก่สด", price: 75, unit: "กก." },
+                    { name: "ปีกไก่บน (ปีกบน)", price: 90, unit: "กก." },
+                    { name: "เครื่องในไก่รวม", price: 65, unit: "กก." }
+                ]
+            }
+        },
+        {
+            id: "APP-SHOP-1502",
+            submittedAt: "2026-09-08T00:15:00.000Z",
+            appliedAt: "2026-09-08T00:15:00.000Z",
+            status: "pending",
+            accessCode: null,
+            stallData: {
+                stallId: "stall_seed_2",
+                stallName: "เจ๊พร ผักสดปลอดสารพิษ",
+                stallNumber: "แผง B-05",
+                zone: "B",
+                category: "vegetable",
+                ownerName: "สมพร จันทร์เพ็ญ (เจ๊พร)",
+                phone: "0892223344",
+                lineId: "jaeporn_veggie",
+                promptPayNumber: "0892223344",
+                promptPayBank: "กสิกรไทย (K-Bank)",
+                highlight: "ผักสดคัดเกรดจากสวน ไร้สารเคมี ปลูกด้วยระบบไฮโดรโปนิกส์",
+                description: "ผักกาดขาว กะหล่ำปลี คะน้า ผักบุ้งจีนสดใหม่ทุกวัน",
+                products: [
+                    { name: "คะน้าฮ่องกงยอดอ่อน", price: 45, unit: "กก." },
+                    { name: "ผักกาดขาวปลี", price: 35, unit: "กก." },
+                    { name: "ผักบุ้งจีนสด", price: 25, unit: "กำ" }
+                ]
+            }
+        }
+    ];
+    try {
+        localStorage.setItem("talathub_merchant_applications", JSON.stringify(seedApps));
+    } catch (e) {}
+    return seedApps;
 }
 window.loadMerchantApplications = loadMerchantApplications;
 

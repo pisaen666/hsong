@@ -3764,7 +3764,142 @@
     </div>
 
     <!-- ========================================== -->
-    <!-- FLEET DAILY PAYOUT & SETTLEMENT MODAL (สรุปจ่ายเงินค่ารอบ) -->
+    <!-- MERCHANT APPLICATION DETAIL MODAL (รายละเอียดใบสมัครเปิดร้านค้า) -->
+    <!-- ========================================== -->
+    <div id="merchant-app-detail-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in" onclick="if (event.target === this) closeMerchantAppDetailModal();">
+        <div class="bg-white rounded-3xl p-5 max-w-lg w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[92vh] flex flex-col">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        <span class="material-symbols-outlined text-base">store</span>
+                    </span>
+                    <div>
+                        <h3 class="font-extrabold text-sm text-slate-900">รายละเอียดใบสมัครเปิดร้านค้า</h3>
+                        <div id="merchant-app-detail-sub" class="text-[10px] text-slate-500 font-mono">APP-MC-xxxx</div>
+                    </div>
+                </div>
+                <button type="button" onclick="closeMerchantAppDetailModal()" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+
+            <div id="merchant-app-detail-body" class="flex-1 overflow-y-auto space-y-3 pr-1 text-xs text-slate-700">
+                <!-- Dynamically populated via viewMerchantAppDetail() -->
+            </div>
+
+            <div id="merchant-app-detail-footer" class="pt-2 border-t border-slate-100 shrink-0 flex items-center justify-between gap-2 flex-wrap">
+                <!-- Action buttons populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MERCHANT APPLICATION EDIT MODAL (แก้ไขข้อมูลใบสมัครร้านค้า) -->
+    <!-- ========================================== -->
+    <div id="merchant-app-edit-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in" onclick="if (event.target === this) closeMerchantAppEditModal();">
+        <div class="bg-white rounded-3xl p-5 max-w-lg w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[92vh] flex flex-col">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        <span class="material-symbols-outlined text-base">edit_note</span>
+                    </span>
+                    <div>
+                        <h3 id="merchant-edit-modal-title" class="font-extrabold text-sm text-slate-900">แก้ไขข้อมูลใบสมัครร้านค้า</h3>
+                        <div id="merchant-edit-modal-sub" class="text-[10px] text-purple-700 font-mono font-bold">APP-MC-xxxx</div>
+                    </div>
+                </div>
+                <button type="button" onclick="closeMerchantAppEditModal()" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+
+            <form id="merchant-app-edit-form" onsubmit="handleMerchantAppEditSubmit(event)" class="flex-1 overflow-y-auto space-y-3 pr-1 text-xs text-slate-700">
+                <input type="hidden" id="merchant-edit-id" value="">
+
+                <div class="grid grid-cols-3 gap-2.5">
+                    <div class="col-span-2">
+                        <label class="font-bold text-slate-700 block mb-1">ชื่อร้านค้า / แผงค้า: *</label>
+                        <input type="text" id="merchant-edit-stallname" required class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">เลขแผง: *</label>
+                        <input type="text" id="merchant-edit-stallnumber" required class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">ชื่อเจ้าของแผงค้า: *</label>
+                        <input type="text" id="merchant-edit-ownername" required class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์ (Login): *</label>
+                        <input type="tel" id="merchant-edit-phone" required class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">LINE ID:</label>
+                        <input type="text" id="merchant-edit-lineid" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">โซนในตลาด:</label>
+                        <select id="merchant-edit-zone" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                            <option value="A">โซน A (เนื้อสัตว์/ไก่สด)</option>
+                            <option value="B">โซน B (ผักสด/ผลไม้)</option>
+                            <option value="C">โซน C (เครื่องเทศ/ของแห้ง)</option>
+                            <option value="D">โซน D (อาหารปรุงสำเร็จ/ขนม)</option>
+                            <option value="E">โซน E (อาหารทะเล/ซีฟู้ด)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1 flex items-center justify-between">
+                        <span>รหัสผ่าน 6 หลักเข้าสู่ระบบ (ACCESS CODE):</span>
+                        <span class="text-[10px] text-emerald-700 font-normal">แผงค้าใช้ล็อกอินเข้าระบบ</span>
+                    </label>
+                    <div class="flex gap-2">
+                        <input type="text" id="merchant-edit-accesscode" maxlength="6" class="flex-1 border border-emerald-400 font-mono font-black text-sm uppercase rounded-xl px-3 py-2 text-emerald-950 bg-emerald-50/50 focus:ring-2 focus:ring-emerald-500 outline-none tracking-widest" placeholder="เช่น CT4578">
+                        <button type="button" onclick="document.getElementById('merchant-edit-accesscode').value = generate6DigitAccessCode()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs active:scale-95 transition-all shrink-0 cursor-pointer">
+                            🔄 สุ่มรหัสใหม่
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">สถานะใบสมัคร: *</label>
+                        <select id="merchant-edit-status" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                            <option value="pending">⏳ รอการพิจารณา (Pending)</option>
+                            <option value="approved">✓ อนุมัติเปิดร้านแล้ว (Approved)</option>
+                            <option value="rejected">✕ ปฏิเสธ (Rejected)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">เบอร์พร้อมเพย์ (เคลียร์เงิน):</label>
+                        <input type="text" id="merchant-edit-promptpay" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none" placeholder="081-xxx-xxxx">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">จุดเด่นร้านค้า:</label>
+                    <input type="text" id="merchant-edit-highlight" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none" placeholder="เช่น ไก่สดคัดเกรด อกไก่ น่องไก่">
+                </div>
+
+                <div class="pt-2 flex gap-2 border-t border-slate-100">
+                    <button type="button" onclick="closeMerchantAppEditModal()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl active:scale-95 transition-all text-xs cursor-pointer">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">save</span>
+                        <span>บันทึกการแก้ไข</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
     <!-- ========================================== -->
     <div id="rider-payout-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in">
         <div class="bg-white rounded-3xl p-5 max-w-2xl w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[92vh] flex flex-col">
