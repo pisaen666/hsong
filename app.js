@@ -427,13 +427,19 @@ async function syncLatestOrderFromCloud() {
 
 
 
+function isCustomOrApprovedStall(s) {
+    if (!s || !s.stallId) return false;
+    const id = s.stallId;
+    return id.startsWith("stall_new_") || id.startsWith("APP-SHOP-") || id.startsWith("stall_custom_") || id.startsWith("stall_seed_");
+}
+
 function loadSavedMarketData() {
     try {
         const saved = localStorage.getItem("talathub_custom_market_stalls");
         if (saved) {
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                const validCustom = parsed.filter(s => s && s.stallId && s.stallId.startsWith("stall_new_"));
+                const validCustom = parsed.filter(isCustomOrApprovedStall);
                 localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(validCustom));
                 return validCustom;
             }
@@ -444,12 +450,15 @@ function loadSavedMarketData() {
 
 function saveMarketDataToStorage() {
     try {
-        const customOnly = MARKET_DATA.filter(s => s && s.stallId && s.stallId.startsWith("stall_new_"));
+        const customOnly = MARKET_DATA.filter(isCustomOrApprovedStall);
         localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(customOnly));
+        if (isFirebaseReady() && db) {
+            db.ref("custom_market_stalls").set(customOnly).catch(console.warn);
+        }
     } catch (e) { }
 }
 
-// Restore saved custom stalls if available (merge with base categories)
+// Restore saved custom stalls if available (merge with base categories and all 100 stalls)
 const _savedStalls = loadSavedMarketData();
 if (_savedStalls && Array.isArray(_savedStalls) && _savedStalls.length > 0) {
     _savedStalls.forEach(savedStall => {
@@ -458,6 +467,15 @@ if (_savedStalls && Array.isArray(_savedStalls) && _savedStalls.length > 0) {
             MARKET_DATA[existingIdx] = savedStall;
         } else {
             MARKET_DATA.push(savedStall);
+        }
+
+        if (typeof ALL_100_STALLS !== "undefined" && Array.isArray(ALL_100_STALLS)) {
+            const allIdx = ALL_100_STALLS.findIndex(s => s.stallId === savedStall.stallId);
+            if (allIdx >= 0) {
+                ALL_100_STALLS[allIdx] = savedStall;
+            } else {
+                ALL_100_STALLS.push(savedStall);
+            }
         }
     });
 }
@@ -7691,6 +7709,225 @@ function reorderCurrentItems() {
 state.merchantPinnedCoords = null;
 state.merchantExpressOrders = loadSavedMerchantExpressOrders();
 
+let _activeMerchantMainTab = "orders";
+
+function switchMerchantMainTab(tabKey) {
+    _activeMerchantMainTab = tabKey;
+    const btnOrders = document.getElementById("merchant-tab-btn-orders");
+    const btnExpress = document.getElementById("merchant-tab-btn-express");
+    const panelOrders = document.getElementById("merchant-panel-orders");
+    const panelExpress = document.getElementById("merchant-panel-express");
+
+    if (tabKey === "orders") {
+        if (btnOrders) btnOrders.className = "px-3 py-1.5 rounded-xl font-bold bg-orange-600 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer";
+        if (btnExpress) btnExpress.className = "px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer";
+        if (panelOrders) panelOrders.classList.remove("hidden");
+        if (panelExpress) panelExpress.classList.add("hidden");
+        renderMerchantIncomingOrders();
+    } else {
+        if (btnOrders) btnOrders.className = "px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer";
+        if (btnExpress) btnExpress.className = "px-3 py-1.5 rounded-xl font-bold bg-orange-600 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer";
+        if (panelOrders) panelOrders.classList.add("hidden");
+        if (panelExpress) panelExpress.classList.remove("hidden");
+        renderMerchantActiveDeliveries();
+    }
+}
+window.switchMerchantMainTab = switchMerchantMainTab;
+
+function openActiveStallEditor() {
+    let stall = null;
+    if (activeMerchantStallId) {
+        stall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.find(s => s.stallId === activeMerchantStallId);
+    }
+    if (!stall && state.activeMerchant) {
+        stall = MARKET_DATA.find(s => s.stallId === state.activeMerchant.stallId) || ALL_100_STALLS.find(s => s.stallId === state.activeMerchant.stallId);
+    }
+    if (!stall) stall = MARKET_DATA[0];
+    loginAsMerchantStall(stall.stallId);
+}
+window.openActiveStallEditor = openActiveStallEditor;
+
+function renderMerchantIncomingOrders() {
+    const listEl = document.getElementById("merchant-incoming-orders-list");
+    const badgeEl = document.getElementById("merchant-incoming-orders-badge");
+    if (!listEl) return;
+
+    let stall = null;
+    if (activeMerchantStallId) {
+        stall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.find(s => s.stallId === activeMerchantStallId);
+    }
+    if (!stall && state.activeMerchant) {
+        stall = MARKET_DATA.find(s => s.stallId === state.activeMerchant.stallId) || ALL_100_STALLS.find(s => s.stallId === state.activeMerchant.stallId);
+    }
+    const currentStallId = stall ? stall.stallId : "";
+    const currentStallName = stall ? stall.stallName : "";
+
+    // Find orders from activeOrder and history
+    const allOrders = [];
+    if (state.activeOrder) allOrders.push(state.activeOrder);
+    try {
+        const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+        hist.forEach(h => {
+            if (h && !allOrders.some(o => o.orderId === h.orderId)) allOrders.push(h);
+        });
+    } catch(e) {}
+
+    // Filter items for this stall
+    const stallOrders = [];
+    allOrders.forEach(order => {
+        if (!order || !order.stalls) return;
+        const matchingStallGroup = order.stalls.find(s => s && (s.stallId === currentStallId || (currentStallName && s.name && (s.name.includes(currentStallName) || currentStallName.includes(s.name)))));
+        if (matchingStallGroup && matchingStallGroup.items && matchingStallGroup.items.length > 0) {
+            stallOrders.push({
+                orderId: order.orderId,
+                status: order.status || "picking",
+                createdAt: order.savedAt || Date.now(),
+                customerName: order.customerName || "ลูกค้าชุมชน",
+                customerPhone: order.customerPhone || "-",
+                deliveryAddress: order.address || order.houseNumber || "จัดส่งตามพิกัด",
+                items: matchingStallGroup.items,
+                stallTotal: matchingStallGroup.items.reduce((sum, it) => sum + (it.price || 0), 0)
+            });
+        }
+    });
+
+    if (badgeEl) {
+        if (stallOrders.length > 0) {
+            badgeEl.textContent = stallOrders.length;
+            badgeEl.classList.remove("hidden");
+        } else {
+            badgeEl.classList.add("hidden");
+        }
+    }
+
+    const totalSales = stallOrders.reduce((sum, o) => sum + o.stallTotal, 0);
+
+    let html = `
+        <!-- Merchant Stall Summary Banner -->
+        <div class="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 rounded-3xl p-4 sm:p-5 text-white shadow-md space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                        🏪
+                    </div>
+                    <div>
+                        <div class="text-[11px] text-amber-100 font-bold">แผงค้าของฉัน • ${stall ? (stall.stallNumber || 'แผงค้า') : 'แผงค้า'} (${stall ? (stall.zone || 'ตลาดสด') : 'ตลาดสด'})</div>
+                        <h3 class="text-base sm:text-lg font-black leading-tight">${stall ? stall.stallName : 'แผงค้า'}</h3>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="openActiveStallEditor()" class="px-3 py-1.5 bg-white text-orange-700 hover:bg-orange-50 rounded-xl font-black text-xs shadow-sm flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">edit</span>
+                        <span>แก้ไขข้อมูลร้าน</span>
+                    </button>
+                    <button onclick="switchRole('customer'); goToMarketScreen();" class="px-3 py-1.5 bg-black/20 hover:bg-black/30 text-white rounded-xl font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">storefront</span>
+                        <span>ดูหน้าร้านในตลาด</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats Bar -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2 border-t border-white/20 text-xs">
+                <div class="bg-black/15 rounded-2xl p-2.5">
+                    <div class="text-[10px] text-amber-100">ออเดอร์ของสดทั้งหมด</div>
+                    <div class="text-base font-black">${stallOrders.length} ออเดอร์</div>
+                </div>
+                <div class="bg-black/15 rounded-2xl p-2.5">
+                    <div class="text-[10px] text-amber-100">ยอดจำหน่ายรวมของร้าน</div>
+                    <div class="text-base font-black text-amber-200">฿${totalSales.toLocaleString()}</div>
+                </div>
+                <div class="col-span-2 sm:col-span-1 bg-black/15 rounded-2xl p-2.5 flex items-center justify-between">
+                    <div>
+                        <div class="text-[10px] text-amber-100">สถานะแผงค้า</div>
+                        <div class="text-xs font-black text-emerald-300 flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span>เปิดรับออเดอร์ปกติ</span>
+                        </div>
+                    </div>
+                    <span class="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-mono font-bold">${stall ? (stall.stallNumber || '-') : '-'}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+            <h4 class="font-extrabold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-orange-600 text-base">receipt_long</span>
+                <span>รายการออเดอร์ของสดที่สั่งซื้อเข้ามา (${stallOrders.length} รายการ)</span>
+            </h4>
+            <button onclick="renderMerchantIncomingOrders(); showToast('🔄 อัปเดตรายการออเดอร์เรียบร้อย');" class="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-all cursor-pointer" title="รีเฟรชออเดอร์">
+                <span class="material-symbols-outlined text-sm">refresh</span>
+            </button>
+        </div>
+    `;
+
+    if (stallOrders.length === 0) {
+        html += `
+            <div class="p-8 bg-white rounded-3xl border border-dashed border-slate-300 text-center space-y-2">
+                <div class="w-12 h-12 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center mx-auto text-xl font-black">
+                    🧺
+                </div>
+                <div class="font-extrabold text-slate-800 text-xs sm:text-sm">ยังไม่มีออเดอร์ของสดสั่งซื้อเข้ามาในขณะนี้</div>
+                <p class="text-[11px] text-slate-500 max-w-sm mx-auto">เมื่อลูกค้าในชุมชนสั่งซื้อสินค้าจากแผงค้าของคุณ รายการจัดเตรียมสินค้าจะแสดงที่นี่แบบเรียลไทม์ทันทีครับ</p>
+                <div class="pt-2">
+                    <button onclick="switchRole('customer'); goToMarketScreen();" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold rounded-xl text-xs shadow-sm active:scale-95 transition-all cursor-pointer">
+                        🛒 ทดลองสั่งซื้อสินค้าจากร้านตัวเอง (Role 1)
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
+        html += `<div class="space-y-3">`;
+        stallOrders.forEach(o => {
+            const statusColor = o.status === "delivered" ? "emerald" : (o.status === "delivering" ? "sky" : "amber");
+            const statusText = o.status === "delivered" ? "✓ ส่งสำเร็จแล้ว" : (o.status === "delivering" ? "🛵 ไรเดอร์กำลังส่ง" : "⏳ กำลังรวบรวมของสด");
+            html += `
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3.5 sm:p-4 space-y-3 hover:shadow-md transition-all">
+                    <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono font-black text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">${o.orderId}</span>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900 border border-${statusColor}-200">${statusText}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[10px] text-slate-400">ยอดสินค้าร้านนี้: </span>
+                            <strong class="font-black text-orange-600 text-xs">฿${o.stallTotal.toLocaleString()}</strong>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">รายการสินค้าที่ต้องจัดเตรียม:</div>
+                        <div class="bg-slate-50 rounded-xl p-2.5 space-y-1 divide-y divide-slate-100">
+                            ${o.items.map(it => `
+                                <div class="flex items-center justify-between pt-1 text-xs">
+                                    <div class="font-bold text-slate-800 flex items-center gap-1.5">
+                                        <span class="text-emerald-600 font-black">✓</span>
+                                        <span>${it.name || 'สินค้า'}</span>
+                                        <span class="text-slate-400 font-normal">x${it.qty || 1}</span>
+                                    </div>
+                                    <div class="font-mono font-bold text-slate-700">฿${(it.price || 0).toLocaleString()}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex-wrap gap-2">
+                        <div>
+                            <span>ลูกค้า: <strong>${o.customerName}</strong> (${o.customerPhone})</span>
+                        </div>
+                        <div class="text-slate-400 text-[10px]">
+                            <span>จุดส่ง: ${o.deliveryAddress}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+    }
+
+    listEl.innerHTML = html;
+}
+window.renderMerchantIncomingOrders = renderMerchantIncomingOrders;
+
 function renderMerchantView() {
     if (!state.activeMerchant || !state.activeMerchant.isLoggedIn) {
         openMerchantLoginModal();
@@ -7739,7 +7976,7 @@ function renderMerchantView() {
     }
 
     calculateMerchantFee();
-    renderMerchantActiveDeliveries();
+    switchMerchantMainTab(_activeMerchantMainTab);
 }
 
 function onMerchantStallSelectChanged(stallId) {
@@ -16388,9 +16625,75 @@ function loginAsMerchantStall(stallId) {
     showToast(`🏪 เข้าสู่ระบบจัดการ: ${stall.stallName}`);
 }
 
+let _lastSubmittedMerchantApp = null;
+
+function backToMerchantRegisterForm() {
+    const formStep = document.getElementById("merchant-portal-step-form");
+    const successStep = document.getElementById("merchant-portal-step-success");
+    if (formStep && successStep) {
+        successStep.classList.add("hidden");
+        formStep.classList.remove("hidden");
+    }
+}
+window.backToMerchantRegisterForm = backToMerchantRegisterForm;
+
+function fillSampleMerchantRegistration() {
+    backToMerchantRegisterForm();
+    
+    // 1. Info
+    document.getElementById("m-stall-name").value = "ร้านไก่สดเฮียวิศิษฐ์";
+    document.getElementById("m-stall-number").value = "แผง A-18";
+    document.getElementById("m-stall-zone").value = "โซน A (เนื้อสัตว์ & ไก่สด)";
+    document.getElementById("m-stall-category").value = "chicken";
+    document.getElementById("m-owner-name").value = "นายวิศิษฐ์ มั่นคง (เฮียวิศิษฐ์)";
+    document.getElementById("m-phone").value = "0815556789";
+    if (document.getElementById("m-phone2")) document.getElementById("m-phone2").value = "038245678";
+    if (document.getElementById("m-line")) document.getElementById("m-line").value = "@hsong_chicken";
+    document.getElementById("m-highlight").value = "ไก่สดส่งตรงจากฟาร์มทุกเช้า ชำแหละสด สะอาด ไร้สารเร่ง ปลอดภัย 100%";
+    document.getElementById("m-desc").value = "จำหน่ายเนื้อไก่สด อกไก่ น่องไก่ สันใน โครงไก่ และเครื่องในสดใหม่คัดเกรด A ประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง) อ.บ้านบึง จ.ชลบุรี พร้อมบริการตัดแต่งตามสั่ง";
+
+    // 2. Images
+    document.getElementById("m-stall-image-url").value = MERCHANT_PRESET_IMAGES.stall.chicken;
+    document.getElementById("m-owner-image-url").value = MERCHANT_PRESET_IMAGES.owner.man1;
+    updateMerchantImagePreviews();
+
+    // 3. Top 6 Highlight Products
+    const sampleProducts = [
+        { name: "อกไก่สดลอกหนังอนามัย", desc: "อกไก่สดลอกหนัง ไร้มัน โปรตีนสูง เหมาะกับคนรักสุขภาพ", price: "85", unit: "กก.", badge: "ยอดนิยม", image: MERCHANT_PRESET_IMAGES.stall.chicken },
+        { name: "น่องติดสะโพกไก่สด", desc: "ชิ้นใหญ่ สด เนื้อแน่น เหมาะทำไก่ทอด ต้ม ย่าง", price: "75", unit: "กก.", badge: "สดใหม่", image: MERCHANT_PRESET_IMAGES.stall.chicken },
+        { name: "ปีกไก่บน (ปีกบน)", desc: "ปีกบนไก่สด คัดขนาดมาตรฐาน ผิวสวย สะอาด", price: "90", unit: "กก.", badge: "แนะนำ", image: MERCHANT_PRESET_IMAGES.stall.chicken },
+        { name: "เครื่องในไก่รวมสด", desc: "ตับ กึ๋น หัวใจ ล้างสะอาด ไร้กลิ่นคาว สดใหม่วันต่อวัน", price: "65", unit: "กก.", badge: "ราคาพิเศษ", image: MERCHANT_PRESET_IMAGES.stall.chicken },
+        { name: "สันในไก่สดอนามัย", desc: "เนื้อนุ่ม ไม่เหนียว ทำอาหารคลีน สเต็ก หรือผัดกะเพรา", price: "95", unit: "กก.", badge: "เกรด A", image: MERCHANT_PRESET_IMAGES.stall.chicken },
+        { name: "โครงไก่สดสำหรับต้มน้ำซุป", desc: "โครงไก่สด ติดเนื้อหวานธรรมชาติ เหมาะต้มก๋วยเตี๋ยว ซุปใส", price: "35", unit: "กก.", badge: "คุ้มค่า", image: MERCHANT_PRESET_IMAGES.stall.chicken }
+    ];
+    renderMerchantTop6ProductsForm(sampleProducts);
+
+    // 4. Extended Catalog Table
+    const sampleCatalog = [
+        {
+            groupName: "ชิ้นส่วนไก่สดเพิ่มเติม",
+            items: [
+                { id: "cat_sample_1", name: "น่องไก่เล็ก (น่องบน)", spec: "สด สะอาด คัดไซส์เท่ากัน", price: 80, unit: "กก." },
+                { id: "cat_sample_2", name: "ตับไก่สดคัดพิเศษ", spec: "สีแดงสด ไม่ช้ำ ล้างสะอาด", price: 70, unit: "กก." },
+                { id: "cat_sample_3", name: "กึ๋นไก่สดกรุบกรอบ", spec: "ขูดลอกสะอาด พร้อมปรุง", price: 75, unit: "กก." }
+            ]
+        }
+    ];
+    renderMerchantCatalogTable(sampleCatalog);
+
+    switchMerchantPortalTab("tab-info");
+    showToast("✨ กรอกข้อมูลตัวอย่างร้านค้าทดสอบเรียบร้อยแล้ว!");
+}
+window.fillSampleMerchantRegistration = fillSampleMerchantRegistration;
+
 function registerNewMerchantStall() {
     closeMerchantLoginModal();
     activeMerchantStallId = "stall_new_" + Date.now();
+
+    const formStep = document.getElementById("merchant-portal-step-form");
+    const successStep = document.getElementById("merchant-portal-step-success");
+    if (formStep) formStep.classList.remove("hidden");
+    if (successStep) successStep.classList.add("hidden");
 
     document.getElementById("merchant-portal-badge").textContent = "✨ ลงทะเบียนแผงค้าใหม่";
     document.getElementById("merchant-portal-zone-text").textContent = "โซนตลาดสด";
@@ -16832,6 +17135,8 @@ function saveMerchantStallData() {
         else apps.unshift(appRecord);
         saveMerchantApplications(apps);
 
+        _lastSubmittedMerchantApp = appRecord;
+
         // Switch to applications view so it appears immediately when admin views
         _adminStallRosterView = "applications";
         _adminMerchantAppFilter = "all";
@@ -16841,18 +17146,26 @@ function saveMerchantStallData() {
             renderAdminStalls();
         }
 
-        closeMerchantPortalModal();
-        showToast(`📤 ส่งข้อมูลเปิดร้าน "${stallName}" (${appId}) ให้แอดมินพิจารณาแล้ว!`);
+        // Show Step 2 (Success Progression View) inside merchant-portal-modal
+        const formStep = document.getElementById("merchant-portal-step-form");
+        const successStep = document.getElementById("merchant-portal-step-success");
+        if (formStep && successStep) {
+            formStep.classList.add("hidden");
+            successStep.classList.remove("hidden");
+        }
 
-        // เปิดหน้าต่างตรวจสอบสถานะการสมัคร
-        setTimeout(() => {
-            openStatusCheckModal("merchant");
-            const phoneInput = document.getElementById("status-check-phone-input");
-            if (phoneInput) {
-                phoneInput.value = phone;
-                handleCheckApplicationStatusSubmit();
-            }
-        }, 300);
+        const elId = document.getElementById("nextstep-merchant-id");
+        const elName = document.getElementById("nextstep-merchant-name");
+        const elStall = document.getElementById("nextstep-merchant-stall");
+        const elPhone = document.getElementById("nextstep-merchant-phone");
+        const elStatus = document.getElementById("nextstep-merchant-status");
+        if (elId) elId.textContent = appId;
+        if (elName) elName.textContent = stallName;
+        if (elStall) elStall.textContent = `${stallNumber} • ${zoneVal}`;
+        if (elPhone) elPhone.textContent = `${ownerName} (${phone})`;
+        if (elStatus) elStatus.innerHTML = '<span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full">⏳ รอแอดมินอนุมัติ</span>';
+
+        showToast(`🎉 ส่งใบสมัครเปิดร้าน "${stallName}" (${appId}) สำเร็จ!`);
         return;
     }
 
@@ -17671,15 +17984,90 @@ function approveMerchantApplication(appId) {
     if (allIndex >= 0) ALL_100_STALLS[allIndex] = stallObj;
     else ALL_100_STALLS.push(stallObj);
 
+    // Ensure catalog is updated in STALL_CATALOG_DATABASE
+    if (stallObj.catalog) {
+        STALL_CATALOG_DATABASE[stallObj.stallId] = stallObj.catalog;
+        saveStallCatalogDatabaseToStorage();
+    }
+
     saveMarketDataToStorage();
 
     updateAdminStallsBadge();
     renderAdminStalls();
 
+    // Re-render market catalog so customer in Role 1 sees the new stall immediately!
+    if (typeof renderCatalog === "function") {
+        renderCatalog();
+    }
+
     showToast("🎉 อนุมัติเปิดร้าน \"" + stallObj.stallName + "\" สำเร็จ! รหัสผ่าน: " + code);
     openSimulatedSmsModal(stallObj.phone, code, stallObj.stallName, "merchant");
 }
 window.approveMerchantApplication = approveMerchantApplication;
+
+function goToAdminToApproveMerchantFromSuccess() {
+    closeMerchantPortalModal();
+    if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
+        state.activeAdmin = {
+            isLoggedIn: true,
+            name: "แอดมินเฮียส่ง",
+            role: "super_admin"
+        };
+        saveAdminToStorage(state.activeAdmin);
+    }
+    setActiveRoleView("admin");
+    renderAuthHeaderButtons();
+    switchAdminTab("stalls");
+    _adminStallRosterView = "applications";
+    _adminMerchantAppFilter = "all";
+    renderAdminStalls();
+    showToast("🔑 สลับเข้าสู่ศูนย์แอดมิน: ตรวจสอบและกดอนุมัติใบสมัครได้ทันทีครับ");
+
+    if (_lastSubmittedMerchantApp && _lastSubmittedMerchantApp.id) {
+        setTimeout(() => {
+            const card = document.getElementById(`merchant-app-card-${_lastSubmittedMerchantApp.id}`);
+            if (card) {
+                card.scrollIntoView({ behavior: "smooth", block: "center" });
+                card.classList.add("ring-4", "ring-purple-400", "bg-purple-50");
+                setTimeout(() => card.classList.remove("ring-4", "ring-purple-400", "bg-purple-50"), 3000);
+            }
+        }, 300);
+    }
+}
+window.goToAdminToApproveMerchantFromSuccess = goToAdminToApproveMerchantFromSuccess;
+
+function approveAndLoginCurrentSubmittedMerchant() {
+    const apps = loadMerchantApplications();
+    const app = _lastSubmittedMerchantApp ? apps.find(a => a.id === _lastSubmittedMerchantApp.id) : apps.find(a => a.status === "pending");
+    if (!app) {
+        showToast("⚠️ ไม่พบข้อมูลใบสมัครล่าสุด");
+        return;
+    }
+
+    if (app.status !== "approved") {
+        approveMerchantApplication(app.id);
+    }
+
+    closeMerchantPortalModal();
+    loginAsMerchantStall(app.stallData.stallId);
+    switchRole("merchant");
+    showToast(`⚡ อนุมัติสำเร็จ! เข้าสู่ระบบร้านค้า "${app.stallData.stallName}" เรียบร้อยแล้ว`);
+}
+window.approveAndLoginCurrentSubmittedMerchant = approveAndLoginCurrentSubmittedMerchant;
+
+function checkCurrentMerchantApprovalAndLogin() {
+    const phone = _lastSubmittedMerchantApp?.stallData?.phone || "";
+    closeMerchantPortalModal();
+    openStatusCheckModal("merchant");
+    if (phone) {
+        const phoneInput = document.getElementById("status-check-phone-input");
+        if (phoneInput) {
+            phoneInput.value = phone;
+            handleCheckApplicationStatusSubmit();
+        }
+    }
+}
+window.checkCurrentMerchantApprovalAndLogin = checkCurrentMerchantApprovalAndLogin;
 
 function rejectMerchantApplication(appId) {
     if (!confirm("คุณต้องการปฏิเสธคำขอเปิดร้านค้านี้ใช่หรือไม่?")) return;

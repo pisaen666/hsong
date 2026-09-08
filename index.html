@@ -1125,26 +1125,82 @@
                 </div>
             </div>
 
+            <!-- Cross-Role Quick Navigation Bar for Merchant (เชื่อมโยงไปยังทุกบทบาท) -->
+            <div class="bg-slate-900 text-slate-300 px-3 py-2 border-b border-slate-800 flex items-center justify-between gap-2 overflow-x-auto text-[11px] shrink-0">
+                <div class="flex items-center gap-1 shrink-0 text-slate-400 font-bold">
+                    <span class="material-symbols-outlined text-xs text-orange-400">sync_alt</span>
+                    <span>สลับบทบาท:</span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="switchRole('customer')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95" title="1. สลับไปสั่งของสด">
+                        <span class="material-symbols-outlined text-xs text-emerald-400">shopping_cart</span>
+                        <span>1. ลูกค้า</span>
+                    </button>
+                    <button type="button" onclick="switchRole('hub')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95" title="2. สลับไปศูนย์จัดของฮับ">
+                        <span class="material-symbols-outlined text-xs text-amber-400">inventory_2</span>
+                        <span>2. จัดส่ง</span>
+                    </button>
+                    <button type="button" onclick="switchRole('rider')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95" title="4. สลับไปหน้าไรเดอร์">
+                        <span class="material-symbols-outlined text-xs text-sky-400">two_wheeler</span>
+                        <span>4. ไรเดอร์</span>
+                    </button>
+                    <button type="button" onclick="switchRole('admin')" class="px-2.5 py-1 bg-gradient-to-r from-purple-800 to-indigo-800 hover:from-purple-700 hover:to-indigo-700 text-white border border-purple-400/40 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95 shadow-2xs" title="5. สลับไปศูนย์แอดมิน">
+                        <span class="material-symbols-outlined text-xs text-purple-300">admin_panel_settings</span>
+                        <span>5. แอดมิน</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Merchant Sub-Tabs Navigation Bar -->
+            <div class="bg-white border-b border-slate-200 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto text-xs shrink-0 shadow-xs">
+                <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="switchMerchantMainTab('orders')" id="merchant-tab-btn-orders" class="px-3 py-1.5 rounded-xl font-bold bg-orange-600 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">receipt_long</span>
+                        <span>1. ออเดอร์ของสดจากลูกค้า</span>
+                        <span id="merchant-incoming-orders-badge" class="bg-white text-orange-700 text-[10px] font-black px-1.5 py-0.2 rounded-full hidden">0</span>
+                    </button>
+                    <button type="button" onclick="switchMerchantMainTab('express')" id="merchant-tab-btn-express" class="px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">moped</span>
+                        <span>2. เรียกไรเดอร์ด่วน</span>
+                    </button>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="openActiveStallEditor()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs" title="แก้ไขข้อมูลแผงค้าและสินค้า">
+                        <span class="material-symbols-outlined text-sm text-emerald-700">edit_note</span>
+                        <span>🏪 จัดการร้าน & แคตตาล็อก</span>
+                    </button>
+                </div>
+            </div>
+
             <div class="p-3.5 sm:p-4 flex-1 overflow-y-auto space-y-4 text-xs pb-16 max-w-4xl mx-auto w-full">
-                <!-- 1. Active Dispatched Deliveries Section (งานด่วนที่กำลังวิ่งอยู่) -->
-                <div id="merchant-active-deliveries-container" class="space-y-3">
-                    <!-- Dynamically populated via renderMerchantActiveDeliveries() -->
+                <!-- PANEL 1: INCOMING CUSTOMER ORDERS (ออเดอร์ของสดจากลูกค้า) -->
+                <div id="merchant-panel-orders" class="space-y-3">
+                    <div id="merchant-incoming-orders-list">
+                        <!-- Populated dynamically via renderMerchantIncomingOrders() -->
+                    </div>
                 </div>
 
-                <!-- 2. Express Dispatch Request Form (ฟอร์มเรียกไรเดอร์ส่งของด่วน) -->
-                <div class="bg-white rounded-3xl p-4 sm:p-5 shadow-card border border-slate-200/80 space-y-4">
-                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-                        <div class="flex items-center gap-2">
-                            <span class="w-8 h-8 rounded-xl bg-orange-500/15 text-orange-600 flex items-center justify-center">
-                                <span class="material-symbols-outlined text-base">moped</span>
-                            </span>
-                            <div>
-                                <h3 class="font-extrabold text-slate-800 text-xs sm:text-sm">ฟอร์มเรียกไรเดอร์ส่งของ (ร้านค้าจัดเตรียมสินค้าเอง)</h3>
-                                <div class="text-[10px] text-slate-400">ร้านค้าแพ็คของเรียบร้อย เรียกไรเดอร์ฮับมารับเพื่อนำไปส่งลูกค้า</div>
-                            </div>
-                        </div>
-                        <span class="text-[10px] bg-orange-100 text-orange-800 font-extrabold px-2 py-0.5 rounded-full">บริการด่วน</span>
+                <!-- PANEL 2: EXPRESS DISPATCH REQUEST FORM (เรียกไรเดอร์ส่งของด่วน) -->
+                <div id="merchant-panel-express" class="space-y-4 hidden">
+                    <!-- 1. Active Dispatched Deliveries Section (งานด่วนที่กำลังวิ่งอยู่) -->
+                    <div id="merchant-active-deliveries-container" class="space-y-3">
+                        <!-- Dynamically populated via renderMerchantActiveDeliveries() -->
                     </div>
+
+                    <!-- 2. Express Dispatch Request Form (ฟอร์มเรียกไรเดอร์ส่งของด่วน) -->
+                    <div class="bg-white rounded-3xl p-4 sm:p-5 shadow-card border border-slate-200/80 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="w-8 h-8 rounded-xl bg-orange-500/15 text-orange-600 flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-base">moped</span>
+                                </span>
+                                <div>
+                                    <h3 class="font-extrabold text-slate-800 text-xs sm:text-sm">ฟอร์มเรียกไรเดอร์ส่งของ (ร้านค้าจัดเตรียมสินค้าเอง)</h3>
+                                    <div class="text-[10px] text-slate-400">ร้านค้าแพ็คของเรียบร้อย เรียกไรเดอร์ฮับมารับเพื่อนำไปส่งลูกค้า</div>
+                                </div>
+                            </div>
+                            <span class="text-[10px] bg-orange-100 text-orange-800 font-extrabold px-2 py-0.5 rounded-full">บริการด่วน</span>
+                        </div>
 
                     <!-- คำชี้แจงนโยบายฮับ -->
                     <div class="p-3 bg-amber-50/70 rounded-2xl border border-amber-200/80 text-[11px] text-amber-900 space-y-1">
@@ -1266,6 +1322,7 @@
                             <span id="merchant-submit-btn-text">📍 ขั้นตอนถัดไป: ปักหมุดแผนที่ดาวเทียมเพื่อคำนวณค่าส่ง 🗺️</span>
                         </button>
                     </div>
+                </div>
                 </div>
             </div>
         </section>
@@ -2574,7 +2631,7 @@
 
             <!-- Points Summary Card with Progress Bar -->
             <div class="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 text-slate-950 rounded-2xl p-4 shadow-sm space-y-2.5">
-                <div class="flex justify-between items-center">
+<div class="flex items-center justify-between">
                     <div>
                         <div class="text-[11px] font-bold text-slate-800">ยอดแต้มสะสมปัจจุบัน</div>
                         <div class="text-2xl font-black text-slate-950" id="wallet-points-display">60 แต้ม</div>
@@ -2895,56 +2952,63 @@
                 </button>
             </div>
 
-            <!-- Tab Switcher for Form Sections with Scroll Buttons -->
-            <div class="bg-slate-100 p-2 border-b border-slate-200 shrink-0 flex items-center gap-1">
-                <button onclick="scrollMerchantPortalTabs(-120)" class="w-6 h-6 rounded-full bg-white shadow-xs border border-slate-200 text-slate-700 hover:text-emerald-700 flex items-center justify-center shrink-0 active:scale-90" title="เลื่อนซ้าย">
-                    <span class="material-symbols-outlined text-xs font-bold">chevron_left</span>
-                </button>
-                <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs w-full scroll-smooth cursor-grab active:cursor-grabbing" id="merchant-portal-tab-bar">
-                    <button onclick="switchMerchantPortalTab('tab-info')" id="btn-tab-info" class="merchant-tab-btn active px-3 py-1.5 rounded-xl font-bold bg-white text-emerald-800 shadow-xs flex items-center gap-1 shrink-0">
-                        <span class="material-symbols-outlined text-sm">badge</span>
-                        <span>1. ข้อมูลแผงค้า & เจ้าของ</span>
+            <!-- ========================================== -->
+            <!-- 1. STEP: FORM VIEW (กรอกข้อมูลแผงค้า)       -->
+            <!-- ========================================== -->
+            <div id="merchant-portal-step-form" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <!-- Tab Switcher for Form Sections with Scroll Buttons & 1-Click Sample Button -->
+                <div class="bg-slate-100 p-2 border-b border-slate-200 shrink-0 flex items-center gap-1">
+                    <button onclick="scrollMerchantPortalTabs(-120)" class="w-6 h-6 rounded-full bg-white shadow-xs border border-slate-200 text-slate-700 hover:text-emerald-700 flex items-center justify-center shrink-0 active:scale-90" title="เลื่อนซ้าย">
+                        <span class="material-symbols-outlined text-xs font-bold">chevron_left</span>
                     </button>
-                    <button onclick="switchMerchantPortalTab('tab-images')" id="btn-tab-images" class="merchant-tab-btn px-3 py-1.5 rounded-xl font-medium bg-transparent text-slate-600 hover:bg-white/60 flex items-center gap-1 shrink-0">
-                        <span class="material-symbols-outlined text-sm">photo_camera</span>
-                        <span>2. รูปภาพโปรไฟล์ (2 รูป)</span>
+                    <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs w-full scroll-smooth cursor-grab active:cursor-grabbing" id="merchant-portal-tab-bar">
+                        <button onclick="switchMerchantPortalTab('tab-info')" id="btn-tab-info" class="merchant-tab-btn active px-3 py-1.5 rounded-xl font-bold bg-white text-emerald-800 shadow-xs flex items-center gap-1 shrink-0">
+                            <span class="material-symbols-outlined text-sm">badge</span>
+                            <span>1. ข้อมูลแผงค้า & เจ้าของ</span>
+                        </button>
+                        <button onclick="switchMerchantPortalTab('tab-images')" id="btn-tab-images" class="merchant-tab-btn px-3 py-1.5 rounded-xl font-medium bg-transparent text-slate-600 hover:bg-white/60 flex items-center gap-1 shrink-0">
+                            <span class="material-symbols-outlined text-sm">photo_camera</span>
+                            <span>2. รูปภาพโปรไฟล์ (2 รูป)</span>
+                        </button>
+                        <button onclick="switchMerchantPortalTab('tab-products')" id="btn-tab-products" class="merchant-tab-btn px-3 py-1.5 rounded-xl font-medium bg-transparent text-slate-600 hover:bg-white/60 flex items-center gap-1 shrink-0">
+                            <span class="material-symbols-outlined text-sm">fastfood</span>
+                            <span>3. สินค้าไฮไลท์ (6 รายการ)</span>
+                        </button>
+                        <button onclick="switchMerchantPortalTab('tab-catalog')" id="btn-tab-catalog" class="merchant-tab-btn px-3 py-1.5 rounded-xl font-medium bg-transparent text-slate-600 hover:bg-white/60 flex items-center gap-1 shrink-0">
+                            <span class="material-symbols-outlined text-sm">table_view</span>
+                            <span>4. ตารางสินค้าทั้งหมด</span>
+                        </button>
+                    </div>
+                    <button onclick="scrollMerchantPortalTabs(120)" class="w-6 h-6 rounded-full bg-white shadow-xs border border-slate-200 text-slate-700 hover:text-emerald-700 flex items-center justify-center shrink-0 active:scale-90" title="เลื่อนขวา">
+                        <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
                     </button>
-                    <button onclick="switchMerchantPortalTab('tab-products')" id="btn-tab-products" class="merchant-tab-btn px-3 py-1.5 rounded-xl font-medium bg-transparent text-slate-600 hover:bg-white/60 flex items-center gap-1 shrink-0">
-                        <span class="material-symbols-outlined text-sm">fastfood</span>
-                        <span>3. สินค้าไฮไลท์ (6 รายการ)</span>
-                    </button>
-                    <button onclick="switchMerchantPortalTab('tab-catalog')" id="btn-tab-catalog" class="merchant-tab-btn px-3 py-1.5 rounded-xl font-medium bg-transparent text-slate-600 hover:bg-white/60 flex items-center gap-1 shrink-0">
-                        <span class="material-symbols-outlined text-sm">table_view</span>
-                        <span>4. ตารางสินค้าทั้งหมด</span>
+                    <button type="button" onclick="fillSampleMerchantRegistration()" class="ml-1 px-2.5 py-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-black rounded-xl text-[10px] flex items-center gap-1 shadow-sm active:scale-95 transition-all shrink-0 cursor-pointer" title="กรอกข้อมูลจำลองร้านค้าตัวอย่างอัตโนมัติสำหรับการทดสอบ">
+                        <span>✨ กรอกตัวอย่าง 1-Click</span>
                     </button>
                 </div>
-                <button onclick="scrollMerchantPortalTabs(120)" class="w-6 h-6 rounded-full bg-white shadow-xs border border-slate-200 text-slate-700 hover:text-emerald-700 flex items-center justify-center shrink-0 active:scale-90" title="เลื่อนขวา">
-                    <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
-                </button>
-            </div>
 
-            <!-- Form Content (Scrollable) -->
-            <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs text-left" id="merchant-portal-content">
-                
-                <!-- TAB 1: General Info -->
-                <div id="tab-info" class="merchant-tab-pane space-y-3.5">
-                    <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-emerald-900 flex items-start gap-2">
-                        <span class="material-symbols-outlined text-emerald-700 text-base shrink-0 mt-0.5">info</span>
-                        <div>
-                            <div class="font-bold">กรอกข้อมูลพื้นฐานของแผงค้า</div>
-                            <div class="text-[11px] text-emerald-800">ระบบจะนำข้อมูลนี้ไปสร้างหน้าร้านและแสดงให้นักช้อปในชุมชนเห็นบนแอปพลิเคชัน</div>
+                <!-- Form Content (Scrollable) -->
+                <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs text-left" id="merchant-portal-content">
+                    
+                    <!-- TAB 1: General Info -->
+                    <div id="tab-info" class="merchant-tab-pane space-y-3.5">
+                        <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-emerald-900 flex items-start gap-2">
+                            <span class="material-symbols-outlined text-emerald-700 text-base shrink-0 mt-0.5">info</span>
+                            <div>
+                                <div class="font-bold">กรอกข้อมูลพื้นฐานของแผงค้า</div>
+                                <div class="text-[11px] text-emerald-800">ระบบจะนำข้อมูลนี้ไปสร้างหน้าร้านและแสดงให้นักช้อปในชุมชนเห็นบนแอปพลิเคชัน</div>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">ชื่อร้านค้า / แผงค้า <span class="text-rose-500">*</span></label>
-                            <input type="text" id="m-stall-name" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
-                        </div>
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">หมายเลขแผงค้า <span class="text-rose-500">*</span></label>
-                            <input type="text" id="m-stall-number" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
-                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">ชื่อร้านค้า / แผงค้า <span class="text-rose-500">*</span></label>
+                                <input type="text" id="m-stall-name" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
+                            </div>
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">หมายเลขแผงค้า <span class="text-rose-500">*</span></label>
+                                <input type="text" id="m-stall-number" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
+                            </div>
                         <div>
                             <label class="block font-bold text-slate-700 mb-1">โซนในตลาด <span class="text-rose-500">*</span></label>
                             <select id="m-stall-zone" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
@@ -3214,13 +3278,129 @@
                         <span class="material-symbols-outlined text-sm">visibility</span>
                         <span>ดูตัวอย่างหน้าร้าน</span>
                     </button>
-                    <button onclick="submitMerchantApplication()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-bold shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
-                        <span class="material-symbols-outlined text-sm">send</span>
-                        <span>📤 ส่งข้อมูลให้แอดมินพิจารณา</span>
+                    <button onclick="submitMerchantApplication()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-bold shadow-md flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm font-bold">send</span>
+                        <span>ส่งใบสมัครเปิดร้านให้แอดมินอนุมัติ 🚀</span>
                     </button>
                 </div>
             </div>
+            </div>
 
+            <!-- ========================================== -->
+            <!-- 2. STEP: SUCCESS & NEXT STEPS PROGRESSION VIEW (แผงค้า) -->
+            <!-- ========================================== -->
+            <div id="merchant-portal-step-success" class="flex-1 flex flex-col min-h-0 overflow-hidden hidden">
+                <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs text-slate-700 text-center">
+                    <!-- Celebratory Animated Icon -->
+                    <div class="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white flex items-center justify-center font-black text-3xl shadow-lg mx-auto animate-bounce">
+                        🎉
+                    </div>
+                    <div>
+                        <h3 class="text-base sm:text-lg font-black text-slate-900">ส่งใบสมัครลงทะเบียนเปิดร้านสำเร็จ!</h3>
+                        <p class="text-xs text-slate-500 mt-0.5">ระบบได้ส่งข้อมูลร้านค้าและแคตตาล็อกสินค้าไปยังศูนย์บริหารตลาดของแอดมินเรียบร้อยแล้ว</p>
+                    </div>
+
+                    <!-- 3-Step Process Flow Indicator -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-left space-y-2">
+                        <div class="text-[11px] font-black text-slate-600 uppercase tracking-wider">เส้นทางการเปิดแผงค้า (ตลาดวิศิษฐ์ชัย เฮียส่ง)</div>
+                        <div class="grid grid-cols-3 gap-1.5 text-center text-[10px]">
+                            <div class="bg-emerald-100 text-emerald-800 border border-emerald-300 p-2 rounded-xl font-bold">
+                                <div class="text-xs mb-0.5">✓ 1. ส่งใบสมัคร</div>
+                                <span>บันทึกแล้ว</span>
+                            </div>
+                            <div class="bg-amber-100 text-amber-900 border border-amber-300 p-2 rounded-xl font-bold animate-pulse">
+                                <div class="text-xs mb-0.5">⏳ 2. แอดมินอนุมัติ</div>
+                                <span>รับรหัส 6 หลัก</span>
+                            </div>
+                            <div class="bg-orange-50 text-orange-800 border border-orange-200 p-2 rounded-xl font-bold">
+                                <div class="text-xs mb-0.5">🏪 3. เริ่มขายของสด</div>
+                                <span>ปุ่ม 3. แผงค้า</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Applicant Summary Card -->
+                    <div class="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-3.5 text-left text-xs space-y-2">
+                        <div class="flex items-center justify-between pb-1.5 border-b border-emerald-200/60">
+                            <span class="font-bold text-slate-700">รหัสติดตามใบสมัคร:</span>
+                            <span id="nextstep-merchant-id" class="font-mono font-black text-emerald-800 bg-white px-2.5 py-0.5 rounded-lg border border-emerald-300">APP-SHOP-xxxx</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-500">ชื่อร้านค้า / แผงค้า:</span>
+                            <span id="nextstep-merchant-name" class="font-bold text-slate-800">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-500">หมายเลขแผง & โซน:</span>
+                            <span id="nextstep-merchant-stall" class="font-bold text-slate-800">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-500">เจ้าของร้าน & เบอร์โทร:</span>
+                            <span id="nextstep-merchant-phone" class="font-bold font-mono text-slate-800">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-500">สถานะปัจจุบัน:</span>
+                            <span id="nextstep-merchant-status" class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full">⏳ รอแอดมินอนุมัติ</span>
+                        </div>
+                    </div>
+
+                    <!-- Next Step Action Buttons -->
+                    <div class="space-y-2.5 pt-2">
+                        <div class="text-left font-bold text-slate-800 text-xs flex items-center gap-1">
+                            <span class="material-symbols-outlined text-purple-600 text-base">forward</span>
+                            <span>เลือกดำเนินการส่งต่อไปยังขั้นตอนต่อไป:</span>
+                        </div>
+
+                        <!-- Button 1: Go to Admin to Approve (Role 5) -->
+                        <button type="button" onclick="goToAdminToApproveMerchantFromSuccess()" class="w-full p-3 bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:from-purple-800 hover:to-indigo-800 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-base">admin_panel_settings</span>
+                            <span>1. ไปหน้าแอดมิน (Role 5) เพื่อตรวจสอบ & กดอนุมัติ</span>
+                        </button>
+
+                        <!-- Button 2: Fast Track Instant Approve & Login to Role 3 -->
+                        <button type="button" onclick="approveAndLoginCurrentSubmittedMerchant()" class="w-full p-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer" title="อนุมัติร้านค้านี้ทันทีและสลับเข้าสู่หน้าจัดการแผงค้า">
+                            <span class="material-symbols-outlined text-base font-bold">verified</span>
+                            <span>⚡ 2. อนุมัติทันที & สลับเข้าร้าน (Role 3 Fast-Track)</span>
+                        </button>
+
+                        <!-- Button 3: Check Approval Status & Login -->
+                        <button type="button" onclick="checkCurrentMerchantApprovalAndLogin()" class="w-full p-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white rounded-2xl font-black text-xs shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-base">check_circle</span>
+                            <span>3. ตรวจสอบสถานะการอนุมัติ / ล็อกอินร้านค้า</span>
+                        </button>
+
+                        <!-- Multi-role Quick Switches (Role 1, 2, 4) -->
+                        <div class="grid grid-cols-2 gap-2 pt-1 text-xs">
+                            <button type="button" onclick="closeMerchantPortalModal(); switchRole('customer'); goToMarketScreen();" class="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-sm text-emerald-600">shopping_cart</span>
+                                <span>🛒 ตลาดสด (Role 1)</span>
+                            </button>
+                            <button type="button" onclick="closeMerchantPortalModal(); switchRole('hub');" class="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-sm text-amber-600">inventory_2</span>
+                                <span>📦 ศูนย์ฮับ (Role 2)</span>
+                            </button>
+                            <button type="button" onclick="closeMerchantPortalModal(); switchRole('rider');" class="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-sm text-sky-600">two_wheeler</span>
+                                <span>🛵 ไรเดอร์ (Role 4)</span>
+                            </button>
+                            <button type="button" onclick="closeMerchantPortalModal(); openStatusCheckModal('merchant');" class="p-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-sm text-amber-600">search</span>
+                                <span>🔍 ตรวจสถานะด้วยเบอร์</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Footer in Success View -->
+                <div class="p-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between shrink-0">
+                    <button type="button" onclick="backToMerchantRegisterForm()" class="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 font-bold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">arrow_back</span>
+                        <span>ย้อนกลับไปดูฟอร์ม</span>
+                    </button>
+                    <button type="button" onclick="closeMerchantPortalModal()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95">
+                        ปิดหน้าต่าง
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
