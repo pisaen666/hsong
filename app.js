@@ -16299,9 +16299,15 @@ function saveMerchantStallData() {
     if (activeMerchantStallId && activeMerchantStallId.startsWith("stall_new_")) {
         const apps = loadMerchantApplications();
         const existingAppIdx = apps.findIndex(a => a.id === activeMerchantStallId);
+        const appId = (existingAppIdx >= 0 && apps[existingAppIdx].id)
+            ? apps[existingAppIdx].id
+            : `APP-SHOP-${Date.now().toString().slice(-4)}`;
+        stallObj.stallId = appId;
+
         const appRecord = {
-            id: activeMerchantStallId,
+            id: appId,
             submittedAt: new Date().toISOString(),
+            appliedAt: new Date().toISOString(),
             status: "pending",
             stallData: stallObj,
             accessCode: null
@@ -16363,7 +16369,76 @@ function saveMerchantStallData() {
 }
 
 function previewMerchantLiveStore() {
-    saveMerchantStallData();
+    const stallName = document.getElementById("m-stall-name")?.value.trim() || "ตัวอย่างชื่อร้านค้า";
+    const stallNumber = document.getElementById("m-stall-number")?.value.trim() || "แผง A-01";
+    const zoneVal = document.getElementById("m-stall-zone")?.value || "A";
+    const zone = zoneVal.includes("B") ? "B" : zoneVal.includes("C") ? "C" : zoneVal.includes("E") ? "E" : "A";
+    const category = document.getElementById("m-stall-category")?.value || "chicken";
+    const ownerName = document.getElementById("m-owner-name")?.value.trim() || "เจ้าของแผง";
+    const phone = document.getElementById("m-phone")?.value.trim() || "081-xxx-xxxx";
+    const highlight = document.getElementById("m-highlight")?.value.trim() || "ของสดคุณภาพดี คัดเกรดสดใหม่";
+    const desc = document.getElementById("m-desc")?.value.trim() || "จำหน่ายของสดคุณภาพดีประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)";
+    const stallImage = document.getElementById("m-stall-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
+    const ownerImage = document.getElementById("m-owner-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.owner.man1;
+
+    const products = [];
+    for (let i = 0; i < 6; i++) {
+        const name = document.getElementById(`m-p-name-${i}`)?.value.trim();
+        const price = parseFloat(document.getElementById(`m-p-price-${i}`)?.value || "0") || 50;
+        const unit = document.getElementById(`m-p-unit-${i}`)?.value.trim() || "กก.";
+        const pImg = document.getElementById(`m-p-img-${i}`)?.value.trim() || stallImage;
+        const pDesc = document.getElementById(`m-p-desc-${i}`)?.value.trim() || "";
+        const badge = document.getElementById(`m-p-badge-${i}`)?.value.trim() || "";
+
+        if (name) {
+            products.push({
+                id: `preview_p_${i + 1}`,
+                name: name,
+                desc: pDesc,
+                price: price,
+                unit: unit,
+                badge: badge,
+                image: pImg
+            });
+        }
+    }
+    if (products.length === 0) {
+        products.push({
+            id: "preview_p_1",
+            name: "สินค้าไฮไลท์ตัวอย่าง",
+            desc: "ของสดคุณภาพดี",
+            price: 60,
+            unit: "กก.",
+            badge: "แนะนำ",
+            image: stallImage
+        });
+    }
+
+    const previewStall = {
+        stallId: "preview_stall_temp",
+        stallName: stallName,
+        stallNumber: stallNumber,
+        zone: zone,
+        category: category,
+        ownerName: ownerName,
+        phone: phone,
+        highlight: highlight,
+        shopDescription: desc,
+        stallImage: stallImage,
+        ownerImage: ownerImage,
+        stallTag: `${stallName} ${ownerName} ${highlight}`,
+        products: products,
+        catalog: []
+    };
+
+    const existIdx = MARKET_DATA.findIndex(s => s.stallId === "preview_stall_temp");
+    if (existIdx >= 0) MARKET_DATA[existIdx] = previewStall;
+    else MARKET_DATA.push(previewStall);
+
+    const modal = document.getElementById("stall-catalog-modal");
+    if (modal) modal.style.zIndex = "9999";
+    openStallCatalogModal("preview_stall_temp");
+    showToast("👁️ กำลังแสดงพรีวิวหน้าร้านค้าของคุณ (กดปิดเพื่อกลับมากรอกข้อมูลต่อ)");
 }
 
 // ==========================================
@@ -17144,3 +17219,17 @@ window.handleMerchantCodeLoginSubmit = handleMerchantCodeLoginSubmit;
 
 window.submitMerchantApplication = saveMerchantStallData;
 window.saveMerchantStallData = saveMerchantStallData;
+window.previewMerchantLiveStore = previewMerchantLiveStore;
+window.closeMerchantPortalModal = closeMerchantPortalModal;
+window.switchMerchantPortalTab = switchMerchantPortalTab;
+window.scrollMerchantPortalTabs = scrollMerchantPortalTabs;
+window.handleMerchantFileUpload = handleMerchantFileUpload;
+window.handleMerchantProductFileUpload = handleMerchantProductFileUpload;
+window.updateMerchantProductPreview = updateMerchantProductPreview;
+window.updateMerchantImagePreviews = updateMerchantImagePreviews;
+window.setMerchantStallImgPreset = setMerchantStallImgPreset;
+window.setMerchantOwnerImgPreset = setMerchantOwnerImgPreset;
+window.renderMerchantTop6ProductsForm = renderMerchantTop6ProductsForm;
+window.renderMerchantCatalogTable = renderMerchantCatalogTable;
+window.addMerchantCatalogRow = addMerchantCatalogRow;
+window.deleteMerchantCatalogRow = deleteMerchantCatalogRow;
