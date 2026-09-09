@@ -18233,6 +18233,7 @@ window.updateCartUI = updateCartUI;
 window.renderCheckoutPage = renderCheckoutPage;
 window.processOrderCheckout = processOrderCheckout;
 window.simulatePaymentSuccess = simulatePaymentSuccess;
+window.selectPaymentMethod = selectPaymentMethod;
 
 // Global Event Capture Listener to guarantee cart navigation and clear cart actions
 document.addEventListener("click", function (e) {
