@@ -1417,8 +1417,29 @@
                 </div>
             </div>
 
+            <!-- Rider Sub-Tabs Navigation Bar -->
+            <div class="bg-white border-b border-slate-200 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto text-xs shrink-0 shadow-xs">
+                <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="switchRiderMainTab('active')" id="rider-tab-btn-active" class="px-3 py-1.5 rounded-xl font-bold bg-[#004D40] text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">two_wheeler</span>
+                        <span>1. งานปัจจุบัน</span>
+                    </button>
+                    <button type="button" onclick="switchRiderMainTab('pool')" id="rider-tab-btn-pool" class="px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">local_shipping</span>
+                        <span>2. บอร์ดรับงานด่วน</span>
+                        <span id="rider-job-pool-badge" class="bg-orange-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full hidden">0</span>
+                    </button>
+                    <button type="button" onclick="switchRiderMainTab('wallet')" id="rider-tab-btn-wallet" class="px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">account_balance_wallet</span>
+                        <span>3. กระเป๋าเงินไรเดอร์</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Rider Content -->
             <div class="p-3.5 sm:p-4 flex-1 overflow-y-auto space-y-3.5 pb-20 text-xs max-w-3xl mx-auto w-full">
+                <!-- PANEL 1: ACTIVE TASK -->
+                <div id="rider-panel-active" class="space-y-3.5">
                 <!-- Active Task Card -->
                 <div class="bg-white rounded-2xl p-4 shadow-card border border-slate-200 space-y-3">
                     <div class="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -1489,6 +1510,18 @@
                         </button>
                     </div>
 
+                    <!-- 2-Step Realtime Location Signals for Rider -->
+                    <div class="grid grid-cols-2 gap-2 pt-1">
+                        <button type="button" onclick="markRiderArrivedAtStall()" class="p-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-2xs flex items-center justify-center gap-1 text-[11px] active:scale-95 transition-all cursor-pointer" title="ส่งสัญญาณเตือนแผงค้าว่าถึงหน้าแผงแล้ว">
+                            <span class="material-symbols-outlined text-xs">storefront</span>
+                            <span>📍 ถึงหน้าแผงค้าแล้ว</span>
+                        </button>
+                        <button type="button" onclick="markRiderArrivedAtCustomer()" class="p-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-2xs flex items-center justify-center gap-1 text-[11px] active:scale-95 transition-all cursor-pointer" title="ส่งสัญญาณเตือนลูกค้าว่าถึงหน้าบ้านแล้ว">
+                            <span class="material-symbols-outlined text-xs">home_pin</span>
+                            <span>🏠 ถึงหน้าบ้านลูกค้าแล้ว</span>
+                        </button>
+                    </div>
+
                     <!-- Refund envelope alert for rider (if any out-of-stock items) -->
                     <div id="rider-refund-alert" class="hidden bg-rose-50 border border-rose-300 text-rose-800 rounded-xl p-3 text-xs font-bold space-y-1 animate-fade-in">
                         <div class="flex items-center gap-1.5 text-rose-700">
@@ -1514,7 +1547,7 @@
                             </button>
                             <button type="button" id="btn-rider-complete-delivery" onclick="handleRiderCompleteDelivery()" class="p-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 text-xs active:scale-95 transition-all">
                                 <span class="material-symbols-outlined text-base" id="rider-btn-complete-icon">check_circle</span>
-                                <span id="rider-btn-complete-text">2. ส่งมอบสำเร็จ</span>
+                                <span id="rider-btn-complete-text">2. ส่งมอบสำเร็จ (แนบรูป)</span>
                             </button>
                         </div>
 
@@ -1543,6 +1576,21 @@
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+                </div>
+
+                <!-- PANEL 2: JOB POOL BOARD (บอร์ดรับงานด่วน) -->
+                <div id="rider-panel-pool" class="space-y-3.5 hidden">
+                    <div id="rider-job-pool-container">
+                        <!-- Populated dynamically via renderRiderJobPool() -->
+                    </div>
+                </div>
+
+                <!-- PANEL 3: RIDER WALLET (กระเป๋าเงินไรเดอร์) -->
+                <div id="rider-panel-wallet" class="space-y-3.5 hidden">
+                    <div id="rider-wallet-container">
+                        <!-- Populated dynamically via renderRiderWallet() -->
                     </div>
                 </div>
 
@@ -4864,6 +4912,49 @@
                 <!-- 4. Next Order -->
                 <button type="button" onclick="resetRiderOrderForNextJob(); closeRiderDeliveryCompleteModal();" class="w-full py-2 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
                     <span>🛵 เสร็จสิ้น • สแตนด์บายรอรับงานถัดไป (Role 4)</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- RIDER PROOF OF DELIVERY UPLOAD MODAL       -->
+    <!-- ========================================== -->
+    <div id="rider-proof-upload-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in">
+        <div class="bg-white rounded-3xl p-5 sm:p-6 max-w-sm w-full shadow-2xl space-y-4 border border-slate-200 text-left animate-scale-up">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="w-9 h-9 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-xl">photo_camera</span>
+                    </span>
+                    <div>
+                        <h3 class="font-extrabold text-sm text-slate-900">ถ่ายรูปหลักฐานการจัดส่ง</h3>
+                        <p class="text-[11px] text-slate-500">บันทึกรูปถ่ายพัสดุหน้าบ้านลูกค้า</p>
+                    </div>
+                </div>
+                <button type="button" onclick="document.getElementById('rider-proof-upload-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <div class="space-y-3">
+                <div class="w-full h-44 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center overflow-hidden relative shadow-inner">
+                    <img id="rider-proof-preview-img" src="" alt="รูปหลักฐาน" class="w-full h-full object-cover hidden">
+                    <div id="rider-proof-placeholder" class="text-center space-y-1 p-3">
+                        <span class="material-symbols-outlined text-slate-300 text-3xl block">add_a_photo</span>
+                        <span class="text-xs font-bold text-slate-600 block">กดถ่ายรูปหรือเลือกรูปภาพ</span>
+                        <span class="text-[10px] text-slate-400 block">รูปถ่ายพัสดุวางไว้หน้าบ้าน หรือยื่นให้ลูกค้า</span>
+                    </div>
+                </div>
+
+                <label class="w-full py-3 bg-slate-900 hover:bg-black text-white font-extrabold rounded-2xl text-xs flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">photo_camera</span>
+                    <span>📷 เปิดกล้อง / เลือกรูปถ่ายหลักฐาน</span>
+                    <input type="file" accept="image/*" capture="environment" onchange="handleRiderProofFileUpload(event)" class="hidden">
+                </label>
+
+                <button type="button" onclick="confirmRiderDeliveryWithProof()" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-2xl text-xs shadow-lg active:scale-95 transition-all cursor-pointer">
+                    ✓ ยืนยันส่งมอบสำเร็จ & บันทึกรูปถ่าย
                 </button>
             </div>
         </div>

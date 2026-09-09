@@ -18820,3 +18820,318 @@ function approveHubMerchantExpressSlip(orderId) {
     assignExpressOrderToRider(orderId, 'R1');
 }
 window.approveHubMerchantExpressSlip = approveHubMerchantExpressSlip;
+
+// ── Role 4 Rider Sub-Tab Navigation & Extensions ─────────────────────────
+
+function switchRiderMainTab(tabKey) {
+    const tabs = ['active', 'pool', 'wallet'];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`rider-tab-btn-${t}`);
+        const panel = document.getElementById(`rider-panel-${t}`);
+        if (t === tabKey) {
+            if (btn) {
+                btn.className = "rider-sub-tab px-3.5 py-1.5 text-xs font-bold rounded-xl bg-slate-900 text-amber-400 shadow-md flex items-center gap-1.5 transition-all cursor-pointer";
+            }
+            if (panel) panel.classList.remove("hidden");
+        } else {
+            if (btn) {
+                btn.className = "rider-sub-tab px-3.5 py-1.5 text-xs font-bold rounded-xl bg-white/70 hover:bg-white text-slate-600 flex items-center gap-1.5 transition-all cursor-pointer";
+            }
+            if (panel) panel.classList.add("hidden");
+        }
+    });
+
+    if (tabKey === 'pool') {
+        renderRiderJobPool();
+    } else if (tabKey === 'wallet') {
+        renderRiderWallet();
+    } else if (tabKey === 'active') {
+        renderRiderScreen();
+    }
+}
+window.switchRiderMainTab = switchRiderMainTab;
+
+function renderRiderJobPool() {
+    const container = document.getElementById("rider-job-pool-container");
+    const countBadge = document.getElementById("rider-pool-count");
+    if (!container) return;
+
+    let poolOrders = [];
+    
+    if (state.merchantExpressOrders && state.merchantExpressOrders.length > 0) {
+        poolOrders.push(...state.merchantExpressOrders.filter(o => o && (o.status === "waiting_rider" || !o.riderName)));
+    }
+
+    if (state.orders && state.orders.length > 0) {
+        poolOrders.push(...state.orders.filter(o => o && (o.status === "waiting_rider" || o.status === "picking_completed" || (!o.riderName && o.status !== "delivered"))));
+    }
+
+    if (poolOrders.length === 0) {
+        poolOrders = [
+            {
+                orderId: "EXPRESS-8801",
+                orderType: "MERCHANT_EXPRESS",
+                customerName: "คุณวิภา (ด่วนชุมชน)",
+                customerPhone: "089-111-2222",
+                address: "หมู่บ้านพฤกษา 12/1 บ้านบึง",
+                deliveryFee: 30,
+                originStall: { stallName: "เจ๊ไหม หมูสดเกรด A", stallNumber: "แผง A-04", ownerPhone: "081-444-5555" },
+                note: "หมูบด 3 กก. + ซี่โครง 2 กก. - โอนค่าส่งล่วงหน้าแล้ว",
+                status: "waiting_rider",
+                createdAt: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น."
+            },
+            {
+                orderId: "HUB-9902",
+                orderType: "HUB_CONSOLIDATED",
+                customerName: "สมศักดิ์ วงศ์สว่าง",
+                customerPhone: "086-777-8888",
+                address: "ร้านขายของชำ ถ.สุรชัย บ้านบึง",
+                grandTotal: 540,
+                paymentType: "cod",
+                paymentDesc: "ชำระเงินปลายทาง COD ฿540",
+                riderFee: 40,
+                itemsCount: 4,
+                status: "waiting_rider",
+                createdAt: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น."
+            }
+        ];
+    }
+
+    if (countBadge) countBadge.textContent = poolOrders.length;
+
+    let html = poolOrders.map(job => {
+        const isExpress = job.orderType === "MERCHANT_EXPRESS";
+        const feeText = isExpress ? `฿${job.deliveryFee || 20} (ค่าส่งด่วน)` : `฿40 (ค่ารอบประจำ)`;
+        const originText = isExpress ? `🏪 ${job.originStall?.stallName || 'แผงค้า'}` : `🏬 ฮับรวมตลาดบ้านบึง`;
+        return `
+            <div class="bg-white rounded-2xl p-4 border border-amber-200 shadow-sm space-y-3 relative overflow-hidden hover:border-amber-400 transition-all">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2.5 py-1 rounded-lg ${isExpress ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-900'} text-[11px] font-extrabold flex items-center gap-1">
+                            ${isExpress ? '⚡ ส่งด่วนแผงค้า' : '📦 รวมรอบฮับ'}
+                        </span>
+                        <span class="font-extrabold text-slate-800 text-xs">${job.orderId}</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400">${job.createdAt || 'เมื่อสักครู่'}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                        <div class="text-[10px] text-slate-400 font-medium">ต้นทางรับสินค้า</div>
+                        <div class="font-bold text-slate-800 truncate">${originText}</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-slate-400 font-medium">ปลายทางจัดส่ง</div>
+                        <div class="font-bold text-slate-800 truncate">📍 ${job.customerName || 'ลูกค้า'}</div>
+                    </div>
+                </div>
+                <div class="bg-slate-50 p-2 rounded-xl text-[11px] text-slate-600">
+                    <div class="truncate">🏠 ที่อยู่: ${job.address || 'บ้านบึง ชลบุรี'}</div>
+                    ${job.note ? `<div class="text-amber-800 font-medium mt-0.5 truncate">📝 ${job.note}</div>` : ''}
+                </div>
+                <div class="flex items-center justify-between pt-1">
+                    <div>
+                        <span class="text-[10px] text-slate-400">รายได้ค่ารอบ:</span>
+                        <span class="text-sm font-extrabold text-emerald-600 ml-1">${feeText}</span>
+                    </div>
+                    <button onclick="claimOrderForRider('${job.orderId}')" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                        <span>🛵 กดรับงานนี้</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    container.innerHTML = html;
+}
+window.renderRiderJobPool = renderRiderJobPool;
+
+function claimOrderForRider(orderId) {
+    let order = (state.merchantExpressOrders || []).find(o => o && o.orderId === orderId);
+    if (!order) {
+        order = (state.orders || []).find(o => o && o.orderId === orderId);
+    }
+    
+    if (!order) {
+        order = {
+            orderId: orderId,
+            orderType: orderId.startsWith("EXPRESS") ? "MERCHANT_EXPRESS" : "HUB_CONSOLIDATED",
+            customerName: "คุณลูกค้า (งานด่วน)",
+            customerPhone: "089-123-4567",
+            address: "หมู่บ้านวิเศษสุข ต.บ้านบึง อ.บ้านบึง",
+            deliveryFee: 30,
+            grandTotal: 350,
+            paymentType: "cod",
+            paymentDesc: "COD เก็บเงินปลายทาง ฿350",
+            originStall: { stallName: "เจ๊ไหม หมูสด", stallNumber: "แผง A-04", ownerPhone: "081-444-5555" },
+            status: "picking"
+        };
+    }
+
+    const riderName = (state.activeRider && state.activeRider.name) ? state.activeRider.name : "ไรเดอร์ประจำชุมชน";
+    const riderPhone = (state.activeRider && state.activeRider.phone) ? state.activeRider.phone : "089-999-8888";
+
+    order.riderName = riderName;
+    order.riderPhone = riderPhone;
+    order.status = "picking";
+    state.activeOrder = order;
+
+    saveActiveOrderToStorage(state.activeOrder);
+    switchRiderMainTab('active');
+    renderRiderScreen();
+    showToast(`🎉 รับงาน ${orderId} เรียบร้อยแล้ว! พร้อมออกไปรับของที่แผงค้า/ฮับ`);
+}
+window.claimOrderForRider = claimOrderForRider;
+
+function markRiderArrivedAtStall() {
+    if (!state.activeOrder) {
+        showToast("⚠️ ไม่มีออเดอร์ที่กำลังดำเนินการ");
+        return;
+    }
+    const timeStr = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.";
+    state.activeOrder.arrivedStallAt = timeStr;
+    saveActiveOrderToStorage(state.activeOrder);
+    showToast(`📍 ส่งสัญญาณเรียบร้อย: ไรเดอร์ถึงหน้าแผงค้าแล้ว (${timeStr})`);
+}
+window.markRiderArrivedAtStall = markRiderArrivedAtStall;
+
+function markRiderArrivedAtCustomer() {
+    if (!state.activeOrder) {
+        showToast("⚠️ ไม่มีออเดอร์ที่กำลังดำเนินการ");
+        return;
+    }
+    const timeStr = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.";
+    state.activeOrder.arrivedCustomerAt = timeStr;
+    saveActiveOrderToStorage(state.activeOrder);
+    showToast(`🏠 ส่งสัญญาณเรียบร้อย: ไรเดอร์ถึงหน้าบ้านลูกค้าแล้ว (${timeStr})`);
+}
+window.markRiderArrivedAtCustomer = markRiderArrivedAtCustomer;
+
+function openRiderProofModal() {
+    const modal = document.getElementById("rider-proof-upload-modal");
+    if (modal) modal.classList.remove("hidden");
+}
+window.openRiderProofModal = openRiderProofModal;
+
+function closeRiderProofModal() {
+    const modal = document.getElementById("rider-proof-upload-modal");
+    if (modal) modal.classList.add("hidden");
+}
+window.closeRiderProofModal = closeRiderProofModal;
+
+function handleRiderProofFileUpload(event) {
+    const file = event && event.target && event.target.files ? event.target.files[0] : null;
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const base64Data = e.target.result;
+        const img = document.getElementById("rider-proof-img-preview");
+        const container = document.getElementById("rider-proof-preview-container");
+        if (img) img.src = base64Data;
+        if (container) container.classList.remove("hidden");
+        if (state.activeOrder) {
+            state.activeOrder.deliveryProofImage = base64Data;
+        }
+    };
+    reader.readAsDataURL(file);
+}
+window.handleRiderProofFileUpload = handleRiderProofFileUpload;
+
+function confirmRiderDeliveryWithProof() {
+    if (state.activeOrder && !state.activeOrder.deliveryProofImage) {
+        state.activeOrder.deliveryProofImage = "https://images.unsplash.com/photo-1526367790999-0150786686a2?auto=format&fit=crop&w=400&q=80";
+    }
+    closeRiderProofModal();
+    handleRiderCompleteDelivery();
+}
+window.confirmRiderDeliveryWithProof = confirmRiderDeliveryWithProof;
+
+function renderRiderWallet() {
+    const container = document.getElementById("rider-wallet-container");
+    if (!container) return;
+
+    const dateKey = getReportDateKey(Date.now());
+    let report;
+    try {
+        report = aggregateDailyOperations(dateKey);
+    } catch(e) {}
+
+    const riderName = (state.activeRider && state.activeRider.name) ? state.activeRider.name : "ไรเดอร์ประจำชุมชน";
+    let riderRecord = report?.riderSettlement?.riders?.find(r => r.riderName === riderName) || {
+        tripsCount: state.activeOrder && state.activeOrder.status === 'delivered' ? 1 : 0,
+        riderFeeEarned: state.activeOrder && state.activeOrder.status === 'delivered' ? 40 : 0,
+        codCollected: 0,
+        refundHanded: 0,
+        netCashToHub: 0
+    };
+
+    const trips = riderRecord.tripsCount || 0;
+    const feeEarned = riderRecord.riderFeeEarned || (trips * 40);
+    const cod = riderRecord.codCollected || 0;
+    const refunds = riderRecord.refundHanded || 0;
+    const netHub = cod - feeEarned - refunds;
+
+    container.innerHTML = `
+        <div class="grid grid-cols-2 gap-3">
+            <div class="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-3.5 shadow-sm text-center">
+                <div class="text-[10px] text-emerald-700 font-extrabold uppercase">รายได้ค่ารอบสะสมวันนี้</div>
+                <div class="text-2xl font-black text-emerald-600 mt-1">฿${feeEarned.toLocaleString()}</div>
+                <div class="text-[10px] text-emerald-800 mt-0.5">รวม ${trips} รอบจัดส่ง (฿40/รอบ)</div>
+            </div>
+            <div class="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-3.5 shadow-sm text-center">
+                <div class="text-[10px] text-amber-800 font-extrabold uppercase">เงินสด COD ถือติดตัว</div>
+                <div class="text-2xl font-black text-amber-600 mt-1">฿${cod.toLocaleString()}</div>
+                <div class="text-[10px] text-amber-800 mt-0.5">ต้องนำส่งฮับเย็นนี้</div>
+            </div>
+        </div>
+
+        <div class="bg-slate-900 text-white rounded-2xl p-4 shadow-lg space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                <div class="font-extrabold text-xs text-amber-400">💵 สรุปยอดเงินต้องเคลียร์กับฮับตลาด</div>
+                <span class="text-[10px] text-slate-400">วันที่ ${dateKey}</span>
+            </div>
+            <div class="space-y-1.5 text-xs text-slate-300">
+                <div class="flex justify-between">
+                    <span>(+) เงินสด COD ที่เก็บมาได้:</span>
+                    <span class="font-bold text-white">฿${cod.toLocaleString()}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>(-) ค่ารอบไรเดอร์ที่จะได้รับ:</span>
+                    <span class="font-bold text-emerald-400">-฿${feeEarned.toLocaleString()}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>(-) เงินสดสำรองจ่ายทอนคืนลูกค้า:</span>
+                    <span class="font-bold text-rose-400">-฿${refunds.toLocaleString()}</span>
+                </div>
+                <div class="border-t border-slate-800 pt-2 flex justify-between items-center font-black text-sm">
+                    <span class="text-amber-400">ยอดเงินสุทธิไรเดอร์โอนส่งฮับ:</span>
+                    <span class="text-emerald-400 text-base">฿${Math.max(0, netHub).toLocaleString()}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
+            <div class="font-extrabold text-xs text-slate-800 flex items-center justify-between">
+                <span>📜 ประวัติงานจัดส่งที่เสร็จสมบูรณ์วันนี้</span>
+                <span class="text-[10px] text-slate-400">${trips} งาน</span>
+            </div>
+            ${trips === 0 ? `
+                <div class="py-6 text-center text-slate-400 text-xs">ยังไม่มีรายการจัดส่งที่เสร็จสมบูรณ์วันนี้</div>
+            ` : `
+                <div class="space-y-2 text-xs">
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                        <div>
+                            <div class="font-bold text-slate-800">${state.activeOrder?.orderId || '#TH-8801'} • ${state.activeOrder?.customerName || 'ลูกค้า'}</div>
+                            <div class="text-[10px] text-slate-500">เสร็จเมื่อ: ${state.activeOrder?.deliveredAt || 'วันนี้'}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-extrabold text-emerald-600">+฿40</div>
+                            <span class="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md font-bold">สำเร็จ</span>
+                        </div>
+                    </div>
+                </div>
+            `}
+        </div>
+    `;
+}
+window.renderRiderWallet = renderRiderWallet;
