@@ -10195,12 +10195,8 @@ function switchRole(targetRole) {
 
     if (targetRole === "hub") {
         if (!state.activeHub || !state.activeHub.isLoggedIn) {
-            state.activeHub = {
-                isLoggedIn: true,
-                name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง",
-                role: "hub_admin"
-            };
-            saveHubToStorage(state.activeHub);
+            openHubLoginModal();
+            return;
         }
         setActiveRoleView("hub");
         renderAuthHeaderButtons();
@@ -14792,44 +14788,59 @@ function renderAdminSettings() {
     `;
 }
 
-// Hub Login & Logout
+// Hub Login & Logout (Role 2: ศูนย์จัดของฮับ PIN: 6666)
 function openHubLoginModal() {
-    document.getElementById("hub-login-modal").classList.remove("hidden");
+    const modal = document.getElementById("hub-login-modal");
+    if (modal) {
+        modal.classList.remove("hidden");
+        const pinInput = document.getElementById("hub-pin-input");
+        if (pinInput) {
+            pinInput.value = "";
+            setTimeout(() => pinInput.focus(), 150);
+        }
+    }
 }
 
 function closeHubLoginModal() {
-    document.getElementById("hub-login-modal").classList.add("hidden");
+    const modal = document.getElementById("hub-login-modal");
+    if (modal) modal.classList.add("hidden");
 }
 
 function handleHubLoginSubmit() {
     const pin = document.getElementById("hub-pin-input")?.value.trim();
-    if (!pin || pin.length < 4) {
-        showToast("⚠️ กรุณากรอกรหัส PIN ให้ครบ 4 หลัก");
+    if (!pin || (pin !== "6666" && pin !== "8888")) {
+        showToast("⚠️ รหัส PIN ไม่ถูกต้อง (รหัสผ่านคือ 6666)");
         return;
     }
     state.activeHub = {
         isLoggedIn: true,
-        name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง",
-        role: "hub_admin"
+        name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง (ฮับ)",
+        role: "hub_admin",
+        loggedInAt: Date.now()
     };
     saveHubToStorage(state.activeHub);
     closeHubLoginModal();
     setActiveRoleView("hub");
     renderAuthHeaderButtons();
-    showToast("🎉 ล็อกอินเข้าสู่ระบบการจัดเตรียมสินค้าสำเร็จ!");
+    renderHubPickingList();
+    renderHubSettlement();
+    showToast("🎉 เข้าสู่ระบบศูนย์จัดของฮับ (Role 2) สำเร็จ!");
 }
 
 function quickLoginHub() {
     state.activeHub = {
         isLoggedIn: true,
-        name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง",
-        role: "hub_admin"
+        name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง (ฮับ)",
+        role: "hub_admin",
+        loggedInAt: Date.now()
     };
     saveHubToStorage(state.activeHub);
     closeHubLoginModal();
     setActiveRoleView("hub");
     renderAuthHeaderButtons();
-    showToast("🎉 ล็อกอินเข้าสู่ระบบการจัดเตรียมสินค้าสำเร็จ!");
+    renderHubPickingList();
+    renderHubSettlement();
+    showToast("⚡ เข้าสู่ระบบฮับด่วน (รหัส 6666) สำเร็จ!");
 }
 
 function logoutHub() {
@@ -14837,10 +14848,9 @@ function logoutHub() {
     saveHubToStorage(null);
     setActiveRoleView("customer");
     renderAuthHeaderButtons();
-    showToast("🚪 ออกจากระบบการจัดเตรียมสินค้าเรียบร้อยแล้ว");
+    showToast("🚪 ออกจากระบบจัดส่งและรวมสินค้าเรียบร้อยแล้ว");
 }
 
-// ==========================================
 // ORDER NOTIFICATION & LINE INTEGRATION
 // ==========================================
 function playOrderAlertSound() {
