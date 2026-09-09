@@ -111,9 +111,10 @@ body {
 
 /* Floating Cart Transition */
 #customer-floating-cart.visible {
-    transform: translateY(0);
-    opacity: 1;
-    pointer-events: auto;
+    transform: translateY(0) !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    display: flex !important;
 }
 
 /* Toast Notification Animation */

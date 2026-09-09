@@ -69,7 +69,7 @@
             }
         }
     </script>
-    <link rel="stylesheet" href="styles.css?v=8.3_home_fix">
+    <link rel="stylesheet" href="styles.css?v=9.24_cart_clear_fix">
 </head>
 <body class="bg-slate-100 text-text-main font-sans min-h-screen flex flex-col items-center justify-start antialiased selection:bg-primary-container selection:text-white pb-10">
 
@@ -508,22 +508,31 @@
                 </div>
 
                 <!-- Floating Cart Bottom Bar -->
-                <div id="customer-floating-cart" class="sticky bottom-16 left-0 right-0 px-4 py-2 z-30 transition-all transform translate-y-20 opacity-0 pointer-events-none flex justify-center">
-                    <button onclick="goToCheckoutScreen()" class="w-full max-w-xl bg-emerald-700 hover:bg-emerald-800 text-white p-3 rounded-2xl shadow-floating flex items-center justify-between active:scale-[0.98] transition-transform">
-                        <div class="flex items-center gap-2">
-                            <span class="bg-emerald-900/60 p-1.5 rounded-xl flex items-center justify-center">
-                                <span class="material-symbols-outlined text-emerald-200">shopping_bag</span>
-                            </span>
-                            <div class="text-left">
-                                <div class="text-xs font-semibold" id="cart-floating-count">3 รายการ (จาก 2 แผงค้า)</div>
-                                <div class="text-[10px] text-emerald-200">แตะเพื่อดูตะกร้าและคิดเงิน</div>
+                <div id="customer-floating-cart" class="hidden sticky bottom-16 left-0 right-0 px-4 py-2 z-30 justify-center" style="pointer-events: auto !important;">
+                    <div class="w-full max-w-xl bg-emerald-700 hover:bg-emerald-800 text-white p-2.5 sm:p-3 rounded-2xl shadow-floating flex items-center justify-between transition-all cursor-pointer" onclick="goToCheckoutScreen()">
+                        <button type="button" onclick="event.stopPropagation(); goToCheckoutScreen();" class="flex-1 flex items-center justify-between text-left cursor-pointer active:scale-[0.99] transition-transform pr-2 outline-none">
+                            <div class="flex items-center gap-2">
+                                <span class="bg-emerald-900/60 p-1.5 rounded-xl flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-emerald-200">shopping_bag</span>
+                                </span>
+                                <div class="text-left">
+                                    <div class="text-xs font-bold" id="cart-floating-count">0 รายการ</div>
+                                    <div class="text-[10px] text-emerald-200 flex items-center gap-1">
+                                        <span>แตะเพื่อดูตะกร้าและคิดเงิน</span>
+                                        <span class="bg-emerald-800/80 px-1 rounded text-[9px] text-emerald-100 font-medium">ขั้นตอนต่อไป</span>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="font-bold text-base" id="cart-floating-total">฿185</span>
-                            <span class="material-symbols-outlined text-sm">arrow_forward</span>
-                        </div>
-                    </button>
+                            <div class="flex items-center gap-2">
+                                <span class="font-black text-sm sm:text-base text-amber-300" id="cart-floating-total">฿0</span>
+                                <span class="material-symbols-outlined text-sm text-emerald-200">arrow_forward</span>
+                            </div>
+                        </button>
+                        <button type="button" id="btn-clear-cart-floating" onclick="event.stopPropagation(); clearCart();" class="ml-2 px-2.5 py-1.5 rounded-xl bg-emerald-900/80 hover:bg-rose-600 text-emerald-200 hover:text-white text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shrink-0 border border-emerald-600/40 hover:border-rose-400 active:scale-95" title="ล้างรายการสินค้าทั้งหมดในตะกร้า">
+                            <span class="material-symbols-outlined text-sm">delete</span>
+                            <span class="text-[10px]">ล้างตะกร้า</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Customer Bottom Navigation -->
@@ -744,8 +753,8 @@
                 </div>
 
                 <!-- Sticky Checkout Button -->
-                <div class="sticky bottom-0 bg-white border-t border-slate-200 p-4 z-20">
-                    <button onclick="processOrderCheckout()" class="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3.5 px-4 rounded-2xl shadow-orange-glow flex items-center justify-between active:scale-[0.99] transition-all">
+                <div class="sticky bottom-0 bg-white border-t border-slate-200 p-3 sm:p-4 z-20 space-y-2">
+                    <button type="button" id="btn-process-checkout" onclick="processOrderCheckout()" class="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3.5 px-4 rounded-2xl shadow-orange-glow flex items-center justify-between active:scale-[0.99] transition-all cursor-pointer">
                         <div class="text-left">
                             <div class="text-[10px] text-orange-100 font-normal">ยืนยันคำสั่งซื้อ</div>
                             <div class="text-sm font-bold" id="btn-checkout-total">ชำระเงิน ฿0</div>
@@ -754,6 +763,10 @@
                             <span>ขั้นตอนต่อไป</span>
                             <span class="material-symbols-outlined text-sm">arrow_forward</span>
                         </div>
+                    </button>
+                    <button type="button" onclick="clearCart(); goToMarketScreen();" class="w-full text-slate-400 hover:text-rose-600 font-bold py-1.5 text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer" title="ลบสินค้าทั้งหมดในตะกร้า">
+                        <span class="material-symbols-outlined text-sm">delete</span>
+                        <span>ล้างสินค้าทั้งหมดในตะกร้าและกลับหน้าหลัก</span>
                     </button>
                 </div>
             </div>
@@ -4845,6 +4858,6 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.18_rider_pending_top_banner"></script>
+    <script src="app.js?v=9.24_cart_clear_fix"></script>
 </body>
 </html>

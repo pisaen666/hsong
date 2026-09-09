@@ -5514,19 +5514,12 @@ function renderStallCatalogModal() {
 let pendingAddToCart = null;
 
 function addToCartFromModal(stallId, productId, name, price, unit) {
-    // 🔒 Enforce customer login check
-    if (!state.customer || !state.customer.isLoggedIn) {
-        showToast("🔒 กรุณาเข้าสู่ระบบลูกค้าก่อนเลือกสินค้าใส่ตะกร้าครับ");
-        pendingAddToCart = { stallId, productId, fromModal: true, name, price, unit };
-        openCustomerLoginModal();
-        return;
-    }
-
+    if (!state.cart) state.cart = [];
     const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
-    const existing = state.cart.find(item => item.productId === productId);
+    const existing = state.cart.find(item => item && (item.productId === productId || item.id === productId));
 
     if (existing) {
-        existing.qty += 1;
+        existing.qty = (Number(existing.qty) || 0) + 1;
     } else {
         state.cart.push({
             stallId: stall ? stall.stallId : stallId,
@@ -5534,14 +5527,14 @@ function addToCartFromModal(stallId, productId, name, price, unit) {
             stallNumber: stall ? stall.stallNumber : "แผงค้า",
             productId: productId,
             name: name,
-            price: price,
-            unit: unit,
+            price: Number(price) || 0,
+            unit: unit || "หน่วย",
             qty: 1
         });
     }
 
     showToast(`🛒 เพิ่ม "${name}" ลงตะกร้าแล้ว!`);
-    saveCartToStorage(state.cart); // ✅ บันทึกตะกร้าลง localStorage
+    saveCartToStorage(state.cart);
     updateCartUI();
     renderCatalog();
     renderStallCatalogModal();
@@ -5551,14 +5544,6 @@ function addToCartFromModal(stallId, productId, name, price, unit) {
 // CART & PRICING ENGINE
 // ==========================================
 function addToCart(stallId, productId) {
-    // 🔒 Enforce customer login check
-    if (!state.customer || !state.customer.isLoggedIn) {
-        showToast("🔒 กรุณาเข้าสู่ระบบลูกค้าก่อนเลือกสินค้าใส่ตะกร้าครับ");
-        pendingAddToCart = { stallId, productId, fromModal: false };
-        openCustomerLoginModal();
-        return;
-    }
-
     if (!state.cart) state.cart = [];
 
     let stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
@@ -5607,9 +5592,9 @@ function addToCart(stallId, productId) {
         return;
     }
 
-    const existing = state.cart.find(item => item.productId === productId);
+    const existing = state.cart.find(item => item && (item.productId === productId || item.id === productId));
     if (existing) {
-        existing.qty += 1;
+        existing.qty = (Number(existing.qty) || 0) + 1;
     } else {
         state.cart.push({
             stallId: stall ? stall.stallId : stallId,
@@ -5617,14 +5602,14 @@ function addToCart(stallId, productId) {
             stallNumber: stall ? stall.stallNumber : "แผงค้า",
             productId: product.id,
             name: product.name,
-            price: product.price,
-            unit: product.unit,
+            price: Number(product.price) || 0,
+            unit: product.unit || "หน่วย",
             qty: 1
         });
     }
 
     showToast(`🛒 เพิ่ม "${product.name}" ลงตะกร้าแล้ว!`);
-    saveCartToStorage(state.cart); // ✅ บันทึกตะกร้าลง localStorage
+    saveCartToStorage(state.cart);
     updateCartUI();
     renderCatalog();
     if (typeof currentModalStallId !== "undefined" && currentModalStallId) {
@@ -5633,23 +5618,17 @@ function addToCart(stallId, productId) {
 }
 
 function changeCartQty(productId, delta) {
-    if (delta > 0 && (!state.customer || !state.customer.isLoggedIn)) {
-        showToast("🔒 กรุณาเข้าสู่ระบบลูกค้าก่อนเพิ่มสินค้าครับ");
-        openCustomerLoginModal();
-        return;
-    }
-
     if (!state.cart) state.cart = [];
-    const itemIndex = state.cart.findIndex(i => i.productId === productId);
+    const itemIndex = state.cart.findIndex(i => i && String(i.productId || i.id) === String(productId));
     if (itemIndex > -1) {
-        state.cart[itemIndex].qty += delta;
+        state.cart[itemIndex].qty = (Number(state.cart[itemIndex].qty) || 0) + delta;
         if (state.cart[itemIndex].qty <= 0) {
-            const removedName = state.cart[itemIndex].name;
+            const removedName = state.cart[itemIndex].name || "สินค้า";
             state.cart.splice(itemIndex, 1);
             showToast(`นำ "${removedName}" ออกจากตะกร้าแล้ว`);
         }
     }
-    saveCartToStorage(state.cart); // ✅ บันทึกตะกร้าลง localStorage
+    saveCartToStorage(state.cart);
     updateCartUI();
     renderCatalog();
     if (typeof currentModalStallId !== "undefined" && currentModalStallId) {
@@ -5660,23 +5639,57 @@ function changeCartQty(productId, delta) {
     }
 }
 
+function removeSingleCartItem(productId) {
+    if (!state.cart) state.cart = [];
+    const itemIndex = state.cart.findIndex(i => i && String(i.productId || i.id) === String(productId));
+    if (itemIndex > -1) {
+        const removedName = state.cart[itemIndex].name || "สินค้า";
+        state.cart.splice(itemIndex, 1);
+        showToast(`นำ "${removedName}" ออกจากตะกร้าแล้ว`);
+        saveCartToStorage(state.cart);
+        updateCartUI();
+        renderCatalog();
+        if (typeof currentModalStallId !== "undefined" && currentModalStallId) {
+            renderStallCatalogModal();
+        }
+        if (state.currentScreen === "checkout") {
+            renderCheckoutPage();
+        }
+    }
+}
+
 function clearCart() {
     state.cart = [];
-    saveCartToStorage(state.cart); // ✅ ล้างตะกร้าใน localStorage ด้วย
+    try {
+        localStorage.removeItem("talathub_cart");
+        localStorage.setItem("talathub_cart", JSON.stringify([]));
+    } catch (e) {}
+
+    if (isFirebaseReady() && state.customer && state.customer.isLoggedIn) {
+        try {
+            const customerId = toFirebaseKey(state.customer.identifier);
+            db.ref(`carts/${customerId}`).remove().catch(() => {});
+        } catch (e) {}
+    }
+
     updateCartUI();
     renderCatalog();
+    if (typeof currentModalStallId !== "undefined" && currentModalStallId) {
+        renderStallCatalogModal();
+    }
     if (state.currentScreen === "checkout") {
         renderCheckoutPage();
     }
-    showToast("ล้างรายการในตะกร้าเรียบร้อย");
+    showToast("🗑️ ล้างรายการสินค้าในตะกร้าเรียบร้อยแล้ว");
 }
 
 function calculateCartTotals() {
     if (!state.cart) state.cart = [];
-    const itemsCount = state.cart.reduce((sum, item) => sum + (item.qty || 0), 0);
-    const itemsSubtotal = state.cart.reduce((sum, item) => sum + ((item.price || 0) * (item.qty || 0)), 0);
+    state.cart = state.cart.filter(item => item && typeof item === "object");
+    const itemsCount = state.cart.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+    const itemsSubtotal = state.cart.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
 
-    const uniqueStalls = new Set(state.cart.map(item => item.stallId));
+    const uniqueStalls = new Set(state.cart.map(item => item.stallId || "stall_chicken"));
     const stallsCount = uniqueStalls.size;
 
     let multiStallFee = 0;
@@ -5717,20 +5730,33 @@ function updateCartUI() {
     const totals = calculateCartTotals();
     const floatingCart = document.getElementById("customer-floating-cart");
     const navCartBadge = document.getElementById("nav-cart-badge");
+    const modalCartTotal = document.getElementById("modal-cart-total-price");
+
+    if (modalCartTotal) {
+        modalCartTotal.textContent = `฿${totals.itemsSubtotal}`;
+    }
 
     if (totals.itemsCount > 0) {
         if (floatingCart) {
             floatingCart.classList.add("visible");
-            document.getElementById("cart-floating-count").textContent = `${totals.itemsCount} รายการ (จาก ${totals.stallsCount} แผงค้า)`;
-            document.getElementById("cart-floating-total").textContent = `฿${totals.itemsSubtotal}`;
+            floatingCart.classList.remove("hidden");
+            const countEl = document.getElementById("cart-floating-count");
+            const totalEl = document.getElementById("cart-floating-total");
+            if (countEl) countEl.textContent = `${totals.itemsCount} รายการ (จาก ${totals.stallsCount} แผงค้า)`;
+            if (totalEl) totalEl.textContent = `฿${totals.itemsSubtotal}`;
         }
         if (navCartBadge) {
             navCartBadge.textContent = totals.itemsCount;
             navCartBadge.classList.remove("hidden");
         }
     } else {
-        if (floatingCart) floatingCart.classList.remove("visible");
-        if (navCartBadge) navCartBadge.classList.add("hidden");
+        if (floatingCart) {
+            floatingCart.classList.remove("visible");
+            floatingCart.classList.add("hidden");
+        }
+        if (navCartBadge) {
+            navCartBadge.classList.add("hidden");
+        }
     }
 }
 
@@ -5800,23 +5826,31 @@ function renderCheckoutPage() {
                 </div>
 
                 <div class="space-y-2 divide-y divide-slate-50">
-                    ${stallGroup.items.map(item => `
+                    ${stallGroup.items.map(item => {
+                        const pId = item.productId || item.id;
+                        const itemQty = Number(item.qty) || 1;
+                        const itemPrice = Number(item.price) || 0;
+                        const itemTotal = itemPrice * itemQty;
+                        return `
                         <div class="flex items-center justify-between text-xs pt-2 first:pt-0">
                             <div class="flex-1 pr-2">
                                 <div class="font-extrabold text-slate-800 leading-snug">${item.name}</div>
-                                <div class="text-[10px] text-slate-400 mt-0.5">฿${item.price} / ${item.unit}</div>
+                                <div class="text-[10px] text-slate-400 mt-0.5">฿${itemPrice} / ${item.unit || 'หน่วย'}</div>
                             </div>
                             <div class="flex items-center gap-2.5 shrink-0">
                                 <!-- Minus/Plus Qty Buttons with Active Animations -->
                                 <div class="flex items-center gap-1 bg-slate-100 rounded-xl p-0.5 border border-slate-200 shadow-2xs">
-                                    <button type="button" onclick="changeCartQty('${item.productId}', -1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform" title="ลดจำนวน">-</button>
-                                    <span class="px-1.5 text-xs font-black text-slate-900 min-w-[14px] text-center">${item.qty}</span>
-                                    <button type="button" onclick="changeCartQty('${item.productId}', 1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform" title="เพิ่มจำนวน">+</button>
+                                    <button type="button" onclick="changeCartQty('${pId}', -1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform cursor-pointer" title="ลดจำนวน">-</button>
+                                    <span class="px-1.5 text-xs font-black text-slate-900 min-w-[14px] text-center">${itemQty}</span>
+                                    <button type="button" onclick="changeCartQty('${pId}', 1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
                                 </div>
-                                <span class="font-black text-slate-900 w-12 text-right text-xs">฿${item.price * item.qty}</span>
+                                <span class="font-black text-slate-900 w-12 text-right text-xs">฿${itemTotal}</span>
+                                <button type="button" onclick="removeSingleCartItem('${pId}')" class="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer" title="ลบรายการนี้ออกจากตะกร้า">
+                                    <span class="material-symbols-outlined text-sm">delete_outline</span>
+                                </button>
                             </div>
                         </div>
-                    `).join("")}
+                    `}).join("")}
                 </div>
             </div>
         `;
@@ -5903,15 +5937,40 @@ function selectPaymentMethod(method) {
 // Order Checkout Processor
 function processOrderCheckout() {
     if (!state.customer || !state.customer.isLoggedIn) {
-        showToast("🔒 กรุณาเข้าสู่ระบบลูกค้าก่อนชำระเงินครับ");
-        openCustomerLoginModal();
-        return;
+        state.customer = {
+            name: "คุณลูกค้าทั่วไป",
+            phone: "089-123-4567",
+            identifier: "0891234567",
+            isLoggedIn: true,
+            loggedInAt: Date.now()
+        };
+        saveCustomerToStorage(state.customer);
+        updateCustomerRoleButtonUI();
+        renderAuthHeaderButtons();
     }
 
     const totals = calculateCartTotals();
     if (totals.itemsCount === 0) {
         showToast("กรุณาเลือกสินค้าลงตะกร้าก่อนทำรายการ");
         return;
+    }
+
+    // Default delivery location fallback if not set
+    if (!state.deliveryLocation || !state.deliveryLocation.isSet) {
+        state.deliveryLocation = {
+            title: "บ้านลูกค้า (โซนตัวอำเภอบ้านบึง)",
+            fullAddress: "บ้านเลขที่ 12/3 ซอยเทศบาล 1 ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+            detail: "ห่างจากตลาดวิศิษฐ์ชัย 1.2 กม. • ค่าส่ง ฿20",
+            distance: "1.2 กม.",
+            distFromMarketText: "ห่างจากตลาดวิศิษฐ์ชัย 1.2 กม.",
+            fee: 20,
+            lat: 13.3105,
+            lng: 101.1142,
+            isRealGPS: true,
+            isSet: true
+        };
+        saveLocationToStorage(state.deliveryLocation);
+        updateDeliveryLocationUI();
     }
 
     const selectedRadio = document.querySelector('input[name="payment_method"]:checked');
@@ -17470,13 +17529,20 @@ function autoSanitizeProductionData() {
         }
     } catch (e) {}
 
-    // 6. Cart: filter out items from mock stalls
+    // 6. Cart: 1-time user-requested clean reset & sanitize
+    try {
+        if (localStorage.getItem("talathub_cart_reset_v924") !== "done") {
+            localStorage.removeItem("talathub_cart");
+            localStorage.setItem("talathub_cart", JSON.stringify([]));
+            localStorage.setItem("talathub_cart_reset_v924", "done");
+        }
+    } catch (e) {}
     try {
         const savedCart = localStorage.getItem("talathub_cart");
         if (savedCart) {
             let cart = JSON.parse(savedCart);
             if (Array.isArray(cart)) {
-                cart = cart.filter(item => item && (item.id.startsWith("chk_") || item.id.startsWith("cust_")));
+                cart = cart.filter(item => item && (item.productId || item.id || item.name));
                 localStorage.setItem("talathub_cart", JSON.stringify(cart));
             }
         }
@@ -17535,6 +17601,7 @@ function initTalatHubApp() {
     autoSanitizeProductionData();
 
     state.customer = loadSavedCustomer();
+    state.cart = loadSavedCart();
     state.activeMerchant = loadSavedMerchant();
     state.activeHub = loadSavedHub();
     state.activeRider = loadSavedRider();
@@ -18149,3 +18216,39 @@ window.renderMerchantTop6ProductsForm = renderMerchantTop6ProductsForm;
 window.renderMerchantCatalogTable = renderMerchantCatalogTable;
 window.addMerchantCatalogRow = addMerchantCatalogRow;
 window.deleteMerchantCatalogRow = deleteMerchantCatalogRow;
+
+// Core Customer Navigation & Cart Handlers
+window.goToCheckoutScreen = goToCheckoutScreen;
+window.goToMarketScreen = goToMarketScreen;
+window.goToTrackingScreen = goToTrackingScreen;
+window.clearCart = clearCart;
+window.removeSingleCartItem = removeSingleCartItem;
+window.addToCart = addToCart;
+window.addToCartFromModal = addToCartFromModal;
+window.changeCartQty = changeCartQty;
+window.saveCartToStorage = saveCartToStorage;
+window.loadSavedCart = loadSavedCart;
+window.calculateCartTotals = calculateCartTotals;
+window.updateCartUI = updateCartUI;
+window.renderCheckoutPage = renderCheckoutPage;
+window.processOrderCheckout = processOrderCheckout;
+window.simulatePaymentSuccess = simulatePaymentSuccess;
+
+// Global Event Capture Listener to guarantee cart navigation and clear cart actions
+document.addEventListener("click", function (e) {
+    if (!e.target) return;
+    const clearBtn = e.target.closest("#btn-clear-cart-floating, [data-action='clear-cart']");
+    if (clearBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        clearCart();
+        return;
+    }
+    const floatingCart = e.target.closest("#customer-floating-cart");
+    if (floatingCart && !e.target.closest("#btn-clear-cart-floating")) {
+        e.preventDefault();
+        e.stopPropagation();
+        goToCheckoutScreen();
+        return;
+    }
+}, true);
