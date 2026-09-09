@@ -561,8 +561,8 @@
             </div>
 
             <!-- Screen 2: Shopping Cart & Checkout -->
-            <div id="screen-checkout" class="sub-screen hidden flex-1 flex flex-col bg-slate-50">
-                <div class="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-20">
+            <div id="screen-checkout" class="sub-screen hidden flex-1 flex flex-col bg-slate-50 max-h-[calc(100vh-65px)] md:max-h-[calc(100vh-90px)] overflow-hidden">
+                <div class="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-20 shrink-0">
                     <div class="max-w-4xl mx-auto w-full flex items-center justify-between">
                         <button onclick="goToMarketScreen()" class="p-1 rounded-full hover:bg-slate-100 flex items-center text-slate-700">
                             <span class="material-symbols-outlined">arrow_back</span>
@@ -572,10 +572,10 @@
                     </div>
                 </div>
 
-                <div class="p-4 flex-1 overflow-y-auto space-y-4 pb-28 max-w-4xl mx-auto w-full">
+                <div class="p-4 flex-1 overflow-y-auto space-y-4 pb-12 max-w-4xl mx-auto w-full">
                     <div id="checkout-stalls-group" class="space-y-3"></div>
 
-                    <!-- Delivery Pinpoint & Notes Card -->
+                    <!-- Delivery Pinpoint & Quick Address Card -->
                     <div class="bg-white rounded-2xl p-4 shadow-card border border-slate-200/80 space-y-3">
                         <div class="flex items-center justify-between">
                             <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -595,9 +595,16 @@
                             </div>
                         </div>
 
-                        <div>
-                            <label class="text-[11px] font-medium text-slate-600 mb-1 block">จุดสังเกต / ข้อความถึงไรเดอร์</label>
-                            <input type="text" id="delivery-note-input" placeholder="ระบุจุดสังเกตถึงไรเดอร์ (ถ้ามี) เช่น แขวนถุงไว้ที่รั้ว โทรแจ้งก่อนถึง" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                        <!-- Quick Address Inputs (กรอกที่อยู่โดยตรงได้ทันที) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                            <div>
+                                <label class="text-[11px] font-semibold text-slate-700 mb-1 block">🏠 บ้านเลขที่ / อาคาร / ซอย (จัดส่งด่วน)</label>
+                                <input type="text" id="checkout-quick-house-no" placeholder="เช่น 12/3 ซอยเทศบาล 1" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium">
+                            </div>
+                            <div>
+                                <label class="text-[11px] font-semibold text-slate-700 mb-1 block">🛵 จุดสังเกต / ข้อความถึงไรเดอร์</label>
+                                <input type="text" id="delivery-note-input" placeholder="เช่น แขวนถุงไว้ที่รั้ว โทรแจ้งก่อนถึง" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium">
+                            </div>
                         </div>
                     </div>
 
@@ -737,7 +744,7 @@
                         </div>
                         <div class="flex justify-between text-slate-600">
                             <span>ค่าจัดส่ง (1.8 กม.)</span>
-                            <span class="font-medium" id="summary-delivery-fee">฿25</span>
+                            <span class="font-medium text-emerald-800" id="summary-delivery-fee"><span id="checkout-delivery-fee">฿20</span></span>
                         </div>
                         <!-- Coupon Discount Line -->
                         <div class="flex justify-between text-slate-600" id="summary-discount-row">
@@ -749,24 +756,24 @@
                         </div>
                         <div class="border-t border-slate-100 pt-2 flex justify-between items-center text-sm font-bold text-slate-900">
                             <span>ยอดรวมสุทธิ</span>
-                            <span class="text-base text-orange-600" id="summary-grand-total">฿0</span>
+                            <span class="text-base font-black text-orange-600" id="summary-grand-total">฿0</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Sticky Checkout Button -->
-                <div class="sticky bottom-0 bg-white border-t border-slate-200 p-3 sm:p-4 z-20 space-y-2">
-                    <button type="button" id="btn-process-checkout" onclick="processOrderCheckout()" class="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3.5 px-4 rounded-2xl shadow-orange-glow flex items-center justify-between active:scale-[0.99] transition-all cursor-pointer">
+                <!-- Sticky Checkout Footer Bar (ตรึงขอบล่างเสมอ มองเห็นทันที 100%) -->
+                <div id="checkout-floating-bottom-bar" class="shrink-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 sm:p-4 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] space-y-1.5">
+                    <button type="button" id="btn-process-checkout" onclick="processOrderCheckout()" class="w-full bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3.5 px-4 rounded-2xl shadow-orange-glow flex items-center justify-between active:scale-[0.99] transition-all cursor-pointer">
                         <div class="text-left">
-                            <div class="text-[10px] text-orange-100 font-normal">ยืนยันคำสั่งซื้อ</div>
-                            <div class="text-sm font-bold" id="btn-checkout-total">ชำระเงิน ฿0</div>
+                            <div class="text-[10px] text-orange-100 font-normal">ยืนยันคำสั่งซื้อของสด</div>
+                            <div class="text-sm font-black" id="btn-checkout-total">ชำระเงิน ฿0</div>
                         </div>
-                        <div class="flex items-center gap-1 font-semibold text-xs">
+                        <div class="flex items-center gap-1.5 font-extrabold text-xs bg-white/20 px-3 py-1.5 rounded-xl backdrop-blur-xs">
                             <span>ขั้นตอนต่อไป</span>
                             <span class="material-symbols-outlined text-sm">arrow_forward</span>
                         </div>
                     </button>
-                    <button type="button" onclick="clearCart(); goToMarketScreen();" class="w-full text-slate-400 hover:text-rose-600 font-bold py-1.5 text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer" title="ลบสินค้าทั้งหมดในตะกร้า">
+                    <button type="button" onclick="clearCart(); goToMarketScreen();" class="w-full text-slate-400 hover:text-rose-600 font-bold py-1 text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer" title="ลบสินค้าทั้งหมดในตะกร้า">
                         <span class="material-symbols-outlined text-sm">delete</span>
                         <span>ล้างสินค้าทั้งหมดในตะกร้าและกลับหน้าหลัก</span>
                     </button>
@@ -3465,65 +3472,6 @@
     </div>
 
 
-    <!-- ========================================== -->
-    <!-- RIDER DELIVERY COMPLETE MODAL              -->
-    <!-- ========================================== -->
-    <div id="rider-delivery-complete-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
-        <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 border border-slate-100 text-center animate-scale-up">
-            <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-3xl shadow-sm">
-                🎉
-            </div>
-            <div>
-                <span class="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1">
-                    จัดส่งสำเร็จแล้ว
-                </span>
-                <h3 class="font-extrabold text-base text-slate-900" id="rider-complete-modal-title">ส่งมอบของสดถึงมือลูกค้าเรียบร้อย!</h3>
-                <p class="text-xs text-slate-500 mt-1" id="rider-complete-modal-desc">
-                    ออเดอร์ถูกบันทึกสถานะจัดส่งสำเร็จบนระบบแล้ว
-                </p>
-            </div>
-
-            <!-- Summary Box -->
-            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-xs text-left space-y-2">
-                <div class="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
-                    <span>เลขออเดอร์:</span>
-                    <strong id="rider-complete-order-id" class="text-slate-900 font-black">-</strong>
-                </div>
-                <div class="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
-                    <span>ลูกค้าผู้รับ:</span>
-                    <strong id="rider-complete-customer-name" class="text-slate-900">-</strong>
-                </div>
-                <div class="flex justify-between items-center text-slate-600 border-b border-slate-200 pb-1.5">
-                    <span>ยอดเงิน & การชำระ:</span>
-                    <strong id="rider-complete-payment-info" class="text-emerald-700 font-bold">-</strong>
-                </div>
-                <!-- Refund note if any -->
-                <div id="rider-complete-refund-row" class="hidden bg-rose-50 p-2 rounded-xl border border-rose-200 text-rose-800 flex items-center justify-between">
-                    <span class="flex items-center gap-1 font-bold">
-                        <span class="material-symbols-outlined text-sm text-rose-600">payments</span>
-                        <span>ส่งมอบซองเงินทอน:</span>
-                    </span>
-                    <strong id="rider-complete-refund-amount" class="text-rose-950 font-black">฿0</strong>
-                </div>
-                <!-- Earnings -->
-                <div class="bg-emerald-50 p-2.5 rounded-xl border border-emerald-200 text-emerald-900 flex items-center justify-between font-bold">
-                    <span>🛵 รายได้ค่ารอบไรเดอร์:</span>
-                    <span class="text-emerald-700 text-sm font-black">+฿40</span>
-                </div>
-            </div>
-
-            <!-- Action Buttons leading to next step -->
-            <div class="space-y-2 pt-1 text-xs">
-                <button onclick="goToCustomerTrackingFromRiderComplete()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all">
-                    <span class="material-symbols-outlined text-base">visibility</span>
-                    <span>1. สลับไปดูหน้าจอลูกค้า (Customer Tracking)</span>
-                </button>
-                <button onclick="closeRiderDeliveryCompleteModal()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl active:scale-95 transition-all">
-                    ปิดหน้าต่าง / สแตนด์บายที่หน้าไรเดอร์
-                </button>
-            </div>
-        </div>
-    </div>
 
     <!-- ========================================== -->
     <!-- DISPATCH SUCCESS & NEXT STEP MODAL         -->
@@ -3688,6 +3636,25 @@
                         <span id="rider-complete-refund-row" class="hidden"><span id="rider-complete-refund-amount">฿0</span></span>
                     </div>
                 </div>
+            </div>
+
+            <!-- Proof of Delivery Photo Upload (หลักฐานถ่ายรูปส่งมอบของสด) -->
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                <div class="flex items-center justify-between text-[11px] font-bold text-slate-800">
+                    <span class="flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm text-emerald-600">photo_camera</span>
+                        <span>รูปถ่ายหลักฐานส่งมอบของสด</span>
+                    </span>
+                    <span id="rider-proof-status-tag" class="text-[9px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-bold">ยังไม่แนบรูป</span>
+                </div>
+                <div id="rider-proof-preview-box" class="h-28 w-full rounded-xl bg-slate-200 border border-slate-300 overflow-hidden hidden">
+                    <img id="rider-proof-img" src="" alt="รูปหลักฐานส่งมอบ" class="w-full h-full object-cover">
+                </div>
+                <label class="cursor-pointer py-2 px-3 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm">add_a_photo</span>
+                    <span id="rider-proof-btn-text">📷 ถ่ายรูป / แนบรูปการวางของสด</span>
+                    <input type="file" accept="image/*" capture="environment" onchange="handleRiderDeliveryProofUpload(event)" class="hidden">
+                </label>
             </div>
 
             <!-- Income Highlight -->

@@ -3701,6 +3701,69 @@ function printThermalOrderSlip(orderId, dateKey) {
     executePrintHtml(`ใบเสร็จ_${o.orderId}_${dateKey}`, content, true);
 }
 
+// ── 3.1 พิมพ์ใบจัดของสดแยกแผงค้า (Stall Picking Slip 80mm) ──────────────────────────
+function printStallPickingSlip(orderId, stallIndex) {
+    let o = null;
+    if (typeof _collectAllOrders === "function") {
+        o = _collectAllOrders().find(x => x.orderId === orderId);
+    }
+    if (!o && state.activeOrder && (!orderId || state.activeOrder.orderId === orderId)) {
+        o = state.activeOrder;
+    }
+    if (!o || !o.stalls || !o.stalls[stallIndex]) {
+        showToast("⚠️ ไม่พบข้อมูลแผงค้าในออเดอร์นี้");
+        return;
+    }
+    const stall = o.stalls[stallIndex];
+    const items = stall.items || [];
+    const thaiDate = typeof formatThaiDateDisplay === "function" ? formatThaiDateDisplay(getReportDateKey(Date.now())) : "วันนี้";
+    const timeStr = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+
+    let itemsHtml = items.map(it => {
+        const pr = it.actualPrice !== undefined ? it.actualPrice : it.price;
+        const oos = it.outOfStock ? ' <span style="color:#dc2626; font-weight:bold;">[หมด-คืนเงินสด]</span>' : '';
+        const picked = it.picked ? ' <span style="color:#059669; font-weight:bold;">✓</span>' : '';
+        return `
+            <div style="margin: 3.5px 0; font-size: 10.5px; display: flex; justify-content: space-between; align-items: baseline;">
+                <span style="max-width: 75%;">• ${it.name} x${it.qty || 1}${picked}${oos}</span>
+                <span style="font-weight: bold;">฿${pr}</span>
+            </div>
+        `;
+    }).join('');
+
+    const stallTotal = items.reduce((sum, it) => sum + (it.outOfStock ? 0 : (it.actualPrice !== undefined ? it.actualPrice : it.price)), 0);
+
+    const content = `
+        <div class="slip-brand">
+            <div class="market-name">🏪 ตลาดสดฮับวิศิษฐ์ชัย</div>
+            <div class="market-sub">WISIT CHAI FRESH HUB MARKET</div>
+            <div style="background:#047857; color:#fff; font-weight:bold; font-size:10.5px; padding:2px 8px; border-radius:4px; display:inline-block; margin-top:4px;">
+                [ ใบจัดของสดแยกแผงค้า 80mm ]
+            </div>
+        </div>
+        <div class="divider-dashed"></div>
+        <div class="slip-row"><span class="slip-label">แผงค้า:</span><span class="slip-value" style="font-size: 11.5px; font-weight: bold; color: #047857;">${stall.name} (${stall.tag || stall.stallNumber || 'แผงค้า'})</span></div>
+        <div class="slip-row"><span class="slip-label">เลขที่ออเดอร์:</span><span class="slip-value" style="font-size: 11px; font-weight: bold;">${o.orderId}</span></div>
+        <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${thaiDate} ${timeStr} น.</span></div>
+        <div class="slip-row"><span class="slip-label">ลูกค้าปลายทาง:</span><span class="slip-value">${o.customerName || 'ลูกค้า'}</span></div>
+        <div class="divider-dashed"></div>
+        <div style="font-weight: bold; margin-bottom: 4px; font-size: 11px; color: #111;">รายการของสดที่ต้องหยิบ:</div>
+        ${itemsHtml}
+        <div class="divider-dashed"></div>
+        <div class="slip-row" style="font-size: 11.5px; font-weight: bold;">
+            <span>ยอดสุทธิแผงนี้:</span>
+            <span style="color: #ea580c;">฿${stallTotal.toLocaleString()}</span>
+        </div>
+        <div class="slip-footer" style="margin-top: 8px;">
+            <div>*** ใบสั่งจัดของสดสำหรับส่งมอบให้ฮับรวบรวมถุง ***</div>
+            <div>สอบถาม / ปัญหาของสด: 089-123-4567</div>
+        </div>
+    `;
+
+    executePrintHtml(`ใบจัด_${stall.name}_${o.orderId}`, content, true);
+}
+window.printStallPickingSlip = printStallPickingSlip;
+
 // ── 4. พิมพ์สรุปกระดาษ A4: หมวด 2 เคลียร์เงินไรเดอร์ทั้งหมด
 function printA4RidersSummary(dateKey) {
     if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
@@ -7937,15 +8000,26 @@ function renderMerchantIncomingOrders() {
         `;
     } else {
         html += `<div class="space-y-3">`;
-        stallOrders.forEach(o => {
+        stallOrders.forEach((o, oIdx) => {
             const statusColor = o.status === "delivered" ? "emerald" : (o.status === "delivering" ? "sky" : "amber");
             const statusText = o.status === "delivered" ? "✓ ส่งสำเร็จแล้ว" : (o.status === "delivering" ? "🛵 ไรเดอร์กำลังส่ง" : "⏳ กำลังรวบรวมของสด");
+            
+            // Check if this stall has marked items as ready
+            let isStallReady = false;
+            if (state.activeOrder && state.activeOrder.orderId === o.orderId && state.activeOrder.stalls) {
+                const curStallObj = state.activeOrder.stalls.find(s => s.stallId === currentStallId);
+                if (curStallObj && (curStallObj.ready || curStallObj.pickedCount >= curStallObj.itemsCount)) {
+                    isStallReady = true;
+                }
+            }
+
             html += `
-                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3.5 sm:p-4 space-y-3 hover:shadow-md transition-all">
+                <div class="bg-white rounded-2xl border ${isStallReady ? 'border-emerald-400/80 shadow-md ring-1 ring-emerald-400/40' : 'border-slate-200/80 shadow-xs'} p-3.5 sm:p-4 space-y-3 hover:shadow-md transition-all">
                     <div class="flex items-center justify-between pb-2 border-b border-slate-100">
                         <div class="flex items-center gap-2">
                             <span class="font-mono font-black text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">${o.orderId}</span>
                             <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900 border border-${statusColor}-200">${statusText}</span>
+                            ${isStallReady ? '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-2xs">✓ แม่ค้าเตรียมเสร็จแล้ว</span>' : ''}
                         </div>
                         <div class="text-right">
                             <span class="text-[10px] text-slate-400">ยอดสินค้าร้านนี้: </span>
@@ -7954,18 +8028,31 @@ function renderMerchantIncomingOrders() {
                     </div>
 
                     <div class="space-y-1.5">
-                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">รายการสินค้าที่ต้องจัดเตรียม:</div>
+                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                            <span>รายการสินค้าที่ต้องจัดเตรียม:</span>
+                            <span class="text-slate-400 text-[9.5px]">แตะแจ้งของหมดเพื่อคืนเงินสดใส่ซอง</span>
+                        </div>
                         <div class="bg-slate-50 rounded-xl p-2.5 space-y-1 divide-y divide-slate-100">
-                            ${o.items.map(it => `
-                                <div class="flex items-center justify-between pt-1 text-xs">
-                                    <div class="font-bold text-slate-800 flex items-center gap-1.5">
-                                        <span class="text-emerald-600 font-black">✓</span>
-                                        <span>${it.name || 'สินค้า'}</span>
-                                        <span class="text-slate-400 font-normal">x${it.qty || 1}</span>
+                            ${o.items.map((it, itIdx) => {
+                                const isOos = it.outOfStock || false;
+                                return `
+                                    <div class="flex items-center justify-between pt-1.5 text-xs ${isOos ? 'opacity-60 line-through' : ''}">
+                                        <div class="font-bold text-slate-800 flex items-center gap-1.5">
+                                            <span class="${isOos ? 'text-rose-500' : 'text-emerald-600'} font-black">${isOos ? '✕' : '✓'}</span>
+                                            <span>${it.name || 'สินค้า'}</span>
+                                            <span class="text-slate-400 font-normal">x${it.qty || 1}</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <div class="font-mono font-bold text-slate-700">฿${(it.price || 0).toLocaleString()}</div>
+                                            ${o.status !== 'delivered' ? `
+                                                <button type="button" onclick="merchantToggleItemOutOfStock('${o.orderId}', '${currentStallId}', ${itIdx})" class="px-1.5 py-0.5 ${isOos ? 'bg-slate-200 text-slate-700' : 'bg-rose-50 text-rose-700 border border-rose-200'} rounded text-[10px] font-bold hover:opacity-80 active:scale-95 transition-all" title="${isOos ? 'กู้คืนสินค้า' : 'แจ้งสินค้าหมด คืนเงินสดใส่ซอง'}">
+                                                    ${isOos ? 'กู้คืน' : 'แจ้งหมด'}
+                                                </button>
+                                            ` : ''}
+                                        </div>
                                     </div>
-                                    <div class="font-mono font-bold text-slate-700">฿${(it.price || 0).toLocaleString()}</div>
-                                </div>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </div>
                     </div>
 
@@ -7977,6 +8064,29 @@ function renderMerchantIncomingOrders() {
                             <span>จุดส่ง: ${o.deliveryAddress}</span>
                         </div>
                     </div>
+
+                    <!-- Interactive Action Bar for Merchant (ปุ่มปฏิบัติการของแม่ค้า) -->
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-100 gap-2 flex-wrap">
+                        <div class="flex items-center gap-1.5">
+                            ${!isStallReady && o.status !== 'delivered' ? `
+                                <button type="button" onclick="merchantMarkStallReady('${o.orderId}', '${currentStallId}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer">
+                                    <span class="material-symbols-outlined text-sm">done_all</span>
+                                    <span>✓ รับออเดอร์ & เตรียมของเสร็จแล้ว</span>
+                                </button>
+                            ` : `
+                                <span class="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl font-bold text-xs flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-sm text-emerald-600">verified</span>
+                                    <span>จัดเตรียมของเสร็จแล้ว พร้อมให้ฮับ/ไรเดอร์มารับ</span>
+                                </span>
+                            `}
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="merchantPrintStallSlip('${o.orderId}', '${currentStallId}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเตรียมของหน้าเขียง 80mm">
+                                <span class="material-symbols-outlined text-xs">print</span>
+                                <span>🖨️ สลิปหน้าเขียง 80mm</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             `;
         });
@@ -7986,6 +8096,52 @@ function renderMerchantIncomingOrders() {
     listEl.innerHTML = html;
 }
 window.renderMerchantIncomingOrders = renderMerchantIncomingOrders;
+
+// Helper: Merchant mark stall ready
+function merchantMarkStallReady(orderId, stallId) {
+    if (state.activeOrder && state.activeOrder.orderId === orderId && state.activeOrder.stalls) {
+        const stall = state.activeOrder.stalls.find(s => s.stallId === stallId);
+        if (stall) {
+            stall.ready = true;
+            stall.pickedCount = stall.itemsCount;
+            if (stall.items) stall.items.forEach(i => { if (!i.outOfStock) i.picked = true; });
+            saveActiveOrderToStorage(state.activeOrder);
+        }
+    }
+    showToast("🎉 แผงค้าบันทึกจัดเตรียมของสดเรียบร้อย! ส่งสัญญาณแจ้งฮับมารับของแล้ว 🔔");
+    renderMerchantIncomingOrders();
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
+    if (typeof renderTrackingScreen === "function") renderTrackingScreen();
+}
+window.merchantMarkStallReady = merchantMarkStallReady;
+
+// Helper: Merchant toggle out of stock on item
+function merchantToggleItemOutOfStock(orderId, stallId, itemIndex) {
+    if (state.activeOrder && state.activeOrder.orderId === orderId && state.activeOrder.stalls) {
+        const stallIndex = state.activeOrder.stalls.findIndex(s => s.stallId === stallId);
+        if (stallIndex !== -1) {
+            toggleHubItemOutOfStock(stallIndex, itemIndex);
+            renderMerchantIncomingOrders();
+            return;
+        }
+    }
+    showToast("ปรับปรุงสถานะสินค้าเรียบร้อย");
+    renderMerchantIncomingOrders();
+}
+window.merchantToggleItemOutOfStock = merchantToggleItemOutOfStock;
+
+// Helper: Merchant print stall slip
+function merchantPrintStallSlip(orderId, stallId) {
+    if (state.activeOrder && state.activeOrder.orderId === orderId && state.activeOrder.stalls) {
+        const stallIndex = state.activeOrder.stalls.findIndex(s => s.stallId === stallId);
+        if (stallIndex !== -1) {
+            printStallPickingSlip(orderId, stallIndex);
+            return;
+        }
+    }
+    showToast("🖨️ กำลังพิมพ์สลิปหน้าเขียง...");
+}
+window.merchantPrintStallSlip = merchantPrintStallSlip;
 
 function renderMerchantView() {
     if (!state.activeMerchant || !state.activeMerchant.isLoggedIn) {
@@ -15193,7 +15349,13 @@ function renderHubPickingList() {
                         <span class="font-extrabold text-slate-900 text-xs flex items-center gap-1">
                             <span>${stall.name}</span>
                         </span>
-                        <span class="text-[10px] bg-white/90 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full font-bold shadow-2xs">${stall.tag || 'แผงค้าในตลาด'}</span>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="printStallPickingSlip('${order.orderId}', ${sIdx})" class="px-2 py-0.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์ใบจัดของสดเฉพาะแผงนี้">
+                                <span class="material-symbols-outlined text-xs">print</span>
+                                <span>สลิปแผงนี้ 80mm</span>
+                            </button>
+                            <span class="text-[10px] bg-white/90 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full font-bold shadow-2xs">${stall.tag || 'แผงค้าในตลาด'}</span>
+                        </div>
                     </div>
                     <div class="space-y-1.5">
                         ${itemsHtml}
@@ -16261,11 +16423,74 @@ function openRiderDeliveryCompleteModal() {
                 refundBox.classList.add("hidden");
             }
         }
+
+        // Setup Photo Proof Preview
+        const proofImg = document.getElementById("rider-proof-img");
+        const proofBox = document.getElementById("rider-proof-preview-box");
+        const proofTag = document.getElementById("rider-proof-status-tag");
+        const proofBtn = document.getElementById("rider-proof-btn-text");
+        if (o.deliveryProofImage && proofImg && proofBox) {
+            proofImg.src = o.deliveryProofImage;
+            proofBox.classList.remove("hidden");
+            if (proofTag) {
+                proofTag.textContent = "✓ แนบรูปแล้ว";
+                proofTag.className = "text-[9px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full";
+            }
+            if (proofBtn) proofBtn.textContent = "📷 เปลี่ยนรูปหลักฐานการวางของ";
+        } else {
+            if (proofBox) proofBox.classList.add("hidden");
+            if (proofImg) proofImg.src = "";
+            if (proofTag) {
+                proofTag.textContent = "ยังไม่แนบรูป";
+                proofTag.className = "text-[9px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-bold";
+            }
+            if (proofBtn) proofBtn.textContent = "📷 ถ่ายรูป / แนบรูปการวางของสด";
+        }
     }
 
     modal.classList.remove("hidden");
 }
 window.openRiderDeliveryCompleteModal = openRiderDeliveryCompleteModal;
+
+// Rider Photo Proof Upload Handler
+function handleRiderDeliveryProofUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        const dataUrl = e.target.result;
+        const img = document.getElementById("rider-proof-img");
+        const box = document.getElementById("rider-proof-preview-box");
+        const tag = document.getElementById("rider-proof-status-tag");
+        const btnText = document.getElementById("rider-proof-btn-text");
+        if (img) img.src = dataUrl;
+        if (box) box.classList.remove("hidden");
+        if (tag) {
+            tag.textContent = "✓ แนบรูปแล้ว";
+            tag.className = "text-[9px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full";
+        }
+        if (btnText) btnText.textContent = "📷 เปลี่ยนรูปหลักฐานการวางของ";
+        if (state.activeOrder) {
+            state.activeOrder.deliveryProofImage = dataUrl;
+            saveActiveOrderToStorage(state.activeOrder);
+        }
+        showToast("📸 แนบรูปถ่ายหลักฐานการส่งมอบของสดเรียบร้อยแล้ว!");
+    };
+    reader.readAsDataURL(file);
+}
+window.handleRiderDeliveryProofUpload = handleRiderDeliveryProofUpload;
+
+// Rider Arrival Alert (LINE / SMS notification to customer)
+function sendRiderArrivalAlert() {
+    const o = state.activeOrder;
+    if (!o) {
+        showToast("⚠️ ไม่มีออเดอร์");
+        return;
+    }
+    playOrderAlertSound();
+    showToast("📢 ส่งแจ้งเตือน 'ไรเดอร์ถึงหน้ารั้วบ้านแล้ว' เรียบร้อย! 🔔");
+}
+window.sendRiderArrivalAlert = sendRiderArrivalAlert;
 
 function closeRiderDeliveryCompleteModal() {
     const modal = document.getElementById("rider-delivery-complete-modal");
