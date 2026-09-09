@@ -4976,6 +4976,16 @@ function renderCatalog() {
                     </div>
                 </div>
 
+                ${stall.isClosed ? `
+                    <div class="mx-3.5 my-2 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl font-bold text-xs flex items-center justify-between shadow-2xs">
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+                            <span>🔴 ร้านนี้พักรับออเดอร์ชั่วคราว</span>
+                        </span>
+                        <span class="text-[10px] text-rose-600 font-normal">เปิดรับออเดอร์อีกครั้งเร็วๆ นี้</span>
+                    </div>
+                ` : ''}
+
                 <!-- Products Header Banner with "ดูเพิ่มเติม" Button (แสดงเฉพาะเมื่อมีสินค้าเพิ่มเติมในข้อ 4) -->
                 <div class="px-3.5 pt-0.5 flex items-center justify-between">
                     <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -5579,6 +5589,10 @@ let pendingAddToCart = null;
 function addToCartFromModal(stallId, productId, name, price, unit) {
     if (!state.cart) state.cart = [];
     const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
+    if (stall && stall.isClosed) {
+        showToast(`🔴 ร้าน "${stall.stallName}" พักรับออเดอร์ชั่วคราว ไม่สามารถสั่งซื้อได้ในขณะนี้`);
+        return;
+    }
     const existing = state.cart.find(item => item && (item.productId === productId || item.id === productId));
 
     if (existing) {
@@ -5610,6 +5624,10 @@ function addToCart(stallId, productId) {
     if (!state.cart) state.cart = [];
 
     let stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
+    if (stall && stall.isClosed) {
+        showToast(`🔴 ร้าน "${stall.stallName}" พักรับออเดอร์ชั่วคราว ไม่สามารถสั่งซื้อได้ในขณะนี้`);
+        return;
+    }
     let product = null;
 
     if (stall && stall.products) {
@@ -7837,24 +7855,254 @@ function switchMerchantMainTab(tabKey) {
     _activeMerchantMainTab = tabKey;
     const btnOrders = document.getElementById("merchant-tab-btn-orders");
     const btnExpress = document.getElementById("merchant-tab-btn-express");
+    const btnSettlement = document.getElementById("merchant-tab-btn-settlement");
+
     const panelOrders = document.getElementById("merchant-panel-orders");
     const panelExpress = document.getElementById("merchant-panel-express");
+    const panelSettlement = document.getElementById("merchant-panel-settlement");
 
-    if (tabKey === "orders") {
-        if (btnOrders) btnOrders.className = "px-3 py-1.5 rounded-xl font-bold bg-orange-600 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer";
-        if (btnExpress) btnExpress.className = "px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer";
-        if (panelOrders) panelOrders.classList.remove("hidden");
-        if (panelExpress) panelExpress.classList.add("hidden");
-        renderMerchantIncomingOrders();
-    } else {
-        if (btnOrders) btnOrders.className = "px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer";
-        if (btnExpress) btnExpress.className = "px-3 py-1.5 rounded-xl font-bold bg-orange-600 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer";
-        if (panelOrders) panelOrders.classList.add("hidden");
-        if (panelExpress) panelExpress.classList.remove("hidden");
-        renderMerchantActiveDeliveries();
-    }
+    if (btnOrders) btnOrders.className = tabKey === "orders" ? "px-3 py-1.5 rounded-xl font-bold bg-orange-600 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer" : "px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer";
+    if (btnExpress) btnExpress.className = tabKey === "express" ? "px-3 py-1.5 rounded-xl font-bold bg-orange-600 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer" : "px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer";
+    if (btnSettlement) btnSettlement.className = tabKey === "settlement" ? "px-3 py-1.5 rounded-xl font-bold bg-orange-600 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer" : "px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer";
+
+    if (panelOrders) panelOrders.classList.toggle("hidden", tabKey !== "orders");
+    if (panelExpress) panelExpress.classList.toggle("hidden", tabKey !== "express");
+    if (panelSettlement) panelSettlement.classList.toggle("hidden", tabKey !== "settlement");
+
+    if (tabKey === "orders") renderMerchantIncomingOrders();
+    else if (tabKey === "express") renderMerchantActiveDeliveries();
+    else if (tabKey === "settlement") renderMerchantSettlement();
 }
 window.switchMerchantMainTab = switchMerchantMainTab;
+
+function toggleMerchantStallStatus() {
+    let stall = null;
+    if (activeMerchantStallId) {
+        stall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.find(s => s.stallId === activeMerchantStallId);
+    }
+    if (!stall && state.activeMerchant) {
+        stall = MARKET_DATA.find(s => s.stallId === state.activeMerchant.stallId) || ALL_100_STALLS.find(s => s.stallId === state.activeMerchant.stallId);
+    }
+    if (!stall) return;
+
+    stall.isClosed = !stall.isClosed;
+    saveMarketDataToStorage();
+
+    updateMerchantStatusUI(stall);
+    const statusMsg = stall.isClosed ? "🔴 ปรับสถานะเป็น พักรับออเดอร์ชั่วคราว เรียบร้อย" : "🟢 ปรับสถานะเป็น เปิดรับออเดอร์ปกติ เรียบร้อย";
+    showToast(statusMsg);
+
+    if (typeof renderMarketScreen === "function") renderMarketScreen();
+}
+window.toggleMerchantStallStatus = toggleMerchantStallStatus;
+
+function updateMerchantStatusUI(stall) {
+    const btn = document.getElementById("merchant-status-toggle-btn");
+    const dot = document.getElementById("merchant-status-dot");
+    const text = document.getElementById("merchant-status-text");
+    if (!btn || !stall) return;
+
+    if (stall.isClosed) {
+        btn.className = "text-[11px] bg-rose-500/30 hover:bg-rose-500/40 text-rose-100 border border-rose-300/40 px-2.5 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs";
+        if (dot) dot.className = "w-2 h-2 rounded-full bg-rose-400 animate-ping";
+        if (text) text.textContent = "🔴 พักร้านชั่วคราว";
+    } else {
+        btn.className = "text-[11px] bg-emerald-500/30 hover:bg-emerald-500/40 text-white border border-emerald-300/40 px-2.5 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs";
+        if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+        if (text) text.textContent = "🟢 เปิดรับออเดอร์ปกติ";
+    }
+}
+window.updateMerchantStatusUI = updateMerchantStatusUI;
+
+function renderMerchantSettlement() {
+    const container = document.getElementById("merchant-settlement-container");
+    if (!container) return;
+
+    let stall = null;
+    if (activeMerchantStallId) {
+        stall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.find(s => s.stallId === activeMerchantStallId);
+    }
+    if (!stall && state.activeMerchant) {
+        stall = MARKET_DATA.find(s => s.stallId === state.activeMerchant.stallId) || ALL_100_STALLS.find(s => s.stallId === state.activeMerchant.stallId);
+    }
+    if (!stall) stall = MARKET_DATA[0];
+
+    const currentStallId = stall.stallId;
+    const currentStallName = stall.stallName;
+
+    const allOrders = [];
+    if (state.activeOrder) allOrders.push(state.activeOrder);
+    try {
+        const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+        hist.forEach(h => {
+            if (h && !allOrders.some(o => o.orderId === h.orderId)) allOrders.push(h);
+        });
+    } catch(e) {}
+
+    let grossSales = 0;
+    let orderCount = 0;
+    const itemBreakdown = [];
+
+    allOrders.forEach(order => {
+        if (!order || !order.stalls) return;
+        const matchingStall = order.stalls.find(s => s && (s.stallId === currentStallId || (currentStallName && s.name && (s.name.includes(currentStallName) || currentStallName.includes(s.name)))));
+        if (matchingStall && matchingStall.items) {
+            orderCount++;
+            const subtotal = matchingStall.items.reduce((sum, it) => sum + (it.outOfStock ? 0 : (it.price || 0)), 0);
+            grossSales += subtotal;
+            itemBreakdown.push({
+                orderId: order.orderId,
+                time: order.time || "วันนี้",
+                subtotal: subtotal,
+                status: order.status || "picking"
+            });
+        }
+    });
+
+    const hubFeeRate = 0.05;
+    const hubFee = Math.round(grossSales * hubFeeRate);
+    const netPayout = grossSales - hubFee;
+
+    const bank = stall.bankInfo || {
+        bankName: stall.bankName || "กสิกรไทย (KBank)",
+        accountNo: stall.accountNo || stall.bankAccountNo || "012-3-45678-9",
+        accountName: stall.accountName || stall.bankAccountName || (stall.ownerName || "เจ้าของร้าน")
+    };
+
+    let html = `
+        <div class="space-y-4 text-left">
+            <!-- Header Summary Card -->
+            <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 rounded-3xl p-4 sm:p-5 text-white shadow-lg space-y-3 border border-slate-700/60">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-xl shrink-0">
+                            💰
+                        </div>
+                        <div>
+                            <div class="text-[10px] text-emerald-300 font-bold uppercase">รายงานเคลียร์เงินโอนค่างวด • ${stall.stallName} (${stall.stallNumber || 'แผงค้า'})</div>
+                            <h3 class="text-base font-black">สรุปยอดขายสุทธิที่ฮับต้องโอนเข้าบัญชี</h3>
+                        </div>
+                    </div>
+                    <span class="px-2.5 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 rounded-full font-bold text-[10px] flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>ตัดรอบโอนเงินประจำวัน</span>
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs">
+                        <div class="text-[10px] text-slate-300">ยอดขายรวมของสด (${orderCount} ออเดอร์)</div>
+                        <div class="text-xl font-black text-white">฿${grossSales.toLocaleString()}</div>
+                    </div>
+                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs">
+                        <div class="text-[10px] text-slate-300">ค่าธรรมเนียมฮับ (GP 5%)</div>
+                        <div class="text-xl font-black text-rose-300">-฿${hubFee.toLocaleString()}</div>
+                    </div>
+                    <div class="bg-emerald-600/30 border border-emerald-400/40 rounded-2xl p-3 backdrop-blur-xs">
+                        <div class="text-[10px] text-emerald-200">ยอดเงินโอนสุทธิคงเหลือ</div>
+                        <div class="text-2xl font-black text-amber-300">฿${netPayout.toLocaleString()}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bank Account Card -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-2.5 shadow-xs">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div class="font-extrabold text-slate-800 flex items-center gap-1.5 text-xs sm:text-sm">
+                        <span class="material-symbols-outlined text-orange-600 text-base">account_balance</span>
+                        <span>บัญชีธนาคารรับเงินโอนของแผงค้า</span>
+                    </div>
+                    <button onclick="openActiveStallEditor()" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer">
+                        ✏️ แก้ไขบัญชี
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                    <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div class="text-[10px] text-slate-400">ธนาคาร:</div>
+                        <div class="font-black text-slate-800">${bank.bankName}</div>
+                    </div>
+                    <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div class="text-[10px] text-slate-400">เลขที่บัญชี / เบอร์พร้อมเพย์:</div>
+                        <div class="font-mono font-black text-emerald-700 text-sm">${bank.accountNo}</div>
+                    </div>
+                    <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div class="text-[10px] text-slate-400">ชื่อบัญชี:</div>
+                        <div class="font-bold text-slate-800">${bank.accountName}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Order Breakdown List -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-xs">
+                <h4 class="font-extrabold text-slate-800 text-xs sm:text-sm flex items-center justify-between">
+                    <span>รายการคำนวณยอดเงินแต่ละออเดอร์</span>
+                    <span class="text-slate-400 font-normal text-xs">รวม ${itemBreakdown.length} รายการ</span>
+                </h4>
+                <div class="divide-y divide-slate-100 space-y-1">
+                    ${itemBreakdown.length === 0 ? `
+                        <div class="py-6 text-center text-slate-400 text-xs">ยังไม่มีรายการยอดขายของสดในระบบ</div>
+                    ` : itemBreakdown.map(b => `
+                        <div class="flex items-center justify-between pt-2 text-xs">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-800">${b.orderId}</span>
+                                <span class="text-[10px] text-slate-400">${b.time}</span>
+                            </div>
+                            <div class="font-mono font-bold text-emerald-700">฿${b.subtotal.toLocaleString()}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+window.renderMerchantSettlement = renderMerchantSettlement;
+
+function cancelMerchantExpressOrder(orderId) {
+    if (!confirm("⚠️ คุณแน่ใจหรือไม่ว่าต้องการยกเลิกคำขอเรียกรถส่งด่วนรายการ " + orderId + " ?")) return;
+
+    if (state.merchantExpressOrders) {
+        const order = state.merchantExpressOrders.find(o => o && o.orderId === orderId);
+        if (order) {
+            order.status = "cancelled";
+            order.cancelledAt = new Date().toISOString();
+        }
+        try {
+            localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders));
+        } catch(e) {}
+    }
+
+    if (state.activeOrder && state.activeOrder.orderId === orderId) {
+        state.activeOrder.status = "cancelled";
+    }
+
+    showToast("✕ ยกเลิกคำขอเรียกรถส่งด่วนเรียบร้อยแล้ว");
+    renderMerchantActiveDeliveries();
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
+}
+window.cancelMerchantExpressOrder = cancelMerchantExpressOrder;
+
+function callCustomerFromMerchant(param) {
+    let order = null;
+    if (typeof param === "string" && param.startsWith("EXP-")) {
+        order = (state.merchantExpressOrders || []).find(o => o.orderId === param);
+    }
+    if (!order && state.activeOrder) order = state.activeOrder;
+
+    const phone = order ? order.customerPhone : (param && param !== "-" ? param : null);
+    const name = order ? order.customerName : "ลูกค้าผู้รับสินค้า";
+
+    if (!phone) {
+        showToast("⚠️ ไม่พบข้อมูลเบอร์โทรศัพท์ของลูกค้าผู้รับ");
+        return;
+    }
+
+    const cleanPhone = phone.replace(/[^0-9]/g, "");
+    window.location.href = `tel:${cleanPhone}`;
+    showToast(`📞 กำลังโทรหาลูกค้าผู้รับ ${name} (${phone})...`);
+}
+window.callCustomerFromMerchant = callCustomerFromMerchant;
 
 function openActiveStallEditor() {
     let stall = null;
@@ -8178,6 +8426,8 @@ function renderMerchantView() {
     if (senderBadge) senderBadge.textContent = `${stall.stallNumber || 'แผงค้า'} • ${stall.zone || 'ตลาดสด'}`;
     if (senderName) senderName.textContent = `${stall.stallName} (${stall.stallNumber || 'แผงค้า'})`;
     if (senderPhone) senderPhone.textContent = `${stall.ownerName || 'เจ้าของร้าน'} (${stall.phone || '081-999-8888'})`;
+
+    updateMerchantStatusUI(stall);
 
     // 3. Populate Stall Selector
     const selectEl = document.getElementById("merchant-stall-select");
@@ -8776,29 +9026,34 @@ function renderMerchantActiveDeliveries() {
                 </div>
             </div>
 
-            <!-- Main Action Bar: Call, Chat, Radar, Slip + Share to LINE -->
-            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 text-xs">
-                <!-- 1. ปุ่มแชร์ LINE ให้ลูกค้า -->
-                <button type="button" onclick="shareMerchantTrackingToLine('${order.orderId}')" class="p-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-black flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="ส่งลิงก์ติดตามไรเดอร์ให้ลูกค้าทาง LINE">
-                    <span class="material-symbols-outlined text-sm">send</span>
-                    <span>แชร์ LINE ลูกค้า</span>
+            <!-- Main Action Bar: Call Rider, Call Customer, Chat, Radar, Slip + Share to LINE -->
+            <div class="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-1 text-xs">
+                <!-- 1. โทรหาลูกค้าผู้รับ -->
+                <button type="button" onclick="callCustomerFromMerchant('${order.orderId}')" class="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="โทรหาลูกค้าผู้รับพัสดุ">
+                    <span class="material-symbols-outlined text-sm">phone_forwarded</span>
+                    <span>โทรหาผู้รับ</span>
                 </button>
                 <!-- 2. โทรหาไรเดอร์ -->
                 <button type="button" onclick="callRiderFromMerchant('${order.orderId}')" class="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">call</span>
                     <span>โทรหาไรเดอร์</span>
                 </button>
-                <!-- 3. แชทไรเดอร์ -->
+                <!-- 3. แชร์ LINE ให้ลูกค้า -->
+                <button type="button" onclick="shareMerchantTrackingToLine('${order.orderId}')" class="p-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-black flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="ส่งลิงก์ติดตามไรเดอร์ให้ลูกค้าทาง LINE">
+                    <span class="material-symbols-outlined text-sm">send</span>
+                    <span>แชร์ LINE</span>
+                </button>
+                <!-- 4. แชทไรเดอร์ -->
                 <button type="button" onclick="openMerchantRiderChat('${order.orderId}')" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">chat</span>
                     <span>แชทไรเดอร์</span>
                 </button>
-                <!-- 4. ดูเรดาร์สด -->
+                <!-- 5. ดูเรดาร์สด -->
                 <button type="button" onclick="viewOrderOnRadar('${order.orderId}')" class="p-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">radar</span>
                     <span>ดูเรดาร์สด</span>
                 </button>
-                <!-- 5. สลิป 80mm -->
+                <!-- 6. สลิป 80mm -->
                 <button type="button" onclick="printMerchantExpressSlip('${order.orderId}')" class="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">print</span>
                     <span>สลิป 80mm</span>
@@ -15213,9 +15468,13 @@ function renderHubPickingList() {
                         <div class="font-extrabold text-slate-800">📦 ร้านค้าจัดเตรียมและแพ็คของเองเรียบร้อย</div>
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
+                        <button type="button" onclick="viewHubMerchantExpressSlip('${expOrder.orderId}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-[11px] font-extrabold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="กดเพื่อตรวจรูปสลิปพร้อมเพย์ฮับ">
+                            <span class="material-symbols-outlined text-xs text-amber-700">receipt_long</span>
+                            <span>📷 ตรวจสลิปค่าส่ง (฿${expOrder.deliveryFee || 20})</span>
+                        </button>
                         <span class="bg-emerald-100 border border-emerald-300 text-emerald-950 font-black px-3 py-1 rounded-xl text-xs flex items-center gap-1.5 shadow-2xs">
                             <span class="material-symbols-outlined text-sm text-emerald-700">verified</span>
-                            <span>ชำระค่าจัดส่งแล้ว ฿${expOrder.deliveryFee || 20} (โอนเข้าฮับ)</span>
+                            <span>ชำระแล้ว ฿${expOrder.deliveryFee || 20}</span>
                         </span>
                     </div>
                 </div>
@@ -16898,6 +17157,9 @@ function loginAsMerchantStall(stallId) {
     document.getElementById("m-phone").value = stall.phone || "";
     if (document.getElementById("m-phone2")) document.getElementById("m-phone2").value = stall.phone2 || "";
     if (document.getElementById("m-line")) document.getElementById("m-line").value = stall.line || "";
+    if (document.getElementById("m-bank-name")) document.getElementById("m-bank-name").value = stall.bankInfo?.bankName || stall.bankName || "กสิกรไทย (KBank)";
+    if (document.getElementById("m-bank-account-no")) document.getElementById("m-bank-account-no").value = stall.bankInfo?.accountNo || stall.bankAccountNo || "";
+    if (document.getElementById("m-bank-account-name")) document.getElementById("m-bank-account-name").value = stall.bankInfo?.accountName || stall.bankAccountName || "";
     document.getElementById("m-highlight").value = stall.highlight || "";
     document.getElementById("m-desc").value = stall.description || stall.shopDescription || "";
 
@@ -17382,6 +17644,16 @@ function saveMerchantStallData() {
     STALL_CATALOG_DATABASE[activeMerchantStallId] = catalogGroups;
     saveStallCatalogDatabaseToStorage();
 
+    const bankName = document.getElementById("m-bank-name") ? document.getElementById("m-bank-name").value : "กสิกรไทย (KBank)";
+    const bankAccountNo = document.getElementById("m-bank-account-no") ? document.getElementById("m-bank-account-no").value.trim() : "";
+    const bankAccountName = document.getElementById("m-bank-account-name") ? document.getElementById("m-bank-account-name").value.trim() : "";
+
+    const bankInfo = {
+        bankName: bankName,
+        accountNo: bankAccountNo,
+        accountName: bankAccountName
+    };
+
     // Create or update stall object
     const stallObj = {
         stallId: activeMerchantStallId,
@@ -17393,6 +17665,10 @@ function saveMerchantStallData() {
         phone: phone,
         phone2: phone2,
         line: line,
+        bankInfo: bankInfo,
+        bankName: bankName,
+        bankAccountNo: bankAccountNo,
+        bankAccountName: bankAccountName,
         highlight: highlight,
         description: desc,
         shopDescription: desc,
@@ -18488,3 +18764,59 @@ document.addEventListener("click", function (e) {
         return;
     }
 }, true);
+
+function viewHubMerchantExpressSlip(orderId) {
+    const orders = state.merchantExpressOrders || [];
+    const order = orders.find(o => o && o.orderId === orderId) || (state.activeOrder && state.activeOrder.orderId === orderId ? state.activeOrder : null);
+    if (!order) {
+        showToast("⚠️ ไม่พบข้อมูลคำขอเรียกรถ");
+        return;
+    }
+
+    let modal = document.getElementById("hub-express-slip-modal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "hub-express-slip-modal";
+        modal.className = "fixed inset-0 bg-black/80 backdrop-blur-sm z-[130] flex items-center justify-center p-4 animate-fade-in";
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove("hidden");
+
+    const slipImg = order.slipImage || `https://promptpay.io/0819998888/${order.deliveryFee || 20}.png`;
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-scale-up text-left text-slate-800 text-xs">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-sm font-bold">📷</span>
+                    <div>
+                        <div class="font-extrabold text-sm text-slate-900">ตรวจสอบสลิปค่าส่งด่วน (${order.orderId})</div>
+                        <div class="text-[10px] text-slate-400">จาก ${order.originStall?.stallName || 'แผงค้า'} • โอนล่วงหน้า ฿${order.deliveryFee || 20}</div>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('hub-express-slip-modal').classList.add('hidden')" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold">✕</button>
+            </div>
+            <div class="bg-slate-900 rounded-2xl p-2 flex items-center justify-center overflow-hidden max-h-72 border border-slate-800">
+                <img src="${slipImg}" alt="สลิปค่าส่งด่วน" class="max-h-64 object-contain rounded-xl">
+            </div>
+            <div class="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-[11px] text-amber-900 font-medium">
+                <div>✓ ยอดโอนค่าบริการจัดส่ง: <strong>฿${order.deliveryFee || 20}</strong> เข้าพร้อมเพย์ฮับ</div>
+                <div>📍 จุดส่ง: ${order.customerName} (${order.address})</div>
+            </div>
+            <div class="flex items-center gap-2 pt-1">
+                <button onclick="approveHubMerchantExpressSlip('${order.orderId}')" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs shadow-md active:scale-95 transition-all cursor-pointer">
+                    ✓ อนุมัติสลิป & เริ่มจ่ายงานไรเดอร์
+                </button>
+            </div>
+        </div>
+    `;
+}
+window.viewHubMerchantExpressSlip = viewHubMerchantExpressSlip;
+
+function approveHubMerchantExpressSlip(orderId) {
+    const modal = document.getElementById("hub-express-slip-modal");
+    if (modal) modal.classList.add("hidden");
+    showToast(`✅ อนุมัติสลิปโอนเงินค่าส่งด่วนออเดอร์ ${orderId} เรียบร้อยแล้ว`);
+    assignExpressOrderToRider(orderId, 'R1');
+}
+window.approveHubMerchantExpressSlip = approveHubMerchantExpressSlip;

@@ -1140,6 +1140,10 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-1.5">
+                    <button id="merchant-status-toggle-btn" onclick="toggleMerchantStallStatus()" class="text-[11px] bg-emerald-500/30 hover:bg-emerald-500/40 text-white border border-emerald-300/40 px-2.5 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs" title="สลับสถานะเปิด/พักร้าน">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" id="merchant-status-dot"></span>
+                        <span id="merchant-status-text">🟢 เปิดรับออเดอร์ปกติ</span>
+                    </button>
                     <button onclick="logoutMerchant()" class="text-[10px] bg-black/30 hover:bg-black/50 text-amber-200 border border-white/20 px-2.5 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1 active:scale-95 cursor-pointer" title="ออกจากระบบแผงค้า">
                         <span class="material-symbols-outlined text-xs">logout</span>
                         <span>ออกจากระบบ</span>
@@ -1184,6 +1188,10 @@
                     <button type="button" onclick="switchMerchantMainTab('express')" id="merchant-tab-btn-express" class="px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">moped</span>
                         <span>2. เรียกไรเดอร์ด่วน</span>
+                    </button>
+                    <button type="button" onclick="switchMerchantMainTab('settlement')" id="merchant-tab-btn-settlement" class="px-3 py-1.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 flex items-center gap-1.5 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">payments</span>
+                        <span>3. สรุปยอดเงินโอนค่างวด</span>
                     </button>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
@@ -1343,6 +1351,13 @@
                             <span class="material-symbols-outlined text-lg" id="merchant-submit-btn-icon">pin_drop</span>
                             <span id="merchant-submit-btn-text">📍 ขั้นตอนถัดไป: ปักหมุดแผนที่ดาวเทียมเพื่อคำนวณค่าส่ง 🗺️</span>
                         </button>
+                    </div>
+                </div>
+
+                <!-- PANEL 3: SETTLEMENT & PAYOUT REPORT (สรุปยอดเงินโอนค่างวด) -->
+                <div id="merchant-panel-settlement" class="space-y-4 hidden">
+                    <div id="merchant-settlement-container">
+                        <!-- Populated dynamically via renderMerchantSettlement() -->
                     </div>
                 </div>
                 </div>
@@ -3069,6 +3084,36 @@
                         <div>
                             <label class="block font-bold text-slate-700 mb-1">เบอร์โทรศัพท์สำรอง (เบอร์ 2)</label>
                             <input type="tel" id="m-phone2" placeholder="" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
+                        </div>
+                    </div>
+
+                    <!-- ส่วนกรอกข้อมูลบัญชีธนาคารสำหรับรับเงินโอนค่างวดจากฮับ -->
+                    <div class="p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl space-y-2.5">
+                        <div class="font-bold text-amber-900 flex items-center gap-1.5 text-xs">
+                            <span class="material-symbols-outlined text-amber-700 text-sm">account_balance</span>
+                            <span>ข้อมูลบัญชีธนาคารสำหรับรับเงินโอนค่างวดสินค้าจากฮับ</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                            <div>
+                                <label class="block font-bold text-slate-700 text-[11px] mb-1">ธนาคาร <span class="text-rose-500">*</span></label>
+                                <select id="m-bank-name" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
+                                    <option value="กสิกรไทย (KBank)">กสิกรไทย (KBank)</option>
+                                    <option value="ไทยพาณิชย์ (SCB)">ไทยพาณิชย์ (SCB)</option>
+                                    <option value="กรุงเทพ (BBL)">กรุงเทพ (BBL)</option>
+                                    <option value="กรุงไทย (KTB)">กรุงไทย (KTB)</option>
+                                    <option value="ออมสิน (GSB)">ออมสิน (GSB)</option>
+                                    <option value="กรุงศรี (BAY)">กรุงศรี (BAY)</option>
+                                    <option value="พร้อมเพย์ (PromptPay)">พร้อมเพย์ (PromptPay)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block font-bold text-slate-700 text-[11px] mb-1">เลขที่บัญชี / เบอร์พร้อมเพย์ <span class="text-rose-500">*</span></label>
+                                <input type="text" id="m-bank-account-no" placeholder="เช่น 012-3-45678-9" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-mono text-xs font-bold bg-white">
+                            </div>
+                            <div>
+                                <label class="block font-bold text-slate-700 text-[11px] mb-1">ชื่อบัญชีธนาคาร <span class="text-rose-500">*</span></label>
+                                <input type="text" id="m-bank-account-name" placeholder="เช่น นายส่งสุข ชัยมงคล" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
+                            </div>
                         </div>
                     </div>
 
