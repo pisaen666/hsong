@@ -17468,24 +17468,6 @@ function renderMerchantTop6ProductsForm(products) {
                     </div>
                 </div>
 
-                <!-- Product Image Upload / URL Row -->
-                <div class="pt-1 border-t border-slate-200/60 flex items-center gap-2.5">
-                    <div class="w-12 h-12 rounded-xl border border-dashed border-slate-300 flex items-center justify-center text-slate-400 bg-white shrink-0 overflow-hidden relative shadow-xs">
-                        <img id="m-p-preview-${i}" src="${pImg}" alt="พรีวิวสินค้า" class="w-full h-full object-cover ${pImg ? '' : 'hidden'}">
-                        <span id="m-p-placeholder-${i}" class="material-symbols-outlined text-slate-300 text-xl ${pImg ? 'hidden' : ''}">add_photo_alternate</span>
-                    </div>
-                    <div class="flex-1 space-y-1">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <label class="cursor-pointer px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg font-bold text-[11px] flex items-center gap-1 active:scale-95 transition-all">
-                                <span class="material-symbols-outlined text-xs text-emerald-600">upload_file</span>
-                                <span>📁 อัปโหลดรูปสินค้า</span>
-                                <input type="file" accept="image/*" onchange="handleMerchantProductFileUpload(event, ${i})" class="hidden">
-                            </label>
-                            <span class="text-[10px] text-slate-400">หรือใส่ลิงก์รูป:</span>
-                        </div>
-                        <input type="text" id="m-p-img-${i}" value="${pImg}" oninput="updateMerchantProductPreview(${i}, this.value)" placeholder="" class="w-full p-1.5 rounded-lg bg-white border border-slate-300 text-[11px]">
-                    </div>
-                </div>
             </div>
         `;
     }
@@ -17727,7 +17709,7 @@ function saveMerchantStallData() {
     }
 
     // Collect additional catalog rows (use select dropdowns now)
-    const tableRows = document.querySelectorAll("#merchant-catalog-table-body tr:not(#merchant-catalog-empty-row)");
+    const tableRows = document.querySelectorAll("#merchant-catalog-container .catalog-item-container");
     const duplicateErrors = [];
 
     tableRows.forEach((r, idx) => {
@@ -17755,7 +17737,7 @@ function saveMerchantStallData() {
         const mainCatEl = r.querySelector(".catalog-main-cat-select");
         const subCatEl = r.querySelector(".catalog-sub-cat-select");
         const nameInput = r.querySelector(".catalog-item-name-input");
-        const priceInput = r.querySelector("input[type='number']");
+        const priceInput = r.querySelector(".catalog-item-price-input");
         const unitEl = r.querySelector(".catalog-unit-select");
 
         const mainCatVal = mainCatEl ? mainCatEl.value.trim() : "";
@@ -17939,13 +17921,15 @@ function previewMerchantLiveStore() {
     const ownerImage = document.getElementById("m-owner-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.owner.man1;
 
     const products = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
         const name = document.getElementById(`m-p-name-${i}`)?.value.trim();
-        const price = parseFloat(document.getElementById(`m-p-price-${i}`)?.value || "0") || 50;
+        const price = parseFloat(document.getElementById(`m-p-price-${i}`)?.value || "0") || 0;
         const unit = document.getElementById(`m-p-unit-${i}`)?.value.trim() || "กก.";
         const pImg = document.getElementById(`m-p-img-${i}`)?.value.trim() || stallImage;
         const pDesc = document.getElementById(`m-p-desc-${i}`)?.value.trim() || "";
         const badge = document.getElementById(`m-p-badge-${i}`)?.value.trim() || "";
+        const mainCat = document.getElementById(`m-p-maincat-${i}`)?.value || "";
+        const subCat = document.getElementById(`m-p-subcat-${i}`)?.value || "";
 
         if (name) {
             products.push({
@@ -17955,7 +17939,9 @@ function previewMerchantLiveStore() {
                 price: price,
                 unit: unit,
                 badge: badge,
-                image: pImg
+                image: pImg,
+                mainCat: mainCat,
+                subCat: subCat
             });
         }
     }
@@ -17971,6 +17957,42 @@ function previewMerchantLiveStore() {
         });
     }
 
+    // Include dynamically added catalog rows in preview
+    const groupMap = {};
+    const tableRows = document.querySelectorAll("#merchant-catalog-container .catalog-item-container");
+    tableRows.forEach((r, idx) => {
+        const mainCatEl = r.querySelector(".catalog-main-cat-select");
+        const subCatEl = r.querySelector(".catalog-sub-cat-select");
+        const nameInput = r.querySelector(".catalog-item-name-input");
+        const priceInput = r.querySelector(".catalog-item-price-input");
+        const unitEl = r.querySelector(".catalog-unit-select");
+
+        const mainCatVal = mainCatEl ? mainCatEl.value.trim() : "";
+        const subCatVal = subCatEl ? subCatEl.value.trim() : "";
+        const itemName = nameInput ? nameInput.value.trim() : "";
+        const itemPrice = parseFloat(priceInput?.value || "0") || 0;
+        const itemUnit = unitEl ? (unitEl.value || "กก.") : "กก.";
+        const group = mainCatVal || subCatVal || "หมวดหมู่ทั่วไป";
+
+        if (itemName) {
+            if (!groupMap[group]) groupMap[group] = [];
+            groupMap[group].push({
+                id: `cat_preview_${idx + 1}`,
+                name: itemName,
+                spec: "",
+                price: itemPrice,
+                unit: itemUnit,
+                mainCat: mainCatVal,
+                subCat: subCatVal
+            });
+        }
+    });
+
+    const catalogGroups = Object.keys(groupMap).map(g => ({
+        groupName: g,
+        items: groupMap[g]
+    }));
+
     const previewStall = {
         stallId: "preview_stall_temp",
         stallName: stallName,
@@ -17985,7 +18007,7 @@ function previewMerchantLiveStore() {
         ownerImage: ownerImage,
         stallTag: `${stallName} ${ownerName} ${highlight}`,
         products: products,
-        catalog: []
+        catalog: catalogGroups
     };
 
     const existIdx = MARKET_DATA.findIndex(s => s.stallId === "preview_stall_temp");

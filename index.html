@@ -3206,7 +3206,7 @@
                         <span class="material-symbols-outlined text-emerald-700 text-base shrink-0 mt-0.5">grid_view</span>
                         <div>
                             <div class="font-bold">สินค้า Highlight ที่ต้องการจำหน่าย (10 รายการ)</div>
-                            <div class="text-[11px] text-emerald-800">สินค้ารายการที่จะนำไปแสดงเป็นอันดับแรกเมื่อลูกค้าเข้าร้านค้า</div>
+                            <div class="text-[11px] text-emerald-800">สินค้ารายการที่จะนำไปแสดงเป็นอันดับแรกเมื่อลูกค้าเข้าร้านค้า <span class="font-bold text-rose-600">กรุณาพิจารณาและตัดสินใจเลือกสินค้า 10 รายการแรกนี้อย่างระมัดระวัง เพราะจะเป็นส่วนที่ลูกค้านักช้อปมองเห็นทันทีที่คลิกเข้าร้านค้าของคุณ</span></div>
                         </div>
                     </div>
 
@@ -3217,39 +3217,26 @@
                     <hr class="border-slate-200 my-4" />
 
                     <!-- Additional Products -->
-                    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-3 text-blue-900 flex items-start gap-2">
-                        <span class="material-symbols-outlined text-blue-700 text-base shrink-0 mt-0.5">list_alt</span>
-                        <div>
-                            <div class="font-bold">รายการสินค้าเพิ่มเติม (ใส่ได้ไม่เกิน 50 รายการ)</div>
-                            <div class="text-[11px] text-blue-800">เป็นส่วนที่ลูกค้าคลิก "ดูสินค้าเพิ่มเติม" และจะแสดงส่วนนี้ออกมา</div>
+                    <!-- Additional Products container -->
+                    <div id="merchant-catalog-container" class="space-y-3">
+                        <!-- Dynamic items generated via app.js -->
+                    </div>
+
+                    <!-- Additional Products Info Box and Add Button -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-blue-900 mt-4">
+                        <div class="flex items-start gap-2 mb-3">
+                            <span class="material-symbols-outlined text-blue-700 text-base shrink-0 mt-0.5">info</span>
+                            <div>
+                                <div class="font-bold">เพิ่มรายการสินค้าอื่นๆ (สูงสุด 50 รายการ)</div>
+                                <div class="text-xs text-blue-800 mt-1">คุณสามารถเพิ่มรายการสินค้าเพิ่มเติมได้ถึง 50 รายการ ซึ่งระบบจะนำไปแสดงให้ลูกค้าเห็นเมื่อลูกค้าคลิกที่ปุ่ม <strong>"ต้องการดูสินค้าเพิ่มเติม"</strong> ที่อยู่ในหน้าร้านค้าของคุณ (ไม่จำเป็นต้องกรอกครบ 50 รายการ ได้แค่ไหนก็แค่นั้น)</div>
+                            </div>
                         </div>
-                    </div>
-
-                    <div class="flex items-center justify-between mt-2">
-                        <span class="font-bold text-slate-700">รายการสินค้าเพิ่มเติม:</span>
-                        <button type="button" onclick="addMerchantCatalogRow()" class="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 shadow-xs active:scale-95 transition-all">
-                            <span class="material-symbols-outlined text-xs">add</span>
-                            <span>เพิ่มรายการสินค้า</span>
-                        </button>
-                    </div>
-
-                    <div class="overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-xs">
-                        <table class="w-full text-left border-collapse text-xs min-w-[700px]">
-                            <thead>
-                                <tr class="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
-                                    <th class="p-2 w-10 text-center">#</th>
-                                    <th class="p-2 w-32">หมวดหมู่หลัก</th>
-                                    <th class="p-2 w-32">หมวดหมู่ย่อย</th>
-                                    <th class="p-2">ชื่อสินค้า</th>
-                                    <th class="p-2 w-24">ราคา (฿)</th>
-                                    <th class="p-2 w-20">หน่วย</th>
-                                    <th class="p-2 w-10 text-center">ลบ</th>
-                                </tr>
-                            </thead>
-                            <tbody id="merchant-catalog-table-body" class="divide-y divide-slate-100">
-                                <!-- Dynamic rows generated via app.js -->
-                            </tbody>
-                        </table>
+                        <div class="flex justify-center">
+                            <button type="button" onclick="addMerchantCatalogRow()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all">
+                                <span class="material-symbols-outlined text-sm">add_circle</span>
+                                <span>เพิ่มรายการสินค้าเพิ่มเติม</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Step 2 Navigation Buttons -->
