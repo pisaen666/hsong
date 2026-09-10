@@ -17242,6 +17242,74 @@ function fillSampleMerchantRegistration() {
 }
 window.fillSampleMerchantRegistration = fillSampleMerchantRegistration;
 
+// === หมวดหมู่สินค้าหลักและย่อย ===
+const STALL_PRODUCT_CATEGORIES = {
+    "🐔 ไก่สด & เนื้อสัตว์": ["ไก่สดทั้งตัว", "ชิ้นส่วนไก่", "เนื้อไก่แล่", "ไก่บ้าน", "เป็ด/นก", "เนื้อวัว", "เนื้อแพะ", "เครื่องในสัตว์ปีก"],
+    "🥩 หมูสด": ["หมูสามชั้น", "หมูสันนอก", "หมูสันใน", "ซี่โครงหมู", "หมูสับ", "เนื้อหมูแล่", "หมูบด", "เครื่องในหมู", "หมูกรอบ"],
+    "🥬 ผักสด": ["ผักใบเขียว", "ผักกาด", "คะน้า", "ผักบุ้ง", "ผักชี/ต้นหอม", "พริก", "มะเขือ", "ถั่วฝักยาว", "แตงกวา", "บวบ", "ฟักทอง", "ข้าวโพด"],
+    "🌿 สมุนไพร & เครื่องเทศ": ["ขิง", "ข่า", "ตะไคร้", "ใบมะกรูด", "พริกไทย", "กระชาย", "กระเทียม", "หัวหอม", "มะนาว"],
+    "🦐 อาหารทะเลสด": ["กุ้ง", "ปลาน้ำจืด", "ปลาทะเล", "หมึก", "ปู", "หอย", "ปลาหมึก", "กุ้งแห้ง", "ปลาเค็ม"],
+    "🌶️ เครื่องแกง & พริกแกง": ["พริกแกงเผ็ด", "พริกแกงเขียวหวาน", "พริกแกงส้ม", "พริกแกงมัสมั่น", "พริกแกงกะหรี่", "น้ำพริกเผา", "น้ำพริกกะปิ"],
+    "🧂 ของแห้ง & เครื่องปรุง": ["กะปิ", "น้ำปลา", "ซีอิ๊ว", "น้ำตาล", "เกลือ", "ผงชูรส", "แป้ง", "วุ้นเส้น", "เส้นก๋วยเตี๋ยว"],
+    "🥛 ไข่ & ผลิตภัณฑ์นม": ["ไข่ไก่", "ไข่เป็ด", "ไข่นกกระทา", "นมสด", "เนย", "โยเกิร์ต"],
+    "🍄 เห็ด & พืชพิเศษ": ["เห็ดฟาง", "เห็ดนางฟ้า", "เห็ดหอม", "เห็ดเข็มทอง", "บัวหลวง", "ดอกไม้จีน"],
+    "🍌 ผลไม้สด": ["กล้วย", "มะม่วง", "ส้ม", "แตงโม", "สับปะรด", "มังคุด", "ทุเรียน", "ลำไย", "ลิ้นจี่"],
+    "🍜 อาหารสำเร็จรูป & อื่นๆ": ["น้ำซุป", "หมูยอ", "ไส้กรอก", "แหนม", "ลูกชิ้น", "เต้าหู้", "เครื่องจิ้ม"]
+};
+
+const STALL_PRODUCT_UNITS = [
+    "กก.", "ขีด", "กรัม", "ชิ้น", "ตัว", "ถุง", "แพ็ก", "กล่อง", "แผ่น",
+    "ฝัก", "หัว", "ต้น", "มัด", "ลูก", "ขวด", "ลิตร", "ฟอง"
+];
+
+function buildCategoryDropdown(id, selectedCat, onChange) {
+    const cats = Object.keys(STALL_PRODUCT_CATEGORIES);
+    let opts = cats.map(c => `<option value="${c}" ${c === selectedCat ? 'selected' : ''}>${c}</option>`).join('');
+    return `<select id="${id}" onchange="${onChange}" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-medium bg-white">
+        <option value="">-- เลือกหมวดหมู่หลัก --</option>
+        ${opts}
+    </select>`;
+}
+
+function buildSubCategoryDropdown(id, mainCat, selectedSub) {
+    const subs = (mainCat && STALL_PRODUCT_CATEGORIES[mainCat]) ? STALL_PRODUCT_CATEGORIES[mainCat] : [];
+    let opts = subs.map(s => `<option value="${s}" ${s === selectedSub ? 'selected' : ''}>${s}</option>`).join('');
+    return `<select id="${id}" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs bg-white">
+        <option value="">-- เลือกหมวดย่อย --</option>
+        ${opts}
+    </select>`;
+}
+
+function buildUnitDropdown(id, selectedUnit) {
+    let opts = STALL_PRODUCT_UNITS.map(u => `<option value="${u}" ${u === selectedUnit ? 'selected' : ''}>${u}</option>`).join('');
+    return `<select id="${id}" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs bg-white">
+        ${opts}
+    </select>`;
+}
+
+function onCatalogMainCatChange(selectEl) {
+    const row = selectEl.closest('tr');
+    if (!row) return;
+    const subSelect = row.querySelector('.catalog-sub-cat-select');
+    if (!subSelect) return;
+    const mainCat = selectEl.value;
+    const subs = (mainCat && STALL_PRODUCT_CATEGORIES[mainCat]) ? STALL_PRODUCT_CATEGORIES[mainCat] : [];
+    subSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย --</option>' +
+        subs.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+window.onCatalogMainCatChange = onCatalogMainCatChange;
+
+function onHighlightMainCatChange(selectEl, index) {
+    const mainCat = selectEl.value;
+    const subSelectId = `m-p-subcat-${index}`;
+    const subSelect = document.getElementById(subSelectId);
+    if (!subSelect) return;
+    const subs = (mainCat && STALL_PRODUCT_CATEGORIES[mainCat]) ? STALL_PRODUCT_CATEGORIES[mainCat] : [];
+    subSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย --</option>' +
+        subs.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+window.onHighlightMainCatChange = onHighlightMainCatChange;
+
 function registerNewMerchantStall() {
     closeMerchantLoginModal();
     activeMerchantStallId = "stall_new_" + Date.now();
@@ -17255,35 +17323,37 @@ function registerNewMerchantStall() {
     document.getElementById("merchant-portal-zone-text").textContent = "โซนตลาดสด";
     document.getElementById("merchant-portal-title").textContent = "เทมเพลตเปิดแผงค้าใหม่ (เฮียส่ง Partner)";
 
-    // Default template values - clear all sample text so boxes are completely empty
-    document.getElementById("m-stall-name").value = "";
-    document.getElementById("m-stall-number").value = "";
-    document.getElementById("m-stall-zone").value = "โซน A (เนื้อสัตว์ & ไก่สด)";
-    document.getElementById("m-stall-category").value = "chicken";
-    document.getElementById("m-owner-name").value = "";
-    document.getElementById("m-phone").value = "";
+    // Clear shop name
+    if (document.getElementById("m-stall-name")) document.getElementById("m-stall-name").value = "";
+    // Keep legacy fields functional for backward-compat
+    if (document.getElementById("m-stall-number")) document.getElementById("m-stall-number").value = "";
+    if (document.getElementById("m-stall-zone")) document.getElementById("m-stall-zone").value = "โซน A (เนื้อสัตว์ & ไก่สด)";
+    if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = "chicken";
+    if (document.getElementById("m-owner-name")) document.getElementById("m-owner-name").value = "";
+    if (document.getElementById("m-phone")) document.getElementById("m-phone").value = "";
     if (document.getElementById("m-phone2")) document.getElementById("m-phone2").value = "";
     if (document.getElementById("m-line")) document.getElementById("m-line").value = "";
-    document.getElementById("m-highlight").value = "";
-    document.getElementById("m-desc").value = "";
+    if (document.getElementById("m-highlight")) document.getElementById("m-highlight").value = "";
+    if (document.getElementById("m-desc")) document.getElementById("m-desc").value = "";
 
-    // Clear sample images
-    document.getElementById("m-stall-image-url").value = "";
-    document.getElementById("m-owner-image-url").value = "";
-    updateMerchantImagePreviews();
+    // Clear new contact fields
+    if (document.getElementById("m-contact1-name")) document.getElementById("m-contact1-name").value = "";
+    if (document.getElementById("m-contact1-phone")) document.getElementById("m-contact1-phone").value = "";
+    if (document.getElementById("m-contact1-line")) document.getElementById("m-contact1-line").value = "";
+    if (document.getElementById("m-contact2-name")) document.getElementById("m-contact2-name").value = "";
+    if (document.getElementById("m-contact2-phone")) document.getElementById("m-contact2-phone").value = "";
+    if (document.getElementById("m-contact2-line")) document.getElementById("m-contact2-line").value = "";
 
-    // Blank top 6 template - completely clear all sample products and images
-    const blankProducts = [
-        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" },
-        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" },
-        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" },
-        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" },
-        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" },
-        { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" }
-    ];
+    // Clear images (keep hidden fields for compat)
+    if (document.getElementById("m-stall-image-url")) document.getElementById("m-stall-image-url").value = "";
+    if (document.getElementById("m-owner-image-url")) document.getElementById("m-owner-image-url").value = "";
+    if (typeof updateMerchantImagePreviews === 'function') updateMerchantImagePreviews();
+
+    // Initialize 10 blank highlight products
+    const blankProducts = Array.from({length: 10}, () => ({ name: "", desc: "", price: "", unit: "กก.", badge: "", image: "", mainCat: "", subCat: "" }));
     renderMerchantTop6ProductsForm(blankProducts);
 
-    // เริ่มต้นตารางสินค้าเพิ่มเติมแบบว่างเปล่า (ข้อ 4 ตารางสินค้าทั้งหมด)
+    // Initialize empty additional products table
     renderMerchantCatalogTable([]);
 
     switchMerchantPortalTab("tab-info");
@@ -17333,19 +17403,45 @@ function renderMerchantTop6ProductsForm(products) {
     const container = document.getElementById("merchant-top6-products-container");
     if (!container) return;
 
+    const HIGHLIGHT_COUNT = 10;
     let html = "";
-    for (let i = 0; i < 6; i++) {
-        const p = products[i] || { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "" };
+    for (let i = 0; i < HIGHLIGHT_COUNT; i++) {
+        const p = products[i] || { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "", mainCat: "", subCat: "" };
         const pImg = p.image || "";
         const priceVal = (p.price !== undefined && p.price !== null && p.price !== "") ? p.price : "";
+        const mainCat = p.mainCat || "";
+        const subCat = p.subCat || "";
+        const cats = Object.keys(STALL_PRODUCT_CATEGORIES);
+        const catOptions = cats.map(c => `<option value="${c}" ${c === mainCat ? 'selected' : ''}>${c}</option>`).join('');
+        const subs = (mainCat && STALL_PRODUCT_CATEGORIES[mainCat]) ? STALL_PRODUCT_CATEGORIES[mainCat] : [];
+        const subOptions = subs.map(s => `<option value="${s}" ${s === subCat ? 'selected' : ''}>${s}</option>`).join('');
+        const unitOptions = STALL_PRODUCT_UNITS.map(u => `<option value="${u}" ${u === (p.unit||'กก.') ? 'selected' : ''}>${u}</option>`).join('');
+
         html += `
             <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
                 <div class="flex items-center justify-between">
                     <span class="font-extrabold text-emerald-800 flex items-center gap-1.5">
                         <span class="w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">${i + 1}</span>
-                        <span>สินค้าไฮไลท์รายการที่ ${i + 1}</span>
+                        <span>สินค้า Highlight รายการที่ ${i + 1}</span>
                     </span>
                     <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">แสดงบนการ์ดหน้าแรก</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่หลัก</label>
+                        <select id="m-p-maincat-${i}" onchange="onHighlightMainCatChange(this, ${i})" class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs font-medium">
+                            <option value="">-- เลือกหมวดหมู่หลัก --</option>
+                            ${catOptions}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่ย่อย</label>
+                        <select id="m-p-subcat-${i}" class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs">
+                            <option value="">-- เลือกหมวดย่อย --</option>
+                            ${subOptions}
+                        </select>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -17354,23 +17450,21 @@ function renderMerchantTop6ProductsForm(products) {
                         <input type="text" id="m-p-name-${i}" value="${p.name || ''}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs">
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ป้ายสินค้า (Badge)</label>
-                        <input type="text" id="m-p-badge-${i}" value="${p.badge || ''}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs">
+                        <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หน่วยขาย</label>
+                        <select id="m-p-unit-${i}" class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs">
+                            ${unitOptions}
+                        </select>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-700 mb-0.5">คำอธิบาย / สเปกสินค้า</label>
-                        <input type="text" id="m-p-desc-${i}" value="${p.desc || ''}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs">
-                    </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ราคา (บาท)</label>
                         <input type="number" id="m-p-price-${i}" value="${priceVal}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-emerald-700 text-xs">
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หน่วยขาย</label>
-                        <input type="text" id="m-p-unit-${i}" value="${p.unit || 'กก.'}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs">
+                        <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ป้ายสินค้า (Badge)</label>
+                        <input type="text" id="m-p-badge-${i}" value="${p.badge || ''}" placeholder="เช่น สด/ลดราคา" class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs">
                     </div>
                 </div>
 
@@ -17384,10 +17478,10 @@ function renderMerchantTop6ProductsForm(products) {
                         <div class="flex items-center gap-2 flex-wrap">
                             <label class="cursor-pointer px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg font-bold text-[11px] flex items-center gap-1 active:scale-95 transition-all">
                                 <span class="material-symbols-outlined text-xs text-emerald-600">upload_file</span>
-                                <span>📁 อัปโหลดรูปสินค้าจากเครื่อง</span>
+                                <span>📁 อัปโหลดรูปสินค้า</span>
                                 <input type="file" accept="image/*" onchange="handleMerchantProductFileUpload(event, ${i})" class="hidden">
                             </label>
-                            <span class="text-[10px] text-slate-400">หรือใส่ลิงก์รูปภาพ:</span>
+                            <span class="text-[10px] text-slate-400">หรือใส่ลิงก์รูป:</span>
                         </div>
                         <input type="text" id="m-p-img-${i}" value="${pImg}" oninput="updateMerchantProductPreview(${i}, this.value)" placeholder="" class="w-full p-1.5 rounded-lg bg-white border border-slate-300 text-[11px]">
                     </div>
@@ -17489,6 +17583,15 @@ function createMerchantTableRow(index, groupName, name, spec, price, unit) {
     `;
 }
 
+function buildCatalogCategorySelects(mainCat, subCat) {
+    const cats = Object.keys(STALL_PRODUCT_CATEGORIES);
+    const catOptions = cats.map(c => `<option value="${c}" ${c === mainCat ? 'selected' : ''}>${c}</option>`).join('');
+    const subs = (mainCat && STALL_PRODUCT_CATEGORIES[mainCat]) ? STALL_PRODUCT_CATEGORIES[mainCat] : [];
+    const subOptions = subs.map(s => `<option value="${s}" ${s === subCat ? 'selected' : ''}>${s}</option>`).join('');
+    const unitOptions = STALL_PRODUCT_UNITS.map(u => `<option value="${u}">${u}</option>`).join('');
+    return { catOptions, subOptions, unitOptions };
+}
+
 function addMerchantCatalogRow() {
     const tbody = document.getElementById("merchant-catalog-table-body");
     if (!tbody) return;
@@ -17496,22 +17599,43 @@ function addMerchantCatalogRow() {
     const emptyRow = document.getElementById("merchant-catalog-empty-row");
     if (emptyRow) emptyRow.remove();
 
-    const newIndex = tbody.querySelectorAll("tr:not(#merchant-catalog-empty-row)").length + 1;
+    const existingRows = tbody.querySelectorAll("tr:not(#merchant-catalog-empty-row)");
+    if (existingRows.length >= 50) {
+        showToast("⚠️ ใส่รายการสินค้าเพิ่มเติมได้ไม่เกิน 50 รายการ");
+        return;
+    }
+
+    const newIndex = existingRows.length + 1;
+    const { catOptions, subOptions, unitOptions } = buildCatalogCategorySelects("", "");
     const newRow = document.createElement("tr");
     newRow.className = "hover:bg-slate-50 transition-colors";
     newRow.innerHTML = `
         <td class="p-2 text-center text-slate-400 font-bold text-[10px]">${newIndex}</td>
-        <td class="p-1.5"><input type="text" value="หมวดใหม่" placeholder="หมวดหมู่ย่อย" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-medium"></td>
+        <td class="p-1.5">
+            <select onchange="onCatalogMainCatChange(this)" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-medium bg-white catalog-main-cat-select">
+                <option value="">-- หมวดหลัก --</option>
+                ${catOptions}
+            </select>
+        </td>
+        <td class="p-1.5">
+            <select class="w-full p-1.5 rounded-lg border border-slate-200 text-xs bg-white catalog-sub-cat-select">
+                <option value="">-- หมวดย่อย --</option>
+                ${subOptions}
+            </select>
+        </td>
         <td class="p-1.5 relative">
-            <input type="text" value="" placeholder="ชื่อสินค้า (ห้ามซ้ำไฮไลท์)" oninput="validateCatalogItemInput(this)" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold catalog-item-name-input">
+            <input type="text" value="" placeholder="ชื่อสินค้า" oninput="validateCatalogItemInput(this)" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold catalog-item-name-input">
             <div class="duplicate-warning text-[10px] text-rose-500 font-bold hidden mt-0.5 flex items-center gap-0.5">
                 <span class="material-symbols-outlined text-[12px]">warning</span>
-                <span>ชื่อซ้ำกับสินค้าไฮไลท์ข้อ 3</span>
+                <span>ชื่อซ้ำกับสินค้า Highlight</span>
             </div>
         </td>
-        <td class="p-1.5"><input type="text" value="" placeholder="สเปก/ขนาด" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs text-slate-600"></td>
-        <td class="p-1.5"><input type="number" value="0" placeholder="ราคา" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold text-emerald-700"></td>
-        <td class="p-1.5"><input type="text" value="กก." placeholder="หน่วย" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs"></td>
+        <td class="p-1.5"><input type="number" value="" placeholder="ราคา" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold text-emerald-700"></td>
+        <td class="p-1.5">
+            <select class="w-full p-1.5 rounded-lg border border-slate-200 text-xs bg-white catalog-unit-select">
+                ${unitOptions}
+            </select>
+        </td>
         <td class="p-1.5 text-center">
             <button type="button" onclick="deleteMerchantCatalogRow(this)" class="w-6 h-6 rounded-md hover:bg-rose-50 text-rose-500 flex items-center justify-center transition-all mx-auto" title="ลบแถว">
                 <span class="material-symbols-outlined text-sm">delete</span>
@@ -17541,97 +17665,117 @@ function deleteMerchantCatalogRow(btn) {
 }
 
 function saveMerchantStallData() {
-    const stallName = document.getElementById("m-stall-name").value.trim();
-    const stallNumber = document.getElementById("m-stall-number").value.trim();
-    const zoneVal = document.getElementById("m-stall-zone").value;
-    const category = document.getElementById("m-stall-category").value;
-    const ownerName = document.getElementById("m-owner-name").value.trim();
-    const phone = document.getElementById("m-phone").value.trim();
-    const phone2 = document.getElementById("m-phone2") ? document.getElementById("m-phone2").value.trim() : "";
-    const line = document.getElementById("m-line") ? document.getElementById("m-line").value.trim() : "";
-    const highlight = document.getElementById("m-highlight").value.trim();
-    const desc = document.getElementById("m-desc").value.trim();
+    const stallName = (document.getElementById("m-stall-name")?.value || "").trim();
+    // Contact 1 (primary)
+    const contact1Name = (document.getElementById("m-contact1-name")?.value || "").trim();
+    const contact1Phone = (document.getElementById("m-contact1-phone")?.value || "").trim();
+    const contact1Line = (document.getElementById("m-contact1-line")?.value || "").trim();
+    // Contact 2 (secondary)
+    const contact2Name = (document.getElementById("m-contact2-name")?.value || "").trim();
+    const contact2Phone = (document.getElementById("m-contact2-phone")?.value || "").trim();
+    const contact2Line = (document.getElementById("m-contact2-line")?.value || "").trim();
 
-    const stallImage = document.getElementById("m-stall-image-url").value.trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
-    const ownerImage = document.getElementById("m-owner-image-url").value.trim() || MERCHANT_PRESET_IMAGES.owner.man1;
+    // Legacy fields - keep backward compat
+    const stallNumber = (document.getElementById("m-stall-number")?.value || "").trim();
+    const zoneVal = document.getElementById("m-stall-zone")?.value || "";
+    const category = document.getElementById("m-stall-category")?.value || "chicken";
+    const ownerName = contact1Name || (document.getElementById("m-owner-name")?.value || "").trim();
+    const phone = contact1Phone || (document.getElementById("m-phone")?.value || "").trim();
+    const phone2 = contact2Phone || (document.getElementById("m-phone2")?.value || "").trim();
+    const line = contact1Line || (document.getElementById("m-line")?.value || "").trim();
+    const highlight = (document.getElementById("m-highlight")?.value || "").trim();
+    const desc = (document.getElementById("m-desc")?.value || "").trim();
 
-    if (!stallName || !stallNumber || !ownerName || !phone) {
-        alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน: ชื่อร้านค้า, หมายเลขแผง, ชื่อเจ้าของร้าน และเบอร์โทรศัพท์");
+    const stallImage = (document.getElementById("m-stall-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
+    const ownerImage = (document.getElementById("m-owner-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.owner.man1;
+
+    if (!stallName || !phone) {
+        alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน: ชื่อร้านค้า และเบอร์โทรศัพท์ผู้ติดต่อ");
         switchMerchantPortalTab("tab-info");
         return;
     }
 
-    // Collect 6 products (Highlight items)
+    // Collect 10 Highlight products
+    const HIGHLIGHT_COUNT = 10;
     const products = [];
     const highlightNames = [];
-    for (let i = 0; i < 6; i++) {
-        const name = document.getElementById(`m-p-name-${i}`)?.value.trim() || `สินค้า ${i + 1}`;
+    for (let i = 0; i < HIGHLIGHT_COUNT; i++) {
+        const name = document.getElementById(`m-p-name-${i}`)?.value.trim() || "";
         const badge = document.getElementById(`m-p-badge-${i}`)?.value.trim() || "";
         const pDesc = document.getElementById(`m-p-desc-${i}`)?.value.trim() || "";
-        const price = parseFloat(document.getElementById(`m-p-price-${i}`)?.value || "0") || 50;
-        const unit = document.getElementById(`m-p-unit-${i}`)?.value.trim() || "กก.";
-
+        const price = parseFloat(document.getElementById(`m-p-price-${i}`)?.value || "0") || 0;
+        const unitEl = document.getElementById(`m-p-unit-${i}`);
+        const unit = unitEl ? (unitEl.value || "กก.") : "กก.";
+        const mainCat = document.getElementById(`m-p-maincat-${i}`)?.value || "";
+        const subCat = document.getElementById(`m-p-subcat-${i}`)?.value || "";
         const pImage = document.getElementById(`m-p-img-${i}`)?.value.trim() || stallImage;
 
-        products.push({
-            id: `${activeMerchantStallId}_p${i + 1}`,
-            name: name,
-            desc: pDesc,
-            price: price,
-            unit: unit,
-            badge: badge,
-            image: pImage
-        });
-
         if (name) {
+            products.push({
+                id: `${activeMerchantStallId}_p${i + 1}`,
+                name: name,
+                desc: pDesc,
+                price: price,
+                unit: unit,
+                badge: badge,
+                image: pImage,
+                mainCat: mainCat,
+                subCat: subCat
+            });
             highlightNames.push(name.toLowerCase());
         }
     }
 
-    // ตรวจสอบความถูกต้อง: ห้ามลงรายการสินค้าในข้อ 4 ซ้ำกับสินค้าไฮไลท์ 6 รายการในข้อ 3
+    // Collect additional catalog rows (use select dropdowns now)
     const tableRows = document.querySelectorAll("#merchant-catalog-table-body tr:not(#merchant-catalog-empty-row)");
     const duplicateErrors = [];
 
     tableRows.forEach((r, idx) => {
-        const inputs = r.querySelectorAll("input");
-        if (inputs.length >= 2) {
-            const itemName = inputs[1].value.trim();
+        const nameInput = r.querySelector(".catalog-item-name-input");
+        if (nameInput) {
+            const itemName = nameInput.value.trim();
             if (itemName && highlightNames.includes(itemName.toLowerCase())) {
-                duplicateErrors.push({ row: idx + 1, name: itemName, input: inputs[1] });
+                duplicateErrors.push({ row: idx + 1, name: itemName, input: nameInput });
             }
         }
     });
 
     if (duplicateErrors.length > 0) {
         const firstErr = duplicateErrors[0];
-        alert(`⚠️ ไม่สามารถบันทึกได้:\n\nรายการสินค้า "${firstErr.name}" ในข้อ 4 (ตารางสินค้าทั้งหมด) ซ้ำกับสินค้าไฮไลท์ 6 รายการในข้อ 3\n\n*ข้อกำหนด: ห้ามลงรายการสินค้าที่ซ้ำกับสินค้าไฮไลท์ 6 รายการ กรุณาลบหรือเปลี่ยนชื่อสินค้าครับ*`);
-        switchMerchantPortalTab("tab-catalog");
+        alert(`⚠️ ไม่สามารถบันทึกได้:\n\nรายการสินค้า "${firstErr.name}" ซ้ำกับสินค้า Highlight \n\nกรุณาลบหรือเปลี่ยนชื่อสินค้าครับ`);
+        switchMerchantPortalTab("tab-products");
         firstErr.input.focus();
         firstErr.input.classList.add("border-rose-500", "ring-2", "ring-rose-400", "bg-rose-50");
         return;
     }
 
-    // Collect full catalog rows
+    // Collect full catalog rows with new category dropdowns
     const groupMap = {};
     tableRows.forEach((r, idx) => {
-        const inputs = r.querySelectorAll("input");
-        if (inputs.length >= 5) {
-            const group = inputs[0].value.trim() || "หมวดหมู่ทั่วไป";
-            const itemName = inputs[1].value.trim();
-            const itemSpec = inputs[2].value.trim();
-            const itemPrice = parseFloat(inputs[3].value || "0") || 0;
-            const itemUnit = inputs[4].value.trim() || "กก.";
+        const mainCatEl = r.querySelector(".catalog-main-cat-select");
+        const subCatEl = r.querySelector(".catalog-sub-cat-select");
+        const nameInput = r.querySelector(".catalog-item-name-input");
+        const priceInput = r.querySelector("input[type='number']");
+        const unitEl = r.querySelector(".catalog-unit-select");
 
-            if (itemName) {
-                if (!groupMap[group]) groupMap[group] = [];
-                groupMap[group].push({
-                    id: `cat_${activeMerchantStallId}_${idx + 1}`,
-                    name: itemName,
-                    spec: itemSpec,
-                    price: itemPrice,
-                    unit: itemUnit
-                });
-            }
+        const mainCatVal = mainCatEl ? mainCatEl.value.trim() : "";
+        const subCatVal = subCatEl ? subCatEl.value.trim() : "";
+        const itemName = nameInput ? nameInput.value.trim() : "";
+        const itemPrice = parseFloat(priceInput?.value || "0") || 0;
+        const itemUnit = unitEl ? (unitEl.value || "กก.") : "กก.";
+        const group = mainCatVal || subCatVal || "หมวดหมู่ทั่วไป";
+
+        if (itemName) {
+            if (!groupMap[group]) groupMap[group] = [];
+            groupMap[group].push({
+                id: `cat_${activeMerchantStallId}_${idx + 1}`,
+                name: itemName,
+                spec: "",
+                price: itemPrice,
+                unit: itemUnit,
+                mainCat: mainCatVal,
+                subCat: subCatVal
+            });
         }
     });
 
@@ -17654,17 +17798,23 @@ function saveMerchantStallData() {
         accountName: bankAccountName
     };
 
+    const contacts = [
+        { name: contact1Name, phone: contact1Phone, line: contact1Line },
+        { name: contact2Name, phone: contact2Phone, line: contact2Line }
+    ].filter(c => c.name || c.phone);
+
     // Create or update stall object
     const stallObj = {
         stallId: activeMerchantStallId,
         stallName: stallName,
-        stallNumber: stallNumber,
-        zone: zoneVal.replace("โซน ", "").replace(/\(.*\)/, "").trim(),
+        stallNumber: stallNumber || "-",
+        zone: zoneVal ? zoneVal.replace("โซน ", "").replace(/\(.*\)/, "").trim() : "",
         category: category,
         ownerName: ownerName,
         phone: phone,
         phone2: phone2,
         line: line,
+        contacts: contacts,
         bankInfo: bankInfo,
         bankName: bankName,
         bankAccountNo: bankAccountNo,
