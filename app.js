@@ -17575,73 +17575,89 @@ function buildCatalogCategorySelects(mainCat, subCat) {
 }
 
 function addMerchantCatalogRow() {
-    const tbody = document.getElementById("merchant-catalog-table-body");
-    if (!tbody) return;
+    const container = document.getElementById("merchant-catalog-container");
+    if (!container) return;
 
-    const emptyRow = document.getElementById("merchant-catalog-empty-row");
-    if (emptyRow) emptyRow.remove();
-
-    const existingRows = tbody.querySelectorAll("tr:not(#merchant-catalog-empty-row)");
-    if (existingRows.length >= 50) {
+    const existingRows = container.querySelectorAll(".catalog-item-container").length;
+    if (existingRows >= 50) {
         showToast("⚠️ ใส่รายการสินค้าเพิ่มเติมได้ไม่เกิน 50 รายการ");
         return;
     }
 
-    const newIndex = existingRows.length + 1;
+    const index = existingRows;
     const { catOptions, subOptions, unitOptions } = buildCatalogCategorySelects("", "");
-    const newRow = document.createElement("tr");
-    newRow.className = "hover:bg-slate-50 transition-colors";
+
+    const newRow = document.createElement("div");
+    newRow.className = "catalog-item-container p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 relative shadow-sm";
+    newRow.id = `m-c-row-${index}`;
     newRow.innerHTML = `
-        <td class="p-2 text-center text-slate-400 font-bold text-[10px]">${newIndex}</td>
-        <td class="p-1.5">
-            <select onchange="onCatalogMainCatChange(this)" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-medium bg-white catalog-main-cat-select">
-                <option value="">-- หมวดหลัก --</option>
-                ${catOptions}
-            </select>
-        </td>
-        <td class="p-1.5">
-            <select class="w-full p-1.5 rounded-lg border border-slate-200 text-xs bg-white catalog-sub-cat-select">
-                <option value="">-- หมวดย่อย --</option>
-                ${subOptions}
-            </select>
-        </td>
-        <td class="p-1.5 relative">
-            <input type="text" value="" placeholder="ชื่อสินค้า" oninput="validateCatalogItemInput(this)" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold catalog-item-name-input">
-            <div class="duplicate-warning text-[10px] text-rose-500 font-bold hidden mt-0.5 flex items-center gap-0.5">
-                <span class="material-symbols-outlined text-[12px]">warning</span>
-                <span>ชื่อซ้ำกับสินค้า Highlight</span>
-            </div>
-        </td>
-        <td class="p-1.5"><input type="number" value="" placeholder="ราคา" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold text-emerald-700"></td>
-        <td class="p-1.5">
-            <select class="w-full p-1.5 rounded-lg border border-slate-200 text-xs bg-white catalog-unit-select">
-                ${unitOptions}
-            </select>
-        </td>
-        <td class="p-1.5 text-center">
-            <button type="button" onclick="deleteMerchantCatalogRow(this)" class="w-6 h-6 rounded-md hover:bg-rose-50 text-rose-500 flex items-center justify-center transition-all mx-auto" title="ลบแถว">
+        <div class="flex items-center justify-between">
+            <span class="font-extrabold text-blue-800 flex items-center gap-1.5">
+                <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-bold">${index + 1}</span>
+                <span>สินค้าเพิ่มเติมรายการที่ ${index + 1}</span>
+            </span>
+            <button type="button" onclick="deleteMerchantCatalogRow(this)" class="w-6 h-6 rounded-md hover:bg-rose-50 text-rose-500 flex items-center justify-center transition-all" title="ลบรายการนี้">
                 <span class="material-symbols-outlined text-sm">delete</span>
             </button>
-        </td>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+                <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่หลัก</label>
+                <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs font-medium catalog-main-cat-select" onchange="onCatalogMainCatChange(this)">
+                    <option value="">-- หมวดหลัก --</option>
+                    ${catOptions}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่ย่อย</label>
+                <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs catalog-sub-cat-select">
+                    <option value="">-- หมวดย่อย --</option>
+                    ${subOptions}
+                </select>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div class="sm:col-span-2 relative">
+                <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ชื่อสินค้า <span class="text-rose-500">*</span></label>
+                <input type="text" placeholder="ชื่อสินค้า" oninput="validateCatalogItemInput(this)" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs catalog-item-name-input">
+                <div class="duplicate-warning text-[10px] text-rose-500 font-bold hidden mt-0.5 flex items-center gap-0.5">
+                    <span class="material-symbols-outlined text-[12px]">warning</span>
+                    <span>ชื่อซ้ำกับสินค้า Highlight</span>
+                </div>
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หน่วยขาย</label>
+                <select class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs catalog-unit-select">
+                    ${unitOptions}
+                </select>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+                <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ราคา (บาท)</label>
+                <input type="number" placeholder="ราคา" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-emerald-700 text-xs catalog-item-price-input">
+            </div>
+        </div>
     `;
-    tbody.appendChild(newRow);
+    container.appendChild(newRow);
 }
 
 function deleteMerchantCatalogRow(btn) {
-    const row = btn.closest("tr");
+    const row = btn.closest(".catalog-item-container");
     if (row) {
         row.remove();
-        const tbody = document.getElementById("merchant-catalog-table-body");
-        if (tbody) {
-            const rows = tbody.querySelectorAll("tr:not(#merchant-catalog-empty-row)");
-            if (rows.length === 0) {
-                renderMerchantCatalogTable([]);
-            } else {
-                rows.forEach((r, idx) => {
-                    const firstCell = r.querySelector("td");
-                    if (firstCell) firstCell.textContent = idx + 1;
-                });
-            }
+        const container = document.getElementById("merchant-catalog-container");
+        if(container) {
+            const items = container.querySelectorAll(".catalog-item-container");
+            items.forEach((item, idx) => {
+                const titleSpan = item.querySelector("span.font-extrabold > span:nth-child(2)");
+                const numSpan = item.querySelector("span.font-extrabold > span:nth-child(1)");
+                if(numSpan) numSpan.textContent = idx + 1;
+                if(titleSpan) titleSpan.textContent = `สินค้าเพิ่มเติมรายการที่ ${idx + 1}`;
+            });
         }
     }
 }
