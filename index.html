@@ -3059,9 +3059,6 @@
                     <button onclick="scrollMerchantPortalTabs(120)" class="w-6 h-6 rounded-full bg-white shadow-xs border border-slate-200 text-slate-700 hover:text-emerald-700 flex items-center justify-center shrink-0 active:scale-90" title="เลื่อนขวา">
                         <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
                     </button>
-                    <button type="button" onclick="fillSampleMerchantRegistration()" class="ml-1 px-2.5 py-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-black rounded-xl text-[10px] flex items-center gap-1 shadow-sm active:scale-95 transition-all shrink-0 cursor-pointer" title="กรอกข้อมูลจำลองร้านค้าตัวอย่างอัตโนมัติสำหรับการทดสอบ">
-                        <span>✨ กรอกตัวอย่าง 1-Click</span>
-                    </button>
                 </div>
 
                 <!-- Form Content (Scrollable) -->
@@ -3073,7 +3070,7 @@
                             <span class="material-symbols-outlined text-emerald-700 text-base shrink-0 mt-0.5">info</span>
                             <div>
                                 <div class="font-bold">กรอกข้อมูลพื้นฐานของแผงค้า</div>
-                                <div class="text-[11px] text-emerald-800">ระบบจะนำข้อมูลนี้ไปสร้างหน้าร้านและแสดงให้นักช้อปในชุมชนเห็นบนแอปพลิเคชัน</div>
+                                <div class="text-[11px] text-emerald-800">ระบบจะนำข้อมูลนี้ไปสร้างหน้าร้านและแสดงให้นักช้อปในชุมชนเห็นบนแอปพลิเคชัน กรุณาตรวจสอบความถูกต้องและชัดเจนของข้อมูลเพื่อประโยชน์ของร้านค้าท่าน</div>
                             </div>
                         </div>
 
@@ -3132,31 +3129,65 @@
                         <div class="p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl space-y-2.5">
                             <div class="font-bold text-amber-900 flex items-center gap-1.5 text-xs">
                                 <span class="material-symbols-outlined text-amber-700 text-sm">account_balance</span>
-                                <span>ช่องทางการรับชำระเงิน</span>
+                                <span>ช่องทางการรับชำระเงิน (รองรับ 2 บัญชี)</span>
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                                <div>
-                                    <label class="block font-bold text-slate-700 text-[11px] mb-1">ธนาคาร <span class="text-rose-500">*</span></label>
-                                    <select id="m-bank-name" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
-                                        <option value="กสิกรไทย (KBank)">กสิกรไทย (KBank)</option>
-                                        <option value="ไทยพาณิชย์ (SCB)">ไทยพาณิชย์ (SCB)</option>
-                                        <option value="กรุงเทพ (BBL)">กรุงเทพ (BBL)</option>
-                                        <option value="กรุงไทย (KTB)">กรุงไทย (KTB)</option>
-                                        <option value="ออมสิน (GSB)">ออมสิน (GSB)</option>
-                                        <option value="กรุงศรี (BAY)">กรุงศรี (BAY)</option>
-                                        <option value="พร้อมเพย์ (PromptPay)">พร้อมเพย์ (PromptPay)</option>
-                                    </select>
+                            
+                            <!-- Account 1 -->
+                            <div class="bg-white p-2.5 rounded-xl border border-amber-200/50 mb-2">
+                                <div class="font-bold text-amber-800 text-[11px] mb-2">บัญชีหลักที่ 1 <span class="text-rose-500">*</span></div>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                    <div>
+                                        <label class="block font-bold text-slate-700 text-[11px] mb-1">ธนาคาร <span class="text-rose-500">*</span></label>
+                                        <select id="m-bank-name" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
+                                            <option value="กสิกรไทย (KBank)">กสิกรไทย (KBank)</option>
+                                            <option value="ไทยพาณิชย์ (SCB)">ไทยพาณิชย์ (SCB)</option>
+                                            <option value="กรุงเทพ (BBL)">กรุงเทพ (BBL)</option>
+                                            <option value="กรุงไทย (KTB)">กรุงไทย (KTB)</option>
+                                            <option value="ออมสิน (GSB)">ออมสิน (GSB)</option>
+                                            <option value="กรุงศรี (BAY)">กรุงศรี (BAY)</option>
+                                            <option value="พร้อมเพย์ (PromptPay)">พร้อมเพย์ (PromptPay)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block font-bold text-slate-700 text-[11px] mb-1">เลขที่บัญชี <span class="text-rose-500">*</span></label>
+                                        <input type="text" id="m-bank-account-no" placeholder="กรอกเลขที่บัญชี" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-mono text-xs font-bold bg-white">
+                                    </div>
+                                    <div>
+                                        <label class="block font-bold text-slate-700 text-[11px] mb-1">ชื่อบัญชี <span class="text-rose-500">*</span></label>
+                                        <input type="text" id="m-bank-account-name" placeholder="กรอกชื่อบัญชี" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
+                                    </div>
                                 </div>
-                                <div>
-                                    <label class="block font-bold text-slate-700 text-[11px] mb-1">เลขที่บัญชี <span class="text-rose-500">*</span></label>
-                                    <input type="text" id="m-bank-account-no" placeholder="กรอกเลขที่บัญชี" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-mono text-xs font-bold bg-white">
-                                </div>
-                                <div>
-                                    <label class="block font-bold text-slate-700 text-[11px] mb-1">ชื่อบัญชี <span class="text-rose-500">*</span></label>
-                                    <input type="text" id="m-bank-account-name" placeholder="กรอกชื่อบัญชี" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
+                            </div>
+                            
+                            <!-- Account 2 -->
+                            <div class="bg-white p-2.5 rounded-xl border border-amber-200/50">
+                                <div class="font-bold text-amber-800 text-[11px] mb-2">บัญชีสำรองที่ 2 (ไม่บังคับ)</div>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                    <div>
+                                        <label class="block font-bold text-slate-700 text-[11px] mb-1">ธนาคาร</label>
+                                        <select id="m-bank-name-2" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
+                                            <option value="">เลือกธนาคาร...</option>
+                                            <option value="กสิกรไทย (KBank)">กสิกรไทย (KBank)</option>
+                                            <option value="ไทยพาณิชย์ (SCB)">ไทยพาณิชย์ (SCB)</option>
+                                            <option value="กรุงเทพ (BBL)">กรุงเทพ (BBL)</option>
+                                            <option value="กรุงไทย (KTB)">กรุงไทย (KTB)</option>
+                                            <option value="ออมสิน (GSB)">ออมสิน (GSB)</option>
+                                            <option value="กรุงศรี (BAY)">กรุงศรี (BAY)</option>
+                                            <option value="พร้อมเพย์ (PromptPay)">พร้อมเพย์ (PromptPay)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block font-bold text-slate-700 text-[11px] mb-1">เลขที่บัญชี</label>
+                                        <input type="text" id="m-bank-account-no-2" placeholder="กรอกเลขที่บัญชี" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-mono text-xs font-bold bg-white">
+                                    </div>
+                                    <div>
+                                        <label class="block font-bold text-slate-700 text-[11px] mb-1">ชื่อบัญชี</label>
+                                        <input type="text" id="m-bank-account-name-2" placeholder="กรอกชื่อบัญชี" class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
+                                    </div>
                                 </div>
                             </div>
                         </div>
+
 
                     <!-- Step 1 Next Button -->
                     <div class="pt-2 flex justify-end">
