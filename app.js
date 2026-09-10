@@ -17288,7 +17288,7 @@ function buildUnitDropdown(id, selectedUnit) {
 }
 
 function onCatalogMainCatChange(selectEl) {
-    const row = selectEl.closest('tr');
+    const row = selectEl.closest('.catalog-item-container, tr');
     if (!row) return;
     const subSelect = row.querySelector('.catalog-sub-cat-select');
     if (!subSelect) return;
