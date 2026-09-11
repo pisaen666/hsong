@@ -5131,10 +5131,10 @@ function renderCatalog() {
                     ` : ''}
                 </div>
 
-                <!-- Products Grid (รองรับขนาด Responsive บนจอ PC และ มือถือ ป้องกันบีบอัดใน Mobile Frame) -->
-                <div class="${(state.screenMode === 'mobile') ? 'grid grid-cols-2 gap-2.5 px-3.5' : 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 md:gap-3 px-3.5'}">
+                <!-- Products Single Column List (เรียงต่อกันเป็นบรรทัด: ลำดับ / ชื่อสินค้า / หน่วย / ราคา / สัญลักษณ์ตะกร้า) -->
+                <div class="flex flex-col gap-1.5 px-3.5">
                     ${(!stallProducts || !Array.isArray(stallProducts) || stallProducts.length === 0) ? `
-                        <div class="col-span-full py-6 px-4 bg-slate-50/90 border border-dashed border-emerald-300/80 rounded-2xl text-center space-y-2">
+                        <div class="py-6 px-4 bg-slate-50/90 border border-dashed border-emerald-300/80 rounded-2xl text-center space-y-2">
                             <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-lg font-bold">🏪</div>
                             <p class="text-xs font-bold text-slate-800">แผงค้าใหม่กำลังเตรียมรายการสินค้าลงระบบ</p>
                             <p class="text-[11px] text-slate-500">สามารถโทรติดต่อสอบถามหรือสั่งซื้อตรงได้ที่ <a href="tel:${phoneNum}" class="text-emerald-700 font-black underline">${phoneNum}</a></p>
@@ -5147,58 +5147,69 @@ function renderCatalog() {
                                 </div>
                             ` : ''}
                         </div>
-                    ` : stallProducts.map(product => {
-            const inCart = state.cart.find(item => item.productId === product.id);
-            const qtyInCart = inCart ? inCart.qty : 0;
+                    ` : `
+                        <!-- Column Header -->
+                        <div class="flex items-center justify-between text-[10px] font-extrabold text-slate-400 px-3 pb-0.5 select-none">
+                            <span class="w-6 shrink-0 text-center">ลำดับ</span>
+                            <span class="flex-1 min-w-0 pl-2">ชื่อรายการสินค้า</span>
+                            <span class="w-12 text-center shrink-0">หน่วย</span>
+                            <span class="w-14 text-right shrink-0">ราคา</span>
+                            <span class="w-8 text-center shrink-0"></span>
+                        </div>
 
-            return `
-                            <div class="bg-white hover:bg-slate-50/90 rounded-2xl p-3 border ${qtyInCart > 0 ? 'border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-400 shadow-sm' : 'border-slate-200/90 shadow-2xs'} flex flex-col justify-between hover:shadow-md transition-all">
-                                <div>
-                                    ${qtyInCart > 0 ? `
-                                        <div class="mb-1.5 flex items-center justify-between">
-                                            <span class="bg-emerald-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shadow-xs flex items-center gap-0.5">
-                                                <span class="material-symbols-outlined text-[10px]">check</span>
-                                                <span>ในตะกร้า ${qtyInCart} ${product.unit || 'กก.'}</span>
-                                            </span>
-                                        </div>
-                                    ` : ''}
-                                    <h4 class="font-extrabold text-[13px] text-slate-900 leading-snug line-clamp-2" title="${product.name}">
-                                        ${product.name}
-                                    </h4>
-                                    ${product.badge ? `
-                                        <span class="inline-block mt-1 text-[9px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200/60 px-1.5 py-0.2 rounded-md">
-                                            ${product.badge}
+                        ${stallProducts.map((product, idx) => {
+                            const inCart = state.cart.find(item => item.productId === product.id);
+                            const qtyInCart = inCart ? inCart.qty : 0;
+
+                            return `
+                                <div class="bg-white hover:bg-slate-50/90 rounded-2xl p-2.5 sm:p-3 border ${qtyInCart > 0 ? 'border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-400 shadow-sm' : 'border-slate-200/90 shadow-2xs'} flex items-center justify-between gap-2.5 transition-all">
+                                    <!-- 1. ลำดับ -->
+                                    <span class="w-6 h-6 rounded-lg ${qtyInCart > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 font-black'} text-xs flex items-center justify-center shrink-0">
+                                        ${idx + 1}
+                                    </span>
+
+                                    <!-- 2. ชื่อรายการสินค้า -->
+                                    <div class="flex-1 min-w-0 flex items-center gap-1.5 pl-1">
+                                        <span class="font-extrabold text-xs sm:text-sm text-slate-900 truncate" title="${product.name}">
+                                            ${product.name}
                                         </span>
-                                    ` : ''}
-                                </div>
-
-                                <!-- Action Bottom Row: Price per Unit + Add to Cart Button -->
-                                <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5 min-h-[36px]">
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-baseline gap-0.5">
-                                            <span class="font-black text-sm text-orange-600">฿${product.price}</span>
-                                            <span class="text-[10px] text-slate-400 font-bold truncate">/${product.unit || 'กก.'}</span>
-                                        </div>
+                                        ${product.badge ? `
+                                            <span class="text-[9px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.2 rounded shrink-0 hidden sm:inline-block">
+                                                ${product.badge}
+                                            </span>
+                                        ` : ''}
                                     </div>
-                                    
-                                    ${qtyInCart > 0 ? `
-                                        <!-- เมื่อหยิบใส่แล้ว: แสดงปุ่มปรับจำนวนสีเขียว -->
-                                        <div class="flex items-center gap-1 bg-emerald-600 text-white rounded-xl px-1.5 py-1 text-xs shadow-sm ring-2 ring-emerald-400 shrink-0">
-                                            <button type="button" onclick="changeCartQty('${product.id}', -1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded-lg font-black text-sm transition-transform cursor-pointer">-</button>
-                                            <span class="px-1 text-xs font-black min-w-[14px] text-center">${qtyInCart}</span>
-                                            <button type="button" onclick="changeCartQty('${product.id}', 1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded-lg font-black text-sm transition-transform cursor-pointer">+</button>
-                                        </div>
-                                    ` : `
-                                        <!-- ปุ่มใส่ตะกร้าสีส้มมาตรฐาน -->
-                                        <button type="button" onclick="addToCart('${stall.stallId}', '${product.id}')" class="px-2.5 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs shrink-0 transition-all cursor-pointer whitespace-nowrap" title="เพิ่มลงตะกร้า">
-                                            <span class="material-symbols-outlined text-[14px] font-bold">add_shopping_cart</span>
-                                            <span>ใส่ตะกร้า</span>
-                                        </button>
-                                    `}
+
+                                    <!-- 3. หน่วย -->
+                                    <span class="w-12 text-center text-[11px] sm:text-xs font-bold text-slate-500 bg-slate-100/90 px-1.5 py-0.5 rounded-md shrink-0 whitespace-nowrap">
+                                        ${product.unit || 'กก.'}
+                                    </span>
+
+                                    <!-- 4. ราคา -->
+                                    <div class="w-14 font-black text-sm sm:text-base text-orange-600 shrink-0 text-right whitespace-nowrap">
+                                        ฿${product.price}
+                                    </div>
+
+                                    <!-- 5. สัญลักษณ์ตะกร้า -->
+                                    <div class="w-8 shrink-0 flex items-center justify-center">
+                                        ${qtyInCart > 0 ? `
+                                            <!-- เมื่อหยิบใส่แล้ว: แสดงปุ่มปรับจำนวนสีเขียว -->
+                                            <div class="flex items-center gap-0.5 bg-emerald-600 text-white rounded-xl px-1 py-1 text-xs shadow-sm ring-2 ring-emerald-400">
+                                                <button type="button" onclick="changeCartQty('${product.id}', -1)" class="w-4 h-4 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[11px] transition-transform cursor-pointer" title="ลดจำนวน">-</button>
+                                                <span class="px-0.5 text-[11px] font-black min-w-[10px] text-center">${qtyInCart}</span>
+                                                <button type="button" onclick="changeCartQty('${product.id}', 1)" class="w-4 h-4 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[11px] transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
+                                            </div>
+                                        ` : `
+                                            <!-- ปุ่มสัญลักษณ์ตะกร้าสีส้ม -->
+                                            <button type="button" onclick="addToCart('${stall.stallId}', '${product.id}')" class="w-8 h-8 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer shrink-0" title="เพิ่ม ${product.name} ลงตะกร้า">
+                                                <span class="material-symbols-outlined text-[17px] font-bold">shopping_cart</span>
+                                            </button>
+                                        `}
+                                    </div>
                                 </div>
-                            </div>
-                        `;
-        }).join("")}
+                            `;
+                        }).join("")}
+                    `}
                 </div>
 
                 ${hasExtraCatalog ? `
