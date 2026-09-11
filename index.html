@@ -6,24 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>เฮียส่ง - เพียงคุณสั่ง เราไปส่ง ทุกรายการจากตลาดถึงมือคุณ</title>
 
-    <!-- Instant Purge of old mock stalls in browser LocalStorage before any logic runs -->
-    <script>
-        try {
-            localStorage.removeItem("talathub_custom_market_stalls");
-            localStorage.removeItem("talathub_pending_stalls");
-            localStorage.removeItem("talathub_mock_orders");
-            localStorage.removeItem("talathub_rating_reviews");
-            localStorage.removeItem("talathub_stall_catalog_database");
-            var _favs = localStorage.getItem("talathub_favorite_stalls");
-            if (_favs) {
-                var _parsedFavs = JSON.parse(_favs);
-                if (Array.isArray(_parsedFavs)) {
-                    _parsedFavs = _parsedFavs.filter(function (id) { return typeof id === "string" && (id.startsWith("stall_new_") || id.startsWith("APP-SHOP-")); });
-                    localStorage.setItem("talathub_favorite_stalls", JSON.stringify(_parsedFavs));
-                }
-            }
-        } catch (e) { }
-    </script>
+
 
     <!-- Fonts: Prompt & Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">

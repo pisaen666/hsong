@@ -399,7 +399,7 @@ async function syncLatestOrderFromCloud() {
 function isCustomOrApprovedStall(s) {
     if (!s || !s.stallId) return false;
     const id = s.stallId;
-    return id.startsWith("stall_new_") || id.startsWith("APP-SHOP-") || id.startsWith("stall_custom_") || id.startsWith("stall_seed_");
+    return s.isModified === true || id.startsWith("stall_new_") || id.startsWith("APP-SHOP-") || id.startsWith("stall_custom_") || id.startsWith("stall_seed_") || !!s.accessCode;
 }
 
 function loadSavedMarketData() {
@@ -422,10 +422,62 @@ function saveMarketDataToStorage() {
         const customOnly = MARKET_DATA.filter(isCustomOrApprovedStall);
         localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(customOnly));
         if (isFirebaseReady() && db) {
-            db.ref("custom_market_stalls").set(customOnly).catch(console.warn);
+            db.ref("custom_market_stalls").set(customOnly).catch(err => {
+                console.warn("Firebase save custom_market_stalls failed:", err);
+            });
         }
     } catch (e) { }
 }
+
+let _isCustomStallsSyncInitialized = false;
+function initCustomStallsRealtimeSync() {
+    if (!isFirebaseReady() || _isCustomStallsSyncInitialized) return;
+    _isCustomStallsSyncInitialized = true;
+
+    db.ref("custom_market_stalls").on("value", snapshot => {
+        try {
+            const data = snapshot.val();
+            let rawList = [];
+            if (Array.isArray(data)) {
+                rawList = data.filter(Boolean);
+            } else if (data && typeof data === "object") {
+                rawList = Object.values(data).filter(Boolean);
+            }
+
+            if (rawList.length > 0) {
+                localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(rawList));
+                rawList.forEach(savedStall => {
+                    const existingIdx = MARKET_DATA.findIndex(s => s.stallId === savedStall.stallId);
+                    if (existingIdx >= 0) {
+                        MARKET_DATA[existingIdx] = { ...MARKET_DATA[existingIdx], ...savedStall };
+                    } else {
+                        MARKET_DATA.push(savedStall);
+                    }
+
+                    if (typeof ALL_100_STALLS !== "undefined" && Array.isArray(ALL_100_STALLS)) {
+                        const allIdx = ALL_100_STALLS.findIndex(s => s.stallId === savedStall.stallId);
+                        if (allIdx >= 0) {
+                            ALL_100_STALLS[allIdx] = { ...ALL_100_STALLS[allIdx], ...savedStall };
+                        } else {
+                            ALL_100_STALLS.push(savedStall);
+                        }
+                    }
+                });
+
+                if (typeof renderCatalog === "function") renderCatalog();
+                if (typeof renderDirectoryList === "function") renderDirectoryList();
+                if (typeof renderFavoriteStallsBar === "function") renderFavoriteStallsBar();
+                if (typeof updateStallRotationUI === "function") updateStallRotationUI();
+                if (state.currentRole === "merchant" && typeof renderMerchantView === "function") {
+                    renderMerchantView();
+                }
+            }
+        } catch (err) {
+            console.warn("Error syncing custom_market_stalls:", err);
+        }
+    });
+}
+window.initCustomStallsRealtimeSync = initCustomStallsRealtimeSync;
 
 // Restore saved custom stalls if available (merge with base categories and all 100 stalls)
 const _savedStalls = loadSavedMarketData();
@@ -5329,8 +5381,32 @@ function loadSavedStallCatalogDatabase() {
 function saveStallCatalogDatabaseToStorage() {
     try {
         localStorage.setItem("talathub_stall_catalog_database", JSON.stringify(STALL_CATALOG_DATABASE));
+        if (isFirebaseReady() && db) {
+            db.ref("stall_catalog_database").set(STALL_CATALOG_DATABASE).catch(err => {
+                console.warn("Firebase save stall_catalog_database failed:", err);
+            });
+        }
     } catch (e) {}
 }
+
+let _isCatalogDbSyncInitialized = false;
+function initCatalogDbRealtimeSync() {
+    if (!isFirebaseReady() || _isCatalogDbSyncInitialized) return;
+    _isCatalogDbSyncInitialized = true;
+
+    db.ref("stall_catalog_database").on("value", snapshot => {
+        try {
+            const data = snapshot.val();
+            if (data && typeof data === "object") {
+                Object.assign(STALL_CATALOG_DATABASE, data);
+                localStorage.setItem("talathub_stall_catalog_database", JSON.stringify(STALL_CATALOG_DATABASE));
+            }
+        } catch (err) {
+            console.warn("Error syncing stall_catalog_database:", err);
+        }
+    });
+}
+window.initCatalogDbRealtimeSync = initCatalogDbRealtimeSync;
 
 const STALL_CATALOG_DATABASE = loadSavedStallCatalogDatabase();
 
@@ -11812,6 +11888,38 @@ function initMerchantRealtimeSync() {
             localStorage.setItem("talathub_merchant_applications", JSON.stringify(rawList));
             updateAdminStallsBadge();
 
+            // Sync approved stalls into MARKET_DATA and ALL_100_STALLS across all online clients
+            rawList.forEach(app => {
+                if (app && app.status === "approved" && app.stallData) {
+                    const sData = { ...app.stallData, accessCode: app.accessCode || app.stallData.accessCode };
+                    const mIdx = MARKET_DATA.findIndex(s => s.stallId === sData.stallId);
+                    if (mIdx >= 0) {
+                        MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...sData };
+                    } else {
+                        MARKET_DATA.push(sData);
+                    }
+                    if (typeof ALL_100_STALLS !== "undefined" && Array.isArray(ALL_100_STALLS)) {
+                        const aIdx = ALL_100_STALLS.findIndex(s => s.stallId === sData.stallId);
+                        if (aIdx >= 0) {
+                            ALL_100_STALLS[aIdx] = { ...ALL_100_STALLS[aIdx], ...sData };
+                        } else {
+                            ALL_100_STALLS.push(sData);
+                        }
+                    }
+                    if (sData.catalog && Array.isArray(sData.catalog)) {
+                        STALL_CATALOG_DATABASE[sData.stallId] = sData.catalog;
+                    }
+                }
+            });
+
+            if (typeof renderCatalog === "function") renderCatalog();
+            if (typeof renderDirectoryList === "function") renderDirectoryList();
+            if (typeof renderFavoriteStallsBar === "function") renderFavoriteStallsBar();
+            if (typeof updateStallRotationUI === "function") updateStallRotationUI();
+            if (state.currentRole === "merchant" && typeof renderMerchantView === "function") {
+                renderMerchantView();
+            }
+
             if (state.currentRole === "admin") {
                 if (_activeAdminTab === "stalls") {
                     renderAdminStalls();
@@ -18145,9 +18253,22 @@ function saveMerchantStallData() {
         if (existingStall.sales) stallObj.sales = existingStall.sales;
     }
 
+    stallObj.isModified = true;
+
+    // อัปเดตแคตตาล็อกสินค้าเพิ่มเติมลงฐานข้อมูล
+    if (catalogGroups && Array.isArray(catalogGroups) && catalogGroups.length > 0) {
+        STALL_CATALOG_DATABASE[activeMerchantStallId] = catalogGroups;
+        saveStallCatalogDatabaseToStorage();
+    }
+
     // อัปเดตในประวัติใบสมัครที่ได้รับอนุมัติ (ถ้ามี) เพื่อให้ข้อมูลคงอยู่ถาวร
     const apps = loadMerchantApplications();
-    const appIdx = apps.findIndex(a => a.id === activeMerchantStallId || (a.stallData && a.stallData.stallId === activeMerchantStallId));
+    const appIdx = apps.findIndex(a => 
+        a.id === activeMerchantStallId || 
+        (a.stallData && a.stallData.stallId === activeMerchantStallId) ||
+        (existingStall && existingStall.accessCode && a.accessCode === existingStall.accessCode) ||
+        (phone && a.stallData && a.stallData.phone && a.stallData.phone === phone)
+    );
     if (appIdx >= 0) {
         apps[appIdx].stallData = { ...apps[appIdx].stallData, ...stallObj };
         saveMerchantApplications(apps);
@@ -18790,12 +18911,12 @@ function autoSanitizeProductionData() {
         localStorage.removeItem("talathub_rating_reviews");
     } catch (e) {}
 
-    // 11. Enforce MARKET_DATA & ALL_100_STALLS memory purge (only APP-* and stall_new_*)
-    const allowedStalls = MARKET_DATA.filter(s => s && s.stallId && (s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-")));
+    // 11. Enforce MARKET_DATA & ALL_100_STALLS memory purge
+    const allowedStalls = MARKET_DATA.filter(s => s && s.stallId && (s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-") || s.isModified || s.accessCode));
     MARKET_DATA.length = 0;
     MARKET_DATA.push(...allowedStalls);
 
-    const allowedAll = ALL_100_STALLS.filter(s => s && s.stallId && (s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-")));
+    const allowedAll = ALL_100_STALLS.filter(s => s && s.stallId && (s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-") || s.isModified || s.accessCode));
     ALL_100_STALLS.length = 0;
     ALL_100_STALLS.push(...allowedAll);
 }
@@ -18847,10 +18968,14 @@ function initTalatHubApp() {
     updateAdminStallsBadge();
     initRiderRealtimeSync();
     initMerchantRealtimeSync();
+    initCustomStallsRealtimeSync();
+    initCatalogDbRealtimeSync();
     if (!isFirebaseReady()) {
         setTimeout(() => {
             initRiderRealtimeSync();
             initMerchantRealtimeSync();
+            initCustomStallsRealtimeSync();
+            initCatalogDbRealtimeSync();
             updateAdminRiderBadges();
             updateAdminStallsBadge();
         }, 1500);
@@ -19345,7 +19470,14 @@ function handleMerchantCodeLoginSubmit() {
     ));
 
     if (!matchedStall && matchedApp && matchedApp.stallData) {
-        matchedStall = matchedApp.stallData;
+        matchedStall = { ...matchedApp.stallData, accessCode: matchedApp.accessCode || matchedApp.stallData.accessCode };
+        if (!MARKET_DATA.find(s => s.stallId === matchedStall.stallId)) {
+            MARKET_DATA.push(matchedStall);
+            if (typeof ALL_100_STALLS !== "undefined" && !ALL_100_STALLS.find(s => s.stallId === matchedStall.stallId)) {
+                ALL_100_STALLS.push(matchedStall);
+            }
+            saveMarketDataToStorage();
+        }
     }
 
     if (!matchedStall) {
