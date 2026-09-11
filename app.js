@@ -17954,10 +17954,34 @@ function previewMerchantLiveStore() {
     const zoneVal = document.getElementById("m-stall-zone")?.value || "A";
     const zone = zoneVal.includes("B") ? "B" : zoneVal.includes("C") ? "C" : zoneVal.includes("E") ? "E" : "A";
     const category = document.getElementById("m-stall-category")?.value || "chicken";
-    const contact1Name = document.getElementById("m-contact1-name")?.value.trim();
+
+    const contact1Name = document.getElementById("m-contact1-name")?.value.trim() || "";
+    const contact1Phone = document.getElementById("m-contact1-phone")?.value.trim() || "";
+    const contact1Line = document.getElementById("m-contact1-line")?.value.trim() || "";
+
+    const contact2Name = document.getElementById("m-contact2-name")?.value.trim() || "";
+    const contact2Phone = document.getElementById("m-contact2-phone")?.value.trim() || "";
+    const contact2Line = document.getElementById("m-contact2-line")?.value.trim() || "";
+
     const ownerName = contact1Name || (document.getElementById("m-owner-name")?.value.trim() || "เจ้าของแผง");
-    const contact1Phone = document.getElementById("m-contact1-phone")?.value.trim();
     const phone = contact1Phone || (document.getElementById("m-phone")?.value.trim() || "081-xxx-xxxx");
+    const line = contact1Line || (document.getElementById("m-line")?.value.trim() || "");
+
+    const bankName = document.getElementById("m-bank-name") ? document.getElementById("m-bank-name").value : "กสิกรไทย (KBank)";
+    const bankAccountNo = document.getElementById("m-bank-account-no") ? document.getElementById("m-bank-account-no").value.trim() : "";
+    const bankAccountName = document.getElementById("m-bank-account-name") ? document.getElementById("m-bank-account-name").value.trim() : "";
+
+    const bankInfo = {
+        bankName: bankName,
+        accountNo: bankAccountNo,
+        accountName: bankAccountName
+    };
+
+    const contacts = [
+        { name: contact1Name, phone: contact1Phone, line: contact1Line },
+        { name: contact2Name, phone: contact2Phone, line: contact2Line }
+    ].filter(c => c.name || c.phone || c.line);
+
     const highlight = document.getElementById("m-highlight")?.value.trim() || "ของสดคุณภาพดี คัดเกรดสดใหม่";
     const desc = document.getElementById("m-desc")?.value.trim() || "จำหน่ายของสดคุณภาพดีประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)";
     const stallImage = document.getElementById("m-stall-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
@@ -18044,6 +18068,13 @@ function previewMerchantLiveStore() {
         category: category,
         ownerName: ownerName,
         phone: phone,
+        phone2: contact2Phone,
+        line: line,
+        contacts: contacts,
+        bankInfo: bankInfo,
+        bankName: bankName,
+        bankAccountNo: bankAccountNo,
+        bankAccountName: bankAccountName,
         highlight: highlight,
         shopDescription: desc,
         stallImage: stallImage,
@@ -18056,6 +18087,8 @@ function previewMerchantLiveStore() {
     const existIdx = MARKET_DATA.findIndex(s => s.stallId === "preview_stall_temp");
     if (existIdx >= 0) MARKET_DATA[existIdx] = previewStall;
     else MARKET_DATA.push(previewStall);
+
+    STALL_CATALOG_DATABASE["preview_stall_temp"] = catalogGroups;
 
     const modal = document.getElementById("stall-catalog-modal");
     if (modal) modal.style.zIndex = "9999";
