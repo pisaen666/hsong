@@ -1,38 +1,7 @@
 // TalatHub (ตลาดฮับ) - Application Core Logic with 100 Stalls Directory
 
-// 1. Data Store: Core Hub Stall (แผง A01: ร้านไก่สดเฮียส่ง)
-const BASE_MARKET_STALLS = [
-    // ========================================================
-    // ร้านค้าหลัก (Hub กลาง) - แผง A01: ไก่สดอนามัย เฮียส่ง
-    // ========================================================
-    {
-        stallId: "stall_chicken",
-        stallName: "ร้านไก่สดเฮียส่ง (แผง A01)",
-        stallNumber: "แผง A01",
-        zone: "A",
-        category: "chicken",
-        stallTag: "🍗 ไก่สดอนามัย",
-        dimension: "3×3 เมตร",
-        badgeColor: "bg-orange-100 text-orange-800 border-orange-200",
-        isHub: true,
-        isFavorite: true,
-        stallImage: "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=700&auto=format&fit=crop&q=80",
-        ownerImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
-        ownerName: "เฮียส่ง (เจ้าของร้านไก่สด & ผู้จัดการระบบจัดส่ง)",
-        phone: "089-123-4567",
-        experience: "ประสบการณ์ในตลาด 15 ปี",
-        highlight: "ไก่สดอนามัยชำแหละวันต่อวัน มาตรฐานฟาร์มปิด สะอาด ปลอดภัย",
-        shopDescription: "จำหน่ายชิ้นส่วนไก่สดครบวงจร อกไก่ลอกหนัง น่องติดสะโพก สันใน ปีกไก่ และโครงต้มซุป ชั่งน้ำหนักแม่นยำ พร้อมบริการตัดแต่งตามสั่งและเป็น Hub ส่งฟรีรอบตลาด",
-        products: [
-            { id: "chk_01", name: "อกไก่สดลอกหนัง (อนามัย)", desc: "เนื้อแน่น สดใหม่ เหมาะทำคลีน", price: 85, unit: "1 กก.", category: "chicken", image: "https://images.unsplash.com/photo-1604503468506-a8da13d82791?w=400&auto=format&fit=crop&q=80", badge: "🌟 ขายดี" },
-            { id: "chk_02", name: "น่องติดสะโพกไก่สด", desc: "นุ่ม ฉ่ำ เหมาะทอดหรือต้มซุป", price: 45, unit: "500 กรัม", category: "chicken", image: "https://images.unsplash.com/photo-1587593810167-a84920ea0781?w=400&auto=format&fit=crop&q=80", badge: "🔥 สดใหม่" },
-            { id: "chk_03", name: "ปีกกลางไก่สดคัดเกรด", desc: "ขนาดเสมอกัน ทอดน้ำปลาอร่อย", price: 75, unit: "500 กรัม", category: "chicken", image: "https://images.unsplash.com/photo-1527477396000-e27163b481c2?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "chk_04", name: "สันในไก่สดเส้นสวย", desc: "นุ่มพิเศษ ไม่ติดมัน ไขมันต่ำ", price: 50, unit: "500 กรัม", category: "chicken", image: "https://images.unsplash.com/photo-1604503468506-a8da13d82791?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "chk_05", name: "น่องไก่สดล้วน (ไซส์ใหญ่)", desc: "เนื้อแน่น เหมาะทำไก่นึ่งกระเทียม", price: 42, unit: "500 กรัม", category: "chicken", image: "https://images.unsplash.com/photo-1587593810167-a84920ea0781?w=400&auto=format&fit=crop&q=80", badge: null },
-            { id: "chk_06", name: "โครงไก่สดต้มน้ำซุปหวาน", desc: "โครงไก่สด ล้างสะอาด เคี่ยวน้ำซุปหวานกลมกล่อม", price: 20, unit: "2 โครง", category: "chicken", image: "https://images.unsplash.com/photo-1527477396000-e27163b481c2?w=400&auto=format&fit=crop&q=80", badge: null }
-        ]
-    }
-];
+// 1. Data Store: Market Stalls (เริ่มต้นจาก 0 และแสดงเฉพาะร้านค้าที่ได้รับการลงทะเบียน/อนุมัติจริง)
+const BASE_MARKET_STALLS = [];
 
 const MARKET_DATA = [...BASE_MARKET_STALLS];
 
@@ -52,8 +21,8 @@ function loadSavedFavorites() {
     } catch (e) {
         console.error("Failed to load favorites from localStorage", e);
     }
-    // Default initial 5 favorite stalls
-    return ["stall_chicken"];
+    // Default initial empty favorite stalls
+    return [];
 }
 
 function saveFavoritesToStorage(favs) {
@@ -4785,6 +4754,31 @@ function renderCatalog() {
 
     // 3. Render Empty State
     if (filteredStalls.length === 0) {
+        if (!isSearchMode) {
+            container.innerHTML = `
+                <div class="text-center py-16 px-4 bg-white rounded-3xl border border-slate-200 shadow-xs space-y-3">
+                    <div class="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 font-bold flex items-center justify-center text-3xl mx-auto border border-emerald-100">
+                        🏪
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="font-extrabold text-base text-slate-800">ยังไม่มีแผงค้าเปิดให้บริการในขณะนี้</h3>
+                        <p class="text-xs text-slate-500 max-w-md mx-auto">ระบบเตรียมพร้อมรองรับข้อมูลจริงจากการลงทะเบียนร้านค้า สามารถลงทะเบียนเปิดร้านค้าใหม่ หรือเข้าไปที่ศูนย์แอดมินเพื่ออนุมัติร้านค้าได้ทันที</p>
+                    </div>
+                    <div class="flex items-center justify-center gap-2 pt-2">
+                        <button onclick="registerNewMerchantStall()" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-sm font-bold">add_business</span>
+                            <span>ลงทะเบียนเปิดร้านค้าใหม่</span>
+                        </button>
+                        <button onclick="switchRole('admin')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-sm">admin_panel_settings</span>
+                            <span>เข้าสู่ศูนย์แอดมิน</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
         container.innerHTML = `
             <div class="text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
                 <span class="material-symbols-outlined text-4xl mb-1 text-slate-300">manage_search</span>
@@ -11150,6 +11144,9 @@ function renderAdminStalls() {
                                                 <button onclick="loginAsMerchantStall('${s.stallId}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
                                                     เข้าร้าน
                                                 </button>
+                                                <button onclick="deleteStallByAdmin('${s.stallId}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer" title="ลบแผงค้านี้">
+                                                    ลบร้าน
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>`).join("")}
@@ -11447,14 +11444,67 @@ window.reconsiderMerchantApplication = reconsiderMerchantApplication;
 function deleteMerchantApplication(appId) {
     if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบใบสมัครนี้?")) return;
     let apps = loadMerchantApplications();
+    const appToDelete = apps.find(a => a.id === appId);
     apps = apps.filter(a => a.id !== appId);
     saveMerchantApplications(apps);
+
+    if (appToDelete && appToDelete.stallData) {
+        const stallId = appToDelete.stallData.stallId;
+        const phone = appToDelete.stallData.phone;
+        const sName = appToDelete.stallData.stallName;
+
+        for (let i = MARKET_DATA.length - 1; i >= 0; i--) {
+            if ((stallId && MARKET_DATA[i].stallId === stallId) || (phone && MARKET_DATA[i].phone === phone) || (sName && MARKET_DATA[i].stallName === sName)) {
+                MARKET_DATA.splice(i, 1);
+            }
+        }
+
+        for (let i = ALL_100_STALLS.length - 1; i >= 0; i--) {
+            if ((stallId && ALL_100_STALLS[i].stallId === stallId) || (phone && ALL_100_STALLS[i].phone === phone) || (sName && ALL_100_STALLS[i].stallName === sName)) {
+                ALL_100_STALLS.splice(i, 1);
+            }
+        }
+
+        saveMarketDataToStorage();
+    }
+
     updateAdminStallsBadge();
     renderAdminStalls();
     closeMerchantAppDetailModal();
-    showToast("🗑️ ลบใบสมัครเรียบร้อยแล้ว");
+    if (typeof renderCatalog === "function") renderCatalog();
+    showToast("🗑️ ลบใบสมัครและข้อมูลร้านค้าเรียบร้อยแล้ว");
 }
 window.deleteMerchantApplication = deleteMerchantApplication;
+
+function deleteStallByAdmin(stallId) {
+    if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบแผงค้านี้ออกจากทำเนียบแผงค้า?")) return;
+
+    for (let i = MARKET_DATA.length - 1; i >= 0; i--) {
+        if (MARKET_DATA[i].stallId === stallId) {
+            MARKET_DATA.splice(i, 1);
+        }
+    }
+
+    for (let i = ALL_100_STALLS.length - 1; i >= 0; i--) {
+        if (ALL_100_STALLS[i].stallId === stallId) {
+            ALL_100_STALLS.splice(i, 1);
+        }
+    }
+
+    let apps = loadMerchantApplications();
+    const initLen = apps.length;
+    apps = apps.filter(a => !(a.stallData && a.stallData.stallId === stallId));
+    if (apps.length !== initLen) {
+        saveMerchantApplications(apps);
+    }
+
+    saveMarketDataToStorage();
+    updateAdminStallsBadge();
+    renderAdminStalls();
+    if (typeof renderCatalog === "function") renderCatalog();
+    showToast("🗑️ ลบแผงค้าออกจากทำเนียบเรียบร้อยแล้ว");
+}
+window.deleteStallByAdmin = deleteStallByAdmin;
 
 function printA4MerchantApplication(appId) {
     const apps = loadMerchantApplications();
@@ -11728,16 +11778,14 @@ function initMerchantRealtimeSync() {
                 rawList = Object.values(data).filter(Boolean);
             }
 
-            if (rawList.length > 0) {
-                localStorage.setItem("talathub_merchant_applications", JSON.stringify(rawList));
-                updateAdminStallsBadge();
+            localStorage.setItem("talathub_merchant_applications", JSON.stringify(rawList));
+            updateAdminStallsBadge();
 
-                if (state.currentRole === "admin") {
-                    if (_activeAdminTab === "stalls") {
-                        renderAdminStalls();
-                    } else if (_activeAdminTab === "report") {
-                        renderAdminReport();
-                    }
+            if (state.currentRole === "admin") {
+                if (_activeAdminTab === "stalls") {
+                    renderAdminStalls();
+                } else if (_activeAdminTab === "report") {
+                    renderAdminReport();
                 }
             }
         } catch (err) {
@@ -18559,20 +18607,30 @@ function autoSanitizeProductionData() {
         }
     } catch (e) {}
 
-    // 5. Favorites: filter out deleted mock stalls
+    // 5. Force Purge old mock stalls from LocalStorage once
+    try {
+        if (localStorage.getItem("talathub_mock_purged_final_v1") !== "true") {
+            localStorage.removeItem("talathub_custom_market_stalls");
+            localStorage.removeItem("talathub_favorite_stalls");
+            localStorage.removeItem("talathub_stall_catalog_database");
+            localStorage.removeItem("talathub_merchant_applications");
+            localStorage.setItem("talathub_mock_purged_final_v1", "true");
+        }
+    } catch (e) {}
+
+    // 6. Favorites: filter out old mock stalls
     try {
         const savedFavs = localStorage.getItem("talathub_favorite_stalls");
         if (savedFavs) {
             let favs = JSON.parse(savedFavs);
             if (Array.isArray(favs)) {
-                favs = favs.filter(id => id === "stall_chicken" || id.startsWith("custom_"));
-                if (favs.length === 0) favs = ["stall_chicken"];
+                favs = favs.filter(id => id && (id.startsWith("stall_new_") || id.startsWith("APP-")));
                 localStorage.setItem("talathub_favorite_stalls", JSON.stringify(favs));
             }
         }
     } catch (e) {}
 
-    // 6. Cart: 1-time user-requested clean reset & sanitize
+    // 7. Cart: 1-time user-requested clean reset & sanitize
     try {
         if (localStorage.getItem("talathub_cart_reset_v924") !== "done") {
             localStorage.removeItem("talathub_cart");
@@ -18591,19 +18649,19 @@ function autoSanitizeProductionData() {
         }
     } catch (e) {}
 
-    // 7. Custom stalls in localStorage: filter out old mock stalls
+    // 8. Custom stalls in localStorage: filter out old mock stalls
     try {
         const rawCustom = localStorage.getItem("talathub_custom_market_stalls");
         if (rawCustom) {
             let stalls = JSON.parse(rawCustom);
             if (Array.isArray(stalls)) {
-                stalls = stalls.filter(s => s && s.stallId && (s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-") || s.stallId.startsWith("stall_seed_")));
+                stalls = stalls.filter(s => s && s.stallId && (s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-")));
                 localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(stalls));
             }
         }
     } catch (e) {}
 
-    // 8. Stalls Catalog Database: wipe old mock stalls
+    // 9. Stalls Catalog Database: wipe old mock stalls
     try {
         const rawCat = localStorage.getItem("talathub_stall_catalog_database");
         if (rawCat) {
@@ -18611,7 +18669,7 @@ function autoSanitizeProductionData() {
             if (db && typeof db === "object") {
                 const cleanDb = {};
                 for (const key of Object.keys(db)) {
-                    if (key === "stall_chicken" || key.startsWith("stall_new_") || key.startsWith("APP-") || key.startsWith("stall_seed_")) {
+                    if (key.startsWith("stall_new_") || key.startsWith("APP-")) {
                         cleanDb[key] = db[key];
                     }
                 }
@@ -18620,19 +18678,19 @@ function autoSanitizeProductionData() {
         }
     } catch (e) {}
 
-    // 9. Remove mock caches
+    // 10. Remove mock caches
     try {
         localStorage.removeItem("talathub_pending_stalls");
         localStorage.removeItem("talathub_mock_orders");
         localStorage.removeItem("talathub_rating_reviews");
     } catch (e) {}
 
-    // 10. Enforce MARKET_DATA & ALL_100_STALLS memory purge (only stall_chicken, APP-*, and stall_new_*)
-    const allowedStalls = MARKET_DATA.filter(s => s && s.stallId && (s.stallId === "stall_chicken" || s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-") || s.stallId.startsWith("stall_seed_")));
+    // 11. Enforce MARKET_DATA & ALL_100_STALLS memory purge (only APP-* and stall_new_*)
+    const allowedStalls = MARKET_DATA.filter(s => s && s.stallId && (s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-")));
     MARKET_DATA.length = 0;
     MARKET_DATA.push(...allowedStalls);
 
-    const allowedAll = ALL_100_STALLS.filter(s => s && s.stallId && (s.stallId === "stall_chicken" || s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-") || s.stallId.startsWith("stall_seed_")));
+    const allowedAll = ALL_100_STALLS.filter(s => s && s.stallId && (s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-")));
     ALL_100_STALLS.length = 0;
     ALL_100_STALLS.push(...allowedAll);
 }
@@ -18847,68 +18905,14 @@ window.sendLineFromModal = sendLineFromModal;
 function loadMerchantApplications() {
     try {
         const raw = localStorage.getItem("talathub_merchant_applications");
-        if (raw) {
+        if (raw !== null) {
             const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            if (Array.isArray(parsed)) return parsed;
         }
     } catch (e) {
         console.error("Error loading merchant applications:", e);
     }
-    const seedApps = [
-        {
-            id: "APP-SHOP-1497",
-            submittedAt: "2026-09-07T13:39:00.000Z",
-            appliedAt: "2026-09-07T13:39:00.000Z",
-            status: "approved",
-            accessCode: "NE1998",
-            stallData: {
-                stallId: "stall_seed_1",
-                stallName: "ร้านเฮียเบิ๊อก ไก่สดอนามัย",
-                stallNumber: "แผง A-14",
-                zone: "A",
-                category: "chicken",
-                ownerName: "อนุทิน ชาญวีรกุล (เบิ๊อก)",
-                phone: "0815887777",
-                lineId: "0815887777",
-                promptPayNumber: "0815887777",
-                promptPayBank: "พร้อมเพย์ e-Wallet",
-                highlight: "ไก่สดส่งตรงจากฟาร์มทุกเช้า ชำแหละสดใหม่ สะอาด ปลอดภัย",
-                description: "จำหน่ายเนื้อไก่สด อกไก่ น่องไก่ เครื่องในไก่ ราคาขายส่งและปลีก ประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)",
-                products: [
-                    { name: "อกไก่สดลอกหนัง", price: 85, unit: "กก." },
-                    { name: "น่องติดสะโพกไก่สด", price: 75, unit: "กก." },
-                    { name: "ปีกไก่บน (ปีกบน)", price: 90, unit: "กก." },
-                    { name: "เครื่องในไก่รวม", price: 65, unit: "กก." }
-                ]
-            }
-        },
-        {
-            id: "APP-SHOP-1502",
-            submittedAt: "2026-09-08T00:15:00.000Z",
-            appliedAt: "2026-09-08T00:15:00.000Z",
-            status: "pending",
-            accessCode: null,
-            stallData: {
-                stallId: "stall_seed_2",
-                stallName: "เจ๊พร ผักสดปลอดสารพิษ",
-                stallNumber: "แผง B-05",
-                zone: "B",
-                category: "vegetable",
-                ownerName: "สมพร จันทร์เพ็ญ (เจ๊พร)",
-                phone: "0892223344",
-                lineId: "jaeporn_veggie",
-                promptPayNumber: "0892223344",
-                promptPayBank: "กสิกรไทย (K-Bank)",
-                highlight: "ผักสดคัดเกรดจากสวน ไร้สารเคมี ปลูกด้วยระบบไฮโดรโปนิกส์",
-                description: "ผักกาดขาว กะหล่ำปลี คะน้า ผักบุ้งจีนสดใหม่ทุกวัน",
-                products: [
-                    { name: "คะน้าฮ่องกงยอดอ่อน", price: 45, unit: "กก." },
-                    { name: "ผักกาดขาวปลี", price: 35, unit: "กก." },
-                    { name: "ผักบุ้งจีนสด", price: 25, unit: "กำ" }
-                ]
-            }
-        }
-    ];
+    const seedApps = [];
     try {
         localStorage.setItem("talathub_merchant_applications", JSON.stringify(seedApps));
     } catch (e) {}
