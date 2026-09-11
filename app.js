@@ -5152,43 +5152,45 @@ function renderCatalog() {
             const qtyInCart = inCart ? inCart.qty : 0;
 
             return `
-                            <div class="bg-slate-50/90 hover:bg-white rounded-2xl p-2.5 border ${qtyInCart > 0 ? 'border-emerald-500 bg-emerald-50/30 ring-1 ring-emerald-400' : 'border-slate-200/80'} flex flex-col justify-between hover:shadow-md transition-all">
+                            <div class="bg-white hover:bg-slate-50/90 rounded-2xl p-3 border ${qtyInCart > 0 ? 'border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-400 shadow-sm' : 'border-slate-200/90 shadow-2xs'} flex flex-col justify-between hover:shadow-md transition-all">
                                 <div>
-                                    <div class="relative mb-2 overflow-hidden rounded-xl bg-slate-200 aspect-[4/3]">
-                                        <img src="${product.image}" alt="${product.name}" class="w-full h-full object-cover hover:scale-105 transition-transform duration-300">
-                                        ${product.badge ? `
-                                            <span class="absolute top-1.5 left-1.5 bg-orange-500 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-lg shadow-sm">
-                                                ${product.badge}
-                                            </span>
-                                        ` : ''}
-                                        ${qtyInCart > 0 ? `
-                                            <span class="absolute top-1.5 right-1.5 bg-emerald-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-lg shadow-sm flex items-center gap-0.5">
+                                    ${qtyInCart > 0 ? `
+                                        <div class="mb-1.5 flex items-center justify-between">
+                                            <span class="bg-emerald-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shadow-xs flex items-center gap-0.5">
                                                 <span class="material-symbols-outlined text-[10px]">check</span>
-                                                <span>ในตะกร้า ${qtyInCart}</span>
+                                                <span>ในตะกร้า ${qtyInCart} ${product.unit || 'กก.'}</span>
                                             </span>
-                                        ` : ''}
-                                    </div>
-                                    <h4 class="font-extrabold text-xs text-slate-900 line-clamp-1 leading-snug" title="${product.name}">${product.name}</h4>
-                                    <p class="text-[10px] text-slate-500 line-clamp-1 mt-0.5 leading-tight" title="${product.desc}">${product.desc}</p>
+                                        </div>
+                                    ` : ''}
+                                    <h4 class="font-extrabold text-[13px] text-slate-900 leading-snug line-clamp-2" title="${product.name}">
+                                        ${product.name}
+                                    </h4>
+                                    ${product.badge ? `
+                                        <span class="inline-block mt-1 text-[9px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200/60 px-1.5 py-0.2 rounded-md">
+                                            ${product.badge}
+                                        </span>
+                                    ` : ''}
                                 </div>
 
-                                <!-- Action Bottom Row: Equalized Height & Uniform Button -->
-                                <div class="mt-2.5 pt-2 border-t border-slate-200/70 flex items-center justify-between gap-1.5 min-h-[38px]">
+                                <!-- Action Bottom Row: Price per Unit + Add to Cart Button -->
+                                <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5 min-h-[36px]">
                                     <div class="min-w-0 flex-1">
-                                        <div class="font-black text-sm text-orange-600 leading-none">฿${product.price}</div>
-                                        <div class="text-[10px] text-slate-400 truncate mt-0.5 font-medium" title="${product.unit}">/${product.unit}</div>
+                                        <div class="flex items-baseline gap-0.5">
+                                            <span class="font-black text-sm text-orange-600">฿${product.price}</span>
+                                            <span class="text-[10px] text-slate-400 font-bold truncate">/${product.unit || 'กก.'}</span>
+                                        </div>
                                     </div>
                                     
                                     ${qtyInCart > 0 ? `
-                                        <!-- เมื่อหยิบใส่แล้ว: เปลี่ยนเป็นสีเขียวเด่นชัด (Vibrant Green Active State) -->
+                                        <!-- เมื่อหยิบใส่แล้ว: แสดงปุ่มปรับจำนวนสีเขียว -->
                                         <div class="flex items-center gap-1 bg-emerald-600 text-white rounded-xl px-1.5 py-1 text-xs shadow-sm ring-2 ring-emerald-400 shrink-0">
                                             <button type="button" onclick="changeCartQty('${product.id}', -1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded-lg font-black text-sm transition-transform cursor-pointer">-</button>
                                             <span class="px-1 text-xs font-black min-w-[14px] text-center">${qtyInCart}</span>
                                             <button type="button" onclick="changeCartQty('${product.id}', 1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded-lg font-black text-sm transition-transform cursor-pointer">+</button>
                                         </div>
                                     ` : `
-                                        <!-- สถานะปกติ: ปุ่มใส่ตะกร้าสีส้มขนาดเท่ากันทุกช่อง -->
-                                        <button type="button" onclick="addToCart('${stall.stallId}', '${product.id}')" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm shrink-0 transition-all cursor-pointer whitespace-nowrap" title="เพิ่มลงตะกร้า">
+                                        <!-- ปุ่มใส่ตะกร้าสีส้มมาตรฐาน -->
+                                        <button type="button" onclick="addToCart('${stall.stallId}', '${product.id}')" class="px-2.5 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs shrink-0 transition-all cursor-pointer whitespace-nowrap" title="เพิ่มลงตะกร้า">
                                             <span class="material-symbols-outlined text-[14px] font-bold">add_shopping_cart</span>
                                             <span>ใส่ตะกร้า</span>
                                         </button>
@@ -17760,12 +17762,12 @@ function fillSampleMerchantRegistration() {
 
     // 3. Top 6 Highlight Products
     const sampleProducts = [
-        { name: "อกไก่สดลอกหนังอนามัย", desc: "อกไก่สดลอกหนัง ไร้มัน โปรตีนสูง เหมาะกับคนรักสุขภาพ", price: "85", unit: "กก.", badge: "ยอดนิยม", image: MERCHANT_PRESET_IMAGES.stall.chicken },
-        { name: "น่องติดสะโพกไก่สด", desc: "ชิ้นใหญ่ สด เนื้อแน่น เหมาะทำไก่ทอด ต้ม ย่าง", price: "75", unit: "กก.", badge: "สดใหม่", image: MERCHANT_PRESET_IMAGES.stall.chicken },
-        { name: "ปีกไก่บน (ปีกบน)", desc: "ปีกบนไก่สด คัดขนาดมาตรฐาน ผิวสวย สะอาด", price: "90", unit: "กก.", badge: "แนะนำ", image: MERCHANT_PRESET_IMAGES.stall.chicken },
-        { name: "เครื่องในไก่รวมสด", desc: "ตับ กึ๋น หัวใจ ล้างสะอาด ไร้กลิ่นคาว สดใหม่วันต่อวัน", price: "65", unit: "กก.", badge: "ราคาพิเศษ", image: MERCHANT_PRESET_IMAGES.stall.chicken },
-        { name: "สันในไก่สดอนามัย", desc: "เนื้อนุ่ม ไม่เหนียว ทำอาหารคลีน สเต็ก หรือผัดกะเพรา", price: "95", unit: "กก.", badge: "เกรด A", image: MERCHANT_PRESET_IMAGES.stall.chicken },
-        { name: "โครงไก่สดสำหรับต้มน้ำซุป", desc: "โครงไก่สด ติดเนื้อหวานธรรมชาติ เหมาะต้มก๋วยเตี๋ยว ซุปใส", price: "35", unit: "กก.", badge: "คุ้มค่า", image: MERCHANT_PRESET_IMAGES.stall.chicken }
+        { name: "อกไก่สดลอกหนังอนามัย", desc: "อกไก่สดลอกหนัง ไร้มัน โปรตีนสูง เหมาะกับคนรักสุขภาพ", price: "85", unit: "กก.", badge: "ยอดนิยม" },
+        { name: "น่องติดสะโพกไก่สด", desc: "ชิ้นใหญ่ สด เนื้อแน่น เหมาะทำไก่ทอด ต้ม ย่าง", price: "75", unit: "กก.", badge: "สดใหม่" },
+        { name: "ปีกไก่บน (ปีกบน)", desc: "ปีกบนไก่สด คัดขนาดมาตรฐาน ผิวสวย สะอาด", price: "90", unit: "กก.", badge: "แนะนำ" },
+        { name: "เครื่องในไก่รวมสด", desc: "ตับ กึ๋น หัวใจ ล้างสะอาด ไร้กลิ่นคาว สดใหม่วันต่อวัน", price: "65", unit: "กก.", badge: "ราคาพิเศษ" },
+        { name: "สันในไก่สดอนามัย", desc: "เนื้อนุ่ม ไม่เหนียว ทำอาหารคลีน สเต็ก หรือผัดกะเพรา", price: "95", unit: "กก.", badge: "เกรด A" },
+        { name: "โครงไก่สดสำหรับต้มน้ำซุป", desc: "โครงไก่สด ติดเนื้อหวานธรรมชาติ เหมาะต้มก๋วยเตี๋ยว ซุปใส", price: "35", unit: "กก.", badge: "คุ้มค่า" }
     ];
     renderMerchantTop6ProductsForm(sampleProducts);
 
@@ -18289,14 +18291,6 @@ async function saveMerchantStallData() {
             const unit = unitEl ? (unitEl.value || "กก.") : "กก.";
             const mainCat = document.getElementById(`m-p-maincat-${i}`)?.value || "";
             const subCat = document.getElementById(`m-p-subcat-${i}`)?.value || "";
-            let pImage = document.getElementById(`m-p-img-${i}`)?.value.trim() || "";
-            if (!pImage) {
-                pImage = stallImage;
-            }
-            if (pImage && pImage.length > 80000 && typeof compressDataUrl === "function") {
-                try { pImage = await compressDataUrl(pImage, 500, 500, 0.75); } catch(e) {}
-            }
-
             if (name) {
                 products.push({
                     id: `${activeMerchantStallId}_p${i + 1}`,
@@ -18305,7 +18299,6 @@ async function saveMerchantStallData() {
                     price: price,
                     unit: unit,
                     badge: badge,
-                    image: pImage,
                     mainCat: mainCat,
                     subCat: subCat
                 });
@@ -18850,25 +18843,24 @@ function previewMerchantLiveStore() {
             ${products.length > 0 ? `
                 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 pt-1">
                     ${products.map((p, idx) => `
-                        <div class="bg-slate-50 hover:bg-white rounded-xl p-2 border border-slate-200 flex flex-col justify-between transition-all">
+                        <div class="bg-slate-50 hover:bg-white rounded-xl p-2.5 border border-slate-200 flex flex-col justify-between transition-all">
                             <div>
-                                <div class="relative mb-1.5 overflow-hidden rounded-lg bg-slate-200 aspect-[4/3]">
-                                    <img src="${p.image}" alt="${p.name}" class="w-full h-full object-cover">
-                                    <span class="absolute top-1 left-1 bg-slate-900/80 text-white text-[8px] font-black px-1.5 py-0.2 rounded">
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <span class="bg-slate-900/80 text-white text-[9px] font-black px-1.5 py-0.5 rounded">
                                         #${idx + 1}
                                     </span>
                                     ${p.badge ? `
-                                        <span class="absolute top-1 right-1 bg-orange-500 text-white text-[8px] font-bold px-1 py-0.2 rounded">
+                                        <span class="bg-orange-500 text-white text-[8px] font-bold px-1.5 py-0.2 rounded">
                                             ${p.badge}
                                         </span>
                                     ` : ''}
                                 </div>
-                                <div class="font-bold text-[11px] text-slate-900 line-clamp-1 leading-tight" title="${p.name}">${p.name}</div>
+                                <div class="font-bold text-xs text-slate-900 line-clamp-2 leading-tight" title="${p.name}">${p.name}</div>
                                 ${p.mainCat || p.subCat ? `
-                                    <div class="text-[9px] text-slate-500 line-clamp-1 mt-0.5">${p.mainCat} • ${p.subCat}</div>
+                                    <div class="text-[9px] text-slate-500 line-clamp-1 mt-1">${p.mainCat} • ${p.subCat}</div>
                                 ` : ''}
                             </div>
-                            <div class="mt-1.5 pt-1 border-t border-slate-200/80 flex items-baseline justify-between">
+                            <div class="mt-2 pt-1.5 border-t border-slate-200/80 flex items-baseline justify-between">
                                 <span class="font-black text-xs text-orange-600">฿${p.price}</span>
                                 <span class="text-[9px] text-slate-400 font-medium">/${p.unit}</span>
                             </div>
@@ -19233,9 +19225,11 @@ async function fetchOnlineStallsStartup() {
         let hasChanges = false;
 
         if (appList.length > 0) {
-            try { localStorage.setItem("talathub_merchant_applications", JSON.stringify(appList)); } catch(e) {}
             appList.forEach(app => {
                 if (app && app.status === 'approved' && app.stallData) {
+                    if (app.stallData.products && Array.isArray(app.stallData.products)) {
+                        app.stallData.products.forEach(p => { if (p && p.image) delete p.image; });
+                    }
                     const sData = { ...app.stallData, accessCode: app.accessCode || app.stallData.accessCode };
                     const mIdx = MARKET_DATA.findIndex(s => s.stallId === sData.stallId);
                     if (mIdx >= 0) {
@@ -19254,12 +19248,15 @@ async function fetchOnlineStallsStartup() {
                     hasChanges = true;
                 }
             });
+            try { localStorage.setItem("talathub_merchant_applications", JSON.stringify(appList)); } catch(e) {}
         }
 
         if (customList.length > 0) {
-            try { localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(customList)); } catch(e) {}
             customList.forEach(stall => {
                 if (stall && stall.stallId) {
+                    if (stall.products && Array.isArray(stall.products)) {
+                        stall.products.forEach(p => { if (p && p.image) delete p.image; });
+                    }
                     const mIdx = MARKET_DATA.findIndex(s => s.stallId === stall.stallId);
                     if (mIdx >= 0) {
                         MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...stall };
@@ -19277,6 +19274,7 @@ async function fetchOnlineStallsStartup() {
                     hasChanges = true;
                 }
             });
+            try { localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(customList)); } catch(e) {}
         }
 
         if (hasChanges) {
