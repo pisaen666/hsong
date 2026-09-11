@@ -8399,7 +8399,27 @@ function renderMerchantView() {
         stall = MARKET_DATA.find(s => s.stallId === state.activeMerchant.stallId) || ALL_100_STALLS.find(s => s.stallId === state.activeMerchant.stallId);
     }
     if (!stall) {
-        stall = MARKET_DATA[0];
+        // Fallback: search approved merchant applications (handles case where MARKET_DATA is empty after page reload)
+        const _mApps = loadMerchantApplications();
+        const _targetId = activeMerchantStallId || (state.activeMerchant && state.activeMerchant.stallId);
+        let _approvedApp = _targetId ? _mApps.find(a => a.status === 'approved' && a.stallData && a.stallData.stallId === _targetId) : null;
+        if (!_approvedApp) _approvedApp = _mApps.find(a => a.status === 'approved' && a.stallData);
+        if (_approvedApp && _approvedApp.stallData) {
+            stall = _approvedApp.stallData;
+            // Sync back into MARKET_DATA if missing
+            if (!MARKET_DATA.find(s => s.stallId === stall.stallId)) {
+                MARKET_DATA.push(stall);
+                ALL_100_STALLS.push(stall);
+                saveMarketDataToStorage();
+            }
+        }
+    }
+    if (!stall) {
+        // No stall found at all — redirect to login/register
+        openMerchantLoginModal();
+        return;
+    }
+    if (!activeMerchantStallId || activeMerchantStallId !== stall.stallId) {
         activeMerchantStallId = stall.stallId;
     }
 
@@ -12024,7 +12044,7 @@ function handleRiderRegisterSubmit(e) {
     const nickname = document.getElementById("reg-rider-nickname")?.value.trim();
     const phone = document.getElementById("reg-rider-phone")?.value.trim().replace(/[-\s]/g, "");
     const lineId = document.getElementById("reg-rider-line")?.value.trim();
-    const idCard = document.getElementById("reg-rider-idcard")?.value.trim().replace(/[-\s]/g, "");
+    let idCard = document.getElementById("reg-rider-idcard")?.value.trim().replace(/[-\s]/g, "");
     const address = document.getElementById("reg-rider-address")?.value.trim() || "";
 
     const motorcycleModel = document.getElementById("reg-rider-model")?.value.trim();
@@ -12104,6 +12124,7 @@ function handleRiderRegisterSubmit(e) {
         address,
         motorcycleModel,
         motorcycleColor,
+        vehiclePlate: plate,
         plate,
         drivingLicense,
         zone,
@@ -17236,7 +17257,21 @@ function loginAsMerchantStall(stallId) {
 
     let stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
     if (!stall) {
-        stall = MARKET_DATA[0];
+        // Fallback: find in approved merchant applications (for page-reload cases)
+        const _apps = loadMerchantApplications();
+        const _matchApp = _apps.find(a => a.status === 'approved' && a.stallData && a.stallData.stallId === stallId);
+        if (_matchApp && _matchApp.stallData) {
+            stall = _matchApp.stallData;
+            if (!MARKET_DATA.find(s => s.stallId === stall.stallId)) {
+                MARKET_DATA.push(stall);
+                ALL_100_STALLS.push(stall);
+                saveMarketDataToStorage();
+            }
+        }
+    }
+    if (!stall) {
+        showToast('⚠️ ไม่พบข้อมูลร้านค้า กรุณาลองใหม่อีกครั้ง');
+        return;
     }
 
     state.activeMerchant = {
@@ -18700,6 +18735,22 @@ function autoSanitizeProductionData() {
 // ==========================================
 function initTalatHubApp() {
     autoSanitizeProductionData();
+
+    // Sync approved merchant applications into MARKET_DATA for catalog display
+    try {
+        const _mAppsOnInit = loadMerchantApplications();
+        _mAppsOnInit.forEach(app => {
+            if (app.status === 'approved' && app.stallData && app.stallData.stallId) {
+                const stall = { ...app.stallData, accessCode: app.accessCode };
+                if (!MARKET_DATA.find(s => s.stallId === stall.stallId)) {
+                    MARKET_DATA.push(stall);
+                }
+                if (!ALL_100_STALLS.find(s => s.stallId === stall.stallId)) {
+                    ALL_100_STALLS.push(stall);
+                }
+            }
+        });
+    } catch (_e) {}
 
     state.customer = loadSavedCustomer();
     state.cart = loadSavedCart();
