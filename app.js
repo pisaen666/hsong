@@ -8191,7 +8191,7 @@ function renderMerchantIncomingOrders() {
                         <span class="material-symbols-outlined text-sm">edit</span>
                         <span>แก้ไขข้อมูลร้าน</span>
                     </button>
-                    <button onclick="switchRole('customer'); goToMarketScreen();" class="px-3 py-1.5 bg-black/20 hover:bg-black/30 text-white rounded-xl font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                    <button onclick="switchRole('customer'); goToMarketScreen(); if (typeof filterBySingleStall === 'function') filterBySingleStall('${stall ? stall.stallId : ''}');" class="px-3 py-1.5 bg-black/20 hover:bg-black/30 text-white rounded-xl font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">storefront</span>
                         <span>ดูหน้าร้านในตลาด</span>
                     </button>
@@ -10198,6 +10198,7 @@ function showToast(text) {
 // MERCHANT PARTNER ONBOARDING & SETUP PORTAL
 // ==========================================
 let activeMerchantStallId = null;
+let _isEditingMerchantStall = false;
 
 const MERCHANT_PRESET_IMAGES = {
     stall: {
@@ -10422,6 +10423,7 @@ function logoutCustomer() {
 function logoutMerchant() {
     state.activeMerchant = null;
     activeMerchantStallId = null;
+    _isEditingMerchantStall = false;
     try {
         localStorage.removeItem("talathub_logged_in_merchant");
         localStorage.removeItem("hsong_logged_in_merchant");
@@ -17104,6 +17106,7 @@ function closeMerchantLoginModal() {
 
 function closeMerchantPortalModal() {
     document.getElementById("merchant-portal-modal").classList.add("hidden");
+    _isEditingMerchantStall = false;
 }
 
 function switchMerchantPortalTab(tabId) {
@@ -17319,6 +17322,7 @@ function openMerchantEditModal(stallId) {
     }
 
     activeMerchantStallId = stall.stallId;
+    _isEditingMerchantStall = true;
 
     // Ensure we are viewing the Form Step (not the success message step)
     backToMerchantRegisterForm();
@@ -17533,6 +17537,7 @@ window.onHighlightMainCatChange = onHighlightMainCatChange;
 
 function registerNewMerchantStall() {
     closeMerchantLoginModal();
+    _isEditingMerchantStall = false;
     activeMerchantStallId = "stall_new_" + Date.now();
 
     const formStep = document.getElementById("merchant-portal-step-form");
@@ -18065,11 +18070,17 @@ function saveMerchantStallData() {
         catalog: catalogGroups
     };
 
-    // ตรวจสอบว่าเป็นแผงค้าที่ลงทะเบียนใหม่หรือไม่
-    const isNewRegistration = !activeMerchantStallId || 
-        activeMerchantStallId.startsWith("stall_new_") || 
-        activeMerchantStallId.startsWith("APP-SHOP-") ||
-        !MARKET_DATA.some(s => s.stallId === activeMerchantStallId && !s.stallId.startsWith("APP-SHOP-") && !s.stallId.startsWith("stall_new_"));
+    // ตรวจสอบว่าเป็นการแก้ไขข้อมูลร้านค้าเดิม หรือการลงทะเบียนเปิดแผงใหม่
+    let isNewRegistration = false;
+    if (_isEditingMerchantStall) {
+        isNewRegistration = false;
+    } else if (!activeMerchantStallId || activeMerchantStallId.startsWith("stall_new_")) {
+        isNewRegistration = true;
+    } else {
+        const existsInMarket = MARKET_DATA.some(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.some(s => s.stallId === activeMerchantStallId);
+        const existsInApprovedApps = loadMerchantApplications().some(a => a.status === 'approved' && ((a.id === activeMerchantStallId) || (a.stallData && a.stallData.stallId === activeMerchantStallId)));
+        isNewRegistration = !existsInMarket && !existsInApprovedApps;
+    }
 
     if (isNewRegistration) {
         const apps = loadMerchantApplications();
@@ -18125,17 +18136,33 @@ function saveMerchantStallData() {
         return;
     }
 
-    // กรณีแก้ไขข้อมูลร้านค้าเดิมที่มีอยู่แล้ว
+    // กรณีแก้ไขข้อมูลร้านค้าเดิมที่มีอยู่แล้ว: ดึงข้อมูลเดิมเพื่อคงค่า accessCode, rating, reviews, sales
+    const existingStall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.find(s => s.stallId === activeMerchantStallId);
+    if (existingStall) {
+        if (existingStall.accessCode) stallObj.accessCode = existingStall.accessCode;
+        if (existingStall.rating) stallObj.rating = existingStall.rating;
+        if (existingStall.reviewCount) stallObj.reviewCount = existingStall.reviewCount;
+        if (existingStall.sales) stallObj.sales = existingStall.sales;
+    }
+
+    // อัปเดตในประวัติใบสมัครที่ได้รับอนุมัติ (ถ้ามี) เพื่อให้ข้อมูลคงอยู่ถาวร
+    const apps = loadMerchantApplications();
+    const appIdx = apps.findIndex(a => a.id === activeMerchantStallId || (a.stallData && a.stallData.stallId === activeMerchantStallId));
+    if (appIdx >= 0) {
+        apps[appIdx].stallData = { ...apps[appIdx].stallData, ...stallObj };
+        saveMerchantApplications(apps);
+    }
+
     const existingIndex = MARKET_DATA.findIndex(s => s.stallId === activeMerchantStallId);
     if (existingIndex >= 0) {
-        MARKET_DATA[existingIndex] = stallObj;
+        MARKET_DATA[existingIndex] = { ...MARKET_DATA[existingIndex], ...stallObj };
     } else {
         MARKET_DATA.push(stallObj);
     }
 
     const allIndex = ALL_100_STALLS.findIndex(s => s.stallId === activeMerchantStallId);
     if (allIndex >= 0) {
-        ALL_100_STALLS[allIndex] = stallObj;
+        ALL_100_STALLS[allIndex] = { ...ALL_100_STALLS[allIndex], ...stallObj };
     } else {
         ALL_100_STALLS.push(stallObj);
     }
@@ -18149,16 +18176,21 @@ function saveMerchantStallData() {
         stallNumber: stallObj.stallNumber
     };
     saveMerchantToStorage(state.activeMerchant);
+    renderAuthHeaderButtons();
     if (typeof renderMerchantView === "function") renderMerchantView();
 
     closeMerchantPortalModal();
+    _isEditingMerchantStall = false;
 
+    // อัปเดตการแสดงผลหน้าร้านทันที (Customer Catalog, Directory, Favorites, Rotation, Admin)
     state.currentSingleStall = null;
-    renderDirectoryList();
-    renderFavoriteStallsBar();
-    renderCatalog();
-    updateStallRotationUI();
-    showToast(`🎉 บันทึกข้อมูลร้าน "${stallName}" สำเร็จเรียบร้อยแล้ว!`);
+    if (typeof renderDirectoryList === "function") renderDirectoryList();
+    if (typeof renderFavoriteStallsBar === "function") renderFavoriteStallsBar();
+    if (typeof renderCatalog === "function") renderCatalog();
+    if (typeof updateStallRotationUI === "function") updateStallRotationUI();
+    if (typeof updateAdminStallsBadge === "function") updateAdminStallsBadge();
+    if (typeof renderAdminStalls === "function") renderAdminStalls();
+    showToast(`🎉 บันทึกการแก้ไขข้อมูลร้าน "${stallName}" สำเร็จ และอัปเดตข้อมูลหน้าร้านทันที!`);
 }
 
 function previewMerchantLiveStore() {
