@@ -8106,8 +8106,15 @@ function openActiveStallEditor() {
     if (!stall && state.activeMerchant) {
         stall = MARKET_DATA.find(s => s.stallId === state.activeMerchant.stallId) || ALL_100_STALLS.find(s => s.stallId === state.activeMerchant.stallId);
     }
+    if (!stall) {
+        const apps = loadMerchantApplications();
+        const approvedApp = apps.find(a => a.status === 'approved' && a.stallData);
+        if (approvedApp) stall = approvedApp.stallData;
+    }
     if (!stall) stall = MARKET_DATA[0];
-    loginAsMerchantStall(stall.stallId);
+    if (stall) {
+        openMerchantEditModal(stall.stallId);
+    }
 }
 window.openActiveStallEditor = openActiveStallEditor;
 
@@ -10570,6 +10577,8 @@ function setActiveRoleView(role) {
     if (role === "hub") {
         renderHubPickingList();
         renderHubSettlement();
+    } else if (role === "merchant") {
+        if (typeof renderMerchantView === "function") renderMerchantView();
     } else if (role === "rider") {
         renderRiderScreen();
     } else if (role === "admin") {
@@ -17253,6 +17262,7 @@ function setMerchantOwnerImgPreset(type) {
 
 function loginAsMerchantStall(stallId) {
     closeMerchantLoginModal();
+    closeMerchantPortalModal();
     activeMerchantStallId = stallId;
 
     let stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
@@ -17282,6 +17292,33 @@ function loginAsMerchantStall(stallId) {
     };
     saveMerchantToStorage(state.activeMerchant);
     renderAuthHeaderButtons();
+
+    // Switch directly to Role 3: Merchant Dashboard
+    switchRole("merchant");
+    showToast(`🎉 เข้าสู่ระบบร้านค้า ${stall.stallName} เรียบร้อยแล้ว`);
+}
+window.loginAsMerchantStall = loginAsMerchantStall;
+
+function openMerchantEditModal(stallId) {
+    let stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
+    if (!stall) {
+        const _apps = loadMerchantApplications();
+        const _matchApp = _apps.find(a => a.status === 'approved' && a.stallData && a.stallData.stallId === stallId);
+        if (_matchApp && _matchApp.stallData) {
+            stall = _matchApp.stallData;
+            if (!MARKET_DATA.find(s => s.stallId === stall.stallId)) {
+                MARKET_DATA.push(stall);
+                ALL_100_STALLS.push(stall);
+                saveMarketDataToStorage();
+            }
+        }
+    }
+    if (!stall) {
+        showToast('⚠️ ไม่พบข้อมูลร้านค้า กรุณาลองใหม่อีกครั้ง');
+        return;
+    }
+
+    activeMerchantStallId = stall.stallId;
 
     // Ensure we are viewing the Form Step (not the success message step)
     backToMerchantRegisterForm();
@@ -17363,6 +17400,7 @@ function loginAsMerchantStall(stallId) {
     document.getElementById("merchant-portal-modal").classList.remove("hidden");
     showToast(`✏️ เปิดหน้าต่างแก้ไขข้อมูลร้าน: ${stall.stallName}`);
 }
+window.openMerchantEditModal = openMerchantEditModal;
 
 let _lastSubmittedMerchantApp = null;
 
@@ -19315,6 +19353,7 @@ window.renderMerchantTop6ProductsForm = renderMerchantTop6ProductsForm;
 window.renderMerchantCatalogTable = renderMerchantCatalogTable;
 window.addMerchantCatalogRow = addMerchantCatalogRow;
 window.deleteMerchantCatalogRow = deleteMerchantCatalogRow;
+window.openMerchantEditModal = openMerchantEditModal;
 
 // Core Customer Navigation & Cart Handlers
 window.goToCheckoutScreen = goToCheckoutScreen;
