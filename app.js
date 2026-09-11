@@ -4621,25 +4621,6 @@ function isMerchantModalOpen() {
     return modal && !modal.classList.contains("hidden");
 }
 
-function hasValidProductImage(product, stall) {
-    if (!product || !product.image) return false;
-    const img = (product.image || "").trim();
-    if (!img) return false;
-
-    if (stall) {
-        if (stall.stallImage && img === stall.stallImage.trim()) return false;
-        if (stall.ownerImage && img === stall.ownerImage.trim()) return false;
-    }
-
-    if (typeof MERCHANT_PRESET_IMAGES !== 'undefined' && MERCHANT_PRESET_IMAGES) {
-        const stallPresets = Object.values(MERCHANT_PRESET_IMAGES.stall || {});
-        const ownerPresets = Object.values(MERCHANT_PRESET_IMAGES.owner || {});
-        if (stallPresets.includes(img) || ownerPresets.includes(img)) return false;
-    }
-
-    return true;
-}
-
 // ==========================================
 // CATALOG FILTERING & RENDERING (SUPER-GROUPS)
 // ==========================================
@@ -4716,7 +4697,7 @@ function renderCatalog() {
                                     desc: extItem.spec,
                                     price: extItem.price,
                                     unit: extItem.unit,
-                                    image: "",
+                                    image: stall.stallImage,
                                     badge: "✨ ตรงคำค้น"
                                 });
                             }
@@ -5019,34 +5000,24 @@ function renderCatalog() {
                     ${stall.products.map(product => {
             const inCart = state.cart.find(item => item.productId === product.id);
             const qtyInCart = inCart ? inCart.qty : 0;
-            const showImg = hasValidProductImage(product, stall);
 
             return `
                             <div class="bg-slate-50/90 hover:bg-white rounded-2xl p-2.5 border ${qtyInCart > 0 ? 'border-emerald-500 bg-emerald-50/30 ring-1 ring-emerald-400' : 'border-slate-200/80'} flex flex-col justify-between hover:shadow-md transition-all">
                                 <div>
-                                    ${showImg ? `
-                                        <div class="relative mb-2 overflow-hidden rounded-xl bg-slate-200 aspect-[4/3]">
-                                            <img src="${product.image}" alt="${product.name}" class="w-full h-full object-cover hover:scale-105 transition-transform duration-300">
-                                            ${product.badge ? `
-                                                <span class="absolute top-1.5 left-1.5 bg-orange-500 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-lg shadow-sm">
-                                                    ${product.badge}
-                                                </span>
-                                            ` : ''}
-                                            ${qtyInCart > 0 ? `
-                                                <span class="absolute top-1.5 right-1.5 bg-emerald-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-lg shadow-sm flex items-center gap-0.5">
-                                                    <span class="material-symbols-outlined text-[10px]">check</span>
-                                                    <span>ในตะกร้า ${qtyInCart}</span>
-                                                </span>
-                                            ` : ''}
-                                        </div>
-                                    ` : `
-                                        ${(product.badge || qtyInCart > 0) ? `
-                                            <div class="flex items-center justify-between gap-1 mb-1.5">
-                                                ${product.badge ? `<span class="bg-orange-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shadow-xs">${product.badge}</span>` : '<div></div>'}
-                                                ${qtyInCart > 0 ? `<span class="bg-emerald-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shadow-xs flex items-center gap-0.5"><span class="material-symbols-outlined text-[10px]">check</span>ในตะกร้า ${qtyInCart}</span>` : ''}
-                                            </div>
+                                    <div class="relative mb-2 overflow-hidden rounded-xl bg-slate-200 aspect-[4/3]">
+                                        <img src="${product.image}" alt="${product.name}" class="w-full h-full object-cover hover:scale-105 transition-transform duration-300">
+                                        ${product.badge ? `
+                                            <span class="absolute top-1.5 left-1.5 bg-orange-500 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-lg shadow-sm">
+                                                ${product.badge}
+                                            </span>
                                         ` : ''}
-                                    `}
+                                        ${qtyInCart > 0 ? `
+                                            <span class="absolute top-1.5 right-1.5 bg-emerald-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-lg shadow-sm flex items-center gap-0.5">
+                                                <span class="material-symbols-outlined text-[10px]">check</span>
+                                                <span>ในตะกร้า ${qtyInCart}</span>
+                                            </span>
+                                        ` : ''}
+                                    </div>
                                     <h4 class="font-extrabold text-xs text-slate-900 line-clamp-1 leading-snug" title="${product.name}">${product.name}</h4>
                                     <p class="text-[10px] text-slate-500 line-clamp-1 mt-0.5 leading-tight" title="${product.desc}">${product.desc}</p>
                                 </div>
@@ -17935,7 +17906,7 @@ function saveMerchantStallData() {
         const unit = unitEl ? (unitEl.value || "กก.") : "กก.";
         const mainCat = document.getElementById(`m-p-maincat-${i}`)?.value || "";
         const subCat = document.getElementById(`m-p-subcat-${i}`)?.value || "";
-        const pImage = document.getElementById(`m-p-img-${i}`)?.value.trim() || "";
+        const pImage = document.getElementById(`m-p-img-${i}`)?.value.trim() || stallImage;
 
         if (name) {
             products.push({
@@ -18185,7 +18156,7 @@ function previewMerchantLiveStore() {
         const name = document.getElementById(`m-p-name-${i}`)?.value.trim();
         const price = parseFloat(document.getElementById(`m-p-price-${i}`)?.value || "0") || 0;
         const unit = document.getElementById(`m-p-unit-${i}`)?.value.trim() || "กก.";
-        const pImg = document.getElementById(`m-p-img-${i}`)?.value.trim() || "";
+        const pImg = document.getElementById(`m-p-img-${i}`)?.value.trim() || stallImage;
         const pDesc = document.getElementById(`m-p-desc-${i}`)?.value.trim() || "";
         const badge = document.getElementById(`m-p-badge-${i}`)?.value.trim() || "";
         const mainCat = document.getElementById(`m-p-maincat-${i}`)?.value || "";
@@ -18387,35 +18358,20 @@ function previewMerchantLiveStore() {
 
             ${products.length > 0 ? `
                 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 pt-1">
-                    ${products.map((p, idx) => {
-                        const showImg = hasValidProductImage(p, { stallImage, ownerImage });
-                        return `
+                    ${products.map((p, idx) => `
                         <div class="bg-slate-50 hover:bg-white rounded-xl p-2 border border-slate-200 flex flex-col justify-between transition-all">
                             <div>
-                                ${showImg ? `
-                                    <div class="relative mb-1.5 overflow-hidden rounded-lg bg-slate-200 aspect-[4/3]">
-                                        <img src="${p.image}" alt="${p.name}" class="w-full h-full object-cover">
-                                        <span class="absolute top-1 left-1 bg-slate-900/80 text-white text-[8px] font-black px-1.5 py-0.2 rounded">
-                                            #${idx + 1}
+                                <div class="relative mb-1.5 overflow-hidden rounded-lg bg-slate-200 aspect-[4/3]">
+                                    <img src="${p.image}" alt="${p.name}" class="w-full h-full object-cover">
+                                    <span class="absolute top-1 left-1 bg-slate-900/80 text-white text-[8px] font-black px-1.5 py-0.2 rounded">
+                                        #${idx + 1}
+                                    </span>
+                                    ${p.badge ? `
+                                        <span class="absolute top-1 right-1 bg-orange-500 text-white text-[8px] font-bold px-1 py-0.2 rounded">
+                                            ${p.badge}
                                         </span>
-                                        ${p.badge ? `
-                                            <span class="absolute top-1 right-1 bg-orange-500 text-white text-[8px] font-bold px-1 py-0.2 rounded">
-                                                ${p.badge}
-                                            </span>
-                                        ` : ''}
-                                    </div>
-                                ` : `
-                                    <div class="flex items-center justify-between gap-1 mb-1">
-                                        <span class="bg-slate-900/80 text-white text-[8px] font-black px-1.5 py-0.2 rounded">
-                                            #${idx + 1}
-                                        </span>
-                                        ${p.badge ? `
-                                            <span class="bg-orange-500 text-white text-[8px] font-bold px-1 py-0.2 rounded">
-                                                ${p.badge}
-                                            </span>
-                                        ` : ''}
-                                    </div>
-                                `}
+                                    ` : ''}
+                                </div>
                                 <div class="font-bold text-[11px] text-slate-900 line-clamp-1 leading-tight" title="${p.name}">${p.name}</div>
                                 ${p.mainCat || p.subCat ? `
                                     <div class="text-[9px] text-slate-500 line-clamp-1 mt-0.5">${p.mainCat} • ${p.subCat}</div>
