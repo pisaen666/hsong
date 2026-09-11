@@ -4540,14 +4540,14 @@ function generateSampleDailyOrders() {
 // ==========================================
 
 function selectRandomStallBatch() {
-    let pool = MARKET_DATA.filter(s => s.products && s.products.length > 0);
-    if (pool.length === 0) pool = MARKET_DATA;
+    let pool = MARKET_DATA;
 
-    // ถ้ามีแผงค้าแค่ 1 แผง หรือไม่เพียงพอสำหรับการสุ่ม ให้แสดงทั้งหมดตรงๆ และไม่ต้องสุ่ม
-    if (pool.length <= 1) {
-        state.stallRotation.displayedStallIds = pool.map(s => s.stallId);
-        return;
-    }
+    // รวบรวมร้านค้าที่ได้รับการอนุมัติใหม่/ร้านค้าที่ผู้ใช้ลงทะเบียนจริงขึ้นแสดงเป็นลำดับแรกเสมอ
+    const customApproved = pool.filter(s => s && (
+        (s.stallId && (s.stallId.startsWith("APP-") || s.stallId.startsWith("stall_new_"))) ||
+        s.isModified ||
+        s.accessCode
+    ));
 
     // ถ้ามีการเลือกหมวดหมู่เฉพาะ (ไม่ใช่ 'all') ให้สุ่มจากร้านในหมวดหมู่นั้น
     if (state.currentCategoryFilter && state.currentCategoryFilter !== "all") {
@@ -4559,26 +4559,22 @@ function selectRandomStallBatch() {
         }
     }
 
-    // กรณีเลือกดู 'all' (หมวดหมู่ทั้งหมด):
+    const selectedStalls = [...customApproved];
+    const maxToPick = Math.max(3, selectedStalls.length);
+
     // สุ่มเลือก 2 ถึง 3 ร้านค้าจากหมวดหมู่ที่แตกต่างกันเพื่อกระจายความหลากหลาย
     const categories = ["chicken", "pork", "veggie", "curry", "seafood"];
     const shuffledCats = [...categories].sort(() => 0.5 - Math.random());
 
-    const selectedStalls = [];
-    const maxToPick = Math.min(pool.length, 3);
-
     for (const cat of shuffledCats) {
         if (selectedStalls.length >= maxToPick) break;
-        const stallsInCat = pool.filter(s => s.category === cat);
+        const stallsInCat = pool.filter(s => s.category === cat && !selectedStalls.some(sel => sel.stallId === s.stallId));
         if (stallsInCat.length > 0) {
             const randomStall = stallsInCat[Math.floor(Math.random() * stallsInCat.length)];
-            if (!selectedStalls.some(s => s.stallId === randomStall.stallId)) {
-                selectedStalls.push(randomStall);
-            }
+            selectedStalls.push(randomStall);
         }
     }
 
-    // ถ้ายังได้ไม่ครบ maxToPick ให้เติมจากร้านอื่นๆ ใน pool
     if (selectedStalls.length < maxToPick) {
         const remaining = pool.filter(s => !selectedStalls.some(sel => sel.stallId === s.stallId));
         const shuffledRemaining = [...remaining].sort(() => 0.5 - Math.random());
@@ -4728,8 +4724,9 @@ function renderCatalog() {
         let directMatchedStalls = [];
 
         MARKET_DATA.forEach(stall => {
+            const sProducts = (stall && Array.isArray(stall.products)) ? stall.products : [];
             // Check in stall products
-            let matchedItems = stall.products.filter(p =>
+            let matchedItems = sProducts.filter(p =>
                 p.name.toLowerCase().includes(searchQuery) ||
                 p.desc.toLowerCase().includes(searchQuery) ||
                 (p.category && p.category.toLowerCase().includes(searchQuery))
@@ -4761,7 +4758,7 @@ function renderCatalog() {
             if (matchedItems.length > 0 || stall.stallName.toLowerCase().includes(searchQuery) || stall.stallTag.toLowerCase().includes(searchQuery)) {
                 directMatchedStalls.push({
                     ...stall,
-                    products: matchedItems.length > 0 ? matchedItems : stall.products
+                    products: matchedItems.length > 0 ? matchedItems : sProducts
                 });
             }
         });
@@ -4779,17 +4776,18 @@ function renderCatalog() {
             const matchedKeyword = keywords.find(kw => searchQuery.includes(kw));
 
             MARKET_DATA.forEach(stall => {
+                const sProducts = (stall && Array.isArray(stall.products)) ? stall.products : [];
                 let suggestedItems = [];
                 if (matchedKeyword) {
-                    suggestedItems = stall.products.filter(p =>
+                    suggestedItems = sProducts.filter(p =>
                         p.name.includes(matchedKeyword) ||
                         p.desc.includes(matchedKeyword) ||
-                        stall.category.includes(matchedKeyword) ||
-                        stall.stallTag.includes(matchedKeyword)
+                        (stall.category && stall.category.includes(matchedKeyword)) ||
+                        (stall.stallTag && stall.stallTag.includes(matchedKeyword))
                     );
                 } else {
                     // Fallback to top bestsellers across stalls
-                    suggestedItems = stall.products.filter(p => p.badge);
+                    suggestedItems = sProducts.filter(p => p.badge);
                 }
 
                 if (suggestedItems.length > 0) {
@@ -4889,6 +4887,8 @@ function renderCatalog() {
     }
 
     filteredStalls.forEach(stall => {
+        if (!stall) return;
+        if (!stall.products || !Array.isArray(stall.products)) stall.products = [];
         const stallImg = stall.stallImage || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=700&auto=format&fit=crop&q=80';
         const ownerImg = stall.ownerImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80';
         const phoneNum = stall.phone || '081-234-5678';
@@ -5049,7 +5049,21 @@ function renderCatalog() {
 
                 <!-- Products Grid (รองรับขนาด Responsive บนจอ PC และ มือถือ ป้องกันบีบอัดใน Mobile Frame) -->
                 <div class="${(state.screenMode === 'mobile') ? 'grid grid-cols-2 gap-2.5 px-3.5' : 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 md:gap-3 px-3.5'}">
-                    ${stall.products.map(product => {
+                    ${(!stall.products || !Array.isArray(stall.products) || stall.products.length === 0) ? `
+                        <div class="col-span-full py-6 px-4 bg-slate-50/90 border border-dashed border-emerald-300/80 rounded-2xl text-center space-y-2">
+                            <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-lg font-bold">🏪</div>
+                            <p class="text-xs font-bold text-slate-800">แผงค้าใหม่กำลังเตรียมรายการสินค้าลงระบบ</p>
+                            <p class="text-[11px] text-slate-500">สามารถโทรติดต่อสอบถามหรือสั่งซื้อตรงได้ที่ <a href="tel:${phoneNum}" class="text-emerald-700 font-black underline">${phoneNum}</a></p>
+                            ${(state.activeMerchant && state.activeMerchant.stallId === stall.stallId) ? `
+                                <div class="pt-1">
+                                    <button onclick="openActiveStallEditor()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm inline-flex items-center gap-1 cursor-pointer active:scale-95 transition-all">
+                                        <span class="material-symbols-outlined text-xs">edit_note</span>
+                                        <span>แก้ไขและลงรายการสินค้าของคุณ</span>
+                                    </button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : stall.products.map(product => {
             const inCart = state.cart.find(item => item.productId === product.id);
             const qtyInCart = inCart ? inCart.qty : 0;
 
@@ -17378,14 +17392,16 @@ function loginAsMerchantStall(stallId) {
 
     let stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
     if (!stall) {
-        // Fallback: find in approved merchant applications (for page-reload cases)
+        // Fallback: find in approved merchant applications
         const _apps = loadMerchantApplications();
-        const _matchApp = _apps.find(a => a.status === 'approved' && a.stallData && a.stallData.stallId === stallId);
+        const _matchApp = _apps.find(a => a.status === 'approved' && (a.id === stallId || (a.stallData && a.stallData.stallId === stallId)));
         if (_matchApp && _matchApp.stallData) {
-            stall = _matchApp.stallData;
+            stall = { ..._matchApp.stallData, accessCode: _matchApp.accessCode || _matchApp.stallData.accessCode };
             if (!MARKET_DATA.find(s => s.stallId === stall.stallId)) {
-                MARKET_DATA.push(stall);
-                ALL_100_STALLS.push(stall);
+                MARKET_DATA.unshift(stall);
+                if (typeof ALL_100_STALLS !== "undefined" && !ALL_100_STALLS.find(s => s.stallId === stall.stallId)) {
+                    ALL_100_STALLS.unshift(stall);
+                }
                 saveMarketDataToStorage();
             }
         }
@@ -17405,8 +17421,13 @@ function loginAsMerchantStall(stallId) {
     renderAuthHeaderButtons();
 
     // Switch directly to Role 3: Merchant Dashboard
-    switchRole("merchant");
-    showToast(`🎉 เข้าสู่ระบบร้านค้า ${stall.stallName} เรียบร้อยแล้ว`);
+    setActiveRoleView("merchant");
+    updateCustomerRoleButtonUI();
+    updateRiderRoleButtonUI();
+    if (typeof renderMerchantView === "function") {
+        renderMerchantView();
+    }
+    showToast(`🎉 เข้าสู่ระบบร้านค้า "${stall.stallName}" เรียบร้อยแล้ว`);
 }
 window.loginAsMerchantStall = loginAsMerchantStall;
 
@@ -18911,14 +18932,6 @@ function autoSanitizeProductionData() {
         localStorage.removeItem("talathub_rating_reviews");
     } catch (e) {}
 
-    // 11. Enforce MARKET_DATA & ALL_100_STALLS memory purge
-    const allowedStalls = MARKET_DATA.filter(s => s && s.stallId && (s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-") || s.isModified || s.accessCode));
-    MARKET_DATA.length = 0;
-    MARKET_DATA.push(...allowedStalls);
-
-    const allowedAll = ALL_100_STALLS.filter(s => s && s.stallId && (s.stallId.startsWith("stall_new_") || s.stallId.startsWith("APP-") || s.isModified || s.accessCode));
-    ALL_100_STALLS.length = 0;
-    ALL_100_STALLS.push(...allowedAll);
 }
 
 // ==========================================
@@ -18931,13 +18944,21 @@ function initTalatHubApp() {
     try {
         const _mAppsOnInit = loadMerchantApplications();
         _mAppsOnInit.forEach(app => {
-            if (app.status === 'approved' && app.stallData && app.stallData.stallId) {
-                const stall = { ...app.stallData, accessCode: app.accessCode };
-                if (!MARKET_DATA.find(s => s.stallId === stall.stallId)) {
-                    MARKET_DATA.push(stall);
+            if (app && app.status === 'approved' && app.stallData && app.stallData.stallId) {
+                const stall = { ...app.stallData, accessCode: app.accessCode || app.stallData.accessCode };
+                const mIdx = MARKET_DATA.findIndex(s => s.stallId === stall.stallId);
+                if (mIdx >= 0) {
+                    MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...stall };
+                } else {
+                    MARKET_DATA.unshift(stall);
                 }
-                if (!ALL_100_STALLS.find(s => s.stallId === stall.stallId)) {
-                    ALL_100_STALLS.push(stall);
+                if (typeof ALL_100_STALLS !== "undefined" && Array.isArray(ALL_100_STALLS)) {
+                    const aIdx = ALL_100_STALLS.findIndex(s => s.stallId === stall.stallId);
+                    if (aIdx >= 0) {
+                        ALL_100_STALLS[aIdx] = { ...ALL_100_STALLS[aIdx], ...stall };
+                    } else {
+                        ALL_100_STALLS.unshift(stall);
+                    }
                 }
             }
         });
@@ -19452,7 +19473,7 @@ function rejectMerchantApplication(appId) {
 }
 window.rejectMerchantApplication = rejectMerchantApplication;
 
-function handleMerchantCodeLoginSubmit() {
+async function handleMerchantCodeLoginSubmit() {
     const inputEl = document.getElementById("merchant-code-login-input");
     if (!inputEl) return;
     const query = inputEl.value.trim().toUpperCase();
@@ -19462,28 +19483,82 @@ function handleMerchantCodeLoginSubmit() {
         return;
     }
 
+    const submitBtn = document.querySelector("#merchant-login-modal button[onclick*='handleMerchantCodeLoginSubmit']");
+    const origBtnText = submitBtn ? submitBtn.innerHTML : "";
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<span class="inline-block animate-spin mr-1.5">⏳</span> กำลังตรวจสอบรหัสออนไลน์...`;
+    }
+
     const cleanQuery = query.replace(/[-\s]/g, "");
 
-    // 1. Search in approved merchant applications
-    const apps = loadMerchantApplications();
-    let matchedApp = apps.find(a => a.status === "approved" && (
-        (a.accessCode && a.accessCode.toUpperCase() === query) ||
-        (a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === cleanQuery)
-    ));
+    function findInApps(appsList) {
+        if (!Array.isArray(appsList)) return null;
+        return appsList.find(a => a && (
+            (a.accessCode && a.accessCode.trim().toUpperCase() === query) ||
+            (a.stallData && a.stallData.accessCode && a.stallData.accessCode.trim().toUpperCase() === query) ||
+            (a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === cleanQuery) ||
+            (a.id && a.id.trim().toUpperCase() === query)
+        ));
+    }
 
-    // 2. Search in MARKET_DATA or ALL_100_STALLS
-    let matchedStall = MARKET_DATA.find(s => (
-        (s.accessCode && s.accessCode.toUpperCase() === query) ||
-        (s.phone && s.phone.replace(/[-\s]/g, "") === cleanQuery) ||
-        (s.stallNumber && s.stallNumber.toUpperCase() === query)
-    ));
+    function findInStalls(stallsList) {
+        if (!Array.isArray(stallsList)) return null;
+        return stallsList.find(s => s && (
+            (s.accessCode && s.accessCode.trim().toUpperCase() === query) ||
+            (s.phone && s.phone.replace(/[-\s]/g, "") === cleanQuery) ||
+            (s.stallNumber && s.stallNumber.trim().toUpperCase() === query) ||
+            (s.stallId && s.stallId.trim().toUpperCase() === query)
+        ));
+    }
+
+    // 1. Search in local apps & stalls
+    let apps = loadMerchantApplications();
+    let matchedApp = findInApps(apps);
+    let matchedStall = findInStalls(MARKET_DATA) || findInStalls(ALL_100_STALLS);
+
+    // 2. If not found locally, fetch directly from Firebase Realtime Database
+    if (!matchedApp && !matchedStall) {
+        try {
+            let remoteData = null;
+            if (isFirebaseReady() && db) {
+                try {
+                    const snap = await db.ref("merchant_applications").once("value");
+                    remoteData = snap.val();
+                } catch (e) {
+                    console.warn("db.ref check failed:", e);
+                }
+            }
+            if (!remoteData) {
+                const res = await fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json");
+                if (res.ok) remoteData = await res.json();
+            }
+
+            let remoteList = [];
+            if (Array.isArray(remoteData)) remoteList = remoteData.filter(Boolean);
+            else if (remoteData && typeof remoteData === "object") remoteList = Object.values(remoteData).filter(Boolean);
+
+            if (remoteList.length > 0) {
+                localStorage.setItem("talathub_merchant_applications", JSON.stringify(remoteList));
+                apps = remoteList;
+                matchedApp = findInApps(remoteList);
+            }
+        } catch (fetchErr) {
+            console.warn("Direct Firebase check failed:", fetchErr);
+        }
+    }
+
+    if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origBtnText;
+    }
 
     if (!matchedStall && matchedApp && matchedApp.stallData) {
         matchedStall = { ...matchedApp.stallData, accessCode: matchedApp.accessCode || matchedApp.stallData.accessCode };
         if (!MARKET_DATA.find(s => s.stallId === matchedStall.stallId)) {
-            MARKET_DATA.push(matchedStall);
+            MARKET_DATA.unshift(matchedStall);
             if (typeof ALL_100_STALLS !== "undefined" && !ALL_100_STALLS.find(s => s.stallId === matchedStall.stallId)) {
-                ALL_100_STALLS.push(matchedStall);
+                ALL_100_STALLS.unshift(matchedStall);
             }
             saveMarketDataToStorage();
         }
@@ -19491,15 +19566,16 @@ function handleMerchantCodeLoginSubmit() {
 
     if (!matchedStall) {
         const pendingApp = apps.find(a => a.status === "pending" && (
-            (a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === cleanQuery)
+            (a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === cleanQuery) ||
+            (a.id && a.id.trim().toUpperCase() === query)
         ));
         if (pendingApp) {
-            alert("⏳ ใบสมัครร้าน \"" + pendingApp.stallData.stallName + "\" ของคุณยังอยู่ระหว่างการพิจารณาโดยแอดมิน\n\nเมื่อแอดมินอนุมัติแล้ว จะได้รับรหัสผ่าน 6 หลักเพื่อเข้าใช้งานครับ");
+            alert("⏳ ใบสมัครร้าน \"" + (pendingApp.stallData?.stallName || pendingApp.id) + "\" ของคุณยังอยู่ระหว่างการพิจารณาโดยแอดมิน\n\nเมื่อแอดมินอนุมัติแล้ว จะได้รับรหัสผ่าน 6 หลักเพื่อเข้าใช้งานครับ");
             return;
         }
 
         alert("⚠️ ไม่พบรหัสดังกล่าว..กรุณาตรวจสอบความถูกต้อง หรือถ้าได้รับการอนุมัติแล้วโปรดดูที่กล่องรับข้อความจากเบอร์โทรศัพท์หรือที่ไลน์ที่ให้ไว้กับทางเรา");
-        showToast("⚠️ ไม่พบรหัสดังกล่าว..กรุณาตรวจสอบความถูกต้อง หรือถ้าได้รับการอนุมัติแล้วโปรดดูที่กล่องรับข้อความจากเบอร์โทรศัพท์หรือที่ไลน์ที่ให้ไว้กับทางเรา");
+        showToast("⚠️ ไม่พบรหัสดังกล่าว..กรุณาตรวจสอบความถูกต้อง");
         return;
     }
 
