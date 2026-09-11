@@ -3081,6 +3081,79 @@
                             </div>
                         </div>
 
+                        <!-- Photo Uploads Section (Owner/Contact Photo & Storefront Photo) -->
+                        <div class="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-2xs">
+                            <div class="font-bold text-slate-800 text-xs flex items-center justify-between border-b border-slate-100 pb-2">
+                                <span class="flex items-center gap-1.5 text-emerald-800">
+                                    <span class="material-symbols-outlined text-base text-emerald-600">add_a_photo</span>
+                                    <span>อัปโหลดรูปภาพร้านค้าและผู้ติดต่อ (2 ส่วน)</span>
+                                </span>
+                                <span class="text-[10px] text-slate-400 font-normal">รองรับไฟล์ JPG, PNG, WEBP</span>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <!-- 1. รูปเจ้าของร้านหรือผู้ติดต่อ 1 รูป -->
+                                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between space-y-2.5">
+                                    <div>
+                                        <label class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-xs text-blue-600">account_circle</span>
+                                            <span>1. รูปเจ้าของร้านหรือผู้ติดต่อ (1 รูป)</span>
+                                        </label>
+                                        <p class="text-[10px] text-slate-500 mb-2">รูปโปรไฟล์ผู้ติดต่อหรือเจ้าของแผง</p>
+                                        
+                                        <div class="flex items-center gap-3">
+                                            <!-- Preview Avatar Box -->
+                                            <div class="relative w-16 h-16 rounded-2xl bg-slate-200 border-2 border-dashed border-slate-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner">
+                                                <img id="m-preview-owner-img" src="" alt="รูปเจ้าของร้าน" class="w-full h-full object-cover hidden">
+                                                <span id="m-preview-owner-placeholder" class="material-symbols-outlined text-2xl text-slate-400">person</span>
+                                            </div>
+
+                                            <!-- Upload Button & File Input -->
+                                            <div class="flex-1 space-y-1">
+                                                <label class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition-all">
+                                                    <span class="material-symbols-outlined text-sm text-blue-600">upload</span>
+                                                    <span>เลือกรูปเจ้าของร้าน</span>
+                                                    <input type="file" accept="image/*" onchange="handleMerchantFileUpload(event, 'm-owner-image-url', 'm-preview-owner-img')" class="hidden">
+                                                </label>
+                                                <input type="hidden" id="m-owner-image-url" value="">
+                                                <div class="text-[10px] text-slate-400" id="m-owner-file-hint">ยังไม่ได้เลือกรูปภาพ</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 2. รูปหน้าร้านหรือรูปที่ต้องการให้ปรากฏบนข้อมูลร้านค้า 1 รูป -->
+                                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between space-y-2.5">
+                                    <div>
+                                        <label class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-xs text-emerald-600">storefront</span>
+                                            <span>2. รูปหน้าร้านค้า / แผงค้า (1 รูป)</span>
+                                        </label>
+                                        <p class="text-[10px] text-slate-500 mb-2">รูปภาพที่ต้องการให้ปรากฏบนข้อมูลร้านค้า</p>
+                                        
+                                        <div class="flex items-center gap-3">
+                                            <!-- Preview Stall Cover Box -->
+                                            <div class="relative w-20 h-16 rounded-2xl bg-slate-200 border-2 border-dashed border-slate-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner">
+                                                <img id="m-preview-stall-img" src="" alt="รูปหน้าร้าน" class="w-full h-full object-cover hidden">
+                                                <span id="m-preview-stall-placeholder" class="material-symbols-outlined text-2xl text-slate-400">store</span>
+                                            </div>
+
+                                            <!-- Upload Button & File Input -->
+                                            <div class="flex-1 space-y-1">
+                                                <label class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition-all">
+                                                    <span class="material-symbols-outlined text-sm text-emerald-600">upload</span>
+                                                    <span>เลือกรูปหน้าร้านค้า</span>
+                                                    <input type="file" accept="image/*" onchange="handleMerchantFileUpload(event, 'm-stall-image-url', 'm-preview-stall-img')" class="hidden">
+                                                </label>
+                                                <input type="hidden" id="m-stall-image-url" value="">
+                                                <div class="text-[10px] text-slate-400" id="m-stall-file-hint">ยังไม่ได้เลือกรูปภาพ</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Contact 1 -->
                         <div class="p-3 bg-white border border-slate-200 rounded-2xl space-y-2.5">
                             <div class="font-bold text-slate-800 text-xs flex items-center gap-1">

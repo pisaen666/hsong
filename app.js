@@ -17123,24 +17123,29 @@ function updateMerchantImagePreviews() {
 
     const previewStall = document.getElementById("m-preview-stall-img");
     const placeholderStall = document.getElementById("m-preview-stall-placeholder");
-    const badgeStall = document.getElementById("m-preview-stall-badge");
+    const hintStall = document.getElementById("m-stall-file-hint");
 
     const previewOwner = document.getElementById("m-preview-owner-img");
     const placeholderOwner = document.getElementById("m-preview-owner-placeholder");
-    const verifiedOwner = document.getElementById("m-preview-owner-verified");
-    const titleOwner = document.getElementById("m-preview-owner-title");
+    const hintOwner = document.getElementById("m-owner-file-hint");
 
     if (previewStall) {
         if (stallImgUrl) {
             previewStall.src = stallImgUrl;
             previewStall.classList.remove("hidden");
             if (placeholderStall) placeholderStall.classList.add("hidden");
-            if (badgeStall) badgeStall.classList.remove("hidden");
+            if (hintStall) {
+                hintStall.textContent = "✅ อัปโหลดรูปหน้าร้านแล้ว";
+                hintStall.className = "text-[10px] text-emerald-600 font-bold";
+            }
         } else {
             previewStall.src = "";
             previewStall.classList.add("hidden");
             if (placeholderStall) placeholderStall.classList.remove("hidden");
-            if (badgeStall) badgeStall.classList.add("hidden");
+            if (hintStall) {
+                hintStall.textContent = "ยังไม่ได้เลือกรูปภาพ";
+                hintStall.className = "text-[10px] text-slate-400";
+            }
         }
     }
 
@@ -17149,14 +17154,18 @@ function updateMerchantImagePreviews() {
             previewOwner.src = ownerImgUrl;
             previewOwner.classList.remove("hidden");
             if (placeholderOwner) placeholderOwner.classList.add("hidden");
-            if (verifiedOwner) verifiedOwner.classList.remove("hidden");
-            if (titleOwner) titleOwner.textContent = "รูปโปรไฟล์เจ้าของร้าน (พร้อมใช้งาน)";
+            if (hintOwner) {
+                hintOwner.textContent = "✅ อัปโหลดรูปเจ้าของร้านแล้ว";
+                hintOwner.className = "text-[10px] text-emerald-600 font-bold";
+            }
         } else {
             previewOwner.src = "";
             previewOwner.classList.add("hidden");
             if (placeholderOwner) placeholderOwner.classList.remove("hidden");
-            if (verifiedOwner) verifiedOwner.classList.add("hidden");
-            if (titleOwner) titleOwner.textContent = "ยังไม่ได้เลือกรูปถ่ายเจ้าของร้าน";
+            if (hintOwner) {
+                hintOwner.textContent = "ยังไม่ได้เลือกรูปภาพ";
+                hintOwner.className = "text-[10px] text-slate-400";
+            }
         }
     }
 }
