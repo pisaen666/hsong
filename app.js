@@ -17050,7 +17050,9 @@ function validateMerchantForm() {
     const stallName = (document.getElementById("m-stall-name")?.value || "").trim();
     const contactName = (document.getElementById("m-contact1-name")?.value || "").trim();
     const contactPhone = (document.getElementById("m-contact1-phone")?.value || "").trim();
+    const contactLine = (document.getElementById("m-contact1-line")?.value || "").trim();
     const bankAccount = (document.getElementById("m-bank-account-no")?.value || "").trim();
+    const bankAccountName = (document.getElementById("m-bank-account-name")?.value || "").trim();
 
     let hasProduct = false;
     for (let i = 0; i < 10; i++) {
@@ -17060,12 +17062,32 @@ function validateMerchantForm() {
         }
     }
 
+    const isValid = !!(stallName && contactName && contactPhone && contactLine && bankAccount && bankAccountName && hasProduct);
+
     const submitBtn = document.getElementById("merchant-submit-footer-btn");
     if (submitBtn) {
-        if (stallName && contactName && contactPhone && bankAccount && hasProduct) {
+        if (isValid) {
             submitBtn.classList.remove("hidden");
         } else {
             submitBtn.classList.add("hidden");
+        }
+    }
+
+    const tabSubmitBtn = document.getElementById("merchant-submit-tab-btn");
+    if (tabSubmitBtn) {
+        if (isValid) {
+            tabSubmitBtn.classList.remove("hidden");
+        } else {
+            tabSubmitBtn.classList.add("hidden");
+        }
+    }
+
+    const previewSubmitBtn = document.getElementById("preview-submit-action-btn");
+    if (previewSubmitBtn) {
+        if (isValid) {
+            previewSubmitBtn.classList.remove("hidden");
+        } else {
+            previewSubmitBtn.classList.add("hidden");
         }
     }
 }
@@ -17951,8 +17973,7 @@ function saveMerchantStallData() {
 function previewMerchantLiveStore() {
     const stallName = document.getElementById("m-stall-name")?.value.trim() || "ตัวอย่างชื่อร้านค้า";
     const stallNumber = document.getElementById("m-stall-number")?.value.trim() || "แผง A-01";
-    const zoneVal = document.getElementById("m-stall-zone")?.value || "A";
-    const zone = zoneVal.includes("B") ? "B" : zoneVal.includes("C") ? "C" : zoneVal.includes("E") ? "E" : "A";
+    const zoneVal = document.getElementById("m-stall-zone")?.value || "โซน A";
     const category = document.getElementById("m-stall-category")?.value || "chicken";
 
     const contact1Name = document.getElementById("m-contact1-name")?.value.trim() || "";
@@ -17964,29 +17985,19 @@ function previewMerchantLiveStore() {
     const contact2Line = document.getElementById("m-contact2-line")?.value.trim() || "";
 
     const ownerName = contact1Name || (document.getElementById("m-owner-name")?.value.trim() || "เจ้าของแผง");
-    const phone = contact1Phone || (document.getElementById("m-phone")?.value.trim() || "081-xxx-xxxx");
-    const line = contact1Line || (document.getElementById("m-line")?.value.trim() || "");
+    const phone = contact1Phone || (document.getElementById("m-phone")?.value.trim() || "-");
+    const line = contact1Line || (document.getElementById("m-line")?.value.trim() || "-");
 
     const bankName = document.getElementById("m-bank-name") ? document.getElementById("m-bank-name").value : "กสิกรไทย (KBank)";
-    const bankAccountNo = document.getElementById("m-bank-account-no") ? document.getElementById("m-bank-account-no").value.trim() : "";
-    const bankAccountName = document.getElementById("m-bank-account-name") ? document.getElementById("m-bank-account-name").value.trim() : "";
-
-    const bankInfo = {
-        bankName: bankName,
-        accountNo: bankAccountNo,
-        accountName: bankAccountName
-    };
-
-    const contacts = [
-        { name: contact1Name, phone: contact1Phone, line: contact1Line },
-        { name: contact2Name, phone: contact2Phone, line: contact2Line }
-    ].filter(c => c.name || c.phone || c.line);
+    const bankAccountNo = document.getElementById("m-bank-account-no") ? document.getElementById("m-bank-account-no").value.trim() : "-";
+    const bankAccountName = document.getElementById("m-bank-account-name") ? document.getElementById("m-bank-account-name").value.trim() : "-";
 
     const highlight = document.getElementById("m-highlight")?.value.trim() || "ของสดคุณภาพดี คัดเกรดสดใหม่";
     const desc = document.getElementById("m-desc")?.value.trim() || "จำหน่ายของสดคุณภาพดีประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)";
     const stallImage = document.getElementById("m-stall-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
     const ownerImage = document.getElementById("m-owner-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.owner.man1;
 
+    // Collect 10 highlight products
     const products = [];
     for (let i = 0; i < 10; i++) {
         const name = document.getElementById(`m-p-name-${i}`)?.value.trim();
@@ -18012,19 +18023,8 @@ function previewMerchantLiveStore() {
             });
         }
     }
-    if (products.length === 0) {
-        products.push({
-            id: "preview_p_1",
-            name: "สินค้าไฮไลท์ตัวอย่าง",
-            desc: "ของสดคุณภาพดี",
-            price: 60,
-            unit: "กก.",
-            badge: "แนะนำ",
-            image: stallImage
-        });
-    }
 
-    // Include dynamically added catalog rows in preview
+    // Collect dynamic catalog items
     const groupMap = {};
     const tableRows = document.querySelectorAll("#merchant-catalog-container .catalog-item-container");
     tableRows.forEach((r, idx) => {
@@ -18044,9 +18044,7 @@ function previewMerchantLiveStore() {
         if (itemName) {
             if (!groupMap[group]) groupMap[group] = [];
             groupMap[group].push({
-                id: `cat_preview_${idx + 1}`,
                 name: itemName,
-                spec: "",
                 price: itemPrice,
                 unit: itemUnit,
                 mainCat: mainCatVal,
@@ -18055,45 +18053,261 @@ function previewMerchantLiveStore() {
         }
     });
 
-    const catalogGroups = Object.keys(groupMap).map(g => ({
-        groupName: g,
-        items: groupMap[g]
-    }));
-
-    const previewStall = {
-        stallId: "preview_stall_temp",
-        stallName: stallName,
-        stallNumber: stallNumber,
-        zone: zone,
-        category: category,
-        ownerName: ownerName,
-        phone: phone,
-        phone2: contact2Phone,
-        line: line,
-        contacts: contacts,
-        bankInfo: bankInfo,
-        bankName: bankName,
-        bankAccountNo: bankAccountNo,
-        bankAccountName: bankAccountName,
-        highlight: highlight,
-        shopDescription: desc,
-        stallImage: stallImage,
-        ownerImage: ownerImage,
-        stallTag: `${stallName} ${ownerName} ${highlight}`,
-        products: products,
-        catalog: catalogGroups
+    const categoryNames = {
+        "pork": "หมูสด / เนื้อหมู",
+        "chicken": "ไก่สด / เป็ด / สัตว์ปีก",
+        "beef": "เนื้อวัว / เนื้อโคขุน",
+        "seafood": "อาหารทะเล / กุ้ง หอย ปู ปลา",
+        "vegetable": "ผักสด / พืชผลการเกษตร",
+        "egg": "ไข่ไก่ / ไข่เป็ด / ไข่นกกระทา",
+        "frozen": "อาหารแช่แข็ง / ลูกชิ้น",
+        "dryfood": "ของแห้ง / เครื่องปรุง / สมุนไพร",
+        "all": "รวมของสดทุกประเภท"
     };
+    const catLabel = categoryNames[category] || "สินค้าของสด";
 
-    const existIdx = MARKET_DATA.findIndex(s => s.stallId === "preview_stall_temp");
-    if (existIdx >= 0) MARKET_DATA[existIdx] = previewStall;
-    else MARKET_DATA.push(previewStall);
+    const contentContainer = document.getElementById("merchant-preview-content");
+    const titleEl = document.getElementById("preview-modal-title");
+    if (titleEl) titleEl.textContent = `ตัวอย่างร้าน: ${stallName}`;
 
-    STALL_CATALOG_DATABASE["preview_stall_temp"] = catalogGroups;
+    let html = `
+        <!-- Stall Hero Card Preview -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-left">
+            <div class="relative h-36 sm:h-44 w-full bg-slate-900 overflow-hidden">
+                <img src="${stallImage}" alt="${stallName}" class="w-full h-full object-cover">
+                <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
+                <div class="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">
+                    <span class="bg-emerald-600 text-white font-black text-[11px] px-2.5 py-0.5 rounded-full shadow-md">
+                        ${stallNumber}
+                    </span>
+                    <span class="bg-slate-900/80 backdrop-blur-xs text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full border border-white/20">
+                        ${zoneVal}
+                    </span>
+                    <span class="bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full shadow-xs">
+                        🏷️ ${catLabel}
+                    </span>
+                </div>
+                <div class="absolute bottom-3 left-3 right-3 flex items-end justify-between">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-black text-white drop-shadow-md leading-tight">${stallName}</h2>
+                        <p class="text-emerald-300 font-bold text-xs mt-0.5 drop-shadow-sm flex items-center gap-1">
+                            <span>✨</span>
+                            <span>${highlight}</span>
+                        </p>
+                    </div>
+                    <div class="w-12 h-12 rounded-2xl border-2 border-white/90 overflow-hidden shadow-lg shrink-0 bg-slate-100">
+                        <img src="${ownerImage}" alt="${ownerName}" class="w-full h-full object-cover">
+                    </div>
+                </div>
+            </div>
 
-    const modal = document.getElementById("stall-catalog-modal");
-    if (modal) modal.style.zIndex = "9999";
-    openStallCatalogModal("preview_stall_temp");
-    showToast("👁️ กำลังแสดงพรีวิวหน้าร้านค้าของคุณ (กดปิดเพื่อกลับมากรอกข้อมูลต่อ)");
+            <!-- Description -->
+            <div class="p-3.5 bg-slate-50 border-b border-slate-200/80 text-xs text-slate-600 leading-relaxed">
+                <span class="font-bold text-slate-700">รายละเอียดร้านค้า: </span>${desc}
+            </div>
+        </div>
+
+        <!-- 1. ข้อมูลผู้ติดต่อ & บัญชีรับเงินโอน (Contact & Bank Section) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+            <!-- Contact Box -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs space-y-2.5">
+                <div class="flex items-center gap-2 text-slate-800 font-extrabold text-xs border-b border-slate-100 pb-2">
+                    <span class="w-6 h-6 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-sm">contacts</span>
+                    </span>
+                    <span>ข้อมูลผู้ติดต่อร้านค้า</span>
+                </div>
+                
+                <!-- Contact Set 1 -->
+                <div class="bg-blue-50/50 p-2.5 rounded-xl border border-blue-100 space-y-1">
+                    <div class="font-bold text-blue-900 text-[11px] flex items-center justify-between">
+                        <span>👤 ผู้ติดต่อชุดที่ 1 (หลัก)</span>
+                        ${contact1Name ? '<span class="text-[9px] bg-blue-200 text-blue-800 px-1.5 py-0.2 rounded font-bold">กรอกแล้ว</span>' : '<span class="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.2 rounded">ยังไม่ระบุ</span>'}
+                    </div>
+                    <div class="text-xs text-slate-800 font-medium">ชื่อ: <strong>${contact1Name || '-'}</strong></div>
+                    <div class="text-xs text-slate-800 flex items-center gap-1">
+                        <span>📞 โทร:</span>
+                        <strong class="text-blue-700">${contact1Phone || '-'}</strong>
+                    </div>
+                    <div class="text-xs text-slate-800 flex items-center gap-1">
+                        <span class="text-emerald-600 font-bold">💬 LINE:</span>
+                        <strong class="text-emerald-700">${contact1Line || '-'}</strong>
+                    </div>
+                </div>
+
+                <!-- Contact Set 2 (if any) -->
+                ${(contact2Name || contact2Phone || contact2Line) ? `
+                    <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1">
+                        <div class="font-bold text-slate-800 text-[11px] flex items-center justify-between">
+                            <span>👤 ผู้ติดต่อชุดที่ 2 (สำรอง)</span>
+                            <span class="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-bold">กรอกแล้ว</span>
+                        </div>
+                        <div class="text-xs text-slate-800 font-medium">ชื่อ: <strong>${contact2Name || '-'}</strong></div>
+                        <div class="text-xs text-slate-800 flex items-center gap-1">
+                            <span>📞 โทร:</span>
+                            <strong class="text-slate-700">${contact2Phone || '-'}</strong>
+                        </div>
+                        <div class="text-xs text-slate-800 flex items-center gap-1">
+                            <span class="text-emerald-600 font-bold">💬 LINE:</span>
+                            <strong class="text-emerald-700">${contact2Line || '-'}</strong>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="text-[10px] text-slate-400 bg-slate-50 p-2 rounded-xl border border-dashed border-slate-200 text-center">
+                        ผู้ติดต่อชุดที่ 2: <em>ไม่ได้ระบุ (ไม่บังคับ)</em>
+                    </div>
+                `}
+            </div>
+
+            <!-- Bank Payout Box -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs space-y-2.5">
+                <div class="flex items-center gap-2 text-slate-800 font-extrabold text-xs border-b border-slate-100 pb-2">
+                    <span class="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-sm">account_balance</span>
+                    </span>
+                    <span>บัญชีธนาคารรับเงินโอน</span>
+                </div>
+
+                <div class="bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-200/80 space-y-1.5">
+                    <div class="font-bold text-emerald-900 text-[11px] flex items-center justify-between">
+                        <span>🏦 ธนาคาร:</span>
+                        <span class="bg-emerald-200 text-emerald-900 font-extrabold px-2 py-0.5 rounded text-[10px]">${bankName}</span>
+                    </div>
+                    <div class="text-xs text-slate-800 pt-1">
+                        <span class="text-slate-500">เลขที่บัญชี: </span>
+                        <span class="font-mono font-black text-sm text-slate-900 tracking-wider">${bankAccountNo || '-'}</span>
+                    </div>
+                    <div class="text-xs text-slate-800">
+                        <span class="text-slate-500">ชื่อบัญชี: </span>
+                        <strong class="text-emerald-800">${bankAccountName || '-'}</strong>
+                    </div>
+                </div>
+
+                <div class="text-[10px] text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-100 leading-snug">
+                    ℹ️ ศูนย์ฮับตลาดสดจะโอนยอดขายสุทธิของร้านค้าเข้าบัญชีนี้ทุกวัน
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. สินค้าด่วน 10 รายการ (Highlight Products) -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs text-left space-y-2.5">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div class="flex items-center gap-2 font-extrabold text-xs text-slate-800">
+                    <span class="w-6 h-6 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-sm">local_fire_department</span>
+                    </span>
+                    <span>รายการสินค้าด่วน 10 รายการ (${products.length} รายการที่กรอก)</span>
+                </div>
+                <span class="text-[10px] text-orange-600 bg-orange-50 font-bold px-2 py-0.5 rounded-full border border-orange-200">
+                    แสดงทันทีหน้าแผงค้า
+                </span>
+            </div>
+
+            ${products.length > 0 ? `
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 pt-1">
+                    ${products.map((p, idx) => `
+                        <div class="bg-slate-50 hover:bg-white rounded-xl p-2 border border-slate-200 flex flex-col justify-between transition-all">
+                            <div>
+                                <div class="relative mb-1.5 overflow-hidden rounded-lg bg-slate-200 aspect-[4/3]">
+                                    <img src="${p.image}" alt="${p.name}" class="w-full h-full object-cover">
+                                    <span class="absolute top-1 left-1 bg-slate-900/80 text-white text-[8px] font-black px-1.5 py-0.2 rounded">
+                                        #${idx + 1}
+                                    </span>
+                                    ${p.badge ? `
+                                        <span class="absolute top-1 right-1 bg-orange-500 text-white text-[8px] font-bold px-1 py-0.2 rounded">
+                                            ${p.badge}
+                                        </span>
+                                    ` : ''}
+                                </div>
+                                <div class="font-bold text-[11px] text-slate-900 line-clamp-1 leading-tight" title="${p.name}">${p.name}</div>
+                                ${p.mainCat || p.subCat ? `
+                                    <div class="text-[9px] text-slate-500 line-clamp-1 mt-0.5">${p.mainCat} • ${p.subCat}</div>
+                                ` : ''}
+                            </div>
+                            <div class="mt-1.5 pt-1 border-t border-slate-200/80 flex items-baseline justify-between">
+                                <span class="font-black text-xs text-orange-600">฿${p.price}</span>
+                                <span class="text-[9px] text-slate-400 font-medium">/${p.unit}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : `
+                <div class="py-6 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">inventory_2</span>
+                    <p class="text-xs font-bold text-slate-600">ยังไม่ได้ระบุสินค้าด่วน 10 รายการ</p>
+                    <p class="text-[10px] text-slate-400 mt-0.5">กรุณากรอกชื่อสินค้าและราคาในแท็บที่ 2 เพื่อให้ลูกค้าสั่งซื้อได้ทันที</p>
+                </div>
+            `}
+        </div>
+
+        <!-- 3. ตารางรายการสินค้าเพิ่มเติม (Extended Catalog Table) -->
+        ${Object.keys(groupMap).length > 0 ? `
+            <div class="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs text-left space-y-2.5">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div class="flex items-center gap-2 font-extrabold text-xs text-slate-800">
+                        <span class="w-6 h-6 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+                            <span class="material-symbols-outlined text-sm">menu_book</span>
+                        </span>
+                        <span>ตารางสินค้าทั้งหมด (${Object.values(groupMap).reduce((s, g) => s + g.length, 0)} รายการ)</span>
+                    </div>
+                    <span class="text-[10px] text-teal-700 bg-teal-50 font-bold px-2 py-0.5 rounded-full border border-teal-200">
+                        หมวดหมู่ย่อย
+                    </span>
+                </div>
+
+                <div class="space-y-2 pt-1">
+                    ${Object.keys(groupMap).map(grp => `
+                        <div class="rounded-xl border border-slate-200 overflow-hidden">
+                            <div class="bg-slate-100 px-3 py-1.5 font-bold text-[11px] text-slate-800 flex items-center justify-between">
+                                <span>📁 ${grp}</span>
+                                <span class="text-[9px] bg-white px-1.5 py-0.2 rounded border border-slate-200 text-slate-600">${groupMap[grp].length} รายการ</span>
+                            </div>
+                            <div class="divide-y divide-slate-100 bg-white">
+                                ${groupMap[grp].map((item, idx) => `
+                                    <div class="px-3 py-2 flex items-center justify-between text-xs hover:bg-slate-50">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-[10px] text-slate-400 w-4">${idx + 1}.</span>
+                                            <span class="font-bold text-slate-800">${item.name}</span>
+                                            ${item.subCat ? `<span class="text-[9px] text-slate-400 font-medium">(${item.subCat})</span>` : ''}
+                                        </div>
+                                        <div class="font-black text-xs text-orange-600">
+                                            ฿${item.price} <span class="text-[9px] text-slate-400 font-normal">/${item.unit}</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        ` : ''}
+    `;
+
+    if (contentContainer) contentContainer.innerHTML = html;
+
+    // Check if form is valid to show or hide the Submit button inside preview modal
+    const isValid = !!(stallName && contact1Name && contact1Phone && contact1Line && bankAccountNo !== "-" && bankAccountName !== "-" && products.length > 0);
+    const previewSubmitBtn = document.getElementById("preview-submit-action-btn");
+    if (previewSubmitBtn) {
+        if (isValid) {
+            previewSubmitBtn.classList.remove("hidden");
+        } else {
+            previewSubmitBtn.classList.add("hidden");
+        }
+    }
+
+    const previewModal = document.getElementById("merchant-preview-modal");
+    if (previewModal) {
+        previewModal.classList.remove("hidden");
+    }
+    showToast("👁️ กำลังแสดงตัวอย่างข้อมูลร้านค้าของคุณ");
+}
+
+function closeMerchantPreviewModal() {
+    const previewModal = document.getElementById("merchant-preview-modal");
+    if (previewModal) {
+        previewModal.classList.add("hidden");
+    }
 }
 
 // ==========================================
@@ -18962,6 +19176,7 @@ window.handleMerchantCodeLoginSubmit = handleMerchantCodeLoginSubmit;
 window.submitMerchantApplication = saveMerchantStallData;
 window.saveMerchantStallData = saveMerchantStallData;
 window.previewMerchantLiveStore = previewMerchantLiveStore;
+window.closeMerchantPreviewModal = closeMerchantPreviewModal;
 window.closeMerchantPortalModal = closeMerchantPortalModal;
 window.switchMerchantPortalTab = switchMerchantPortalTab;
 window.scrollMerchantPortalTabs = scrollMerchantPortalTabs;
