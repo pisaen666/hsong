@@ -17200,41 +17200,85 @@ function loginAsMerchantStall(stallId) {
     saveMerchantToStorage(state.activeMerchant);
     renderAuthHeaderButtons();
 
-    document.getElementById("merchant-portal-badge").textContent = stall.stallNumber || "แผงค้าพาร์ทเนอร์";
-    document.getElementById("merchant-portal-zone-text").textContent = stall.zone || "โซนตลาดสด";
-    document.getElementById("merchant-portal-title").textContent = `จัดการข้อมูล: ${stall.stallName}`;
+    // Ensure we are viewing the Form Step (not the success message step)
+    backToMerchantRegisterForm();
+
+    const badgeEl = document.getElementById("merchant-portal-badge");
+    const zoneEl = document.getElementById("merchant-portal-zone-text");
+    const titleEl = document.getElementById("merchant-portal-title");
+    if (badgeEl) badgeEl.textContent = stall.stallNumber ? `แผง ${stall.stallNumber}` : "แผงค้าของฉัน";
+    if (zoneEl) zoneEl.textContent = stall.zone ? `โซน ${stall.zone}` : "โซนตลาดสด";
+    if (titleEl) titleEl.textContent = `✏️ แก้ไขข้อมูลร้าน: ${stall.stallName}`;
 
     // Fill General Info
-    document.getElementById("m-stall-name").value = stall.stallName || "";
-    document.getElementById("m-stall-number").value = stall.stallNumber || "";
-    document.getElementById("m-stall-zone").value = stall.zone ? `โซน ${stall.zone.charAt(0)}` : "โซน A (เนื้อสัตว์ & ไก่สด)";
-    document.getElementById("m-stall-category").value = stall.category || "chicken";
-    document.getElementById("m-owner-name").value = stall.ownerName || "";
-    document.getElementById("m-phone").value = stall.phone || "";
+    if (document.getElementById("m-stall-name")) document.getElementById("m-stall-name").value = stall.stallName || "";
+    if (document.getElementById("m-stall-number")) document.getElementById("m-stall-number").value = stall.stallNumber || "";
+    if (document.getElementById("m-stall-zone")) document.getElementById("m-stall-zone").value = stall.zone ? `โซน ${stall.zone.charAt(0)}` : "โซน A (เนื้อสัตว์ & ไก่สด)";
+    if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = stall.category || "chicken";
+
+    // Fill Contact 1
+    const c1 = (stall.contacts && stall.contacts[0]) || {};
+    if (document.getElementById("m-contact1-name")) document.getElementById("m-contact1-name").value = c1.name || stall.ownerName || "";
+    if (document.getElementById("m-contact1-phone")) document.getElementById("m-contact1-phone").value = c1.phone || stall.phone || "";
+    if (document.getElementById("m-contact1-line")) document.getElementById("m-contact1-line").value = c1.line || stall.line || "";
+
+    // Fill Contact 2
+    const c2 = (stall.contacts && stall.contacts[1]) || {};
+    if (document.getElementById("m-contact2-name")) document.getElementById("m-contact2-name").value = c2.name || "";
+    if (document.getElementById("m-contact2-phone")) document.getElementById("m-contact2-phone").value = c2.phone || stall.phone2 || "";
+    if (document.getElementById("m-contact2-line")) document.getElementById("m-contact2-line").value = c2.line || "";
+
+    // Legacy fields if present
+    if (document.getElementById("m-owner-name")) document.getElementById("m-owner-name").value = stall.ownerName || "";
+    if (document.getElementById("m-phone")) document.getElementById("m-phone").value = stall.phone || "";
     if (document.getElementById("m-phone2")) document.getElementById("m-phone2").value = stall.phone2 || "";
     if (document.getElementById("m-line")) document.getElementById("m-line").value = stall.line || "";
-    if (document.getElementById("m-bank-name")) document.getElementById("m-bank-name").value = stall.bankInfo?.bankName || stall.bankName || "กสิกรไทย (KBank)";
-    if (document.getElementById("m-bank-account-no")) document.getElementById("m-bank-account-no").value = stall.bankInfo?.accountNo || stall.bankAccountNo || "";
-    if (document.getElementById("m-bank-account-name")) document.getElementById("m-bank-account-name").value = stall.bankInfo?.accountName || stall.bankAccountName || "";
-    document.getElementById("m-highlight").value = stall.highlight || "";
-    document.getElementById("m-desc").value = stall.description || stall.shopDescription || "";
+
+    // Fill Bank Account 1
+    const bank1 = stall.bankInfo || {};
+    if (document.getElementById("m-bank-name")) document.getElementById("m-bank-name").value = bank1.bankName || stall.bankName || "กสิกรไทย (KBank)";
+    if (document.getElementById("m-bank-account-no")) document.getElementById("m-bank-account-no").value = bank1.accountNo || stall.bankAccountNo || "";
+    if (document.getElementById("m-bank-account-name")) document.getElementById("m-bank-account-name").value = bank1.accountName || stall.bankAccountName || "";
+
+    // Fill Bank Account 2
+    const bank2 = stall.bankInfo2 || {};
+    if (document.getElementById("m-bank-name-2")) document.getElementById("m-bank-name-2").value = bank2.bankName || stall.bankName2 || "";
+    if (document.getElementById("m-bank-account-no-2")) document.getElementById("m-bank-account-no-2").value = bank2.accountNo || stall.bankAccountNo2 || "";
+    if (document.getElementById("m-bank-account-name-2")) document.getElementById("m-bank-account-name-2").value = bank2.accountName || stall.bankAccountName2 || "";
+
+    // Fill Highlights & Descriptions
+    if (document.getElementById("m-highlight")) document.getElementById("m-highlight").value = stall.highlight || "";
+    if (document.getElementById("m-desc")) document.getElementById("m-desc").value = stall.description || stall.shopDescription || "";
 
     // Fill Images
-    document.getElementById("m-stall-image-url").value = stall.stallImage || "";
-    document.getElementById("m-owner-image-url").value = stall.ownerImage || "";
+    if (document.getElementById("m-stall-image-url")) document.getElementById("m-stall-image-url").value = stall.stallImage || "";
+    if (document.getElementById("m-owner-image-url")) document.getElementById("m-owner-image-url").value = stall.ownerImage || "";
     updateMerchantImagePreviews();
 
-    // Fill Top 6 Products
+    // Fill 10 Highlight Products
     renderMerchantTop6ProductsForm(stall.products || []);
 
     // Fill Full Catalog Table
     const catalogData = getStallCatalogData(stallId);
     renderMerchantCatalogTable(catalogData);
 
+    // Update Submit buttons text for edit mode
+    const submitBtn = document.getElementById("merchant-submit-footer-btn");
+    if (submitBtn) {
+        submitBtn.innerHTML = '<span class="material-symbols-outlined text-sm font-bold">save</span><span>บันทึกการแก้ไขข้อมูลร้านค้า 💾</span>';
+    }
+    const tabSubmitBtn = document.getElementById("merchant-submit-tab-btn");
+    if (tabSubmitBtn) {
+        tabSubmitBtn.innerHTML = '<span class="material-symbols-outlined text-sm font-bold">save</span><span>บันทึกการแก้ไขข้อมูลร้านค้า 💾</span>';
+    }
+
+    // Validate form to make save button available
+    validateMerchantForm();
+
     // Open Modal
     switchMerchantPortalTab("tab-info");
     document.getElementById("merchant-portal-modal").classList.remove("hidden");
-    showToast(`🏪 เข้าสู่ระบบจัดการ: ${stall.stallName}`);
+    showToast(`✏️ เปิดหน้าต่างแก้ไขข้อมูลร้าน: ${stall.stallName}`);
 }
 
 let _lastSubmittedMerchantApp = null;
@@ -17557,68 +17601,85 @@ function validateCatalogItemInput(input) {
 }
 
 function renderMerchantCatalogTable(groups) {
-    const tbody = document.getElementById("merchant-catalog-table-body");
-    if (!tbody) return;
+    const container = document.getElementById("merchant-catalog-container");
+    if (!container) return;
+    container.innerHTML = "";
 
-    let rowsHtml = "";
-    let rowIndex = 1;
     const highlightNames = getMerchantCurrentHighlightNames();
+    let index = 0;
 
     if (groups && groups.length > 0) {
         groups.forEach(g => {
             if (g.items) {
                 g.items.forEach(item => {
                     const cleanName = (item.name || "").trim();
-                    // กรองสินค้าที่ซ้ำกับสินค้าไฮไลท์ 6 อย่างออก
                     if (cleanName && !highlightNames.includes(cleanName.toLowerCase())) {
-                        rowsHtml += createMerchantTableRow(rowIndex++, g.groupName || "หมวดทั่วไป", cleanName, item.spec || "", item.price || 0, item.unit || "กก.");
+                        const mainCat = item.mainCat || g.groupName || "";
+                        const subCat = item.subCat || "";
+                        const { catOptions, subOptions } = buildCatalogCategorySelects(mainCat, subCat);
+
+                        const newRow = document.createElement("div");
+                        newRow.className = "catalog-item-container p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 relative shadow-sm";
+                        newRow.id = `m-c-row-${index}`;
+                        newRow.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <span class="font-extrabold text-blue-800 flex items-center gap-1.5">
+                                    <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-bold">${index + 1}</span>
+                                    <span>สินค้าเพิ่มเติมรายการที่ ${index + 1}</span>
+                                </span>
+                                <button type="button" onclick="deleteMerchantCatalogRow(this)" class="w-6 h-6 rounded-md hover:bg-rose-50 text-rose-500 flex items-center justify-center transition-all" title="ลบรายการนี้">
+                                    <span class="material-symbols-outlined text-sm">delete</span>
+                                </button>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่หลัก</label>
+                                    <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs font-medium catalog-main-cat-select" onchange="onCatalogMainCatChange(this)">
+                                        <option value="">-- หมวดหลัก --</option>
+                                        ${catOptions}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่ย่อย</label>
+                                    <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs catalog-sub-cat-select">
+                                        <option value="">-- หมวดย่อย --</option>
+                                        ${subOptions}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div class="sm:col-span-2 relative">
+                                    <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ชื่อสินค้า <span class="text-rose-500">*</span></label>
+                                    <input type="text" value="${cleanName}" placeholder="ชื่อสินค้า" oninput="validateCatalogItemInput(this)" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs catalog-item-name-input">
+                                    <div class="duplicate-warning text-[10px] text-rose-500 font-bold hidden mt-0.5 flex items-center gap-0.5">
+                                        <span class="material-symbols-outlined text-[12px]">warning</span>
+                                        <span>ชื่อซ้ำกับสินค้า Highlight</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หน่วยขาย</label>
+                                    <select class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs catalog-unit-select">
+                                        ${STALL_PRODUCT_UNITS.map(u => `<option value="${u}" ${u === (item.unit || 'กก.') ? 'selected' : ''}>${u}</option>`).join('')}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ราคา (บาท)</label>
+                                    <input type="number" value="${item.price || ''}" placeholder="ราคา" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-emerald-700 text-xs catalog-item-price-input">
+                                </div>
+                            </div>
+                        `;
+                        container.appendChild(newRow);
+                        index++;
                     }
                 });
             }
         });
     }
-
-    if (rowsHtml === "") {
-        tbody.innerHTML = `
-            <tr id="merchant-catalog-empty-row">
-                <td colspan="7" class="p-6 text-center text-slate-400 bg-slate-50/50">
-                    <span class="material-symbols-outlined text-3xl text-slate-300 block mb-1">playlist_add</span>
-                    <span class="font-bold text-xs text-slate-600 block">ยังไม่มีรายการสินค้าเพิ่มเติมในตารางข้อ 4</span>
-                    <p class="text-[11px] text-slate-400 mt-1">หากมีสินค้าอื่นๆ นอกเหนือจาก 6 รายการไฮไลท์ สามารถกดปุ่ม <strong>"เพิ่มรายการสินค้า"</strong> ด้านบนได้</p>
-                    <p class="text-[10px] text-amber-700 font-bold mt-1.5 bg-amber-50 p-1.5 rounded-lg inline-block border border-amber-200">
-                        ⚠️ ข้อกำหนด: ห้ามลงรายการสินค้าที่ซ้ำกับสินค้าไฮไลท์ 6 อย่างในข้อ 3 และหากไม่มีข้อมูลในข้อ 4 ระบบจะไม่แสดงปุ่ม "ดูเพิ่มเติม" บนหน้าร้าน
-                    </p>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-
-    tbody.innerHTML = rowsHtml;
-}
-
-function createMerchantTableRow(index, groupName, name, spec, price, unit) {
-    return `
-        <tr class="hover:bg-slate-50 transition-colors">
-            <td class="p-2 text-center text-slate-400 font-bold text-[10px]">${index}</td>
-            <td class="p-1.5"><input type="text" value="${groupName || ''}" placeholder="หมวดหมู่ย่อย" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-medium"></td>
-            <td class="p-1.5 relative">
-                <input type="text" value="${name || ''}" placeholder="ชื่อสินค้า (ห้ามซ้ำไฮไลท์)" oninput="validateCatalogItemInput(this)" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold catalog-item-name-input">
-                <div class="duplicate-warning text-[10px] text-rose-500 font-bold hidden mt-0.5 flex items-center gap-0.5">
-                    <span class="material-symbols-outlined text-[12px]">warning</span>
-                    <span>ชื่อซ้ำกับสินค้าไฮไลท์ข้อ 3</span>
-                </div>
-            </td>
-            <td class="p-1.5"><input type="text" value="${spec || ''}" placeholder="สเปก/ขนาด" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs text-slate-600"></td>
-            <td class="p-1.5"><input type="number" value="${price || 0}" placeholder="ราคา" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-bold text-emerald-700"></td>
-            <td class="p-1.5"><input type="text" value="${unit || 'กก.'}" placeholder="หน่วย" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs"></td>
-            <td class="p-1.5 text-center">
-                <button type="button" onclick="deleteMerchantCatalogRow(this)" class="w-6 h-6 rounded-md hover:bg-rose-50 text-rose-500 flex items-center justify-center transition-all mx-auto" title="ลบแถว">
-                    <span class="material-symbols-outlined text-sm">delete</span>
-                </button>
-            </td>
-        </tr>
-    `;
 }
 
 function buildCatalogCategorySelects(mainCat, subCat) {
