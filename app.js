@@ -426,8 +426,41 @@ function saveMarketDataToStorage() {
                 console.warn("Firebase save custom_market_stalls failed:", err);
             });
         }
+        try {
+            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/custom_market_stalls.json", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(customOnly)
+            }).catch(() => {});
+        } catch (e) {}
     } catch (e) { }
 }
+
+async function saveMarketDataToStorageAsync() {
+    try {
+        const customOnly = MARKET_DATA.filter(isCustomOrApprovedStall);
+        localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(customOnly));
+        const promises = [];
+        if (isFirebaseReady() && db) {
+            promises.push(
+                db.ref("custom_market_stalls").set(customOnly).catch(err => {
+                    console.warn("Firebase save custom_market_stalls failed:", err);
+                })
+            );
+        }
+        try {
+            promises.push(
+                fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/custom_market_stalls.json", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(customOnly)
+                }).catch(e => console.warn("REST PUT custom_market_stalls failed:", e))
+            );
+        } catch (e) {}
+        await Promise.allSettled(promises);
+    } catch (e) { }
+}
+window.saveMarketDataToStorageAsync = saveMarketDataToStorageAsync;
 
 let _isCustomStallsSyncInitialized = false;
 function initCustomStallsRealtimeSync() {
@@ -4700,6 +4733,17 @@ function renderCatalog() {
             selectRandomStallBatch();
         }
 
+        // หากเป็นร้านค้าที่ล็อกอินอยู่ ให้ดึงขึ้นมาแสดงด้านหน้าเสมอ
+        if (state.activeMerchant && state.activeMerchant.stallId) {
+            const mId = state.activeMerchant.stallId;
+            if (MARKET_DATA.some(s => s.stallId === mId)) {
+                state.stallRotation.displayedStallIds = [
+                    mId,
+                    ...state.stallRotation.displayedStallIds.filter(id => id !== mId)
+                ];
+            }
+        }
+
         let randomized = state.stallRotation.displayedStallIds
             .map(id => MARKET_DATA.find(s => s.stallId === id))
             .filter(Boolean);
@@ -4716,6 +4760,14 @@ function renderCatalog() {
         }
 
         filteredStalls = randomized.length > 0 ? randomized : MARKET_DATA;
+
+        // นำร้านของร้านค้าที่ล็อกอินอยู่มาแสดงอันดับแรกในหน้าโฮมเพจ (เมื่อดูทั้งหมด)
+        if (state.activeMerchant && state.activeMerchant.stallId && state.currentCategoryFilter === "all") {
+            const myStall = MARKET_DATA.find(s => s.stallId === state.activeMerchant.stallId);
+            if (myStall) {
+                filteredStalls = [myStall, ...filteredStalls.filter(s => s.stallId !== myStall.stallId)];
+            }
+        }
     }
 
     // 2. SEARCH ENGINE: Match across up to 5 stalls + Fuzzy Suggestions
@@ -4901,6 +4953,30 @@ function renderCatalog() {
         const extraItemsCount = extraCatalog.reduce((sum, g) => sum + (g.items ? g.items.length : 0), 0);
         const hasExtraCatalog = extraItemsCount > 0;
 
+        // Fallback: if stall.products is empty or missing, populate from catalog items so products always show!
+        let stallProducts = (stall.products && Array.isArray(stall.products))
+            ? stall.products.filter(p => p && p.name && p.name.trim())
+            : [];
+        if (stallProducts.length === 0 && extraCatalog && Array.isArray(extraCatalog) && extraCatalog.length > 0) {
+            extraCatalog.forEach(g => {
+                (g.items || []).forEach(it => {
+                    if (it && it.name && it.name.trim()) {
+                        stallProducts.push({
+                            id: it.id || `${stall.stallId}_cat_${stallProducts.length + 1}`,
+                            name: it.name.trim(),
+                            desc: it.spec || it.subCat || it.mainCat || "",
+                            price: it.price || 0,
+                            unit: it.unit || "กก.",
+                            badge: "สินค้าแนะนำ",
+                            image: it.image || stall.stallImage || MERCHANT_PRESET_IMAGES.stall.chicken,
+                            mainCat: it.mainCat || g.groupName || "",
+                            subCat: it.subCat || ""
+                        });
+                    }
+                });
+            });
+        }
+
         html += `
             <div class="bg-white rounded-2xl shadow-card border border-slate-200/80 overflow-hidden space-y-3 pb-3.5 transition-all">
                 
@@ -5036,7 +5112,7 @@ function renderCatalog() {
                 <div class="px-3.5 pt-0.5 flex items-center justify-between">
                     <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                         <span class="material-symbols-outlined text-sm text-orange-500">grid_view</span>
-                        สินค้าสดแนะนำ (${stall.products.length} รายการ)
+                        สินค้าสดแนะนำ (${stallProducts.length} รายการ)
                     </span>
                     ${hasExtraCatalog ? `
                         <button onclick="openStallCatalogModal('${stall.stallId}')" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-1 rounded-xl border border-emerald-300/80 flex items-center gap-1 transition-all active:scale-95 shadow-xs">
@@ -5049,7 +5125,7 @@ function renderCatalog() {
 
                 <!-- Products Grid (รองรับขนาด Responsive บนจอ PC และ มือถือ ป้องกันบีบอัดใน Mobile Frame) -->
                 <div class="${(state.screenMode === 'mobile') ? 'grid grid-cols-2 gap-2.5 px-3.5' : 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 md:gap-3 px-3.5'}">
-                    ${(!stall.products || !Array.isArray(stall.products) || stall.products.length === 0) ? `
+                    ${(!stallProducts || !Array.isArray(stallProducts) || stallProducts.length === 0) ? `
                         <div class="col-span-full py-6 px-4 bg-slate-50/90 border border-dashed border-emerald-300/80 rounded-2xl text-center space-y-2">
                             <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-lg font-bold">🏪</div>
                             <p class="text-xs font-bold text-slate-800">แผงค้าใหม่กำลังเตรียมรายการสินค้าลงระบบ</p>
@@ -5063,7 +5139,7 @@ function renderCatalog() {
                                 </div>
                             ` : ''}
                         </div>
-                    ` : stall.products.map(product => {
+                    ` : stallProducts.map(product => {
             const inCart = state.cart.find(item => item.productId === product.id);
             const qtyInCart = inCart ? inCart.qty : 0;
 
@@ -5400,8 +5476,40 @@ function saveStallCatalogDatabaseToStorage() {
                 console.warn("Firebase save stall_catalog_database failed:", err);
             });
         }
+        try {
+            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/stall_catalog_database.json", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(STALL_CATALOG_DATABASE)
+            }).catch(() => {});
+        } catch (e) {}
     } catch (e) {}
 }
+
+async function saveStallCatalogDatabaseToStorageAsync() {
+    try {
+        localStorage.setItem("talathub_stall_catalog_database", JSON.stringify(STALL_CATALOG_DATABASE));
+        const promises = [];
+        if (isFirebaseReady() && db) {
+            promises.push(
+                db.ref("stall_catalog_database").set(STALL_CATALOG_DATABASE).catch(err => {
+                    console.warn("Firebase save stall_catalog_database failed:", err);
+                })
+            );
+        }
+        try {
+            promises.push(
+                fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/stall_catalog_database.json", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(STALL_CATALOG_DATABASE)
+                }).catch(e => console.warn("REST PUT stall_catalog_database failed:", e))
+            );
+        } catch(e) {}
+        await Promise.allSettled(promises);
+    } catch (e) {}
+}
+window.saveStallCatalogDatabaseToStorageAsync = saveStallCatalogDatabaseToStorageAsync;
 
 let _isCatalogDbSyncInitialized = false;
 function initCatalogDbRealtimeSync() {
@@ -17251,11 +17359,8 @@ function switchMerchantPortalTab(tabId) {
 
 function validateMerchantForm() {
     const stallName = (document.getElementById("m-stall-name")?.value || "").trim();
-    const contactName = (document.getElementById("m-contact1-name")?.value || "").trim();
-    const contactPhone = (document.getElementById("m-contact1-phone")?.value || "").trim();
-    const contactLine = (document.getElementById("m-contact1-line")?.value || "").trim();
-    const bankAccount = (document.getElementById("m-bank-account-no")?.value || "").trim();
-    const bankAccountName = (document.getElementById("m-bank-account-name")?.value || "").trim();
+    const contactName = (document.getElementById("m-contact1-name")?.value || "").trim() || (document.getElementById("m-owner-name")?.value || "").trim();
+    const contactPhone = (document.getElementById("m-contact1-phone")?.value || "").trim() || (document.getElementById("m-phone")?.value || "").trim();
 
     let hasProduct = false;
     for (let i = 0; i < 10; i++) {
@@ -17264,30 +17369,36 @@ function validateMerchantForm() {
             break;
         }
     }
+    if (!hasProduct) {
+        const catRows = document.querySelectorAll("#merchant-catalog-container .catalog-item-name-input");
+        for (let r of catRows) {
+            if (r.value.trim()) {
+                hasProduct = true;
+                break;
+            }
+        }
+    }
+    if (!hasProduct && _isEditingMerchantStall) {
+        const s = MARKET_DATA.find(x => x.stallId === activeMerchantStallId) || ALL_100_STALLS.find(x => x.stallId === activeMerchantStallId);
+        if (s && ((s.products && s.products.length > 0) || (s.catalog && s.catalog.length > 0))) {
+            hasProduct = true;
+        }
+    }
 
-    const isValid = !!(stallName && contactName && contactPhone && contactLine && bankAccount && bankAccountName && hasProduct);
+    const isValid = !!(stallName && contactPhone && hasProduct);
 
     const submitBtn = document.getElementById("merchant-submit-footer-btn");
     if (submitBtn) {
-        if (isValid) {
+        if (isValid || _isEditingMerchantStall) {
             submitBtn.classList.remove("hidden");
         } else {
             submitBtn.classList.add("hidden");
         }
     }
 
-    const tabSubmitBtn = document.getElementById("merchant-submit-tab-btn");
-    if (tabSubmitBtn) {
-        if (isValid) {
-            tabSubmitBtn.classList.remove("hidden");
-        } else {
-            tabSubmitBtn.classList.add("hidden");
-        }
-    }
-
     const previewSubmitBtn = document.getElementById("preview-submit-action-btn");
     if (previewSubmitBtn) {
-        if (isValid) {
+        if (isValid || _isEditingMerchantStall) {
             previewSubmitBtn.classList.remove("hidden");
         } else {
             previewSubmitBtn.classList.add("hidden");
@@ -17515,14 +17626,10 @@ function openMerchantEditModal(stallId) {
     const catalogData = getStallCatalogData(stallId);
     renderMerchantCatalogTable(catalogData);
 
-    // Update Submit buttons text for edit mode
+    // Update Submit button text for edit mode
     const submitBtn = document.getElementById("merchant-submit-footer-btn");
     if (submitBtn) {
         submitBtn.innerHTML = '<span class="material-symbols-outlined text-sm font-bold">save</span><span>บันทึกการแก้ไขข้อมูลร้านค้า 💾</span>';
-    }
-    const tabSubmitBtn = document.getElementById("merchant-submit-tab-btn");
-    if (tabSubmitBtn) {
-        tabSubmitBtn.innerHTML = '<span class="material-symbols-outlined text-sm font-bold">save</span><span>บันทึกการแก้ไขข้อมูลร้านค้า 💾</span>';
     }
 
     // Validate form to make save button available
@@ -17831,7 +17938,7 @@ function renderMerchantTop6ProductsForm(products) {
 
 function getMerchantCurrentHighlightNames() {
     const names = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
         const val = document.getElementById(`m-p-name-${i}`)?.value.trim();
         if (val) names.push(val.toLowerCase());
     }
@@ -18034,305 +18141,375 @@ function deleteMerchantCatalogRow(btn) {
     }
 }
 
-function saveMerchantStallData() {
-    const stallName = (document.getElementById("m-stall-name")?.value || "").trim();
-    // Contact 1 (primary)
-    const contact1Name = (document.getElementById("m-contact1-name")?.value || "").trim();
-    const contact1Phone = (document.getElementById("m-contact1-phone")?.value || "").trim();
-    const contact1Line = (document.getElementById("m-contact1-line")?.value || "").trim();
-    // Contact 2 (secondary)
-    const contact2Name = (document.getElementById("m-contact2-name")?.value || "").trim();
-    const contact2Phone = (document.getElementById("m-contact2-phone")?.value || "").trim();
-    const contact2Line = (document.getElementById("m-contact2-line")?.value || "").trim();
-
-    // Legacy fields - keep backward compat
-    const stallNumber = (document.getElementById("m-stall-number")?.value || "").trim();
-    const zoneVal = document.getElementById("m-stall-zone")?.value || "";
-    const category = document.getElementById("m-stall-category")?.value || "chicken";
-    const ownerName = contact1Name || (document.getElementById("m-owner-name")?.value || "").trim();
-    const phone = contact1Phone || (document.getElementById("m-phone")?.value || "").trim();
-    const phone2 = contact2Phone || (document.getElementById("m-phone2")?.value || "").trim();
-    const line = contact1Line || (document.getElementById("m-line")?.value || "").trim();
-    const highlight = (document.getElementById("m-highlight")?.value || "").trim();
-    const desc = (document.getElementById("m-desc")?.value || "").trim();
-
-    const stallImage = (document.getElementById("m-stall-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
-    const ownerImage = (document.getElementById("m-owner-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.owner.man1;
-
-    if (!stallName || !phone) {
-        alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน: ชื่อร้านค้า และเบอร์โทรศัพท์ผู้ติดต่อ");
-        switchMerchantPortalTab("tab-info");
-        return;
+async function saveMerchantStallData() {
+    const submitBtn = document.getElementById("merchant-submit-footer-btn");
+    const origSubmitHtml = submitBtn ? submitBtn.innerHTML : '<span class="material-symbols-outlined text-sm font-bold">save</span><span>บันทึกการแก้ไขข้อมูลร้านค้า 💾</span>';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span><span>กำลังบันทึกข้อมูลออนไลน์... ⏳</span>';
     }
 
-    // Collect 10 Highlight products
-    const HIGHLIGHT_COUNT = 10;
-    const products = [];
-    const highlightNames = [];
-    for (let i = 0; i < HIGHLIGHT_COUNT; i++) {
-        const name = document.getElementById(`m-p-name-${i}`)?.value.trim() || "";
-        const badge = document.getElementById(`m-p-badge-${i}`)?.value.trim() || "";
-        const pDesc = document.getElementById(`m-p-desc-${i}`)?.value.trim() || "";
-        const price = parseFloat(document.getElementById(`m-p-price-${i}`)?.value || "0") || 0;
-        const unitEl = document.getElementById(`m-p-unit-${i}`);
-        const unit = unitEl ? (unitEl.value || "กก.") : "กก.";
-        const mainCat = document.getElementById(`m-p-maincat-${i}`)?.value || "";
-        const subCat = document.getElementById(`m-p-subcat-${i}`)?.value || "";
-        const pImage = document.getElementById(`m-p-img-${i}`)?.value.trim() || stallImage;
+    try {
+        const stallName = (document.getElementById("m-stall-name")?.value || "").trim();
+        // Contact 1 (primary)
+        const contact1Name = (document.getElementById("m-contact1-name")?.value || "").trim();
+        const contact1Phone = (document.getElementById("m-contact1-phone")?.value || "").trim();
+        const contact1Line = (document.getElementById("m-contact1-line")?.value || "").trim();
+        // Contact 2 (secondary)
+        const contact2Name = (document.getElementById("m-contact2-name")?.value || "").trim();
+        const contact2Phone = (document.getElementById("m-contact2-phone")?.value || "").trim();
+        const contact2Line = (document.getElementById("m-contact2-line")?.value || "").trim();
 
-        if (name) {
-            products.push({
-                id: `${activeMerchantStallId}_p${i + 1}`,
-                name: name,
-                desc: pDesc,
-                price: price,
-                unit: unit,
-                badge: badge,
-                image: pImage,
-                mainCat: mainCat,
-                subCat: subCat
-            });
-            highlightNames.push(name.toLowerCase());
+        // Legacy fields - keep backward compat
+        const stallNumber = (document.getElementById("m-stall-number")?.value || "").trim();
+        const zoneVal = document.getElementById("m-stall-zone")?.value || "";
+        const category = document.getElementById("m-stall-category")?.value || "chicken";
+        const ownerName = contact1Name || (document.getElementById("m-owner-name")?.value || "").trim();
+        const phone = contact1Phone || (document.getElementById("m-phone")?.value || "").trim();
+        const phone2 = contact2Phone || (document.getElementById("m-phone2")?.value || "").trim();
+        const line = contact1Line || (document.getElementById("m-line")?.value || "").trim();
+        const highlight = (document.getElementById("m-highlight")?.value || "").trim();
+        const desc = (document.getElementById("m-desc")?.value || "").trim();
+
+        const stallImage = (document.getElementById("m-stall-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
+        const ownerImage = (document.getElementById("m-owner-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.owner.man1;
+
+        if (!stallName || !phone) {
+            alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน: ชื่อร้านค้า และเบอร์โทรศัพท์ผู้ติดต่อ");
+            switchMerchantPortalTab("tab-info");
+            return;
         }
-    }
 
-    // Collect additional catalog rows (use select dropdowns now)
-    const tableRows = document.querySelectorAll("#merchant-catalog-container .catalog-item-container");
-    const duplicateErrors = [];
+        // Collect 10 Highlight products
+        const HIGHLIGHT_COUNT = 10;
+        const products = [];
+        const highlightNames = [];
+        for (let i = 0; i < HIGHLIGHT_COUNT; i++) {
+            const name = document.getElementById(`m-p-name-${i}`)?.value.trim() || "";
+            const badge = document.getElementById(`m-p-badge-${i}`)?.value.trim() || "";
+            const pDesc = document.getElementById(`m-p-desc-${i}`)?.value.trim() || "";
+            const price = parseFloat(document.getElementById(`m-p-price-${i}`)?.value || "0") || 0;
+            const unitEl = document.getElementById(`m-p-unit-${i}`);
+            const unit = unitEl ? (unitEl.value || "กก.") : "กก.";
+            const mainCat = document.getElementById(`m-p-maincat-${i}`)?.value || "";
+            const subCat = document.getElementById(`m-p-subcat-${i}`)?.value || "";
+            const pImage = document.getElementById(`m-p-img-${i}`)?.value.trim() || stallImage;
 
-    tableRows.forEach((r, idx) => {
-        const nameInput = r.querySelector(".catalog-item-name-input");
-        if (nameInput) {
-            const itemName = nameInput.value.trim();
-            if (itemName && highlightNames.includes(itemName.toLowerCase())) {
-                duplicateErrors.push({ row: idx + 1, name: itemName, input: nameInput });
+            if (name) {
+                products.push({
+                    id: `${activeMerchantStallId}_p${i + 1}`,
+                    name: name,
+                    desc: pDesc,
+                    price: price,
+                    unit: unit,
+                    badge: badge,
+                    image: pImage,
+                    mainCat: mainCat,
+                    subCat: subCat
+                });
+                highlightNames.push(name.toLowerCase());
             }
         }
-    });
 
-    if (duplicateErrors.length > 0) {
-        const firstErr = duplicateErrors[0];
-        alert(`⚠️ ไม่สามารถบันทึกได้:\n\nรายการสินค้า "${firstErr.name}" ซ้ำกับสินค้า Highlight \n\nกรุณาลบหรือเปลี่ยนชื่อสินค้าครับ`);
-        switchMerchantPortalTab("tab-products");
-        firstErr.input.focus();
-        firstErr.input.classList.add("border-rose-500", "ring-2", "ring-rose-400", "bg-rose-50");
-        return;
-    }
+        // Collect additional catalog rows (use select dropdowns now)
+        const tableRows = document.querySelectorAll("#merchant-catalog-container .catalog-item-container");
+        const duplicateErrors = [];
 
-    // Collect full catalog rows with new category dropdowns
-    const groupMap = {};
-    tableRows.forEach((r, idx) => {
-        const mainCatEl = r.querySelector(".catalog-main-cat-select");
-        const subCatEl = r.querySelector(".catalog-sub-cat-select");
-        const nameInput = r.querySelector(".catalog-item-name-input");
-        const priceInput = r.querySelector(".catalog-item-price-input");
-        const unitEl = r.querySelector(".catalog-unit-select");
+        tableRows.forEach((r, idx) => {
+            const nameInput = r.querySelector(".catalog-item-name-input");
+            if (nameInput) {
+                const itemName = nameInput.value.trim();
+                if (itemName && highlightNames.includes(itemName.toLowerCase())) {
+                    duplicateErrors.push({ row: idx + 1, name: itemName, input: nameInput });
+                }
+            }
+        });
 
-        const mainCatVal = mainCatEl ? mainCatEl.value.trim() : "";
-        const subCatVal = subCatEl ? subCatEl.value.trim() : "";
-        const itemName = nameInput ? nameInput.value.trim() : "";
-        const itemPrice = parseFloat(priceInput?.value || "0") || 0;
-        const itemUnit = unitEl ? (unitEl.value || "กก.") : "กก.";
-        const group = mainCatVal || subCatVal || "หมวดหมู่ทั่วไป";
+        if (duplicateErrors.length > 0) {
+            const firstErr = duplicateErrors[0];
+            alert(`⚠️ ไม่สามารถบันทึกได้:\n\nรายการสินค้า "${firstErr.name}" ซ้ำกับสินค้า Highlight \n\nกรุณาลบหรือเปลี่ยนชื่อสินค้าครับ`);
+            switchMerchantPortalTab("tab-products");
+            firstErr.input.focus();
+            firstErr.input.classList.add("border-rose-500", "ring-2", "ring-rose-400", "bg-rose-50");
+            return;
+        }
 
-        if (itemName) {
-            if (!groupMap[group]) groupMap[group] = [];
-            groupMap[group].push({
-                id: `cat_${activeMerchantStallId}_${idx + 1}`,
-                name: itemName,
-                spec: "",
-                price: itemPrice,
-                unit: itemUnit,
-                mainCat: mainCatVal,
-                subCat: subCatVal
+        // Collect full catalog rows with new category dropdowns
+        const groupMap = {};
+        tableRows.forEach((r, idx) => {
+            const mainCatEl = r.querySelector(".catalog-main-cat-select");
+            const subCatEl = r.querySelector(".catalog-sub-cat-select");
+            const nameInput = r.querySelector(".catalog-item-name-input");
+            const priceInput = r.querySelector(".catalog-item-price-input");
+            const unitEl = r.querySelector(".catalog-unit-select");
+
+            const mainCatVal = mainCatEl ? mainCatEl.value.trim() : "";
+            const subCatVal = subCatEl ? subCatEl.value.trim() : "";
+            const itemName = nameInput ? nameInput.value.trim() : "";
+            const itemPrice = parseFloat(priceInput?.value || "0") || 0;
+            const itemUnit = unitEl ? (unitEl.value || "กก.") : "กก.";
+            const group = mainCatVal || subCatVal || "หมวดหมู่ทั่วไป";
+
+            if (itemName) {
+                if (!groupMap[group]) groupMap[group] = [];
+                groupMap[group].push({
+                    id: `cat_${activeMerchantStallId}_${idx + 1}`,
+                    name: itemName,
+                    spec: "",
+                    price: itemPrice,
+                    unit: itemUnit,
+                    mainCat: mainCatVal,
+                    subCat: subCatVal
+                });
+            }
+        });
+
+        const catalogGroups = Object.keys(groupMap).map(g => ({
+            groupName: g,
+            items: groupMap[g]
+        }));
+
+        // Auto-populate Highlight products from catalog if products list is empty
+        if (products.length === 0 && catalogGroups && catalogGroups.length > 0) {
+            let pCount = 0;
+            catalogGroups.forEach(g => {
+                (g.items || []).forEach(it => {
+                    if (pCount < 10) {
+                        pCount++;
+                        products.push({
+                            id: `${activeMerchantStallId}_p${pCount}`,
+                            name: it.name,
+                            desc: it.spec || it.subCat || it.mainCat || "",
+                            price: it.price || 0,
+                            unit: it.unit || "กก.",
+                            badge: "สินค้าแนะนำ",
+                            image: stallImage,
+                            mainCat: it.mainCat || g.groupName || "",
+                            subCat: it.subCat || ""
+                        });
+                    }
+                });
             });
         }
-    });
 
-    const catalogGroups = Object.keys(groupMap).map(g => ({
-        groupName: g,
-        items: groupMap[g]
-    }));
+        // Update Extended Catalog Database
+        if (catalogGroups && Array.isArray(catalogGroups) && catalogGroups.length > 0) {
+            STALL_CATALOG_DATABASE[activeMerchantStallId] = catalogGroups;
+            await saveStallCatalogDatabaseToStorageAsync();
+        }
 
-    // Update Extended Catalog Database
-    STALL_CATALOG_DATABASE[activeMerchantStallId] = catalogGroups;
-    saveStallCatalogDatabaseToStorage();
+        const bankName = document.getElementById("m-bank-name") ? document.getElementById("m-bank-name").value : "กสิกรไทย (KBank)";
+        const bankAccountNo = document.getElementById("m-bank-account-no") ? document.getElementById("m-bank-account-no").value.trim() : "";
+        const bankAccountName = document.getElementById("m-bank-account-name") ? document.getElementById("m-bank-account-name").value.trim() : "";
 
-    const bankName = document.getElementById("m-bank-name") ? document.getElementById("m-bank-name").value : "กสิกรไทย (KBank)";
-    const bankAccountNo = document.getElementById("m-bank-account-no") ? document.getElementById("m-bank-account-no").value.trim() : "";
-    const bankAccountName = document.getElementById("m-bank-account-name") ? document.getElementById("m-bank-account-name").value.trim() : "";
-
-    const bankInfo = {
-        bankName: bankName,
-        accountNo: bankAccountNo,
-        accountName: bankAccountName
-    };
-
-    const contacts = [
-        { name: contact1Name, phone: contact1Phone, line: contact1Line },
-        { name: contact2Name, phone: contact2Phone, line: contact2Line }
-    ].filter(c => c.name || c.phone);
-
-    // Create or update stall object
-    const stallObj = {
-        stallId: activeMerchantStallId,
-        stallName: stallName,
-        stallNumber: stallNumber || "-",
-        zone: zoneVal ? zoneVal.replace("โซน ", "").replace(/\(.*\)/, "").trim() : "",
-        category: category,
-        ownerName: ownerName,
-        phone: phone,
-        phone2: phone2,
-        line: line,
-        contacts: contacts,
-        bankInfo: bankInfo,
-        bankName: bankName,
-        bankAccountNo: bankAccountNo,
-        bankAccountName: bankAccountName,
-        highlight: highlight,
-        description: desc,
-        shopDescription: desc,
-        stallImage: stallImage,
-        ownerImage: ownerImage,
-        stallTag: `${stallName} ${ownerName} ${highlight}`.trim(),
-        products: products,
-        catalog: catalogGroups
-    };
-
-    // ตรวจสอบว่าเป็นการแก้ไขข้อมูลร้านค้าเดิม หรือการลงทะเบียนเปิดแผงใหม่
-    let isNewRegistration = false;
-    if (_isEditingMerchantStall) {
-        isNewRegistration = false;
-    } else if (!activeMerchantStallId || activeMerchantStallId.startsWith("stall_new_")) {
-        isNewRegistration = true;
-    } else {
-        const existsInMarket = MARKET_DATA.some(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.some(s => s.stallId === activeMerchantStallId);
-        const existsInApprovedApps = loadMerchantApplications().some(a => a.status === 'approved' && ((a.id === activeMerchantStallId) || (a.stallData && a.stallData.stallId === activeMerchantStallId)));
-        isNewRegistration = !existsInMarket && !existsInApprovedApps;
-    }
-
-    if (isNewRegistration) {
-        const apps = loadMerchantApplications();
-        const appId = (activeMerchantStallId && activeMerchantStallId.startsWith("APP-SHOP-"))
-            ? activeMerchantStallId
-            : `APP-SHOP-${Date.now().toString().slice(-4)}`;
-        stallObj.stallId = appId;
-
-        const existingAppIdx = apps.findIndex(a => a.id === appId || (a.stallData && a.stallData.phone === phone));
-        const appRecord = {
-            id: appId,
-            submittedAt: new Date().toISOString(),
-            appliedAt: new Date().toISOString(),
-            status: "pending",
-            stallData: stallObj,
-            accessCode: null
+        const bankInfo = {
+            bankName: bankName,
+            accountNo: bankAccountNo,
+            accountName: bankAccountName
         };
-        if (existingAppIdx >= 0) apps[existingAppIdx] = appRecord;
-        else apps.unshift(appRecord);
-        saveMerchantApplications(apps);
 
-        _lastSubmittedMerchantApp = appRecord;
+        const contacts = [
+            { name: contact1Name, phone: contact1Phone, line: contact1Line },
+            { name: contact2Name, phone: contact2Phone, line: contact2Line }
+        ].filter(c => c.name || c.phone);
 
-        // Switch to applications view so it appears immediately when admin views
-        _adminStallRosterView = "applications";
-        _adminMerchantAppFilter = "all";
+        // Create or update stall object
+        const stallObj = {
+            stallId: activeMerchantStallId,
+            stallName: stallName,
+            stallNumber: stallNumber || "-",
+            zone: zoneVal ? zoneVal.replace("โซน ", "").replace(/\(.*\)/, "").trim() : "",
+            category: category,
+            ownerName: ownerName,
+            phone: phone,
+            phone2: phone2,
+            line: line,
+            contacts: contacts,
+            bankInfo: bankInfo,
+            bankName: bankName,
+            bankAccountNo: bankAccountNo,
+            bankAccountName: bankAccountName,
+            highlight: highlight,
+            description: desc,
+            shopDescription: desc,
+            stallImage: stallImage,
+            ownerImage: ownerImage,
+            stallTag: `${stallName} ${ownerName} ${highlight}`.trim(),
+            products: products,
+            catalog: catalogGroups
+        };
 
-        updateAdminStallsBadge();
-        if (typeof renderAdminStalls === "function") {
-            renderAdminStalls();
+        // ตรวจสอบว่าเป็นการแก้ไขข้อมูลร้านค้าเดิม หรือการลงทะเบียนเปิดแผงใหม่
+        let isNewRegistration = false;
+        if (_isEditingMerchantStall) {
+            isNewRegistration = false;
+        } else if (!activeMerchantStallId || activeMerchantStallId.startsWith("stall_new_")) {
+            isNewRegistration = true;
+        } else {
+            const existsInMarket = MARKET_DATA.some(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.some(s => s.stallId === activeMerchantStallId);
+            const existsInApprovedApps = loadMerchantApplications().some(a => a.status === 'approved' && ((a.id === activeMerchantStallId) || (a.stallData && a.stallData.stallId === activeMerchantStallId)));
+            isNewRegistration = !existsInMarket && !existsInApprovedApps;
         }
 
-        // Show Step 2 (Success Progression View) inside merchant-portal-modal
-        const formStep = document.getElementById("merchant-portal-step-form");
-        const successStep = document.getElementById("merchant-portal-step-success");
-        if (formStep && successStep) {
-            formStep.classList.add("hidden");
-            successStep.classList.remove("hidden");
+        if (isNewRegistration) {
+            let apps = loadMerchantApplications();
+            const appId = (activeMerchantStallId && activeMerchantStallId.startsWith("APP-SHOP-"))
+                ? activeMerchantStallId
+                : `APP-SHOP-${Date.now().toString().slice(-4)}`;
+            stallObj.stallId = appId;
+
+            const existingAppIdx = apps.findIndex(a => a.id === appId || (a.stallData && a.stallData.phone === phone));
+            const appRecord = {
+                id: appId,
+                submittedAt: new Date().toISOString(),
+                appliedAt: new Date().toISOString(),
+                status: "pending",
+                stallData: stallObj,
+                accessCode: null
+            };
+            if (existingAppIdx >= 0) apps[existingAppIdx] = appRecord;
+            else apps.unshift(appRecord);
+            await saveMerchantApplicationsAsync(apps);
+
+            _lastSubmittedMerchantApp = appRecord;
+
+            // Switch to applications view so it appears immediately when admin views
+            _adminStallRosterView = "applications";
+            _adminMerchantAppFilter = "all";
+
+            updateAdminStallsBadge();
+            if (typeof renderAdminStalls === "function") {
+                renderAdminStalls();
+            }
+
+            // Show Step 2 (Success Progression View) inside merchant-portal-modal
+            const formStep = document.getElementById("merchant-portal-step-form");
+            const successStep = document.getElementById("merchant-portal-step-success");
+            if (formStep && successStep) {
+                formStep.classList.add("hidden");
+                successStep.classList.remove("hidden");
+            }
+
+            const elId = document.getElementById("nextstep-merchant-id");
+            const elName = document.getElementById("nextstep-merchant-name");
+            const elStall = document.getElementById("nextstep-merchant-stall");
+            const elPhone = document.getElementById("nextstep-merchant-phone");
+            const elStatus = document.getElementById("nextstep-merchant-status");
+            if (elId) elId.textContent = appId;
+            if (elName) elName.textContent = stallName;
+            if (elStall) elStall.textContent = `${stallNumber} • ${zoneVal}`;
+            if (elPhone) elPhone.textContent = `${ownerName} (${phone})`;
+            if (elStatus) elStatus.innerHTML = '<span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full">⏳ รอแอดมินอนุมัติ</span>';
+
+            showToast(`🎉 ส่งใบสมัครเปิดร้าน "${stallName}" (${appId}) สำเร็จ!`);
+            return;
         }
 
-        const elId = document.getElementById("nextstep-merchant-id");
-        const elName = document.getElementById("nextstep-merchant-name");
-        const elStall = document.getElementById("nextstep-merchant-stall");
-        const elPhone = document.getElementById("nextstep-merchant-phone");
-        const elStatus = document.getElementById("nextstep-merchant-status");
-        if (elId) elId.textContent = appId;
-        if (elName) elName.textContent = stallName;
-        if (elStall) elStall.textContent = `${stallNumber} • ${zoneVal}`;
-        if (elPhone) elPhone.textContent = `${ownerName} (${phone})`;
-        if (elStatus) elStatus.innerHTML = '<span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full">⏳ รอแอดมินอนุมัติ</span>';
+        // กรณีแก้ไขข้อมูลร้านค้าเดิมที่มีอยู่แล้ว: ดึงข้อมูลเดิมเพื่อคงค่า accessCode, rating, reviews, sales
+        const existingStall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.find(s => s.stallId === activeMerchantStallId);
+        if (existingStall) {
+            if (existingStall.accessCode) stallObj.accessCode = existingStall.accessCode;
+            if (existingStall.rating) stallObj.rating = existingStall.rating;
+            if (existingStall.reviewCount) stallObj.reviewCount = existingStall.reviewCount;
+            if (existingStall.sales) stallObj.sales = existingStall.sales;
+        }
 
-        showToast(`🎉 ส่งใบสมัครเปิดร้าน "${stallName}" (${appId}) สำเร็จ!`);
-        return;
+        stallObj.isModified = true;
+
+        // อัปเดตในประวัติใบสมัครที่ได้รับอนุมัติ (ถ้ามี) เพื่อให้ข้อมูลคงอยู่ถาวร
+        let apps = loadMerchantApplications();
+        if (!apps || apps.length === 0) {
+            try {
+                const res = await fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json");
+                if (res.ok) {
+                    const remote = await res.json();
+                    apps = Array.isArray(remote) ? remote.filter(Boolean) : Object.values(remote || {}).filter(Boolean);
+                }
+            } catch (e) {}
+        }
+        if (!Array.isArray(apps)) apps = [];
+
+        const appIdx = apps.findIndex(a => 
+            a.id === activeMerchantStallId || 
+            (a.stallData && a.stallData.stallId === activeMerchantStallId) ||
+            (existingStall && existingStall.accessCode && a.accessCode === existingStall.accessCode) ||
+            (phone && a.stallData && a.stallData.phone && a.stallData.phone === phone)
+        );
+
+        const appRecord = {
+            id: activeMerchantStallId,
+            submittedAt: (existingStall && existingStall.submittedAt) || new Date().toISOString(),
+            appliedAt: (existingStall && existingStall.appliedAt) || new Date().toISOString(),
+            status: "approved",
+            stallData: stallObj,
+            accessCode: (existingStall && existingStall.accessCode) || stallObj.accessCode || null
+        };
+
+        if (appIdx >= 0) {
+            apps[appIdx].stallData = { ...apps[appIdx].stallData, ...stallObj };
+            if (appRecord.accessCode && !apps[appIdx].accessCode) {
+                apps[appIdx].accessCode = appRecord.accessCode;
+            }
+            apps[appIdx].status = "approved";
+        } else {
+            apps.unshift(appRecord);
+        }
+        await saveMerchantApplicationsAsync(apps);
+
+        const existingIndex = MARKET_DATA.findIndex(s => s.stallId === activeMerchantStallId);
+        if (existingIndex >= 0) {
+            MARKET_DATA[existingIndex] = { ...MARKET_DATA[existingIndex], ...stallObj };
+        } else {
+            MARKET_DATA.unshift(stallObj);
+        }
+
+        const allIndex = ALL_100_STALLS.findIndex(s => s.stallId === activeMerchantStallId);
+        if (allIndex >= 0) {
+            ALL_100_STALLS[allIndex] = { ...ALL_100_STALLS[allIndex], ...stallObj };
+        } else {
+            ALL_100_STALLS.unshift(stallObj);
+        }
+
+        await saveMarketDataToStorageAsync();
+
+        // Ensure this stall is shown first in customer view & rotation
+        if (!state.stallRotation.displayedStallIds) {
+            state.stallRotation.displayedStallIds = [];
+        }
+        state.stallRotation.displayedStallIds = state.stallRotation.displayedStallIds.filter(id => id !== stallObj.stallId);
+        state.stallRotation.displayedStallIds.unshift(stallObj.stallId);
+
+        state.activeMerchant = {
+            isLoggedIn: true,
+            stallId: stallObj.stallId,
+            stallName: stallObj.stallName,
+            stallNumber: stallObj.stallNumber
+        };
+        saveMerchantToStorage(state.activeMerchant);
+        renderAuthHeaderButtons();
+        if (typeof renderMerchantView === "function") renderMerchantView();
+
+        closeMerchantPortalModal();
+        _isEditingMerchantStall = false;
+
+        // อัปเดตการแสดงผลหน้าร้านทันที (Customer Catalog, Directory, Favorites, Rotation, Admin)
+        state.currentSingleStall = null;
+        if (typeof renderDirectoryList === "function") renderDirectoryList();
+        if (typeof renderFavoriteStallsBar === "function") renderFavoriteStallsBar();
+        if (typeof renderCatalog === "function") renderCatalog();
+        if (typeof updateStallRotationUI === "function") updateStallRotationUI();
+        if (typeof updateAdminStallsBadge === "function") updateAdminStallsBadge();
+        if (typeof renderAdminStalls === "function") renderAdminStalls();
+        showToast(`🎉 บันทึกการแก้ไขข้อมูลร้าน "${stallName}" สำเร็จ และอัปเดตข้อมูลหน้าร้านทันที!`);
+    } catch (err) {
+        console.error("Error saving merchant stall data:", err);
+        alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง: " + (err.message || err));
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origSubmitHtml;
+        }
     }
-
-    // กรณีแก้ไขข้อมูลร้านค้าเดิมที่มีอยู่แล้ว: ดึงข้อมูลเดิมเพื่อคงค่า accessCode, rating, reviews, sales
-    const existingStall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.find(s => s.stallId === activeMerchantStallId);
-    if (existingStall) {
-        if (existingStall.accessCode) stallObj.accessCode = existingStall.accessCode;
-        if (existingStall.rating) stallObj.rating = existingStall.rating;
-        if (existingStall.reviewCount) stallObj.reviewCount = existingStall.reviewCount;
-        if (existingStall.sales) stallObj.sales = existingStall.sales;
-    }
-
-    stallObj.isModified = true;
-
-    // อัปเดตแคตตาล็อกสินค้าเพิ่มเติมลงฐานข้อมูล
-    if (catalogGroups && Array.isArray(catalogGroups) && catalogGroups.length > 0) {
-        STALL_CATALOG_DATABASE[activeMerchantStallId] = catalogGroups;
-        saveStallCatalogDatabaseToStorage();
-    }
-
-    // อัปเดตในประวัติใบสมัครที่ได้รับอนุมัติ (ถ้ามี) เพื่อให้ข้อมูลคงอยู่ถาวร
-    const apps = loadMerchantApplications();
-    const appIdx = apps.findIndex(a => 
-        a.id === activeMerchantStallId || 
-        (a.stallData && a.stallData.stallId === activeMerchantStallId) ||
-        (existingStall && existingStall.accessCode && a.accessCode === existingStall.accessCode) ||
-        (phone && a.stallData && a.stallData.phone && a.stallData.phone === phone)
-    );
-    if (appIdx >= 0) {
-        apps[appIdx].stallData = { ...apps[appIdx].stallData, ...stallObj };
-        saveMerchantApplications(apps);
-    }
-
-    const existingIndex = MARKET_DATA.findIndex(s => s.stallId === activeMerchantStallId);
-    if (existingIndex >= 0) {
-        MARKET_DATA[existingIndex] = { ...MARKET_DATA[existingIndex], ...stallObj };
-    } else {
-        MARKET_DATA.push(stallObj);
-    }
-
-    const allIndex = ALL_100_STALLS.findIndex(s => s.stallId === activeMerchantStallId);
-    if (allIndex >= 0) {
-        ALL_100_STALLS[allIndex] = { ...ALL_100_STALLS[allIndex], ...stallObj };
-    } else {
-        ALL_100_STALLS.push(stallObj);
-    }
-
-    saveMarketDataToStorage();
-
-    state.activeMerchant = {
-        isLoggedIn: true,
-        stallId: stallObj.stallId,
-        stallName: stallObj.stallName,
-        stallNumber: stallObj.stallNumber
-    };
-    saveMerchantToStorage(state.activeMerchant);
-    renderAuthHeaderButtons();
-    if (typeof renderMerchantView === "function") renderMerchantView();
-
-    closeMerchantPortalModal();
-    _isEditingMerchantStall = false;
-
-    // อัปเดตการแสดงผลหน้าร้านทันที (Customer Catalog, Directory, Favorites, Rotation, Admin)
-    state.currentSingleStall = null;
-    if (typeof renderDirectoryList === "function") renderDirectoryList();
-    if (typeof renderFavoriteStallsBar === "function") renderFavoriteStallsBar();
-    if (typeof renderCatalog === "function") renderCatalog();
-    if (typeof updateStallRotationUI === "function") updateStallRotationUI();
-    if (typeof updateAdminStallsBadge === "function") updateAdminStallsBadge();
-    if (typeof renderAdminStalls === "function") renderAdminStalls();
-    showToast(`🎉 บันทึกการแก้ไขข้อมูลร้าน "${stallName}" สำเร็จ และอัปเดตข้อมูลหน้าร้านทันที!`);
 }
 
 function previewMerchantLiveStore() {
@@ -19195,9 +19372,41 @@ function saveMerchantApplications(apps) {
                 console.warn("Firebase save merchant_applications failed:", err);
             });
         }
+        try {
+            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(apps)
+            }).catch(() => {});
+        } catch (e) {}
     } catch (e) {}
 }
 window.saveMerchantApplications = saveMerchantApplications;
+
+async function saveMerchantApplicationsAsync(apps) {
+    try {
+        localStorage.setItem("talathub_merchant_applications", JSON.stringify(apps));
+        const promises = [];
+        if (isFirebaseReady() && db) {
+            promises.push(
+                db.ref("merchant_applications").set(apps).catch(err => {
+                    console.warn("Firebase save merchant_applications failed:", err);
+                })
+            );
+        }
+        try {
+            promises.push(
+                fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(apps)
+                }).catch(e => console.warn("REST PUT merchant_applications failed:", e))
+            );
+        } catch(e) {}
+        await Promise.allSettled(promises);
+    } catch (e) {}
+}
+window.saveMerchantApplicationsAsync = saveMerchantApplicationsAsync;
 
 function updateAdminStallsBadge() {
     const badge = document.getElementById("admin-stalls-badge");
