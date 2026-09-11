@@ -420,7 +420,11 @@ function loadSavedMarketData() {
 function saveMarketDataToStorage() {
     try {
         const customOnly = MARKET_DATA.filter(isCustomOrApprovedStall);
-        localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(customOnly));
+        try {
+            localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(customOnly));
+        } catch (storageErr) {
+            console.warn("localStorage quota exceeded for custom_market_stalls:", storageErr);
+        }
         if (isFirebaseReady() && db) {
             db.ref("custom_market_stalls").set(customOnly).catch(err => {
                 console.warn("Firebase save custom_market_stalls failed:", err);
@@ -439,7 +443,11 @@ function saveMarketDataToStorage() {
 async function saveMarketDataToStorageAsync() {
     try {
         const customOnly = MARKET_DATA.filter(isCustomOrApprovedStall);
-        localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(customOnly));
+        try {
+            localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(customOnly));
+        } catch (storageErr) {
+            console.warn("localStorage quota exceeded for custom_market_stalls:", storageErr);
+        }
         const promises = [];
         if (isFirebaseReady() && db) {
             promises.push(
@@ -17406,7 +17414,77 @@ function validateMerchantForm() {
     }
 }
 
-function handleMerchantFileUpload(event, targetInputId, targetPreviewImgId) {
+function compressImageFile(file, maxWidth = 600, maxHeight = 600, quality = 0.75) {
+    return new Promise((resolve) => {
+        if (!file || !file.type || !file.type.startsWith('image/')) return resolve(null);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                if (width > maxWidth || height > maxHeight) {
+                    if (width > height) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    } else {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
+                const canvas = document.createElement("canvas");
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, width, height);
+                const compressed = canvas.toDataURL("image/jpeg", quality);
+                resolve(compressed);
+            };
+            img.onerror = () => resolve(e.target.result);
+            img.src = e.target.result;
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+    });
+}
+window.compressImageFile = compressImageFile;
+
+function compressDataUrl(dataUrl, maxWidth = 600, maxHeight = 600, quality = 0.75) {
+    return new Promise((resolve) => {
+        if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
+            return resolve(dataUrl);
+        }
+        if (dataUrl.length < 80000) {
+            return resolve(dataUrl);
+        }
+        const img = new Image();
+        img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+            if (width > maxWidth || height > maxHeight) {
+                if (width > height) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                } else {
+                    width = Math.round((width * maxHeight) / height);
+                    height = maxHeight;
+                }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL("image/jpeg", quality);
+            resolve(compressed);
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
+}
+window.compressDataUrl = compressDataUrl;
+
+async function handleMerchantFileUpload(event, targetInputId, targetPreviewImgId) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
 
@@ -17415,9 +17493,14 @@ function handleMerchantFileUpload(event, targetInputId, targetPreviewImgId) {
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        const dataUrl = e.target.result;
+    try {
+        const compressed = await compressImageFile(file, 600, 600, 0.75);
+        const dataUrl = compressed || await new Promise(r => {
+            const reader = new FileReader();
+            reader.onload = e => r(e.target.result);
+            reader.readAsDataURL(file);
+        });
+
         const input = document.getElementById(targetInputId);
         const preview = document.getElementById(targetPreviewImgId);
         if (input) input.value = dataUrl;
@@ -17426,9 +17509,10 @@ function handleMerchantFileUpload(event, targetInputId, targetPreviewImgId) {
             preview.classList.remove("hidden");
         }
         updateMerchantImagePreviews();
-        showToast("📸 อัปโหลดรูปภาพสำเร็จเรียบร้อยแล้ว!");
-    };
-    reader.readAsDataURL(file);
+        showToast("📸 อัปโหลดและปรับขนาดรูปภาพสำเร็จเรียบร้อยแล้ว!");
+    } catch (err) {
+        console.warn("Upload compression failed, falling back:", err);
+    }
 }
 
 function updateMerchantImagePreviews() {
@@ -17841,7 +17925,7 @@ function updateMerchantProductPreview(index, url) {
     }
 }
 
-function handleMerchantProductFileUpload(event, index) {
+async function handleMerchantProductFileUpload(event, index) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
 
@@ -17850,15 +17934,21 @@ function handleMerchantProductFileUpload(event, index) {
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        const dataUrl = e.target.result;
+    try {
+        const compressed = await compressImageFile(file, 500, 500, 0.75);
+        const dataUrl = compressed || await new Promise(r => {
+            const reader = new FileReader();
+            reader.onload = e => r(e.target.result);
+            reader.readAsDataURL(file);
+        });
+
         const input = document.getElementById(`m-p-img-${index}`);
         if (input) input.value = dataUrl;
         updateMerchantProductPreview(index, dataUrl);
-        showToast("📸 อัปโหลดรูปภาพสินค้าสำเร็จ!");
-    };
-    reader.readAsDataURL(file);
+        showToast(`📸 อัปโหลดรูปภาพสินค้าที่ ${index + 1} สำเร็จ!`);
+    } catch (err) {
+        console.warn("Product image compression failed:", err);
+    }
 }
 
 function renderMerchantTop6ProductsForm(products) {
@@ -18171,8 +18261,14 @@ async function saveMerchantStallData() {
         const highlight = (document.getElementById("m-highlight")?.value || "").trim();
         const desc = (document.getElementById("m-desc")?.value || "").trim();
 
-        const stallImage = (document.getElementById("m-stall-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
-        const ownerImage = (document.getElementById("m-owner-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.owner.man1;
+        let stallImage = (document.getElementById("m-stall-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
+        let ownerImage = (document.getElementById("m-owner-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.owner.man1;
+        if (stallImage && stallImage.length > 80000 && typeof compressDataUrl === "function") {
+            try { stallImage = await compressDataUrl(stallImage, 600, 600, 0.75); } catch(e) {}
+        }
+        if (ownerImage && ownerImage.length > 80000 && typeof compressDataUrl === "function") {
+            try { ownerImage = await compressDataUrl(ownerImage, 400, 400, 0.75); } catch(e) {}
+        }
 
         if (!stallName || !phone) {
             alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน: ชื่อร้านค้า และเบอร์โทรศัพท์ผู้ติดต่อ");
@@ -18193,7 +18289,13 @@ async function saveMerchantStallData() {
             const unit = unitEl ? (unitEl.value || "กก.") : "กก.";
             const mainCat = document.getElementById(`m-p-maincat-${i}`)?.value || "";
             const subCat = document.getElementById(`m-p-subcat-${i}`)?.value || "";
-            const pImage = document.getElementById(`m-p-img-${i}`)?.value.trim() || stallImage;
+            let pImage = document.getElementById(`m-p-img-${i}`)?.value.trim() || "";
+            if (!pImage) {
+                pImage = stallImage;
+            }
+            if (pImage && pImage.length > 80000 && typeof compressDataUrl === "function") {
+                try { pImage = await compressDataUrl(pImage, 500, 500, 0.75); } catch(e) {}
+            }
 
             if (name) {
                 products.push({
@@ -18458,16 +18560,16 @@ async function saveMerchantStallData() {
 
         const existingIndex = MARKET_DATA.findIndex(s => s.stallId === activeMerchantStallId);
         if (existingIndex >= 0) {
-            MARKET_DATA[existingIndex] = { ...MARKET_DATA[existingIndex], ...stallObj };
+            MARKET_DATA[existingIndex] = { ...MARKET_DATA[existingIndex], ...stallObj, isModified: true };
         } else {
-            MARKET_DATA.unshift(stallObj);
+            MARKET_DATA.unshift({ ...stallObj, isModified: true });
         }
 
         const allIndex = ALL_100_STALLS.findIndex(s => s.stallId === activeMerchantStallId);
         if (allIndex >= 0) {
-            ALL_100_STALLS[allIndex] = { ...ALL_100_STALLS[allIndex], ...stallObj };
+            ALL_100_STALLS[allIndex] = { ...ALL_100_STALLS[allIndex], ...stallObj, isModified: true };
         } else {
-            ALL_100_STALLS.unshift(stallObj);
+            ALL_100_STALLS.unshift({ ...stallObj, isModified: true });
         }
 
         await saveMarketDataToStorageAsync();
@@ -19111,6 +19213,87 @@ function autoSanitizeProductionData() {
 
 }
 
+async function fetchOnlineStallsStartup() {
+    try {
+        const [resApps, resCustom] = await Promise.allSettled([
+            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json").then(r => r.ok ? r.json() : null),
+            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/custom_market_stalls.json").then(r => r.ok ? r.json() : null)
+        ]);
+        const remoteApps = (resApps.status === 'fulfilled' && resApps.value) || null;
+        const remoteCustom = (resCustom.status === 'fulfilled' && resCustom.value) || null;
+
+        let appList = [];
+        if (Array.isArray(remoteApps)) appList = remoteApps.filter(Boolean);
+        else if (remoteApps && typeof remoteApps === 'object') appList = Object.values(remoteApps).filter(Boolean);
+
+        let customList = [];
+        if (Array.isArray(remoteCustom)) customList = remoteCustom.filter(Boolean);
+        else if (remoteCustom && typeof remoteCustom === 'object') customList = Object.values(remoteCustom).filter(Boolean);
+
+        let hasChanges = false;
+
+        if (appList.length > 0) {
+            try { localStorage.setItem("talathub_merchant_applications", JSON.stringify(appList)); } catch(e) {}
+            appList.forEach(app => {
+                if (app && app.status === 'approved' && app.stallData) {
+                    const sData = { ...app.stallData, accessCode: app.accessCode || app.stallData.accessCode };
+                    const mIdx = MARKET_DATA.findIndex(s => s.stallId === sData.stallId);
+                    if (mIdx >= 0) {
+                        MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...sData };
+                    } else {
+                        MARKET_DATA.unshift(sData);
+                    }
+                    if (typeof ALL_100_STALLS !== "undefined" && Array.isArray(ALL_100_STALLS)) {
+                        const aIdx = ALL_100_STALLS.findIndex(s => s.stallId === sData.stallId);
+                        if (aIdx >= 0) {
+                            ALL_100_STALLS[aIdx] = { ...ALL_100_STALLS[aIdx], ...sData };
+                        } else {
+                            ALL_100_STALLS.unshift(sData);
+                        }
+                    }
+                    hasChanges = true;
+                }
+            });
+        }
+
+        if (customList.length > 0) {
+            try { localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(customList)); } catch(e) {}
+            customList.forEach(stall => {
+                if (stall && stall.stallId) {
+                    const mIdx = MARKET_DATA.findIndex(s => s.stallId === stall.stallId);
+                    if (mIdx >= 0) {
+                        MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...stall };
+                    } else {
+                        MARKET_DATA.unshift(stall);
+                    }
+                    if (typeof ALL_100_STALLS !== "undefined" && Array.isArray(ALL_100_STALLS)) {
+                        const aIdx = ALL_100_STALLS.findIndex(s => s.stallId === stall.stallId);
+                        if (aIdx >= 0) {
+                            ALL_100_STALLS[aIdx] = { ...ALL_100_STALLS[aIdx], ...stall };
+                        } else {
+                            ALL_100_STALLS.unshift(stall);
+                        }
+                    }
+                    hasChanges = true;
+                }
+            });
+        }
+
+        if (hasChanges) {
+            if (typeof renderCatalog === "function") renderCatalog();
+            if (typeof renderDirectoryList === "function") renderDirectoryList();
+            if (typeof renderFavoriteStallsBar === "function") renderFavoriteStallsBar();
+            if (typeof updateStallRotationUI === "function") updateStallRotationUI();
+            if (state.currentRole === "merchant" && typeof renderMerchantView === "function") {
+                renderMerchantView();
+            }
+        }
+    } catch (e) {
+        console.warn("fetchOnlineStallsStartup error:", e);
+    }
+}
+window.fetchOnlineStallsStartup = fetchOnlineStallsStartup;
+
 // ==========================================
 // INITIALIZE APPLICATION
 // ==========================================
@@ -19168,12 +19351,17 @@ function initTalatHubApp() {
     initMerchantRealtimeSync();
     initCustomStallsRealtimeSync();
     initCatalogDbRealtimeSync();
+
+    // Immediate startup fetch from online Firebase RTDB to guarantee freshest data on every page load
+    fetchOnlineStallsStartup();
+
     if (!isFirebaseReady()) {
         setTimeout(() => {
             initRiderRealtimeSync();
             initMerchantRealtimeSync();
             initCustomStallsRealtimeSync();
             initCatalogDbRealtimeSync();
+            fetchOnlineStallsStartup();
             updateAdminRiderBadges();
             updateAdminStallsBadge();
         }, 1500);
@@ -19366,7 +19554,11 @@ window.loadMerchantApplications = loadMerchantApplications;
 
 function saveMerchantApplications(apps) {
     try {
-        localStorage.setItem("talathub_merchant_applications", JSON.stringify(apps));
+        try {
+            localStorage.setItem("talathub_merchant_applications", JSON.stringify(apps));
+        } catch (storageErr) {
+            console.warn("localStorage quota exceeded for merchant_applications:", storageErr);
+        }
         if (isFirebaseReady() && db) {
             db.ref("merchant_applications").set(apps).catch(err => {
                 console.warn("Firebase save merchant_applications failed:", err);
@@ -19385,7 +19577,11 @@ window.saveMerchantApplications = saveMerchantApplications;
 
 async function saveMerchantApplicationsAsync(apps) {
     try {
-        localStorage.setItem("talathub_merchant_applications", JSON.stringify(apps));
+        try {
+            localStorage.setItem("talathub_merchant_applications", JSON.stringify(apps));
+        } catch (storageErr) {
+            console.warn("localStorage quota exceeded for merchant_applications:", storageErr);
+        }
         const promises = [];
         if (isFirebaseReady() && db) {
             promises.push(
@@ -19404,7 +19600,9 @@ async function saveMerchantApplicationsAsync(apps) {
             );
         } catch(e) {}
         await Promise.allSettled(promises);
-    } catch (e) {}
+    } catch (e) {
+        console.warn("saveMerchantApplicationsAsync error:", e);
+    }
 }
 window.saveMerchantApplicationsAsync = saveMerchantApplicationsAsync;
 
