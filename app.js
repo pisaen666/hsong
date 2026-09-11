@@ -17043,6 +17043,31 @@ function switchMerchantPortalTab(tabId) {
         activeBtn.classList.remove("bg-transparent", "text-slate-600", "font-medium");
         activeBtn.classList.add("active", "bg-white", "text-emerald-800", "shadow-xs", "font-bold");
     }
+    validateMerchantForm();
+}
+
+function validateMerchantForm() {
+    const stallName = (document.getElementById("m-stall-name")?.value || "").trim();
+    const contactName = (document.getElementById("m-contact1-name")?.value || "").trim();
+    const contactPhone = (document.getElementById("m-contact1-phone")?.value || "").trim();
+    const bankAccount = (document.getElementById("m-bank-account-no")?.value || "").trim();
+
+    let hasProduct = false;
+    for (let i = 0; i < 10; i++) {
+        if ((document.getElementById(`m-p-name-${i}`)?.value || "").trim()) {
+            hasProduct = true;
+            break;
+        }
+    }
+
+    const submitBtn = document.getElementById("merchant-submit-footer-btn");
+    if (submitBtn) {
+        if (stallName && contactName && contactPhone && bankAccount && hasProduct) {
+            submitBtn.classList.remove("hidden");
+        } else {
+            submitBtn.classList.add("hidden");
+        }
+    }
 }
 
 function handleMerchantFileUpload(event, targetInputId, targetPreviewImgId) {
@@ -17929,8 +17954,10 @@ function previewMerchantLiveStore() {
     const zoneVal = document.getElementById("m-stall-zone")?.value || "A";
     const zone = zoneVal.includes("B") ? "B" : zoneVal.includes("C") ? "C" : zoneVal.includes("E") ? "E" : "A";
     const category = document.getElementById("m-stall-category")?.value || "chicken";
-    const ownerName = document.getElementById("m-owner-name")?.value.trim() || "เจ้าของแผง";
-    const phone = document.getElementById("m-phone")?.value.trim() || "081-xxx-xxxx";
+    const contact1Name = document.getElementById("m-contact1-name")?.value.trim();
+    const ownerName = contact1Name || (document.getElementById("m-owner-name")?.value.trim() || "เจ้าของแผง");
+    const contact1Phone = document.getElementById("m-contact1-phone")?.value.trim();
+    const phone = contact1Phone || (document.getElementById("m-phone")?.value.trim() || "081-xxx-xxxx");
     const highlight = document.getElementById("m-highlight")?.value.trim() || "ของสดคุณภาพดี คัดเกรดสดใหม่";
     const desc = document.getElementById("m-desc")?.value.trim() || "จำหน่ายของสดคุณภาพดีประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)";
     const stallImage = document.getElementById("m-stall-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
@@ -19323,3 +19350,11 @@ function renderRiderWallet() {
     `;
 }
 window.renderRiderWallet = renderRiderWallet;
+
+document.addEventListener('input', function(e) {
+    if (e.target.closest('#merchant-portal-modal')) {
+        if (typeof validateMerchantForm === 'function') {
+            validateMerchantForm();
+        }
+    }
+});
