@@ -19359,6 +19359,15 @@ function approveMerchantApplication(appId) {
     if (typeof renderCatalog === "function") {
         renderCatalog();
     }
+    if (typeof renderDirectoryList === "function") {
+        renderDirectoryList();
+    }
+    if (typeof renderFavoriteStallsBar === "function") {
+        renderFavoriteStallsBar();
+    }
+    if (typeof updateStallRotationUI === "function") {
+        updateStallRotationUI();
+    }
 
     showToast("🎉 อนุมัติเปิดร้าน \"" + stallObj.stallName + "\" สำเร็จ! รหัสผ่าน: " + code);
     openSimulatedSmsModal(stallObj.phone, code, stallObj.stallName, "merchant");
