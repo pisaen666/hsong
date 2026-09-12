@@ -4951,6 +4951,7 @@ function renderCatalog() {
         if (!stall.products || !Array.isArray(stall.products)) stall.products = [];
         const stallImg = stall.stallImage || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=700&auto=format&fit=crop&q=80';
         const ownerImg = stall.ownerImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80';
+        const ownerBannerUrl = (typeof getOrBuildOwnerBanner === "function") ? getOrBuildOwnerBanner(stall) : ownerImg;
         const phoneNum = stall.phone || '081-234-5678';
         const ownerNm = stall.ownerName || 'เจ้าของแผงค้า';
         const expText = stall.experience || 'เปิดบริการในตลาดสด';
@@ -5005,10 +5006,10 @@ function renderCatalog() {
                                 <img src="${stallImg}" alt="ภาพร้านค้า ${stall.stallName}" class="relative w-full h-full object-cover object-center">
                                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30 pointer-events-none"></div>
                             </div>
-                            <!-- Slide 2: ภาพเจ้าของแผงค้า (สัดส่วนเดียวกับรูปหน้าร้าน) -->
+                            <!-- Slide 2: ภาพเจ้าของแผงค้า (Composite Owner Template & Name Badge) -->
                             <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
-                                <img src="${ownerImg}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
-                                <img src="${ownerImg}" alt="ภาพเจ้าของร้าน ${ownerNm}" class="relative w-full h-full object-contain sm:object-cover object-center">
+                                <img id="stall-owner-banner-blur-${stall.stallId}" src="${ownerBannerUrl || ownerImg}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
+                                <img id="stall-owner-banner-img-${stall.stallId}" src="${ownerBannerUrl || ownerImg}" alt="ภาพเจ้าของร้าน ${ownerNm}" class="relative w-full h-full object-contain sm:object-cover object-center">
                                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/30 pointer-events-none"></div>
                             </div>
                         </div>
@@ -17591,9 +17592,268 @@ async function handleMerchantFileUpload(event, targetInputId, targetPreviewImgId
     }
 }
 
+// ========================================================
+// OWNER BANNER COMPOSITE & NAME BADGE SYSTEM
+// ========================================================
+const _ownerBannerCache = new Map();
+
+function getOwnerBannerCacheKey(stall) {
+    if (!stall) return "";
+    const id = stall.stallId || "temp";
+    const img1 = (stall.ownerImage || "").slice(0, 100);
+    const img2 = (stall.owner2Image || "").slice(0, 100);
+    const n1 = stall.owner1Nickname || stall.ownerName || "";
+    const n2 = stall.owner2Nickname || "";
+    return `${id}_${img1}_${img2}_${n1}_${n2}`;
+}
+
+function getOrBuildOwnerBanner(stall) {
+    if (!stall) return "";
+    const defaultImg = stall.ownerImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80';
+    if (!stall.ownerImage && !stall.owner2Image) {
+        return defaultImg;
+    }
+    const cacheKey = getOwnerBannerCacheKey(stall);
+    if (_ownerBannerCache.has(cacheKey)) {
+        return _ownerBannerCache.get(cacheKey);
+    }
+    // Asynchronously generate banner and update DOM
+    buildOwnerBannerCanvas(stall).then(dataUrl => {
+        if (dataUrl) {
+            const imgEl = document.getElementById(`stall-owner-banner-img-${stall.stallId}`);
+            if (imgEl) imgEl.src = dataUrl;
+            const blurEl = document.getElementById(`stall-owner-banner-blur-${stall.stallId}`);
+            if (blurEl) blurEl.src = dataUrl;
+        }
+    }).catch(err => {
+        console.warn("Async banner composite failed for stall:", stall.stallId, err);
+    });
+    return defaultImg;
+}
+window.getOrBuildOwnerBanner = getOrBuildOwnerBanner;
+
+async function buildOwnerBannerCanvas(stall) {
+    if (!stall) return null;
+    const img1Url = (stall.ownerImage || "").trim();
+    const img2Url = (stall.owner2Image || "").trim();
+
+    if (!img1Url && !img2Url) {
+        return null;
+    }
+
+    const cacheKey = getOwnerBannerCacheKey(stall);
+    if (_ownerBannerCache.has(cacheKey)) {
+        return _ownerBannerCache.get(cacheKey);
+    }
+
+    const isDual = !!(img1Url && img2Url);
+    const templateSrc = isDual ? 'images/owner_template_dual.png' : 'images/owner_template_single.png';
+
+    const loadImage = (src) => new Promise((resolve, reject) => {
+        if (!src) return resolve(null);
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = () => {
+            const fallback = new Image();
+            fallback.onload = () => resolve(fallback);
+            fallback.onerror = () => resolve(null);
+            fallback.src = src;
+        };
+        img.src = src;
+    });
+
+    try {
+        const [tplImg, face1, face2] = await Promise.all([
+            loadImage(templateSrc),
+            loadImage(img1Url || img2Url),
+            isDual ? loadImage(img2Url) : Promise.resolve(null)
+        ]);
+
+        if (!tplImg) return null;
+
+        const canvas = document.createElement("canvas");
+        const w = 1024;
+        const h = 580;
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+
+        // 1. Draw template background
+        ctx.drawImage(tplImg, 0, 0, w, h);
+
+        // Helper to draw circular face
+        const drawCircularFace = (faceImg, cx, cy, radius) => {
+            if (!faceImg) return;
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip();
+
+            const srcW = faceImg.naturalWidth || faceImg.width;
+            const srcH = faceImg.naturalHeight || faceImg.height;
+            const scale = Math.max((radius * 2) / srcW, (radius * 2) / srcH);
+            const drawW = srcW * scale;
+            const drawH = srcH * scale;
+            const drawX = cx - (drawW / 2);
+            const drawY = cy - (drawH * 0.45);
+
+            ctx.drawImage(faceImg, drawX, drawY, drawW, drawH);
+            ctx.restore();
+        };
+
+        // Helper to draw Emerald & Gold Capsule Name Badge (Style 1)
+        const drawEmeraldGoldBadge = (name, cx, cy, badgeH) => {
+            if (!name || !name.trim()) return;
+            const displayName = `✨ ${name.trim()}`;
+            ctx.save();
+
+            ctx.font = "bold 20px 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif";
+            const textMetrics = ctx.measureText(displayName);
+            const padX = 26;
+            const badgeW = Math.max(textMetrics.width + (padX * 2), 170);
+            const badgeX = cx - (badgeW / 2);
+            const badgeY = cy - (badgeH / 2);
+            const r = badgeH / 2;
+
+            const createPillPath = () => {
+                ctx.beginPath();
+                ctx.moveTo(badgeX + r, badgeY);
+                ctx.lineTo(badgeX + badgeW - r, badgeY);
+                ctx.arc(badgeX + badgeW - r, badgeY + r, r, -Math.PI / 2, Math.PI / 2);
+                ctx.lineTo(badgeX + r, badgeY + badgeH);
+                ctx.arc(badgeX + r, badgeY + r, r, Math.PI / 2, -Math.PI / 2);
+                ctx.closePath();
+            };
+
+            // Outer Drop shadow
+            ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+            ctx.shadowBlur = 14;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 5;
+
+            // Emerald linear gradient
+            const grad = ctx.createLinearGradient(badgeX, badgeY, badgeX + badgeW, badgeY + badgeH);
+            grad.addColorStop(0, "#065f46");
+            grad.addColorStop(0.5, "#047857");
+            grad.addColorStop(1, "#064e3b");
+            ctx.fillStyle = grad;
+            createPillPath();
+            ctx.fill();
+
+            // Gold Border
+            ctx.shadowColor = "transparent";
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "#fbbf24";
+            createPillPath();
+            ctx.stroke();
+
+            // Inner fine highlight
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+            createPillPath();
+            ctx.stroke();
+
+            // Text
+            ctx.fillStyle = "#ffffff";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetY = 1;
+            ctx.fillText(displayName, cx, cy);
+
+            ctx.restore();
+        };
+
+        const name1 = (stall.owner1Nickname || stall.ownerName || "").trim();
+        const name2 = (stall.owner2Nickname || "").trim();
+
+        if (isDual) {
+            // Dual circles: Left (306, 275, r=176), Right (718, 275, r=176)
+            drawCircularFace(face1, 306, 275, 176);
+            drawCircularFace(face2, 718, 275, 176);
+            drawEmeraldGoldBadge(name1, 306, 475, 52);
+            drawEmeraldGoldBadge(name2, 718, 475, 52);
+        } else {
+            // Single center circle: (514, 286, r=188)
+            drawCircularFace(face1, 514, 286, 188);
+            drawEmeraldGoldBadge(name1, 514, 492, 54);
+        }
+
+        const dataUrl = canvas.toDataURL("image/png", 0.92);
+        _ownerBannerCache.set(cacheKey, dataUrl);
+        return dataUrl;
+    } catch (err) {
+        console.warn("buildOwnerBannerCanvas failed, falling back to raw image:", err);
+        return null;
+    }
+}
+window.buildOwnerBannerCanvas = buildOwnerBannerCanvas;
+
+let _livePreviewDebounceTimer = null;
+function onOwnerNicknameInput() {
+    clearTimeout(_livePreviewDebounceTimer);
+    _livePreviewDebounceTimer = setTimeout(() => {
+        renderOwnerTemplateLivePreview();
+    }, 250);
+}
+window.onOwnerNicknameInput = onOwnerNicknameInput;
+
+async function renderOwnerTemplateLivePreview() {
+    const previewContainer = document.getElementById("owner-template-live-preview");
+    const canvas = document.getElementById("owner-template-canvas");
+    const loading = document.getElementById("owner-template-loading");
+    if (!previewContainer || !canvas) return;
+
+    const img1Url = (document.getElementById("m-owner-image-url")?.value || "").trim();
+    const img2Url = (document.getElementById("m-owner2-image-url")?.value || "").trim();
+    const n1 = (document.getElementById("m-owner1-nickname")?.value || "").trim();
+    const n2 = (document.getElementById("m-owner2-nickname")?.value || "").trim();
+    const contactName = (document.getElementById("m-contact1-name")?.value || document.getElementById("m-owner-name")?.value || "").trim();
+
+    if (!img1Url && !img2Url) {
+        previewContainer.classList.add("hidden");
+        return;
+    }
+
+    previewContainer.classList.remove("hidden");
+    if (loading) loading.classList.remove("hidden");
+
+    try {
+        const stallMock = {
+            stallId: "live_form_preview",
+            ownerImage: img1Url,
+            owner2Image: img2Url,
+            owner1Nickname: n1,
+            owner2Nickname: n2,
+            ownerName: contactName
+        };
+
+        const bannerDataUrl = await buildOwnerBannerCanvas(stallMock);
+        if (bannerDataUrl) {
+            const ctx = canvas.getContext("2d");
+            const img = new Image();
+            img.onload = () => {
+                canvas.width = 1024;
+                canvas.height = 580;
+                ctx.drawImage(img, 0, 0, 1024, 580);
+            };
+            img.src = bannerDataUrl;
+        }
+    } catch (e) {
+        console.warn("renderOwnerTemplateLivePreview error:", e);
+    } finally {
+        if (loading) loading.classList.add("hidden");
+    }
+}
+window.renderOwnerTemplateLivePreview = renderOwnerTemplateLivePreview;
+
 function updateMerchantImagePreviews() {
     const stallImgUrl = (document.getElementById("m-stall-image-url")?.value || "").trim();
     const ownerImgUrl = (document.getElementById("m-owner-image-url")?.value || "").trim();
+    const owner2ImgUrl = (document.getElementById("m-owner2-image-url")?.value || "").trim();
 
     const previewStall = document.getElementById("m-preview-stall-img");
     const placeholderStall = document.getElementById("m-preview-stall-placeholder");
@@ -17602,6 +17862,10 @@ function updateMerchantImagePreviews() {
     const previewOwner = document.getElementById("m-preview-owner-img");
     const placeholderOwner = document.getElementById("m-preview-owner-placeholder");
     const hintOwner = document.getElementById("m-owner-file-hint");
+
+    const previewOwner2 = document.getElementById("m-preview-owner2-img");
+    const placeholderOwner2 = document.getElementById("m-preview-owner2-placeholder");
+    const hintOwner2 = document.getElementById("m-owner2-file-hint");
 
     if (previewStall) {
         if (stallImgUrl) {
@@ -17629,8 +17893,8 @@ function updateMerchantImagePreviews() {
             previewOwner.classList.remove("hidden");
             if (placeholderOwner) placeholderOwner.classList.add("hidden");
             if (hintOwner) {
-                hintOwner.textContent = "✅ อัปโหลดรูปเจ้าของร้านแล้ว";
-                hintOwner.className = "text-[10px] text-emerald-600 font-bold";
+                hintOwner.textContent = "✅ อัปโหลดรูปคนที่ 1 แล้ว";
+                hintOwner.className = "text-[10px] text-blue-600 font-bold";
             }
         } else {
             previewOwner.src = "";
@@ -17641,6 +17905,30 @@ function updateMerchantImagePreviews() {
                 hintOwner.className = "text-[10px] text-slate-400";
             }
         }
+    }
+
+    if (previewOwner2) {
+        if (owner2ImgUrl) {
+            previewOwner2.src = owner2ImgUrl;
+            previewOwner2.classList.remove("hidden");
+            if (placeholderOwner2) placeholderOwner2.classList.add("hidden");
+            if (hintOwner2) {
+                hintOwner2.textContent = "✅ อัปโหลดรูปคนที่ 2 แล้ว";
+                hintOwner2.className = "text-[10px] text-purple-600 font-bold";
+            }
+        } else {
+            previewOwner2.src = "";
+            previewOwner2.classList.add("hidden");
+            if (placeholderOwner2) placeholderOwner2.classList.remove("hidden");
+            if (hintOwner2) {
+                hintOwner2.textContent = "ยังไม่ได้เลือกรูปภาพ";
+                hintOwner2.className = "text-[10px] text-slate-400";
+            }
+        }
+    }
+
+    if (typeof renderOwnerTemplateLivePreview === "function") {
+        renderOwnerTemplateLivePreview();
     }
 }
 
@@ -17774,9 +18062,12 @@ function openMerchantEditModal(stallId) {
     if (document.getElementById("m-highlight")) document.getElementById("m-highlight").value = stall.highlight || "";
     if (document.getElementById("m-desc")) document.getElementById("m-desc").value = stall.description || stall.shopDescription || "";
 
-    // Fill Images
+    // Fill Images & Nicknames for Owner Template
     if (document.getElementById("m-stall-image-url")) document.getElementById("m-stall-image-url").value = stall.stallImage || "";
     if (document.getElementById("m-owner-image-url")) document.getElementById("m-owner-image-url").value = stall.ownerImage || "";
+    if (document.getElementById("m-owner2-image-url")) document.getElementById("m-owner2-image-url").value = stall.owner2Image || "";
+    if (document.getElementById("m-owner1-nickname")) document.getElementById("m-owner1-nickname").value = stall.owner1Nickname || "";
+    if (document.getElementById("m-owner2-nickname")) document.getElementById("m-owner2-nickname").value = stall.owner2Nickname || "";
     updateMerchantImagePreviews();
 
     // Fill 10 Highlight Products
@@ -17966,9 +18257,12 @@ function registerNewMerchantStall() {
     if (document.getElementById("m-contact2-phone")) document.getElementById("m-contact2-phone").value = "";
     if (document.getElementById("m-contact2-line")) document.getElementById("m-contact2-line").value = "";
 
-    // Clear images (keep hidden fields for compat)
+    // Clear images & nicknames
     if (document.getElementById("m-stall-image-url")) document.getElementById("m-stall-image-url").value = "";
     if (document.getElementById("m-owner-image-url")) document.getElementById("m-owner-image-url").value = "";
+    if (document.getElementById("m-owner2-image-url")) document.getElementById("m-owner2-image-url").value = "";
+    if (document.getElementById("m-owner1-nickname")) document.getElementById("m-owner1-nickname").value = "";
+    if (document.getElementById("m-owner2-nickname")) document.getElementById("m-owner2-nickname").value = "";
     if (typeof updateMerchantImagePreviews === 'function') updateMerchantImagePreviews();
 
     // Initialize 10 blank highlight products
@@ -18339,11 +18633,17 @@ async function saveMerchantStallData() {
 
         let stallImage = (document.getElementById("m-stall-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
         let ownerImage = (document.getElementById("m-owner-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.owner.man1;
+        let owner2Image = (document.getElementById("m-owner2-image-url")?.value || "").trim();
+        const owner1Nickname = (document.getElementById("m-owner1-nickname")?.value || "").trim();
+        const owner2Nickname = (document.getElementById("m-owner2-nickname")?.value || "").trim();
         if (stallImage && typeof compressDataUrl === "function") {
             try { stallImage = await compressDataUrl(stallImage, 640, 360, 0.8); } catch(e) {}
         }
         if (ownerImage && typeof compressDataUrl === "function") {
             try { ownerImage = await compressDataUrl(ownerImage, 640, 360, 0.8); } catch(e) {}
+        }
+        if (owner2Image && typeof compressDataUrl === "function") {
+            try { owner2Image = await compressDataUrl(owner2Image, 640, 360, 0.8); } catch(e) {}
         }
 
         if (!stallName || !phone) {
@@ -18503,6 +18803,9 @@ async function saveMerchantStallData() {
             shopDescription: desc,
             stallImage: stallImage,
             ownerImage: ownerImage,
+            owner2Image: owner2Image,
+            owner1Nickname: owner1Nickname,
+            owner2Nickname: owner2Nickname,
             stallTag: `${stallName} ${ownerName} ${highlight}`.trim(),
             products: products,
             catalog: catalogGroups
@@ -18707,6 +19010,30 @@ function previewMerchantLiveStore() {
     const desc = document.getElementById("m-desc")?.value.trim() || "จำหน่ายของสดคุณภาพดีประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)";
     const stallImage = document.getElementById("m-stall-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
     const ownerImage = document.getElementById("m-owner-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.owner.man1;
+    const owner2Image = (document.getElementById("m-owner2-image-url")?.value || "").trim();
+    const owner1Nickname = (document.getElementById("m-owner1-nickname")?.value || "").trim();
+    const owner2Nickname = (document.getElementById("m-owner2-nickname")?.value || "").trim();
+
+    const previewStallForBanner = {
+        stallId: "preview_modal",
+        ownerImage: ownerImage,
+        owner2Image: owner2Image,
+        owner1Nickname: owner1Nickname,
+        owner2Nickname: owner2Nickname,
+        ownerName: ownerName
+    };
+    const cachedPreviewBanner = _ownerBannerCache.get(getOwnerBannerCacheKey(previewStallForBanner));
+    const ownerBannerPreviewSrc = cachedPreviewBanner || ownerImage;
+    if (!cachedPreviewBanner && (ownerImage || owner2Image)) {
+        buildOwnerBannerCanvas(previewStallForBanner).then(bUrl => {
+            if (bUrl) {
+                const imgEl = document.getElementById("preview-owner-banner-img");
+                if (imgEl) imgEl.src = bUrl;
+                const blurEl = document.getElementById("preview-owner-banner-blur");
+                if (blurEl) blurEl.src = bUrl;
+            }
+        });
+    }
 
     // Collect 10 highlight products
     const products = [];
@@ -18792,10 +19119,10 @@ function previewMerchantLiveStore() {
                         <img src="${stallImage}" alt="${stallName}" class="relative w-full h-full object-cover object-center">
                         <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none"></div>
                     </div>
-                    <!-- Slide 2: ภาพเจ้าของแผง -->
+                    <!-- Slide 2: ภาพเจ้าของแผง (Composite Owner Template & Name Badge) -->
                     <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextPreviewBannerSlide()">
-                        <img src="${ownerImage}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
-                        <img src="${ownerImage}" alt="${ownerName}" class="relative w-full h-full object-contain sm:object-cover object-center">
+                        <img id="preview-owner-banner-blur" src="${ownerBannerPreviewSrc}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
+                        <img id="preview-owner-banner-img" src="${ownerBannerPreviewSrc}" alt="${ownerName}" class="relative w-full h-full object-contain sm:object-cover object-center">
                         <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none"></div>
                     </div>
                 </div>
