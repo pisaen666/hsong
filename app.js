@@ -5022,56 +5022,36 @@ function renderCatalog() {
                             <span class="material-symbols-outlined text-base">chevron_right</span>
                         </button>
 
-                        <!-- 2. ปุ่มบันทึกเป็นร้านโปรด (ย้ายไว้ข้างบนสุด สีส้มสดใส ไม่บังป้ายชื่อเจ้าของร้าน) -->
-                        <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="absolute top-2.5 right-2.5 pointer-events-auto text-[11px] font-black px-3.5 py-1.5 rounded-full shadow-lg transition-all flex items-center gap-1.5 active:scale-95 z-20 ${isFav ? 'bg-orange-600 text-white border-2 border-white ring-2 ring-orange-400 shadow-orange-950/40' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-orange-950/30'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
-                            <span class="material-symbols-outlined text-[15px] text-white font-bold">star</span>
-                            <span>${isFav ? 'ร้านโปรดแล้ว ⭐' : 'บันทึกเป็นร้านโปรด'}</span>
-                        </button>
                     </div>
 
-                    <!-- Stall Info Header (Name, Owner, Phones) -->
+                    <!-- Stall Info Header (Name, Favorite Button, Owner Info) -->
                     <div class="px-3.5 pt-3 pb-3">
-                        <div class="flex items-start justify-between gap-2.5">
-                            <!-- Left: Shop Name & Owner Info (Tap to view owner photo) -->
-                            <div class="space-y-1">
-                                <h3 class="font-extrabold text-[15px] text-slate-900 leading-snug flex items-center gap-1.5 flex-wrap">
+                        <div class="flex items-center justify-between gap-2 flex-wrap">
+                            <!-- Shop Name + ปุ่มบันทึกเป็นร้านโปรดวางต่อกับชื่อร้าน -->
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <h3 class="font-extrabold text-[16px] text-slate-900 leading-snug flex items-center gap-1.5">
                                     <span>${stall.stallName}</span>
-                                    <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-900 text-white shadow-xs">${stall.stallNumber}</span>
-                                    <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">โซน ${stall.zone}</span>
                                     ${stall.isHub ? `<span class="bg-orange-100 text-orange-700 text-[9px] font-bold px-1.5 py-0.2 rounded border border-orange-200">Hub กลาง</span>` : ''}
                                 </h3>
-                                <div class="flex items-center gap-2 text-[11px] text-slate-600">
-                                    <button type="button" onclick="goToStallBannerSlide('${stall.stallId}', 1, event)" class="inline-flex items-center gap-1.5 hover:text-emerald-700 transition-colors group/owner text-left bg-slate-100/90 hover:bg-emerald-50 px-2 py-0.5 rounded-lg border border-slate-200/80 cursor-pointer" title="แตะเพื่อสลับดูรูปเจ้าของร้านบนแบนเนอร์">
-                                        <span class="relative w-5 h-5 rounded-full ring-1 ring-emerald-500 overflow-hidden shrink-0 inline-block align-middle bg-white">
-                                            <img src="${ownerImg}" alt="${ownerNm}" class="w-full h-full object-cover">
-                                        </span>
-                                        <span class="font-bold text-slate-700 group-hover/owner:text-emerald-700 flex items-center gap-0.5">
-                                            <span>${ownerNm}</span>
-                                            <span class="material-symbols-outlined text-[13px] text-emerald-600 font-bold" title="ยืนยันตัวตนแล้ว">verified</span>
-                                        </span>
-                                        <span class="text-[9px] text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded font-bold">สลับรูป ↺</span>
-                                    </button>
-                                </div>
+                                <!-- ปุ่มบันทึกเป็นร้านโปรด (สีส้มสดใส วางต่อกับชื่อร้าน) -->
+                                <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="pointer-events-auto text-[11px] font-black px-3 py-1 rounded-full shadow-xs transition-all flex items-center gap-1 active:scale-95 ${isFav ? 'bg-orange-600 text-white border-2 border-white ring-2 ring-orange-400 shadow-orange-950/30' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-xs'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
+                                    <span class="material-symbols-outlined text-[14px] text-white font-bold">star</span>
+                                    <span>${isFav ? 'ร้านโปรดแล้ว ⭐' : 'บันทึกเป็นร้านโปรด'}</span>
+                                </button>
                             </div>
 
-                            <!-- Right: เบอร์โทรศัพท์ 2 เบอร์ & LINE (กดติดต่อได้ทันที) -->
-                            <div class="mt-1 shrink-0 flex flex-col gap-1 items-end">
-                                <a href="tel:${phoneNum}" class="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-1 rounded-xl text-xs font-extrabold shadow-xs transition-all active:scale-95" title="โทรหาเบอร์หลัก">
-                                    <span class="material-symbols-outlined text-xs text-emerald-600">call</span>
-                                    <span>${phoneNum}</span>
-                                </a>
-                                ${stall.phone2 ? `
-                                    <a href="tel:${stall.phone2}" class="inline-flex items-center gap-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-xs transition-all active:scale-95" title="โทรหาเบอร์สำรอง">
-                                        <span class="material-symbols-outlined text-[11px] text-slate-500">call</span>
-                                        <span>${stall.phone2}</span>
-                                    </a>
-                                ` : ''}
-                                ${stall.line ? `
-                                    <span class="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-xs">
-                                        <span class="font-black text-[9px] bg-emerald-600 text-white px-1 rounded">LINE</span>
-                                        <span>${stall.line}</span>
+                            <!-- เจ้าของแผงค้า (ปุ่มสลับรูป) -->
+                            <div class="flex items-center gap-2 text-[11px] text-slate-600">
+                                <button type="button" onclick="goToStallBannerSlide('${stall.stallId}', 1, event)" class="inline-flex items-center gap-1.5 hover:text-emerald-700 transition-colors group/owner text-left bg-slate-100/90 hover:bg-emerald-50 px-2 py-0.5 rounded-lg border border-slate-200/80 cursor-pointer" title="แตะเพื่อสลับดูรูปเจ้าของร้านบนแบนเนอร์">
+                                    <span class="relative w-5 h-5 rounded-full ring-1 ring-emerald-500 overflow-hidden shrink-0 inline-block align-middle bg-white">
+                                        <img src="${ownerImg}" alt="${ownerNm}" class="w-full h-full object-cover">
                                     </span>
-                                ` : ''}
+                                    <span class="font-bold text-slate-700 group-hover/owner:text-emerald-700 flex items-center gap-0.5">
+                                        <span>${ownerNm}</span>
+                                        <span class="material-symbols-outlined text-[13px] text-emerald-600 font-bold" title="ยืนยันตัวตนแล้ว">verified</span>
+                                    </span>
+                                    <span class="text-[9px] text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded font-bold">สลับรูป ↺</span>
+                                </button>
                             </div>
                         </div>
 
