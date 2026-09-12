@@ -4995,13 +4995,24 @@ function renderCatalog() {
                 <!-- ======================================================== -->
                 <div class="bg-gradient-to-b from-slate-50/90 to-white border-b border-slate-200/70">
                     
-                    <!-- 1. ภาพของร้านค้านั้น ๆ (Stall Cover Photo 1 รูป) -->
-                    <div class="relative h-36 w-full overflow-hidden bg-slate-200 group">
-                        <img src="${stallImg}" alt="ภาพร้านค้า ${stall.stallName}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
-                        <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/30"></div>
-                        
+                    <!-- 🌟 HERO BANNER CAROUSEL (สลับ 2 ภาพ: ภาพแผงค้า & ภาพเจ้าของร้าน) -->
+                    <div id="stall-banner-container-${stall.stallId}" class="relative h-44 sm:h-52 w-full overflow-hidden bg-slate-950 group select-none">
+                        <!-- Slides Track -->
+                        <div id="stall-carousel-track-${stall.stallId}" class="flex transition-transform duration-500 ease-out h-full w-full">
+                            <!-- Slide 1: ภาพแผงค้า/ร้านค้า -->
+                            <div class="min-w-full h-full relative cursor-pointer" onclick="nextStallBannerSlide('${stall.stallId}', event)">
+                                <img src="${stallImg}" alt="ภาพร้านค้า ${stall.stallName}" class="w-full h-full object-cover">
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30"></div>
+                            </div>
+                            <!-- Slide 2: ภาพเจ้าของแผงค้า -->
+                            <div class="min-w-full h-full relative cursor-pointer bg-slate-900" onclick="nextStallBannerSlide('${stall.stallId}', event)">
+                                <img src="${ownerImg}" alt="ภาพเจ้าของร้าน ${ownerNm}" class="w-full h-full object-cover object-top">
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30"></div>
+                            </div>
+                        </div>
+
                         <!-- Top Row: Stall Number Badge (Left) + Favorite Button (Right) -->
-                        <div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 pointer-events-none">
+                        <div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 pointer-events-none z-10">
                             <div class="flex items-center gap-1.5 pointer-events-auto">
                                 <span class="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-slate-900/90 text-white shadow-sm backdrop-blur-md border border-slate-700/60 flex items-center gap-1">
                                     <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
@@ -5013,51 +5024,67 @@ function renderCatalog() {
                             </div>
 
                             <!-- Interactive Favorite Star Button -->
-                            <button onclick="toggleFavoriteStall('${stall.stallId}')" class="pointer-events-auto text-[10px] ${isFav ? 'bg-amber-500 text-white border-amber-600 shadow-md ring-1 ring-amber-300' : 'bg-white/95 hover:bg-amber-50 text-slate-800 hover:text-amber-800 border-slate-200'} font-extrabold px-3 py-1 rounded-full shadow-sm backdrop-blur-md transition-all flex items-center gap-1 active:scale-90" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อเลือกเป็นร้านค้าโปรด'}">
+                            <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="pointer-events-auto text-[10px] ${isFav ? 'bg-amber-500 text-white border-amber-600 shadow-md ring-1 ring-amber-300' : 'bg-white/95 hover:bg-amber-50 text-slate-800 hover:text-amber-800 border-slate-200'} font-extrabold px-3 py-1 rounded-full shadow-sm backdrop-blur-md transition-all flex items-center gap-1 active:scale-90" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อเลือกเป็นร้านค้าโปรด'}">
                                 <span class="material-symbols-outlined text-[13px] ${isFav ? 'text-white' : 'text-amber-500'}">star</span>
                                 <span>${isFav ? 'ร้านโปรดแล้ว ⭐' : 'บันทึกร้านโปรด'}</span>
                             </button>
                         </div>
 
-                        <!-- Bottom Row: Category Tag Badge (Left) + Filter Single Stall Action (Right) -->
-                        <div class="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-2 pointer-events-none">
-                            <div class="pointer-events-auto">
-                                <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-700/90 text-white shadow-sm backdrop-blur-md border border-emerald-500/40">
+                        <!-- Carousel Navigation Arrows (Left & Right Chevrons) -->
+                        <button type="button" onclick="prevStallBannerSlide('${stall.stallId}', event)" class="absolute left-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/45 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-10 opacity-75 hover:opacity-100 active:scale-90 shadow-md" title="รูปก่อนหน้า">
+                            <span class="material-symbols-outlined text-sm">chevron_left</span>
+                        </button>
+                        <button type="button" onclick="nextStallBannerSlide('${stall.stallId}', event)" class="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/45 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-10 opacity-75 hover:opacity-100 active:scale-90 shadow-md" title="รูปถัดไป">
+                            <span class="material-symbols-outlined text-sm">chevron_right</span>
+                        </button>
+
+                        <!-- Bottom Row: Dynamic Slide Badge (Left) + Indicator Dots (Center) + Filter Single Stall Action (Right) -->
+                        <div class="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-2 pointer-events-none z-10">
+                            <!-- Left: Category Tag + Dynamic Slide Badge -->
+                            <div class="pointer-events-auto flex items-center gap-1.5">
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-700/90 text-white shadow-sm backdrop-blur-md border border-emerald-500/40">
                                     ${stall.stallTag}
+                                </span>
+                                <span id="stall-slide-badge-${stall.stallId}" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 text-white/90 shadow-sm backdrop-blur-md border border-white/20 flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-[12px] text-emerald-400">storefront</span>
+                                    <span>ภาพแผงค้า</span>
                                 </span>
                             </div>
 
-                            <button onclick="filterBySingleStall('${stall.stallId}')" class="pointer-events-auto text-[10px] bg-white/95 hover:bg-white text-emerald-900 font-bold px-2.5 py-1 rounded-full shadow-md backdrop-blur-md transition-all flex items-center gap-0.5 active:scale-95">
+                            <!-- Center: 2 Indicator Dots -->
+                            <div class="pointer-events-auto flex items-center gap-1.5 bg-black/45 backdrop-blur-xs px-2 py-0.5 rounded-full border border-white/15">
+                                <button type="button" onclick="goToStallBannerSlide('${stall.stallId}', 0, event)" id="stall-dot-${stall.stallId}-0" class="stall-banner-dot w-4 h-1.5 rounded-full bg-emerald-400 transition-all cursor-pointer" title="ดูภาพแผงค้า"></button>
+                                <button type="button" onclick="goToStallBannerSlide('${stall.stallId}', 1, event)" id="stall-dot-${stall.stallId}-1" class="stall-banner-dot w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer" title="ดูภาพเจ้าของร้าน"></button>
+                            </div>
+
+                            <!-- Right: ดูเฉพาะแผงนี้ -->
+                            <button type="button" onclick="filterBySingleStall('${stall.stallId}')" class="pointer-events-auto text-[10px] bg-white/95 hover:bg-white text-emerald-900 font-bold px-2.5 py-1 rounded-full shadow-md backdrop-blur-md transition-all flex items-center gap-0.5 active:scale-95">
                                 <span>ดูเฉพาะแผงนี้</span>
                                 <span class="material-symbols-outlined text-[13px]">chevron_right</span>
                             </button>
                         </div>
                     </div>
 
-                    <!-- Stall Owner, Contact & Details Header -->
-                    <div class="px-3.5 pt-2 pb-3">
-                        
-                        <!-- Row 1: 2. ภาพเจ้าของร้าน (Owner Avatar 1 รูป) + Shop Name + Phone Button -->
+                    <!-- Stall Info Header (Name, Owner, Phones) -->
+                    <div class="px-3.5 pt-3 pb-3">
                         <div class="flex items-start justify-between gap-2.5">
-                            <!-- Left: รูปเจ้าของร้าน + ชื่อร้านค้า -->
-                            <div class="flex items-center gap-3 -mt-7">
-                                <div class="relative shrink-0">
-                                    <img src="${ownerImg}" alt="ภาพเจ้าของร้าน ${ownerNm}" class="w-14 h-14 rounded-full object-cover border-[3px] border-white shadow-lg ring-2 ring-emerald-500/40 bg-white">
-                                    <span class="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center text-white shadow-xs" title="เจ้าของร้านตัวจริง ยืนยันตัวตนแล้ว">
-                                        <span class="material-symbols-outlined text-[9px] font-extrabold">check</span>
-                                    </span>
-                                </div>
-                                <div class="mt-4">
-                                    <h3 class="font-extrabold text-[15px] text-slate-900 leading-snug flex items-center gap-1">
-                                        <span>${stall.stallName}</span>
-                                        ${stall.isHub ? `<span class="bg-orange-100 text-orange-700 text-[9px] font-bold px-1.5 py-0.2 rounded border border-orange-200">Hub กลาง</span>` : ''}
-                                    </h3>
-                                    <div class="flex items-center gap-1.5 text-[11px] text-slate-600 mt-0.5">
-                                        <span class="font-bold text-slate-700 flex items-center gap-0.5">
-                                            <span class="material-symbols-outlined text-[12px] text-slate-500">person</span>
-                                            ${ownerNm}
+                            <!-- Left: Shop Name & Owner Info (Tap to view owner photo) -->
+                            <div class="space-y-1">
+                                <h3 class="font-extrabold text-[15px] text-slate-900 leading-snug flex items-center gap-1.5 flex-wrap">
+                                    <span>${stall.stallName}</span>
+                                    ${stall.isHub ? `<span class="bg-orange-100 text-orange-700 text-[9px] font-bold px-1.5 py-0.2 rounded border border-orange-200">Hub กลาง</span>` : ''}
+                                </h3>
+                                <div class="flex items-center gap-2 text-[11px] text-slate-600">
+                                    <button type="button" onclick="goToStallBannerSlide('${stall.stallId}', 1, event)" class="inline-flex items-center gap-1.5 hover:text-emerald-700 transition-colors group/owner text-left bg-slate-100/90 hover:bg-emerald-50 px-2 py-0.5 rounded-lg border border-slate-200/80 cursor-pointer" title="แตะเพื่อสลับดูรูปเจ้าของร้านบนแบนเนอร์">
+                                        <span class="relative w-5 h-5 rounded-full ring-1 ring-emerald-500 overflow-hidden shrink-0 inline-block align-middle bg-white">
+                                            <img src="${ownerImg}" alt="${ownerNm}" class="w-full h-full object-cover">
                                         </span>
-                                    </div>
+                                        <span class="font-bold text-slate-700 group-hover/owner:text-emerald-700 flex items-center gap-0.5">
+                                            <span>${ownerNm}</span>
+                                            <span class="material-symbols-outlined text-[13px] text-emerald-600 font-bold" title="ยืนยันตัวตนแล้ว">verified</span>
+                                        </span>
+                                        <span class="text-[9px] text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded font-bold">สลับรูป ↺</span>
+                                    </button>
                                 </div>
                             </div>
 
@@ -5233,6 +5260,7 @@ function renderCatalog() {
 
     container.innerHTML = html;
     updateStallRotationUI();
+    if (typeof initStallBannerCarousels === "function") initStallBannerCarousels();
 }
 
 // ==========================================
@@ -18724,33 +18752,62 @@ function previewMerchantLiveStore() {
     if (titleEl) titleEl.textContent = `ตัวอย่างร้าน: ${stallName}`;
 
     let html = `
-        <!-- Stall Hero Card Preview -->
+        <!-- Stall Hero Card Preview (Dual Slide Carousel) -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-left">
-            <div class="relative h-36 sm:h-44 w-full bg-slate-900 overflow-hidden">
-                <img src="${stallImage}" alt="${stallName}" class="w-full h-full object-cover">
-                <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
-                <div class="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">
-                    <span class="bg-emerald-600 text-white font-black text-[11px] px-2.5 py-0.5 rounded-full shadow-md">
-                        ${stallNumber}
-                    </span>
-                    <span class="bg-slate-900/80 backdrop-blur-xs text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full border border-white/20">
-                        ${zoneVal}
-                    </span>
-                    <span class="bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full shadow-xs">
-                        🏷️ ${catLabel}
-                    </span>
+            <div id="preview-stall-banner" class="relative h-44 sm:h-52 w-full bg-slate-950 overflow-hidden group select-none">
+                <div id="preview-carousel-track" class="flex transition-transform duration-500 ease-out h-full w-full">
+                    <!-- Slide 1: ภาพแผงค้า -->
+                    <div class="min-w-full h-full relative cursor-pointer" onclick="nextPreviewBannerSlide()">
+                        <img src="${stallImage}" alt="${stallName}" class="w-full h-full object-cover">
+                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
+                    </div>
+                    <!-- Slide 2: ภาพเจ้าของแผง -->
+                    <div class="min-w-full h-full relative cursor-pointer bg-slate-900" onclick="nextPreviewBannerSlide()">
+                        <img src="${ownerImage}" alt="${ownerName}" class="w-full h-full object-cover object-top">
+                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
+                    </div>
                 </div>
-                <div class="absolute bottom-3 left-3 right-3 flex items-end justify-between">
-                    <div>
+
+                <!-- Navigation Chevrons -->
+                <button type="button" onclick="prevPreviewBannerSlide()" class="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-10 opacity-75 hover:opacity-100 active:scale-90">
+                    <span class="material-symbols-outlined text-sm">chevron_left</span>
+                </button>
+                <button type="button" onclick="nextPreviewBannerSlide()" class="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-10 opacity-75 hover:opacity-100 active:scale-90">
+                    <span class="material-symbols-outlined text-sm">chevron_right</span>
+                </button>
+
+                <!-- Top Row Badges + Indicator Dots -->
+                <div class="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none z-10">
+                    <div class="flex items-center gap-1.5 flex-wrap pointer-events-auto">
+                        <span class="bg-emerald-600 text-white font-black text-[11px] px-2.5 py-0.5 rounded-full shadow-md">
+                            ${stallNumber}
+                        </span>
+                        <span class="bg-slate-900/80 backdrop-blur-xs text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full border border-white/20">
+                            ${zoneVal}
+                        </span>
+                        <span class="bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full shadow-xs">
+                            🏷️ ${catLabel}
+                        </span>
+                    </div>
+                    <div class="pointer-events-auto flex items-center gap-1.5 bg-black/50 backdrop-blur-xs px-2 py-0.5 rounded-full border border-white/15">
+                        <button type="button" onclick="goToPreviewBannerSlide(0)" id="preview-dot-0" class="w-4 h-1.5 rounded-full bg-emerald-400 transition-all cursor-pointer"></button>
+                        <button type="button" onclick="goToPreviewBannerSlide(1)" id="preview-dot-1" class="w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer"></button>
+                    </div>
+                </div>
+
+                <!-- Bottom Row Info -->
+                <div class="absolute bottom-3 left-3 right-3 flex items-end justify-between pointer-events-none z-10">
+                    <div class="pointer-events-auto">
                         <h2 class="text-lg sm:text-xl font-black text-white drop-shadow-md leading-tight">${stallName}</h2>
                         <p class="text-emerald-300 font-bold text-xs mt-0.5 drop-shadow-sm flex items-center gap-1">
                             <span>✨</span>
                             <span>${highlight}</span>
                         </p>
                     </div>
-                    <div class="w-12 h-12 rounded-2xl border-2 border-white/90 overflow-hidden shadow-lg shrink-0 bg-slate-100">
-                        <img src="${ownerImage}" alt="${ownerName}" class="w-full h-full object-cover">
-                    </div>
+                    <span id="preview-slide-badge" class="pointer-events-auto text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-black/60 text-white/90 shadow-sm backdrop-blur-md border border-white/20 flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[12px] text-emerald-400">storefront</span>
+                        <span>ภาพแผงค้า</span>
+                    </span>
                 </div>
             </div>
 
@@ -19072,6 +19129,134 @@ function initHeroBannerCarousel() {
     startHeroBannerAutoplay();
 }
 
+// ==========================================
+// 🌟 STALL HERO BANNER CAROUSEL SYSTEM
+// ==========================================
+const _stallBannerSlides = {};
+let _stallBannerAutoplayInterval = null;
+
+function goToStallBannerSlide(stallId, slideIndex, e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    const track = document.getElementById(`stall-carousel-track-${stallId}`);
+    if (!track) return;
+
+    slideIndex = slideIndex % 2;
+    if (slideIndex < 0) slideIndex = 1;
+    _stallBannerSlides[stallId] = slideIndex;
+
+    track.style.transform = `translateX(-${slideIndex * 100}%)`;
+
+    // Update Indicator Dots
+    const dot0 = document.getElementById(`stall-dot-${stallId}-0`);
+    const dot1 = document.getElementById(`stall-dot-${stallId}-1`);
+    if (dot0 && dot1) {
+        if (slideIndex === 0) {
+            dot0.className = "stall-banner-dot w-4 h-1.5 rounded-full bg-emerald-400 transition-all shadow-xs cursor-pointer";
+            dot1.className = "stall-banner-dot w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer";
+        } else {
+            dot0.className = "stall-banner-dot w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer";
+            dot1.className = "stall-banner-dot w-4 h-1.5 rounded-full bg-emerald-400 transition-all shadow-xs cursor-pointer";
+        }
+    }
+
+    // Update Slide Badge
+    const badge = document.getElementById(`stall-slide-badge-${stallId}`);
+    if (badge) {
+        if (slideIndex === 0) {
+            badge.innerHTML = `
+                <span class="material-symbols-outlined text-[12px] text-emerald-400">storefront</span>
+                <span>ภาพแผงค้า</span>
+            `;
+            badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 text-white/90 shadow-sm backdrop-blur-md border border-white/20 flex items-center gap-1";
+        } else {
+            badge.innerHTML = `
+                <span class="material-symbols-outlined text-[12px] text-emerald-300">verified_user</span>
+                <span>เจ้าของแผง</span>
+            `;
+            badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-200 shadow-sm backdrop-blur-md border border-emerald-400/40 flex items-center gap-1";
+        }
+    }
+}
+
+function nextStallBannerSlide(stallId, e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    const current = _stallBannerSlides[stallId] || 0;
+    goToStallBannerSlide(stallId, current === 0 ? 1 : 0);
+}
+
+function prevStallBannerSlide(stallId, e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    const current = _stallBannerSlides[stallId] || 0;
+    goToStallBannerSlide(stallId, current === 0 ? 1 : 0);
+}
+
+function initStallBannerCarousels() {
+    // Attach touch gestures to each stall banner container
+    document.querySelectorAll("[id^='stall-banner-container-']").forEach(container => {
+        const stallId = container.id.replace("stall-banner-container-", "");
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        container.addEventListener("touchstart", (e) => {
+            if (e.changedTouches && e.changedTouches[0]) {
+                touchStartX = e.changedTouches[0].screenX;
+            }
+        }, { passive: true });
+
+        container.addEventListener("touchend", (e) => {
+            if (e.changedTouches && e.changedTouches[0]) {
+                touchEndX = e.changedTouches[0].screenX;
+                const diff = touchStartX - touchEndX;
+                if (Math.abs(diff) > 35) {
+                    if (diff > 0) nextStallBannerSlide(stallId);
+                    else prevStallBannerSlide(stallId);
+                }
+            }
+        }, { passive: true });
+    });
+
+    // Start gentle auto-slide rotation for visible stalls (cycles every 5.5s)
+    if (_stallBannerAutoplayInterval) clearInterval(_stallBannerAutoplayInterval);
+    _stallBannerAutoplayInterval = setInterval(() => {
+        if (state.currentRole !== 'customer' || (state.currentScreen && state.currentScreen !== 'market')) return;
+        const containers = document.querySelectorAll("[id^='stall-banner-container-']");
+        if (!containers || containers.length === 0) return;
+        
+        containers.forEach(container => {
+            const rect = container.getBoundingClientRect();
+            if (rect.top < window.innerHeight && rect.bottom > 0) {
+                const stallId = container.id.replace("stall-banner-container-", "");
+                nextStallBannerSlide(stallId);
+            }
+        });
+    }, 5500);
+}
+
+// Preview modal carousel functions
+let _previewSlideIndex = 0;
+function goToPreviewBannerSlide(idx) {
+    _previewSlideIndex = idx % 2;
+    if (_previewSlideIndex < 0) _previewSlideIndex = 1;
+    const track = document.getElementById("preview-carousel-track");
+    if (track) track.style.transform = `translateX(-${_previewSlideIndex * 100}%)`;
+    const dot0 = document.getElementById("preview-dot-0");
+    const dot1 = document.getElementById("preview-dot-1");
+    if (dot0 && dot1) {
+        dot0.className = _previewSlideIndex === 0 ? "w-4 h-1.5 rounded-full bg-emerald-400 transition-all cursor-pointer" : "w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer";
+        dot1.className = _previewSlideIndex === 1 ? "w-4 h-1.5 rounded-full bg-emerald-400 transition-all cursor-pointer" : "w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer";
+    }
+    const badge = document.getElementById("preview-slide-badge");
+    if (badge) {
+        if (_previewSlideIndex === 0) {
+            badge.innerHTML = `<span class="material-symbols-outlined text-[12px] text-emerald-400">storefront</span><span>ภาพแผงค้า</span>`;
+        } else {
+            badge.innerHTML = `<span class="material-symbols-outlined text-[12px] text-emerald-300">verified_user</span><span>เจ้าของแผง</span>`;
+        }
+    }
+}
+function nextPreviewBannerSlide() { goToPreviewBannerSlide(_previewSlideIndex + 1); }
+function prevPreviewBannerSlide() { goToPreviewBannerSlide(_previewSlideIndex - 1); }
+
 // Window registrations
 window.goToHeroBannerSlide = goToHeroBannerSlide;
 window.nextHeroBannerSlide = nextHeroBannerSlide;
@@ -19080,6 +19265,13 @@ window.handleHeroBannerClick = handleHeroBannerClick;
 window.initHeroBannerCarousel = initHeroBannerCarousel;
 window.triggerManualStallShuffle = triggerManualStallShuffle;
 window.toggleStallRotationPause = toggleStallRotationPause;
+window.goToStallBannerSlide = goToStallBannerSlide;
+window.nextStallBannerSlide = nextStallBannerSlide;
+window.prevStallBannerSlide = prevStallBannerSlide;
+window.initStallBannerCarousels = initStallBannerCarousels;
+window.goToPreviewBannerSlide = goToPreviewBannerSlide;
+window.nextPreviewBannerSlide = nextPreviewBannerSlide;
+window.prevPreviewBannerSlide = prevPreviewBannerSlide;
 
 // Auto-sanitize test & mock data on application launch
 function autoSanitizeProductionData() {
