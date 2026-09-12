@@ -5004,68 +5004,29 @@ function renderCatalog() {
                             <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
                                 <img src="${stallImg}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
                                 <img src="${stallImg}" alt="ภาพร้านค้า ${stall.stallName}" class="relative w-full h-full object-cover object-center">
-                                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30 pointer-events-none"></div>
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none"></div>
                             </div>
                             <!-- Slide 2: ภาพเจ้าของแผงค้า (Composite Owner Template & Name Badge) -->
                             <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
                                 <img id="stall-owner-banner-blur-${stall.stallId}" src="${ownerBannerUrl || ownerImg}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
                                 <img id="stall-owner-banner-img-${stall.stallId}" src="${ownerBannerUrl || ownerImg}" alt="ภาพเจ้าของร้าน ${ownerNm}" class="relative w-full h-full object-contain sm:object-cover object-center">
-                                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/30 pointer-events-none"></div>
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none"></div>
                             </div>
                         </div>
 
-                        <!-- Top Row: Stall Number Badge (Left) + Favorite Button (Right) -->
-                        <div class="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 pointer-events-none z-10">
-                            <div class="flex items-center gap-1.5 pointer-events-auto">
-                                <span class="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-slate-900/90 text-white shadow-sm backdrop-blur-md border border-slate-700/60 flex items-center gap-1">
-                                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                                    ${stall.stallNumber}
-                                </span>
-                                <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-black/55 text-white/90 shadow-sm backdrop-blur-md border border-white/20">
-                                    โซน ${stall.zone}
-                                </span>
-                            </div>
-
-                            <!-- Interactive Favorite Star Button -->
-                            <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="pointer-events-auto text-[10px] ${isFav ? 'bg-amber-500 text-white border-amber-600 shadow-md ring-1 ring-amber-300' : 'bg-white/95 hover:bg-amber-50 text-slate-800 hover:text-amber-800 border-slate-200'} font-extrabold px-3 py-1 rounded-full shadow-sm backdrop-blur-md transition-all flex items-center gap-1 active:scale-90" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อเลือกเป็นร้านค้าโปรด'}">
-                                <span class="material-symbols-outlined text-[13px] ${isFav ? 'text-white' : 'text-amber-500'}">star</span>
-                                <span>${isFav ? 'ร้านโปรดแล้ว ⭐' : 'บันทึกร้านโปรด'}</span>
-                            </button>
-                        </div>
-
-                        <!-- Carousel Navigation Arrows (Left & Right Chevrons) -->
-                        <button type="button" onclick="prevStallBannerSlide('${stall.stallId}', event)" class="absolute left-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/45 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-10 opacity-75 hover:opacity-100 active:scale-90 shadow-md" title="รูปก่อนหน้า">
-                            <span class="material-symbols-outlined text-sm">chevron_left</span>
+                        <!-- 1. ปุ่มเลื่อนภาพไปข้างหน้าถอยหลัง (Prev & Next Chevrons) -->
+                        <button type="button" onclick="prevStallBannerSlide('${stall.stallId}', event)" class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md" title="รูปก่อนหน้า">
+                            <span class="material-symbols-outlined text-base">chevron_left</span>
                         </button>
-                        <button type="button" onclick="nextStallBannerSlide('${stall.stallId}', event)" class="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/45 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-10 opacity-75 hover:opacity-100 active:scale-90 shadow-md" title="รูปถัดไป">
-                            <span class="material-symbols-outlined text-sm">chevron_right</span>
+                        <button type="button" onclick="nextStallBannerSlide('${stall.stallId}', event)" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md" title="รูปถัดไป">
+                            <span class="material-symbols-outlined text-base">chevron_right</span>
                         </button>
 
-                        <!-- Bottom Row: Dynamic Slide Badge (Left) + Indicator Dots (Center) + Filter Single Stall Action (Right) -->
-                        <div class="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-2 pointer-events-none z-10">
-                            <!-- Left: Category Tag + Dynamic Slide Badge -->
-                            <div class="pointer-events-auto flex items-center gap-1.5">
-                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-700/90 text-white shadow-sm backdrop-blur-md border border-emerald-500/40">
-                                    ${stall.stallTag}
-                                </span>
-                                <span id="stall-slide-badge-${stall.stallId}" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 text-white/90 shadow-sm backdrop-blur-md border border-white/20 flex items-center gap-1">
-                                    <span class="material-symbols-outlined text-[12px] text-emerald-400">storefront</span>
-                                    <span>ภาพแผงค้า</span>
-                                </span>
-                            </div>
-
-                            <!-- Center: 2 Indicator Dots -->
-                            <div class="pointer-events-auto flex items-center gap-1.5 bg-black/45 backdrop-blur-xs px-2 py-0.5 rounded-full border border-white/15">
-                                <button type="button" onclick="goToStallBannerSlide('${stall.stallId}', 0, event)" id="stall-dot-${stall.stallId}-0" class="stall-banner-dot w-4 h-1.5 rounded-full bg-emerald-400 transition-all cursor-pointer" title="ดูภาพแผงค้า"></button>
-                                <button type="button" onclick="goToStallBannerSlide('${stall.stallId}', 1, event)" id="stall-dot-${stall.stallId}-1" class="stall-banner-dot w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer" title="ดูภาพเจ้าของร้าน"></button>
-                            </div>
-
-                            <!-- Right: ดูเฉพาะแผงนี้ -->
-                            <button type="button" onclick="filterBySingleStall('${stall.stallId}')" class="pointer-events-auto text-[10px] bg-white/95 hover:bg-white text-emerald-900 font-bold px-2.5 py-1 rounded-full shadow-md backdrop-blur-md transition-all flex items-center gap-0.5 active:scale-95">
-                                <span>ดูเฉพาะแผงนี้</span>
-                                <span class="material-symbols-outlined text-[13px]">chevron_right</span>
-                            </button>
-                        </div>
+                        <!-- 2. ปุ่มบันทึกเป็นร้านโปรด (สีส้มสดใส วางตำแหน่งมุมขวาล่าง ไม่ทับรูปเจ้าของร้าน) -->
+                        <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="absolute bottom-2.5 right-2.5 pointer-events-auto text-[11px] font-black px-3.5 py-1.5 rounded-full shadow-lg transition-all flex items-center gap-1.5 active:scale-95 z-20 ${isFav ? 'bg-orange-600 text-white border-2 border-white ring-2 ring-orange-400 shadow-orange-950/40' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-orange-950/30'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
+                            <span class="material-symbols-outlined text-[15px] text-white font-bold">star</span>
+                            <span>${isFav ? 'ร้านโปรดแล้ว ⭐' : 'บันทึกเป็นร้านโปรด'}</span>
+                        </button>
                     </div>
 
                     <!-- Stall Info Header (Name, Owner, Phones) -->
@@ -5075,6 +5036,8 @@ function renderCatalog() {
                             <div class="space-y-1">
                                 <h3 class="font-extrabold text-[15px] text-slate-900 leading-snug flex items-center gap-1.5 flex-wrap">
                                     <span>${stall.stallName}</span>
+                                    <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-900 text-white shadow-xs">${stall.stallNumber}</span>
+                                    <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">โซน ${stall.zone}</span>
                                     ${stall.isHub ? `<span class="bg-orange-100 text-orange-700 text-[9px] font-bold px-1.5 py-0.2 rounded border border-orange-200">Hub กลาง</span>` : ''}
                                 </h3>
                                 <div class="flex items-center gap-2 text-[11px] text-slate-600">
