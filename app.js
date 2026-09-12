@@ -5022,8 +5022,8 @@ function renderCatalog() {
                             <span class="material-symbols-outlined text-base">chevron_right</span>
                         </button>
 
-                        <!-- 2. ปุ่มบันทึกเป็นร้านโปรด (สีส้มสดใส วางตำแหน่งมุมขวาล่าง ไม่ทับรูปเจ้าของร้าน) -->
-                        <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="absolute bottom-2.5 right-2.5 pointer-events-auto text-[11px] font-black px-3.5 py-1.5 rounded-full shadow-lg transition-all flex items-center gap-1.5 active:scale-95 z-20 ${isFav ? 'bg-orange-600 text-white border-2 border-white ring-2 ring-orange-400 shadow-orange-950/40' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-orange-950/30'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
+                        <!-- 2. ปุ่มบันทึกเป็นร้านโปรด (ย้ายไว้ข้างบนสุด สีส้มสดใส ไม่บังป้ายชื่อเจ้าของร้าน) -->
+                        <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="absolute top-2.5 right-2.5 pointer-events-auto text-[11px] font-black px-3.5 py-1.5 rounded-full shadow-lg transition-all flex items-center gap-1.5 active:scale-95 z-20 ${isFav ? 'bg-orange-600 text-white border-2 border-white ring-2 ring-orange-400 shadow-orange-950/40' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-orange-950/30'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
                             <span class="material-symbols-outlined text-[15px] text-white font-bold">star</span>
                             <span>${isFav ? 'ร้านโปรดแล้ว ⭐' : 'บันทึกเป็นร้านโปรด'}</span>
                         </button>
@@ -17672,10 +17672,10 @@ async function buildOwnerBannerCanvas(stall) {
             const displayName = `✨ ${name.trim()}`;
             ctx.save();
 
-            ctx.font = "bold 20px 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif";
+            ctx.font = "bold 24px 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif";
             const textMetrics = ctx.measureText(displayName);
-            const padX = 26;
-            const badgeW = Math.max(textMetrics.width + (padX * 2), 170);
+            const padX = 30;
+            const badgeW = Math.max(textMetrics.width + (padX * 2), 200);
             const badgeX = cx - (badgeW / 2);
             const badgeY = cy - (badgeH / 2);
             const r = badgeH / 2;
@@ -17707,7 +17707,7 @@ async function buildOwnerBannerCanvas(stall) {
 
             // Gold Border
             ctx.shadowColor = "transparent";
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 4;
             ctx.strokeStyle = "#fbbf24";
             createPillPath();
             ctx.stroke();
@@ -17734,15 +17734,17 @@ async function buildOwnerBannerCanvas(stall) {
         const name2 = (stall.owner2Nickname || "").trim();
 
         if (isDual) {
-            // Dual circles: Left (306, 275, r=176), Right (718, 275, r=176)
-            drawCircularFace(face1, 306, 275, 176);
-            drawCircularFace(face2, 718, 275, 176);
-            drawEmeraldGoldBadge(name1, 306, 475, 52);
-            drawEmeraldGoldBadge(name2, 718, 475, 52);
+            // Dual circles: Expanded r=188 to fill frame completely with NO GAP
+            drawCircularFace(face1, 306, 276, 188);
+            drawCircularFace(face2, 718, 276, 188);
+            // Badges moved to the bottom (cy=522) and enlarged (h=60, font 24px) for prominent display
+            drawEmeraldGoldBadge(name1, 306, 522, 60);
+            drawEmeraldGoldBadge(name2, 718, 522, 60);
         } else {
-            // Single center circle: (514, 286, r=188)
-            drawCircularFace(face1, 514, 286, 188);
-            drawEmeraldGoldBadge(name1, 514, 492, 54);
+            // Single center circle: Expanded r=199 to fill frame completely with NO GAP
+            drawCircularFace(face1, 514, 286, 199);
+            // Badge moved to the bottom (cy=526) and enlarged (h=62, font 24px) for prominent display
+            drawEmeraldGoldBadge(name1, 514, 526, 62);
         }
 
         const dataUrl = canvas.toDataURL("image/png", 0.92);
