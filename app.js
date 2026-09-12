@@ -5033,8 +5033,8 @@ function renderCatalog() {
                                     <span>${stall.stallName}</span>
                                     ${stall.isHub ? `<span class="bg-orange-100 text-orange-700 text-[9px] font-bold px-1.5 py-0.2 rounded border border-orange-200">Hub กลาง</span>` : ''}
                                 </h3>
-                                <!-- ปุ่มบันทึกเป็นร้านโปรด (สีส้มสดใส วางต่อกับชื่อร้าน) -->
-                                <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="pointer-events-auto text-[11px] font-black px-3 py-1 rounded-full shadow-xs transition-all flex items-center gap-1 active:scale-95 ${isFav ? 'bg-orange-600 text-white border-2 border-white ring-2 ring-orange-400 shadow-orange-950/30' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-xs'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
+                                <!-- ปุ่มบันทึกเป็นร้านโปรด (ยังไม่บันทึก=สีส้ม, บันทึกแล้ว=สีเขียว วางต่อกับชื่อร้าน) -->
+                                <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="pointer-events-auto text-[11px] font-black px-3 py-1 rounded-full shadow-xs transition-all flex items-center gap-1 active:scale-95 ${isFav ? 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500 shadow-emerald-950/20' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-xs'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
                                     <span class="material-symbols-outlined text-[14px] text-white font-bold">star</span>
                                     <span>${isFav ? 'ร้านโปรดแล้ว ⭐' : 'บันทึกเป็นร้านโปรด'}</span>
                                 </button>
