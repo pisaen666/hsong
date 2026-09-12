@@ -5000,14 +5000,16 @@ function renderCatalog() {
                         <!-- Slides Track -->
                         <div id="stall-carousel-track-${stall.stallId}" class="flex transition-transform duration-500 ease-out h-full w-full">
                             <!-- Slide 1: ภาพแผงค้า/ร้านค้า -->
-                            <div class="min-w-full h-full relative cursor-pointer" onclick="nextStallBannerSlide('${stall.stallId}', event)">
-                                <img src="${stallImg}" alt="ภาพร้านค้า ${stall.stallName}" class="w-full h-full object-cover">
-                                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30"></div>
+                            <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
+                                <img src="${stallImg}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
+                                <img src="${stallImg}" alt="ภาพร้านค้า ${stall.stallName}" class="relative w-full h-full object-cover object-center">
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30 pointer-events-none"></div>
                             </div>
-                            <!-- Slide 2: ภาพเจ้าของแผงค้า -->
-                            <div class="min-w-full h-full relative cursor-pointer bg-slate-900" onclick="nextStallBannerSlide('${stall.stallId}', event)">
-                                <img src="${ownerImg}" alt="ภาพเจ้าของร้าน ${ownerNm}" class="w-full h-full object-cover object-top">
-                                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30"></div>
+                            <!-- Slide 2: ภาพเจ้าของแผงค้า (สัดส่วนเดียวกับรูปหน้าร้าน) -->
+                            <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
+                                <img src="${ownerImg}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
+                                <img src="${ownerImg}" alt="ภาพเจ้าของร้าน ${ownerNm}" class="relative w-full h-full object-contain sm:object-cover object-center">
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/30 pointer-events-none"></div>
                             </div>
                         </div>
 
@@ -17460,29 +17462,46 @@ function validateMerchantForm() {
     }
 }
 
-function compressImageFile(file, maxWidth = 600, maxHeight = 600, quality = 0.75) {
+function compressImageFile(file, maxWidth = 640, maxHeight = 360, quality = 0.8) {
     return new Promise((resolve) => {
         if (!file || !file.type || !file.type.startsWith('image/')) return resolve(null);
         const reader = new FileReader();
         reader.onload = (e) => {
             const img = new Image();
             img.onload = () => {
-                let width = img.width;
-                let height = img.height;
-                if (width > maxWidth || height > maxHeight) {
-                    if (width > height) {
-                        height = Math.round((height * maxWidth) / width);
-                        width = maxWidth;
-                    } else {
-                        width = Math.round((width * maxHeight) / height);
-                        height = maxHeight;
-                    }
-                }
+                const targetW = maxWidth;
+                const targetH = maxHeight;
                 const canvas = document.createElement("canvas");
-                canvas.width = width;
-                canvas.height = height;
+                canvas.width = targetW;
+                canvas.height = targetH;
                 const ctx = canvas.getContext("2d");
-                ctx.drawImage(img, 0, 0, width, height);
+
+                // Dark neutral background
+                ctx.fillStyle = "#090d16";
+                ctx.fillRect(0, 0, targetW, targetH);
+
+                // 1. Draw blurred backdrop to fill entire 16:9 frame smoothly
+                const bgScale = Math.max(targetW / img.width, targetH / img.height);
+                const bgW = img.width * bgScale;
+                const bgH = img.height * bgScale;
+                const bgX = (targetW - bgW) / 2;
+                const bgY = (targetH - bgH) / 2;
+                
+                ctx.save();
+                if (ctx.filter !== undefined) {
+                    ctx.filter = "blur(14px) brightness(0.65)";
+                }
+                ctx.drawImage(img, bgX, bgY, bgW, bgH);
+                ctx.restore();
+
+                // 2. Draw clear image in center (fits entire face/stall without distortion or clipping)
+                const scale = Math.min(targetW / img.width, targetH / img.height);
+                const drawW = img.width * scale;
+                const drawH = img.height * scale;
+                const drawX = (targetW - drawW) / 2;
+                const drawY = (targetH - drawH) / 2;
+                ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
                 const compressed = canvas.toDataURL("image/jpeg", quality);
                 resolve(compressed);
             };
@@ -17495,32 +17514,43 @@ function compressImageFile(file, maxWidth = 600, maxHeight = 600, quality = 0.75
 }
 window.compressImageFile = compressImageFile;
 
-function compressDataUrl(dataUrl, maxWidth = 600, maxHeight = 600, quality = 0.75) {
+function compressDataUrl(dataUrl, maxWidth = 640, maxHeight = 360, quality = 0.8) {
     return new Promise((resolve) => {
         if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
             return resolve(dataUrl);
         }
-        if (dataUrl.length < 80000) {
-            return resolve(dataUrl);
-        }
         const img = new Image();
         img.onload = () => {
-            let width = img.width;
-            let height = img.height;
-            if (width > maxWidth || height > maxHeight) {
-                if (width > height) {
-                    height = Math.round((height * maxWidth) / width);
-                    width = maxWidth;
-                } else {
-                    width = Math.round((width * maxHeight) / height);
-                    height = maxHeight;
-                }
-            }
+            const targetW = maxWidth;
+            const targetH = maxHeight;
             const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
+            canvas.width = targetW;
+            canvas.height = targetH;
             const ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, width, height);
+
+            ctx.fillStyle = "#090d16";
+            ctx.fillRect(0, 0, targetW, targetH);
+
+            const bgScale = Math.max(targetW / img.width, targetH / img.height);
+            const bgW = img.width * bgScale;
+            const bgH = img.height * bgScale;
+            const bgX = (targetW - bgW) / 2;
+            const bgY = (targetH - bgH) / 2;
+            
+            ctx.save();
+            if (ctx.filter !== undefined) {
+                ctx.filter = "blur(14px) brightness(0.65)";
+            }
+            ctx.drawImage(img, bgX, bgY, bgW, bgH);
+            ctx.restore();
+
+            const scale = Math.min(targetW / img.width, targetH / img.height);
+            const drawW = img.width * scale;
+            const drawH = img.height * scale;
+            const drawX = (targetW - drawW) / 2;
+            const drawY = (targetH - drawH) / 2;
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
             const compressed = canvas.toDataURL("image/jpeg", quality);
             resolve(compressed);
         };
@@ -17540,7 +17570,7 @@ async function handleMerchantFileUpload(event, targetInputId, targetPreviewImgId
     }
 
     try {
-        const compressed = await compressImageFile(file, 600, 600, 0.75);
+        const compressed = await compressImageFile(file, 640, 360, 0.8);
         const dataUrl = compressed || await new Promise(r => {
             const reader = new FileReader();
             reader.onload = e => r(e.target.result);
@@ -18309,11 +18339,11 @@ async function saveMerchantStallData() {
 
         let stallImage = (document.getElementById("m-stall-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
         let ownerImage = (document.getElementById("m-owner-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.owner.man1;
-        if (stallImage && stallImage.length > 80000 && typeof compressDataUrl === "function") {
-            try { stallImage = await compressDataUrl(stallImage, 600, 600, 0.75); } catch(e) {}
+        if (stallImage && typeof compressDataUrl === "function") {
+            try { stallImage = await compressDataUrl(stallImage, 640, 360, 0.8); } catch(e) {}
         }
-        if (ownerImage && ownerImage.length > 80000 && typeof compressDataUrl === "function") {
-            try { ownerImage = await compressDataUrl(ownerImage, 400, 400, 0.75); } catch(e) {}
+        if (ownerImage && typeof compressDataUrl === "function") {
+            try { ownerImage = await compressDataUrl(ownerImage, 640, 360, 0.8); } catch(e) {}
         }
 
         if (!stallName || !phone) {
@@ -18757,14 +18787,16 @@ function previewMerchantLiveStore() {
             <div id="preview-stall-banner" class="relative h-44 sm:h-52 w-full bg-slate-950 overflow-hidden group select-none">
                 <div id="preview-carousel-track" class="flex transition-transform duration-500 ease-out h-full w-full">
                     <!-- Slide 1: ภาพแผงค้า -->
-                    <div class="min-w-full h-full relative cursor-pointer" onclick="nextPreviewBannerSlide()">
-                        <img src="${stallImage}" alt="${stallName}" class="w-full h-full object-cover">
-                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
+                    <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextPreviewBannerSlide()">
+                        <img src="${stallImage}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
+                        <img src="${stallImage}" alt="${stallName}" class="relative w-full h-full object-cover object-center">
+                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none"></div>
                     </div>
                     <!-- Slide 2: ภาพเจ้าของแผง -->
-                    <div class="min-w-full h-full relative cursor-pointer bg-slate-900" onclick="nextPreviewBannerSlide()">
-                        <img src="${ownerImage}" alt="${ownerName}" class="w-full h-full object-cover object-top">
-                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
+                    <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextPreviewBannerSlide()">
+                        <img src="${ownerImage}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
+                        <img src="${ownerImage}" alt="${ownerName}" class="relative w-full h-full object-contain sm:object-cover object-center">
+                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none"></div>
                     </div>
                 </div>
 

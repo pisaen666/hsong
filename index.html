@@ -3788,16 +3788,16 @@
                                             class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
                                             <span
                                                 class="material-symbols-outlined text-xs text-blue-600">account_circle</span>
-                                            <span>1. รูปเจ้าของร้านหรือผู้ติดต่อ (1 รูป)</span>
+                                            <span>1. รูปเจ้าของร้านหรือผู้ติดต่อ (สัดส่วนแนวนอน 16:9)</span>
                                         </label>
-                                        <p class="text-[10px] text-slate-500 mb-2">รูปโปรไฟล์ผู้ติดต่อหรือเจ้าของแผง</p>
+                                        <p class="text-[10px] text-slate-500 mb-2">สัดส่วนแนวนอน 16:9 เท่ากับรูปหน้าร้านสำหรับ Hero Banner</p>
 
                                         <div class="flex items-center gap-3">
-                                            <!-- Preview Avatar Box -->
+                                            <!-- Preview Owner Box (16:9 Landscape) -->
                                             <div
-                                                class="relative w-16 h-16 rounded-2xl bg-slate-200 border-2 border-dashed border-slate-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner">
+                                                class="relative w-24 h-15 rounded-xl bg-slate-900 border-2 border-dashed border-slate-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner aspect-[16/9]">
                                                 <img id="m-preview-owner-img" src="" alt="รูปเจ้าของร้าน"
-                                                    class="w-full h-full object-cover hidden">
+                                                    class="w-full h-full object-contain hidden">
                                                 <span id="m-preview-owner-placeholder"
                                                     class="material-symbols-outlined text-2xl text-slate-400">person</span>
                                             </div>
@@ -3829,15 +3829,15 @@
                                             class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
                                             <span
                                                 class="material-symbols-outlined text-xs text-emerald-600">storefront</span>
-                                            <span>2. รูปหน้าร้านค้า / แผงค้า (1 รูป)</span>
+                                            <span>2. รูปหน้าร้านค้า / แผงค้า (สัดส่วนแนวนอน 16:9)</span>
                                         </label>
                                         <p class="text-[10px] text-slate-500 mb-2">
-                                            รูปภาพที่ต้องการให้ปรากฏบนข้อมูลร้านค้า</p>
+                                            รูปภาพที่ต้องการให้ปรากฏบนข้อมูลร้านค้า (สัดส่วนแนวนอน 16:9)</p>
 
                                         <div class="flex items-center gap-3">
-                                            <!-- Preview Stall Cover Box -->
+                                            <!-- Preview Stall Cover Box (16:9 Landscape) -->
                                             <div
-                                                class="relative w-20 h-16 rounded-2xl bg-slate-200 border-2 border-dashed border-slate-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner">
+                                                class="relative w-24 h-15 rounded-xl bg-slate-900 border-2 border-dashed border-slate-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner aspect-[16/9]">
                                                 <img id="m-preview-stall-img" src="" alt="รูปหน้าร้าน"
                                                     class="w-full h-full object-cover hidden">
                                                 <span id="m-preview-stall-placeholder"
@@ -6039,7 +6039,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.37_hero_banner_carousel"></script>
+    <script src="app.js?v=9.38_perfect_landscape_owner_ratio"></script>
 </body>
 
 </html>
