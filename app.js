@@ -5035,7 +5035,7 @@ function renderCatalog() {
                                 </h3>
                                 <!-- ปุ่มบันทึกเป็นร้านโปรด (ยังไม่บันทึก=สีส้ม, บันทึกแล้ว=สีเขียว วางต่อกับชื่อร้าน) -->
                                 <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="pointer-events-auto text-[11px] font-black px-3 py-1 rounded-full shadow-xs transition-all flex items-center gap-1 active:scale-95 ${isFav ? 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500 shadow-emerald-950/20' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-xs'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
-                                    <span class="material-symbols-outlined text-[14px] text-white font-bold">star</span>
+                                    <span class="material-symbols-outlined text-[14px] ${isFav ? 'text-yellow-300' : 'text-white'} font-bold">star</span>
                                     <span>${isFav ? 'ร้านโปรดแล้ว ⭐' : 'บันทึกเป็นร้านโปรด'}</span>
                                 </button>
                             </div>
@@ -17647,15 +17647,16 @@ async function buildOwnerBannerCanvas(stall) {
         };
 
         // Helper to draw Emerald & Gold Capsule Name Badge (Style 1)
-        const drawEmeraldGoldBadge = (name, cx, cy, badgeH) => {
+        // Helper to draw Emerald & Gold Capsule Name Badge (Style 1: Expanded & Prominent)
+        const drawEmeraldGoldBadge = (name, cx, cy, badgeH, fontSize = 28) => {
             if (!name || !name.trim()) return;
             const displayName = `✨ ${name.trim()}`;
             ctx.save();
 
-            ctx.font = "bold 24px 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif";
+            ctx.font = `bold ${fontSize}px 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif`;
             const textMetrics = ctx.measureText(displayName);
-            const padX = 30;
-            const badgeW = Math.max(textMetrics.width + (padX * 2), 200);
+            const padX = 36;
+            const badgeW = Math.max(textMetrics.width + (padX * 2), 220);
             const badgeX = cx - (badgeW / 2);
             const badgeY = cy - (badgeH / 2);
             const r = badgeH / 2;
@@ -17671,10 +17672,10 @@ async function buildOwnerBannerCanvas(stall) {
             };
 
             // Outer Drop shadow
-            ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
-            ctx.shadowBlur = 14;
+            ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+            ctx.shadowBlur = 16;
             ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 5;
+            ctx.shadowOffsetY = 6;
 
             // Emerald linear gradient
             const grad = ctx.createLinearGradient(badgeX, badgeY, badgeX + badgeW, badgeY + badgeH);
@@ -17685,9 +17686,9 @@ async function buildOwnerBannerCanvas(stall) {
             createPillPath();
             ctx.fill();
 
-            // Gold Border
+            // Gold Border (Thick & vibrant)
             ctx.shadowColor = "transparent";
-            ctx.lineWidth = 4;
+            ctx.lineWidth = 4.5;
             ctx.strokeStyle = "#fbbf24";
             createPillPath();
             ctx.stroke();
@@ -17698,7 +17699,7 @@ async function buildOwnerBannerCanvas(stall) {
             createPillPath();
             ctx.stroke();
 
-            // Text
+            // Text (Bold, large, readable)
             ctx.fillStyle = "#ffffff";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
@@ -17717,14 +17718,14 @@ async function buildOwnerBannerCanvas(stall) {
             // Dual circles: Expanded r=188 to fill frame completely with NO GAP
             drawCircularFace(face1, 306, 276, 188);
             drawCircularFace(face2, 718, 276, 188);
-            // Badges moved to the bottom (cy=522) and enlarged (h=60, font 24px) for prominent display
-            drawEmeraldGoldBadge(name1, 306, 522, 60);
-            drawEmeraldGoldBadge(name2, 718, 522, 60);
+            // Badges enlarged (h=72, font 30px) for prominent display
+            drawEmeraldGoldBadge(name1, 306, 506, 72, 30);
+            drawEmeraldGoldBadge(name2, 718, 506, 72, 30);
         } else {
             // Single center circle: Expanded r=199 to fill frame completely with NO GAP
             drawCircularFace(face1, 514, 286, 199);
-            // Badge moved to the bottom (cy=526) and enlarged (h=62, font 24px) for prominent display
-            drawEmeraldGoldBadge(name1, 514, 526, 62);
+            // Badge enlarged (h=76, font 32px) for prominent display
+            drawEmeraldGoldBadge(name1, 514, 512, 76, 32);
         }
 
         const dataUrl = canvas.toDataURL("image/png", 0.92);
