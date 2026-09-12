@@ -3767,153 +3767,196 @@
                             </div>
                         </div>
 
-                        <!-- Photo Uploads Section (Owner/Contact Photo & Storefront Photo) -->
-                        <div class="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-2xs">
+                        <!-- Photo Uploads Section (Storefront Photos 1-3 & Owner Photos 1-2) -->
+                        <div class="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-2xs">
                             <div
                                 class="font-bold text-slate-800 text-xs flex items-center justify-between border-b border-slate-100 pb-2">
                                 <span class="flex items-center gap-1.5 text-emerald-800">
                                     <span
                                         class="material-symbols-outlined text-base text-emerald-600">add_a_photo</span>
-                                    <span>อัปโหลดรูปภาพร้านค้าและผู้ติดต่อ (3 ส่วน)</span>
+                                    <span>อัปโหลดรูปภาพร้านค้าและเจ้าของร้าน (สไลด์แบนเนอร์โพรไฟล์)</span>
                                 </span>
                                 <span class="text-[10px] text-slate-400 font-normal">รองรับไฟล์ JPG, PNG, WEBP</span>
                             </div>
 
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <!-- 1. รูปหน้าร้านค้า / แผงค้า -->
-                                <div
-                                    class="bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between space-y-2.5">
-                                    <div>
-                                        <label
-                                            class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
-                                            <span
-                                                class="material-symbols-outlined text-xs text-emerald-600">storefront</span>
-                                            <span>1. รูปหน้าร้านค้า / แผงค้า</span>
-                                        </label>
-                                        <p class="text-[10px] text-slate-500 mb-2">สัดส่วนแนวนอน 16:9 สำหรับ Hero Banner สไลด์แรก</p>
+                            <!-- ส่วนที่ 1: รูปภาพหน้าร้านค้า / แผงค้า (รวม 3 รูป สลับแสดงบน Hero Banner) -->
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-extrabold text-[12px] text-slate-800 flex items-center gap-1.5">
+                                        <span class="material-symbols-outlined text-sm text-emerald-600">storefront</span>
+                                        <span>1. รูปหน้าร้านค้า / แผงค้า (อัปโหลดได้สูงสุด 3 รูป สลับแสดงบนโพรไฟล์)</span>
+                                    </span>
+                                    <span class="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">16:9 แนวนอน</span>
+                                </div>
 
-                                        <div class="flex items-center gap-3">
-                                            <div
-                                                class="relative w-24 rounded-xl bg-slate-900 border-2 border-dashed border-slate-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner aspect-[16/9]">
-                                                <img id="m-preview-stall-img" src="" alt="รูปหน้าร้าน"
-                                                    class="w-full h-full object-cover hidden">
-                                                <span id="m-preview-stall-placeholder"
-                                                    class="material-symbols-outlined text-2xl text-slate-400">store</span>
-                                            </div>
-                                            <div class="flex-1 space-y-1">
-                                                <label
-                                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition-all">
-                                                    <span
-                                                        class="material-symbols-outlined text-sm text-emerald-600">upload</span>
-                                                    <span>เลือกรูปหน้าร้านค้า</span>
-                                                    <input type="file" accept="image/*"
-                                                        onchange="handleMerchantFileUpload(event, 'm-stall-image-url', 'm-preview-stall-img')"
-                                                        class="hidden">
-                                                </label>
-                                                <input type="hidden" id="m-stall-image-url" value="">
-                                                <div class="text-[10px] text-slate-400" id="m-stall-file-hint">ยังไม่ได้เลือกรูปภาพ</div>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <!-- 1.1 รูปหน้าร้านค้า รูปที่ 1 (รูปหลัก) -->
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between space-y-2 relative">
+                                        <span class="absolute top-2 right-2 text-[9px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded-full border border-emerald-200">รูปหลัก (สไลด์ 1)</span>
+                                        <div>
+                                            <label class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
+                                                <span>รูปหน้าร้าน รูปที่ 1</span>
+                                            </label>
+                                            <p class="text-[10px] text-slate-500 mb-2">ภาพหน้าร้านภาพแรกที่ลูกค้าเห็น</p>
+
+                                            <div class="flex items-center gap-3">
+                                                <div class="relative w-20 rounded-xl bg-slate-900 border-2 border-dashed border-slate-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner aspect-[16/9]">
+                                                    <img id="m-preview-stall-img" src="" alt="รูปหน้าร้าน 1" class="w-full h-full object-cover hidden">
+                                                    <span id="m-preview-stall-placeholder" class="material-symbols-outlined text-2xl text-slate-400">store</span>
+                                                </div>
+                                                <div class="flex-1 space-y-1">
+                                                    <label class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-[11px] font-bold shadow-2xs cursor-pointer active:scale-95 transition-all">
+                                                        <span class="material-symbols-outlined text-sm text-emerald-600">upload</span>
+                                                        <span>เลือกรูปที่ 1</span>
+                                                        <input type="file" accept="image/*" onchange="handleMerchantFileUpload(event, 'm-stall-image-url', 'm-preview-stall-img')" class="hidden">
+                                                    </label>
+                                                    <input type="hidden" id="m-stall-image-url" value="">
+                                                    <div class="text-[10px] text-slate-400" id="m-stall-file-hint">ยังไม่ได้เลือกรูปภาพ</div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                <!-- 2. รูปเจ้าของร้าน คนที่ 1 + Name Badge Nickname -->
-                                <div
-                                    class="bg-blue-50/60 p-3 rounded-xl border border-blue-200/70 flex flex-col justify-between space-y-2.5">
-                                    <div>
-                                        <label
-                                            class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
-                                            <span
-                                                class="material-symbols-outlined text-xs text-blue-600">account_circle</span>
-                                            <span>2. รูปเจ้าของร้าน คนที่ 1</span>
-                                        </label>
-                                        <p class="text-[10px] text-slate-500 mb-2">รูปใบหน้าคนที่ 1 — จะถูกตัดใส่วงกลมบนเทมเพลตอัตโนมัติ</p>
-                                        <div class="flex items-center gap-3">
-                                            <div
-                                                class="relative w-24 rounded-xl bg-slate-900 border-2 border-dashed border-blue-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner aspect-[16/9]">
-                                                <img id="m-preview-owner-img" src="" alt="รูปเจ้าของร้าน"
-                                                    class="w-full h-full object-cover hidden">
-                                                <span id="m-preview-owner-placeholder"
-                                                    class="material-symbols-outlined text-2xl text-slate-400">person</span>
-                                            </div>
-                                            <div class="flex-1 space-y-1.5">
-                                                <label
-                                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-blue-50 text-slate-700 border border-blue-300 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition-all">
-                                                    <span
-                                                        class="material-symbols-outlined text-sm text-blue-600">upload</span>
-                                                    <span>เลือกรูปคนที่ 1</span>
-                                                    <input type="file" accept="image/*"
-                                                        onchange="handleMerchantFileUpload(event, 'm-owner-image-url', 'm-preview-owner-img')"
-                                                        class="hidden">
-                                                </label>
-                                                <input type="hidden" id="m-owner-image-url" value="">
-                                                <div class="text-[10px] text-slate-400" id="m-owner-file-hint">ยังไม่ได้เลือกรูปภาพ</div>
-                                            </div>
-                                        </div>
-                                        <div class="mt-2.5">
-                                            <label class="block font-bold text-blue-800 text-[10px] mb-1 flex items-center gap-1">
-                                                <span class="material-symbols-outlined text-[12px]">badge</span>
-                                                <span>ชื่อที่แสดงบนป้ายชื่อ (Name Badge)</span>
+                                    <!-- 1.2 รูปหน้าร้านค้า รูปที่ 2 (เพิ่มเติม) -->
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-dashed border-slate-300/80 flex flex-col justify-between space-y-2 relative">
+                                        <span class="absolute top-2 right-2 text-[9px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded-full border border-slate-300">ไม่บังคับ (สไลด์ 2)</span>
+                                        <div>
+                                            <label class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
+                                                <span>รูปหน้าร้าน รูปที่ 2</span>
                                             </label>
-                                            <input type="text" id="m-owner1-nickname" placeholder="เช่น เฮียกวง, คุณสมชาย"
-                                                maxlength="20"
-                                                class="w-full p-2 rounded-xl border border-blue-300 focus:ring-2 focus:ring-blue-400 text-xs font-medium bg-white"
-                                                oninput="onOwnerNicknameInput()">
-                                            <p class="text-[9px] text-blue-600/70 mt-0.5">ปรากฏบนป้ายสีเขียวทองใต้รูป</p>
+                                            <p class="text-[10px] text-slate-500 mb-2">ภาพมุมสินค้าหรือแผงค้าเพิ่มเติม</p>
+
+                                            <div class="flex items-center gap-3">
+                                                <div class="relative w-20 rounded-xl bg-slate-900 border-2 border-dashed border-slate-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner aspect-[16/9]">
+                                                    <img id="m-preview-stall2-img" src="" alt="รูปหน้าร้าน 2" class="w-full h-full object-cover hidden">
+                                                    <span id="m-preview-stall2-placeholder" class="material-symbols-outlined text-2xl text-slate-400">store</span>
+                                                </div>
+                                                <div class="flex-1 space-y-1">
+                                                    <label class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-[11px] font-bold shadow-2xs cursor-pointer active:scale-95 transition-all">
+                                                        <span class="material-symbols-outlined text-sm text-emerald-600">upload</span>
+                                                        <span>เลือกรูปที่ 2</span>
+                                                        <input type="file" accept="image/*" onchange="handleMerchantFileUpload(event, 'm-stall2-image-url', 'm-preview-stall2-img')" class="hidden">
+                                                    </label>
+                                                    <input type="hidden" id="m-stall2-image-url" value="">
+                                                    <div class="text-[10px] text-slate-400" id="m-stall2-file-hint">ยังไม่ได้เลือกรูปภาพ</div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                <!-- 3. รูปเจ้าของร้าน คนที่ 2 (ไม่บังคับ) -->
-                                <div
-                                    class="bg-purple-50/50 p-3 rounded-xl border border-dashed border-purple-200/60 flex flex-col justify-between space-y-2.5 relative">
-                                    <span class="absolute top-2 right-2 text-[9px] bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded-full border border-purple-200">ไม่บังคับ</span>
-                                    <div>
-                                        <label
-                                            class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
-                                            <span
-                                                class="material-symbols-outlined text-xs text-purple-600">person_add</span>
-                                            <span>3. รูปเจ้าของร้าน คนที่ 2</span>
-                                        </label>
-                                        <p class="text-[10px] text-slate-500 mb-2">ถ้ามี 2 คน — ระบบจะใช้เทมเพลตวงกลมคู่อัตโนมัติ</p>
-                                        <div class="flex items-center gap-3">
-                                            <div
-                                                class="relative w-24 rounded-xl bg-slate-800/70 border-2 border-dashed border-purple-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner aspect-[16/9]">
-                                                <img id="m-preview-owner2-img" src="" alt="รูปเจ้าของร้านคนที่ 2"
-                                                    class="w-full h-full object-cover hidden">
-                                                <span id="m-preview-owner2-placeholder"
-                                                    class="material-symbols-outlined text-2xl text-slate-400">person_add</span>
-                                            </div>
-                                            <div class="flex-1 space-y-1.5">
-                                                <label
-                                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-purple-50 text-slate-700 border border-purple-300 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition-all">
-                                                    <span
-                                                        class="material-symbols-outlined text-sm text-purple-600">upload</span>
-                                                    <span>เลือกรูปคนที่ 2</span>
-                                                    <input type="file" accept="image/*"
-                                                        onchange="handleMerchantFileUpload(event, 'm-owner2-image-url', 'm-preview-owner2-img')"
-                                                        class="hidden">
-                                                </label>
-                                                <input type="hidden" id="m-owner2-image-url" value="">
-                                                <div class="text-[10px] text-slate-400" id="m-owner2-file-hint">ยังไม่ได้เลือกรูปภาพ</div>
-                                            </div>
-                                        </div>
-                                        <div class="mt-2.5">
-                                            <label class="block font-bold text-purple-800 text-[10px] mb-1 flex items-center gap-1">
-                                                <span class="material-symbols-outlined text-[12px]">badge</span>
-                                                <span>ชื่อที่แสดงบนป้ายชื่อ (Name Badge)</span>
+                                    <!-- 1.3 รูปหน้าร้านค้า รูปที่ 3 (เพิ่มเติม) -->
+                                    <div class="bg-slate-50 p-3 rounded-xl border border-dashed border-slate-300/80 flex flex-col justify-between space-y-2 relative">
+                                        <span class="absolute top-2 right-2 text-[9px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded-full border border-slate-300">ไม่บังคับ (สไลด์ 3)</span>
+                                        <div>
+                                            <label class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
+                                                <span>รูปหน้าร้าน รูปที่ 3</span>
                                             </label>
-                                            <input type="text" id="m-owner2-nickname" placeholder="เช่น เจ๊เล็ก, คุณสมหญิง"
-                                                maxlength="20"
-                                                class="w-full p-2 rounded-xl border border-purple-300 focus:ring-2 focus:ring-purple-400 text-xs font-medium bg-white"
-                                                oninput="onOwnerNicknameInput()">
-                                            <p class="text-[9px] text-purple-600/70 mt-0.5">ปรากฏบนป้ายสีเขียวทองใต้รูป</p>
+                                            <p class="text-[10px] text-slate-500 mb-2">ภาพบรรยากาศหรือการจัดวางของสด</p>
+
+                                            <div class="flex items-center gap-3">
+                                                <div class="relative w-20 rounded-xl bg-slate-900 border-2 border-dashed border-slate-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner aspect-[16/9]">
+                                                    <img id="m-preview-stall3-img" src="" alt="รูปหน้าร้าน 3" class="w-full h-full object-cover hidden">
+                                                    <span id="m-preview-stall3-placeholder" class="material-symbols-outlined text-2xl text-slate-400">store</span>
+                                                </div>
+                                                <div class="flex-1 space-y-1">
+                                                    <label class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-[11px] font-bold shadow-2xs cursor-pointer active:scale-95 transition-all">
+                                                        <span class="material-symbols-outlined text-sm text-emerald-600">upload</span>
+                                                        <span>เลือกรูปที่ 3</span>
+                                                        <input type="file" accept="image/*" onchange="handleMerchantFileUpload(event, 'm-stall3-image-url', 'm-preview-stall3-img')" class="hidden">
+                                                    </label>
+                                                    <input type="hidden" id="m-stall3-image-url" value="">
+                                                    <div class="text-[10px] text-slate-400" id="m-stall3-file-hint">ยังไม่ได้เลือกรูปภาพ</div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Live Preview: Owner Template Banner -->
+                            <!-- ส่วนที่ 2: รูปเจ้าของร้านและป้ายชื่อ (ตัดใส่วงกลมเทมเพลตอัตโนมัติ) -->
+                            <div class="space-y-2 pt-2 border-t border-slate-100">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-extrabold text-[12px] text-slate-800 flex items-center gap-1.5">
+                                        <span class="material-symbols-outlined text-sm text-blue-600">badge</span>
+                                        <span>2. รูปภาพเจ้าของร้านและป้ายชื่อ (ตัดใส่เทมเพลตอัตโนมัติ)</span>
+                                    </span>
+                                    <span class="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full font-bold">1 หรือ 2 ท่าน</span>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <!-- 2.1 รูปเจ้าของร้าน คนที่ 1 + Name Badge Nickname -->
+                                    <div class="bg-blue-50/60 p-3 rounded-xl border border-blue-200/70 flex flex-col justify-between space-y-2.5">
+                                        <div>
+                                            <label class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
+                                                <span class="material-symbols-outlined text-xs text-blue-600">account_circle</span>
+                                                <span>รูปเจ้าของร้าน คนที่ 1</span>
+                                            </label>
+                                            <p class="text-[10px] text-slate-500 mb-2">รูปใบหน้าคนที่ 1 — จะถูกตัดใส่วงกลมบนเทมเพลตอัตโนมัติ</p>
+                                            <div class="flex items-center gap-3">
+                                                <div class="relative w-20 rounded-xl bg-slate-900 border-2 border-dashed border-blue-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner aspect-[16/9]">
+                                                    <img id="m-preview-owner-img" src="" alt="รูปเจ้าของร้าน" class="w-full h-full object-cover hidden">
+                                                    <span id="m-preview-owner-placeholder" class="material-symbols-outlined text-2xl text-slate-400">person</span>
+                                                </div>
+                                                <div class="flex-1 space-y-1.5">
+                                                    <label class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-blue-50 text-slate-700 border border-blue-300 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition-all">
+                                                        <span class="material-symbols-outlined text-sm text-blue-600">upload</span>
+                                                        <span>เลือกรูปคนที่ 1</span>
+                                                        <input type="file" accept="image/*" onchange="handleMerchantFileUpload(event, 'm-owner-image-url', 'm-preview-owner-img')" class="hidden">
+                                                    </label>
+                                                    <input type="hidden" id="m-owner-image-url" value="">
+                                                    <div class="text-[10px] text-slate-400" id="m-owner-file-hint">ยังไม่ได้เลือกรูปภาพ</div>
+                                                </div>
+                                            </div>
+                                            <div class="mt-2.5">
+                                                <label class="block font-bold text-blue-800 text-[10px] mb-1 flex items-center gap-1">
+                                                    <span class="material-symbols-outlined text-[12px]">badge</span>
+                                                    <span>ชื่อที่แสดงบนป้ายชื่อ (Name Badge)</span>
+                                                </label>
+                                                <input type="text" id="m-owner1-nickname" placeholder="เช่น เฮียกวง, คุณสมชาย" maxlength="20" class="w-full p-2 rounded-xl border border-blue-300 focus:ring-2 focus:ring-blue-400 text-xs font-medium bg-white" oninput="onOwnerNicknameInput()">
+                                                <p class="text-[9px] text-blue-600/70 mt-0.5">ปรากฏบนป้ายสีเขียวทองใต้รูป</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 2.2 รูปเจ้าของร้าน คนที่ 2 (ไม่บังคับ) -->
+                                    <div class="bg-purple-50/50 p-3 rounded-xl border border-dashed border-purple-200/60 flex flex-col justify-between space-y-2.5 relative">
+                                        <span class="absolute top-2 right-2 text-[9px] bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded-full border border-purple-200">ไม่บังคับ</span>
+                                        <div>
+                                            <label class="block font-bold text-slate-700 text-[11px] mb-0.5 flex items-center gap-1">
+                                                <span class="material-symbols-outlined text-xs text-purple-600">person_add</span>
+                                                <span>รูปเจ้าของร้าน คนที่ 2</span>
+                                            </label>
+                                            <p class="text-[10px] text-slate-500 mb-2">ถ้ามี 2 คน — ระบบจะใช้เทมเพลตวงกลมคู่อัตโนมัติ</p>
+                                            <div class="flex items-center gap-3">
+                                                <div class="relative w-20 rounded-xl bg-slate-800/70 border-2 border-dashed border-purple-300 overflow-hidden shrink-0 flex items-center justify-center shadow-inner aspect-[16/9]">
+                                                    <img id="m-preview-owner2-img" src="" alt="รูปเจ้าของร้านคนที่ 2" class="w-full h-full object-cover hidden">
+                                                    <span id="m-preview-owner2-placeholder" class="material-symbols-outlined text-2xl text-slate-400">person_add</span>
+                                                </div>
+                                                <div class="flex-1 space-y-1.5">
+                                                    <label class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-purple-50 text-slate-700 border border-purple-300 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition-all">
+                                                        <span class="material-symbols-outlined text-sm text-purple-600">upload</span>
+                                                        <span>เลือกรูปคนที่ 2</span>
+                                                        <input type="file" accept="image/*" onchange="handleMerchantFileUpload(event, 'm-owner2-image-url', 'm-preview-owner2-img')" class="hidden">
+                                                    </label>
+                                                    <input type="hidden" id="m-owner2-image-url" value="">
+                                                    <div class="text-[10px] text-slate-400" id="m-owner2-file-hint">ยังไม่ได้เลือกรูปภาพ</div>
+                                                </div>
+                                            </div>
+                                            <div class="mt-2.5">
+                                                <label class="block font-bold text-purple-800 text-[10px] mb-1 flex items-center gap-1">
+                                                    <span class="material-symbols-outlined text-[12px]">badge</span>
+                                                    <span>ชื่อที่แสดงบนป้ายชื่อ (Name Badge)</span>
+                                                </label>
+                                                <input type="text" id="m-owner2-nickname" placeholder="เช่น เจ๊เล็ก, คุณสมหญิง" maxlength="20" class="w-full p-2 rounded-xl border border-purple-300 focus:ring-2 focus:ring-purple-400 text-xs font-medium bg-white" oninput="onOwnerNicknameInput()">
+                                                <p class="text-[9px] text-purple-600/70 mt-0.5">ปรากฏบนป้ายสีเขียวทองใต้รูป</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live Preview: Owner Template Banner -->
                             <div id="owner-template-live-preview" class="hidden mt-1">
                                 <div class="font-bold text-[10px] text-emerald-800 mb-1.5 flex items-center gap-1">
                                     <span class="material-symbols-outlined text-xs text-emerald-600">auto_awesome</span>
@@ -6104,7 +6147,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.40_green_fav_big_badge"></script>
+    <script src="app.js?v=9.41_3_stall_images_carousel"></script>
 </body>
 
 </html>

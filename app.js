@@ -4962,6 +4962,14 @@ function renderCatalog() {
         const extraItemsCount = extraCatalog.reduce((sum, g) => sum + (g.items ? g.items.length : 0), 0);
         const hasExtraCatalog = extraItemsCount > 0;
 
+        // Collect all stall photos (up to 3 storefront photos)
+        const stallPhotosList = (stall.stallImages && Array.isArray(stall.stallImages) && stall.stallImages.length > 0)
+            ? stall.stallImages.filter(Boolean)
+            : [stall.stallImage, stall.stallImage2, stall.stallImage3].filter(Boolean);
+        if (stallPhotosList.length === 0) stallPhotosList.push(stallImg || MERCHANT_PRESET_IMAGES.stall.chicken);
+        const ownerSlideIdx = stallPhotosList.length;
+        const totalBannerSlides = stallPhotosList.length + 1;
+
         // Fallback: if stall.products is empty or missing, populate from catalog items so products always show!
         let stallProducts = (stall.products && Array.isArray(stall.products))
             ? stall.products.filter(p => p && p.name && p.name.trim())
@@ -4996,17 +5004,20 @@ function renderCatalog() {
                 <!-- ======================================================== -->
                 <div class="bg-gradient-to-b from-slate-50/90 to-white border-b border-slate-200/70">
                     
-                    <!-- 🌟 HERO BANNER CAROUSEL (สลับ 2 ภาพ: ภาพแผงค้า & ภาพเจ้าของร้าน) -->
+                    <!-- 🌟 HERO BANNER CAROUSEL (สลับ 1-3 ภาพหน้าร้านค้า & ภาพเจ้าของร้าน รวม ${totalBannerSlides} สไลด์) -->
                     <div id="stall-banner-container-${stall.stallId}" class="relative h-44 sm:h-52 w-full overflow-hidden bg-slate-950 group select-none">
                         <!-- Slides Track -->
                         <div id="stall-carousel-track-${stall.stallId}" class="flex transition-transform duration-500 ease-out h-full w-full">
-                            <!-- Slide 1: ภาพแผงค้า/ร้านค้า -->
-                            <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
-                                <img src="${stallImg}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
-                                <img src="${stallImg}" alt="ภาพร้านค้า ${stall.stallName}" class="relative w-full h-full object-cover object-center">
-                                <div class="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none"></div>
-                            </div>
-                            <!-- Slide 2: ภาพเจ้าของแผงค้า (Composite Owner Template & Name Badge) -->
+                            ${stallPhotosList.map((photoUrl, pIdx) => `
+                                <!-- Slide ${pIdx + 1}: ภาพแผงค้า/หน้าร้าน ${pIdx + 1} -->
+                                <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
+                                    <img src="${photoUrl}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
+                                    <img src="${photoUrl}" alt="ภาพร้านค้า ${stall.stallName} (รูปที่ ${pIdx + 1})" class="relative w-full h-full object-cover object-center">
+                                    <div class="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none"></div>
+                                </div>
+                            `).join('')}
+
+                            <!-- Slide ${ownerSlideIdx + 1}: ภาพเจ้าของแผงค้า (Composite Owner Template & Name Badge) -->
                             <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
                                 <img id="stall-owner-banner-blur-${stall.stallId}" src="${ownerBannerUrl || ownerImg}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
                                 <img id="stall-owner-banner-img-${stall.stallId}" src="${ownerBannerUrl || ownerImg}" alt="ภาพเจ้าของร้าน ${ownerNm}" class="relative w-full h-full object-contain sm:object-cover object-center">
@@ -5021,6 +5032,13 @@ function renderCatalog() {
                         <button type="button" onclick="nextStallBannerSlide('${stall.stallId}', event)" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md" title="รูปถัดไป">
                             <span class="material-symbols-outlined text-base">chevron_right</span>
                         </button>
+
+                        <!-- Indicator Dots -->
+                        <div id="stall-dots-${stall.stallId}" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 pointer-events-auto bg-black/40 px-2 py-0.5 rounded-full backdrop-blur-xs">
+                            ${Array.from({ length: totalBannerSlides }).map((_, dIdx) => `
+                                <button type="button" onclick="goToStallBannerSlide('${stall.stallId}', ${dIdx}, event)" class="stall-banner-dot ${dIdx === 0 ? 'w-4 h-1.5 rounded-full bg-emerald-400' : 'w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white'} transition-all cursor-pointer" title="สไลด์ที่ ${dIdx + 1}"></button>
+                            `).join('')}
+                        </div>
 
                     </div>
 
@@ -5042,7 +5060,7 @@ function renderCatalog() {
 
                             <!-- เจ้าของแผงค้า (ปุ่มสลับรูป) -->
                             <div class="flex items-center gap-2 text-[11px] text-slate-600">
-                                <button type="button" onclick="goToStallBannerSlide('${stall.stallId}', 1, event)" class="inline-flex items-center gap-1.5 hover:text-emerald-700 transition-colors group/owner text-left bg-slate-100/90 hover:bg-emerald-50 px-2 py-0.5 rounded-lg border border-slate-200/80 cursor-pointer" title="แตะเพื่อสลับดูรูปเจ้าของร้านบนแบนเนอร์">
+                                <button type="button" onclick="toggleOwnerBannerSlide('${stall.stallId}', ${ownerSlideIdx}, event)" class="inline-flex items-center gap-1.5 hover:text-emerald-700 transition-colors group/owner text-left bg-slate-100/90 hover:bg-emerald-50 px-2 py-0.5 rounded-lg border border-slate-200/80 cursor-pointer" title="แตะเพื่อสลับดูรูปเจ้าของร้านบนแบนเนอร์">
                                     <span class="relative w-5 h-5 rounded-full ring-1 ring-emerald-500 overflow-hidden shrink-0 inline-block align-middle bg-white">
                                         <img src="${ownerImg}" alt="${ownerNm}" class="w-full h-full object-cover">
                                     </span>
@@ -17798,6 +17816,8 @@ window.renderOwnerTemplateLivePreview = renderOwnerTemplateLivePreview;
 
 function updateMerchantImagePreviews() {
     const stallImgUrl = (document.getElementById("m-stall-image-url")?.value || "").trim();
+    const stall2ImgUrl = (document.getElementById("m-stall2-image-url")?.value || "").trim();
+    const stall3ImgUrl = (document.getElementById("m-stall3-image-url")?.value || "").trim();
     const ownerImgUrl = (document.getElementById("m-owner-image-url")?.value || "").trim();
     const owner2ImgUrl = (document.getElementById("m-owner2-image-url")?.value || "").trim();
 
@@ -17819,7 +17839,7 @@ function updateMerchantImagePreviews() {
             previewStall.classList.remove("hidden");
             if (placeholderStall) placeholderStall.classList.add("hidden");
             if (hintStall) {
-                hintStall.textContent = "✅ อัปโหลดรูปหน้าร้านแล้ว";
+                hintStall.textContent = "✅ อัปโหลดรูปที่ 1 แล้ว";
                 hintStall.className = "text-[10px] text-emerald-600 font-bold";
             }
         } else {
@@ -17829,6 +17849,52 @@ function updateMerchantImagePreviews() {
             if (hintStall) {
                 hintStall.textContent = "ยังไม่ได้เลือกรูปภาพ";
                 hintStall.className = "text-[10px] text-slate-400";
+            }
+        }
+    }
+
+    const previewStall2 = document.getElementById("m-preview-stall2-img");
+    const placeholderStall2 = document.getElementById("m-preview-stall2-placeholder");
+    const hintStall2 = document.getElementById("m-stall2-file-hint");
+    if (previewStall2) {
+        if (stall2ImgUrl) {
+            previewStall2.src = stall2ImgUrl;
+            previewStall2.classList.remove("hidden");
+            if (placeholderStall2) placeholderStall2.classList.add("hidden");
+            if (hintStall2) {
+                hintStall2.textContent = "✅ อัปโหลดรูปที่ 2 แล้ว";
+                hintStall2.className = "text-[10px] text-emerald-600 font-bold";
+            }
+        } else {
+            previewStall2.src = "";
+            previewStall2.classList.add("hidden");
+            if (placeholderStall2) placeholderStall2.classList.remove("hidden");
+            if (hintStall2) {
+                hintStall2.textContent = "ยังไม่ได้เลือกรูปภาพ";
+                hintStall2.className = "text-[10px] text-slate-400";
+            }
+        }
+    }
+
+    const previewStall3 = document.getElementById("m-preview-stall3-img");
+    const placeholderStall3 = document.getElementById("m-preview-stall3-placeholder");
+    const hintStall3 = document.getElementById("m-stall3-file-hint");
+    if (previewStall3) {
+        if (stall3ImgUrl) {
+            previewStall3.src = stall3ImgUrl;
+            previewStall3.classList.remove("hidden");
+            if (placeholderStall3) placeholderStall3.classList.add("hidden");
+            if (hintStall3) {
+                hintStall3.textContent = "✅ อัปโหลดรูปที่ 3 แล้ว";
+                hintStall3.className = "text-[10px] text-emerald-600 font-bold";
+            }
+        } else {
+            previewStall3.src = "";
+            previewStall3.classList.add("hidden");
+            if (placeholderStall3) placeholderStall3.classList.remove("hidden");
+            if (hintStall3) {
+                hintStall3.textContent = "ยังไม่ได้เลือกรูปภาพ";
+                hintStall3.className = "text-[10px] text-slate-400";
             }
         }
     }
@@ -18009,7 +18075,9 @@ function openMerchantEditModal(stallId) {
     if (document.getElementById("m-desc")) document.getElementById("m-desc").value = stall.description || stall.shopDescription || "";
 
     // Fill Images & Nicknames for Owner Template
-    if (document.getElementById("m-stall-image-url")) document.getElementById("m-stall-image-url").value = stall.stallImage || "";
+    if (document.getElementById("m-stall-image-url")) document.getElementById("m-stall-image-url").value = stall.stallImage || (stall.stallImages ? stall.stallImages[0] : "") || "";
+    if (document.getElementById("m-stall2-image-url")) document.getElementById("m-stall2-image-url").value = stall.stallImage2 || (stall.stallImages ? stall.stallImages[1] : "") || "";
+    if (document.getElementById("m-stall3-image-url")) document.getElementById("m-stall3-image-url").value = stall.stallImage3 || (stall.stallImages ? stall.stallImages[2] : "") || "";
     if (document.getElementById("m-owner-image-url")) document.getElementById("m-owner-image-url").value = stall.ownerImage || "";
     if (document.getElementById("m-owner2-image-url")) document.getElementById("m-owner2-image-url").value = stall.owner2Image || "";
     if (document.getElementById("m-owner1-nickname")) document.getElementById("m-owner1-nickname").value = stall.owner1Nickname || "";
@@ -18066,8 +18134,10 @@ function fillSampleMerchantRegistration() {
     document.getElementById("m-highlight").value = "ไก่สดส่งตรงจากฟาร์มทุกเช้า ชำแหละสด สะอาด ไร้สารเร่ง ปลอดภัย 100%";
     document.getElementById("m-desc").value = "จำหน่ายเนื้อไก่สด อกไก่ น่องไก่ สันใน โครงไก่ และเครื่องในสดใหม่คัดเกรด A ประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง) อ.บ้านบึง จ.ชลบุรี พร้อมบริการตัดแต่งตามสั่ง";
 
-    // 2. Images
+    // 2. Images (3 Stall Photos + Owner Photo)
     document.getElementById("m-stall-image-url").value = MERCHANT_PRESET_IMAGES.stall.chicken;
+    if (document.getElementById("m-stall2-image-url")) document.getElementById("m-stall2-image-url").value = MERCHANT_PRESET_IMAGES.stall.pork;
+    if (document.getElementById("m-stall3-image-url")) document.getElementById("m-stall3-image-url").value = MERCHANT_PRESET_IMAGES.stall.beef;
     document.getElementById("m-owner-image-url").value = MERCHANT_PRESET_IMAGES.owner.man1;
     updateMerchantImagePreviews();
 
@@ -18205,6 +18275,8 @@ function registerNewMerchantStall() {
 
     // Clear images & nicknames
     if (document.getElementById("m-stall-image-url")) document.getElementById("m-stall-image-url").value = "";
+    if (document.getElementById("m-stall2-image-url")) document.getElementById("m-stall2-image-url").value = "";
+    if (document.getElementById("m-stall3-image-url")) document.getElementById("m-stall3-image-url").value = "";
     if (document.getElementById("m-owner-image-url")) document.getElementById("m-owner-image-url").value = "";
     if (document.getElementById("m-owner2-image-url")) document.getElementById("m-owner2-image-url").value = "";
     if (document.getElementById("m-owner1-nickname")) document.getElementById("m-owner1-nickname").value = "";
@@ -18578,6 +18650,8 @@ async function saveMerchantStallData() {
         const desc = (document.getElementById("m-desc")?.value || "").trim();
 
         let stallImage = (document.getElementById("m-stall-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
+        let stallImage2 = (document.getElementById("m-stall2-image-url")?.value || "").trim();
+        let stallImage3 = (document.getElementById("m-stall3-image-url")?.value || "").trim();
         let ownerImage = (document.getElementById("m-owner-image-url")?.value || "").trim() || MERCHANT_PRESET_IMAGES.owner.man1;
         let owner2Image = (document.getElementById("m-owner2-image-url")?.value || "").trim();
         const owner1Nickname = (document.getElementById("m-owner1-nickname")?.value || "").trim();
@@ -18585,12 +18659,19 @@ async function saveMerchantStallData() {
         if (stallImage && typeof compressDataUrl === "function") {
             try { stallImage = await compressDataUrl(stallImage, 640, 360, 0.8); } catch(e) {}
         }
+        if (stallImage2 && typeof compressDataUrl === "function") {
+            try { stallImage2 = await compressDataUrl(stallImage2, 640, 360, 0.8); } catch(e) {}
+        }
+        if (stallImage3 && typeof compressDataUrl === "function") {
+            try { stallImage3 = await compressDataUrl(stallImage3, 640, 360, 0.8); } catch(e) {}
+        }
         if (ownerImage && typeof compressDataUrl === "function") {
             try { ownerImage = await compressDataUrl(ownerImage, 640, 360, 0.8); } catch(e) {}
         }
         if (owner2Image && typeof compressDataUrl === "function") {
             try { owner2Image = await compressDataUrl(owner2Image, 640, 360, 0.8); } catch(e) {}
         }
+        const stallImages = [stallImage, stallImage2, stallImage3].filter(Boolean);
 
         if (!stallName || !phone) {
             alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน: ชื่อร้านค้า และเบอร์โทรศัพท์ผู้ติดต่อ");
@@ -18748,6 +18829,9 @@ async function saveMerchantStallData() {
             description: desc,
             shopDescription: desc,
             stallImage: stallImage,
+            stallImage2: stallImage2,
+            stallImage3: stallImage3,
+            stallImages: stallImages,
             ownerImage: ownerImage,
             owner2Image: owner2Image,
             owner1Nickname: owner1Nickname,
@@ -18955,6 +19039,12 @@ function previewMerchantLiveStore() {
     const highlight = document.getElementById("m-highlight")?.value.trim() || "ของสดคุณภาพดี คัดเกรดสดใหม่";
     const desc = document.getElementById("m-desc")?.value.trim() || "จำหน่ายของสดคุณภาพดีประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)";
     const stallImage = document.getElementById("m-stall-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
+    const stallImage2 = document.getElementById("m-stall2-image-url")?.value.trim() || "";
+    const stallImage3 = document.getElementById("m-stall3-image-url")?.value.trim() || "";
+    const previewStallPhotosList = [stallImage, stallImage2, stallImage3].filter(Boolean);
+    if (previewStallPhotosList.length === 0) previewStallPhotosList.push(MERCHANT_PRESET_IMAGES.stall.chicken);
+    const previewOwnerSlideIdx = previewStallPhotosList.length;
+    const totalPreviewSlides = previewStallPhotosList.length + 1;
     const ownerImage = document.getElementById("m-owner-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.owner.man1;
     const owner2Image = (document.getElementById("m-owner2-image-url")?.value || "").trim();
     const owner1Nickname = (document.getElementById("m-owner1-nickname")?.value || "").trim();
@@ -19059,13 +19149,15 @@ function previewMerchantLiveStore() {
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-left">
             <div id="preview-stall-banner" class="relative h-44 sm:h-52 w-full bg-slate-950 overflow-hidden group select-none">
                 <div id="preview-carousel-track" class="flex transition-transform duration-500 ease-out h-full w-full">
-                    <!-- Slide 1: ภาพแผงค้า -->
-                    <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextPreviewBannerSlide()">
-                        <img src="${stallImage}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
-                        <img src="${stallImage}" alt="${stallName}" class="relative w-full h-full object-cover object-center">
-                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none"></div>
-                    </div>
-                    <!-- Slide 2: ภาพเจ้าของแผง (Composite Owner Template & Name Badge) -->
+                    ${previewStallPhotosList.map((photoUrl, pIdx) => `
+                        <!-- Slide ${pIdx + 1}: ภาพแผงค้า ${pIdx + 1} -->
+                        <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextPreviewBannerSlide()">
+                            <img src="${photoUrl}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
+                            <img src="${photoUrl}" alt="${stallName} (รูปที่ ${pIdx + 1})" class="relative w-full h-full object-cover object-center">
+                            <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none"></div>
+                        </div>
+                    `).join('')}
+                    <!-- Slide ${previewOwnerSlideIdx + 1}: ภาพเจ้าของแผง (Composite Owner Template & Name Badge) -->
                     <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextPreviewBannerSlide()">
                         <img id="preview-owner-banner-blur" src="${ownerBannerPreviewSrc}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
                         <img id="preview-owner-banner-img" src="${ownerBannerPreviewSrc}" alt="${ownerName}" class="relative w-full h-full object-contain sm:object-cover object-center">
@@ -19094,9 +19186,10 @@ function previewMerchantLiveStore() {
                             🏷️ ${catLabel}
                         </span>
                     </div>
-                    <div class="pointer-events-auto flex items-center gap-1.5 bg-black/50 backdrop-blur-xs px-2 py-0.5 rounded-full border border-white/15">
-                        <button type="button" onclick="goToPreviewBannerSlide(0)" id="preview-dot-0" class="w-4 h-1.5 rounded-full bg-emerald-400 transition-all cursor-pointer"></button>
-                        <button type="button" onclick="goToPreviewBannerSlide(1)" id="preview-dot-1" class="w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer"></button>
+                    <div id="preview-dots-container" class="pointer-events-auto flex items-center gap-1.5 bg-black/50 backdrop-blur-xs px-2 py-0.5 rounded-full border border-white/15">
+                        ${Array.from({ length: totalPreviewSlides }).map((_, dIdx) => `
+                            <button type="button" onclick="goToPreviewBannerSlide(${dIdx})" class="preview-dot ${dIdx === 0 ? 'w-4 h-1.5 rounded-full bg-emerald-400' : 'w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white'} transition-all cursor-pointer"></button>
+                        `).join('')}
                     </div>
                 </div>
 
@@ -19445,55 +19538,52 @@ function goToStallBannerSlide(stallId, slideIndex, e) {
     const track = document.getElementById(`stall-carousel-track-${stallId}`);
     if (!track) return;
 
-    slideIndex = slideIndex % 2;
-    if (slideIndex < 0) slideIndex = 1;
+    const totalSlides = track.children ? track.children.length : 2;
+    slideIndex = ((slideIndex % totalSlides) + totalSlides) % totalSlides;
     _stallBannerSlides[stallId] = slideIndex;
 
     track.style.transform = `translateX(-${slideIndex * 100}%)`;
 
-    // Update Indicator Dots
-    const dot0 = document.getElementById(`stall-dot-${stallId}-0`);
-    const dot1 = document.getElementById(`stall-dot-${stallId}-1`);
-    if (dot0 && dot1) {
-        if (slideIndex === 0) {
-            dot0.className = "stall-banner-dot w-4 h-1.5 rounded-full bg-emerald-400 transition-all shadow-xs cursor-pointer";
-            dot1.className = "stall-banner-dot w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer";
-        } else {
-            dot0.className = "stall-banner-dot w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer";
-            dot1.className = "stall-banner-dot w-4 h-1.5 rounded-full bg-emerald-400 transition-all shadow-xs cursor-pointer";
-        }
-    }
-
-    // Update Slide Badge
-    const badge = document.getElementById(`stall-slide-badge-${stallId}`);
-    if (badge) {
-        if (slideIndex === 0) {
-            badge.innerHTML = `
-                <span class="material-symbols-outlined text-[12px] text-emerald-400">storefront</span>
-                <span>ภาพแผงค้า</span>
-            `;
-            badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 text-white/90 shadow-sm backdrop-blur-md border border-white/20 flex items-center gap-1";
-        } else {
-            badge.innerHTML = `
-                <span class="material-symbols-outlined text-[12px] text-emerald-300">verified_user</span>
-                <span>เจ้าของแผง</span>
-            `;
-            badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-200 shadow-sm backdrop-blur-md border border-emerald-400/40 flex items-center gap-1";
-        }
+    // Update Indicator Dots dynamically
+    const dotsContainer = document.getElementById(`stall-dots-${stallId}`);
+    if (dotsContainer) {
+        const dots = dotsContainer.querySelectorAll(".stall-banner-dot");
+        dots.forEach((dot, idx) => {
+            if (idx === slideIndex) {
+                dot.className = "stall-banner-dot w-4 h-1.5 rounded-full bg-emerald-400 transition-all shadow-xs cursor-pointer";
+            } else {
+                dot.className = "stall-banner-dot w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer";
+            }
+        });
     }
 }
 
 function nextStallBannerSlide(stallId, e) {
     if (e && e.stopPropagation) e.stopPropagation();
+    const track = document.getElementById(`stall-carousel-track-${stallId}`);
+    const totalSlides = track && track.children ? track.children.length : 2;
     const current = _stallBannerSlides[stallId] || 0;
-    goToStallBannerSlide(stallId, current === 0 ? 1 : 0);
+    goToStallBannerSlide(stallId, (current + 1) % totalSlides);
 }
 
 function prevStallBannerSlide(stallId, e) {
     if (e && e.stopPropagation) e.stopPropagation();
+    const track = document.getElementById(`stall-carousel-track-${stallId}`);
+    const totalSlides = track && track.children ? track.children.length : 2;
     const current = _stallBannerSlides[stallId] || 0;
-    goToStallBannerSlide(stallId, current === 0 ? 1 : 0);
+    goToStallBannerSlide(stallId, (current - 1 + totalSlides) % totalSlides);
 }
+
+function toggleOwnerBannerSlide(stallId, ownerSlideIndex, e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    const current = _stallBannerSlides[stallId] || 0;
+    if (current === ownerSlideIndex) {
+        goToStallBannerSlide(stallId, 0);
+    } else {
+        goToStallBannerSlide(stallId, ownerSlideIndex);
+    }
+}
+window.toggleOwnerBannerSlide = toggleOwnerBannerSlide;
 
 function initStallBannerCarousels() {
     // Attach touch gestures to each stall banner container
@@ -19540,23 +19630,16 @@ function initStallBannerCarousels() {
 // Preview modal carousel functions
 let _previewSlideIndex = 0;
 function goToPreviewBannerSlide(idx) {
-    _previewSlideIndex = idx % 2;
-    if (_previewSlideIndex < 0) _previewSlideIndex = 1;
     const track = document.getElementById("preview-carousel-track");
+    const totalSlides = track && track.children ? track.children.length : 2;
+    _previewSlideIndex = ((idx % totalSlides) + totalSlides) % totalSlides;
     if (track) track.style.transform = `translateX(-${_previewSlideIndex * 100}%)`;
-    const dot0 = document.getElementById("preview-dot-0");
-    const dot1 = document.getElementById("preview-dot-1");
-    if (dot0 && dot1) {
-        dot0.className = _previewSlideIndex === 0 ? "w-4 h-1.5 rounded-full bg-emerald-400 transition-all cursor-pointer" : "w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer";
-        dot1.className = _previewSlideIndex === 1 ? "w-4 h-1.5 rounded-full bg-emerald-400 transition-all cursor-pointer" : "w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer";
-    }
-    const badge = document.getElementById("preview-slide-badge");
-    if (badge) {
-        if (_previewSlideIndex === 0) {
-            badge.innerHTML = `<span class="material-symbols-outlined text-[12px] text-emerald-400">storefront</span><span>ภาพแผงค้า</span>`;
-        } else {
-            badge.innerHTML = `<span class="material-symbols-outlined text-[12px] text-emerald-300">verified_user</span><span>เจ้าของแผง</span>`;
-        }
+    const dotsContainer = document.getElementById("preview-dots-container");
+    if (dotsContainer) {
+        const dots = dotsContainer.querySelectorAll(".preview-dot");
+        dots.forEach((dot, dIdx) => {
+            dot.className = dIdx === _previewSlideIndex ? "preview-dot w-4 h-1.5 rounded-full bg-emerald-400 transition-all cursor-pointer" : "preview-dot w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white transition-all cursor-pointer";
+        });
     }
 }
 function nextPreviewBannerSlide() { goToPreviewBannerSlide(_previewSlideIndex + 1); }
