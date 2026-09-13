@@ -20043,25 +20043,23 @@ function restartHeroBannerAutoplay() {
 
 function handleHeroBannerClick(index) {
     if (index === 0) {
-        // Slide 1: ตลาดสดพรีเมี่ยม
-        const catalogEl = document.getElementById("categories-container") || document.getElementById("catalog-section");
-        if (catalogEl) {
-            catalogEl.scrollIntoView({ behavior: "smooth" });
-        }
-        showToast("🛒 เลือกชมของสดคัดเกรดจาก 100 แผงค้าตลาดวิศิษฐ์ชัยได้เลยครับ");
+        // Slide 1: รวมบิลร้านค้าต่าง ๆ สั่งหลายแผง ค่าส่งรอบเดียว
+        openDirectoryModal();
+        showToast("🏪 ดูผัง 100 แผงค้า สั่งหลายร้าน รวมส่งรอบเดียวได้เลยครับ");
     } else if (index === 1) {
-        // Slide 2: เฮียส่ง ส่งตรงถึงมือคุณ รวดเร็ว ทันใจ
-        openLocationModal();
-        showToast("🛵 ระบุพิกัดจัดส่งเพื่อเช็ครอบส่งด่วน 30 นาทีถึงหน้าบ้าน");
+        // Slide 2: สด ๆ ใหม่ ๆ จากร้านค้า ส่งไวใน 30 นาที
+        const catEl = document.getElementById("category-tabs");
+        if (catEl) {
+            catEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        showToast("⚡ สั่งของสดตอนนี้ การันตีสดใหม่ส่งไวใน 30 นาที!");
     } else if (index === 2) {
-        // Slide 3: คูปองส่วนลดพิเศษ WELCOMESONG ส่งฟรี
-        const couponCode = "WELCOMESONG";
-        try {
-            if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(couponCode).catch(() => {});
-            }
-        } catch (e) {}
-        showToast(`🎉 รับสิทธิ์คูปอง '${couponCode}' ส่วนลดค่าส่งเรียบร้อยแล้ว!`);
+        // Slide 3: สิทธิพิเศษลูกค้าใหม่ รับส่วนลด & สะสมแต้มตลาดฮับ
+        const loyaltyBanner = document.getElementById("customer-loyalty-banner");
+        if (loyaltyBanner) {
+            loyaltyBanner.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        showToast("🎁 สิทธิพิเศษลูกค้าใหม่ รับส่วนลด ฿20 และสะสมแต้มทุกการสั่งซื้อ!");
     }
 }
 
