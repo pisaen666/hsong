@@ -1583,6 +1583,65 @@ function copyRiderGPSCoords() {
     }
 }
 
+// === หมวดหมู่สินค้าหลักและย่อย (Global Standard Categories) ===
+const STALL_PRODUCT_CATEGORIES = {
+    "🐔 ไก่สด & เนื้อสัตว์": ["ไก่สดทั้งตัว", "ชิ้นส่วนไก่", "เนื้อไก่แล่", "ไก่บ้าน", "เป็ด/นก", "เนื้อวัว", "เนื้อแพะ", "เครื่องในสัตว์ปีก"],
+    "🥩 หมูสด": ["หมูสามชั้น", "หมูสันนอก", "หมูสันใน", "ซี่โครงหมู", "หมูสับ", "เนื้อหมูแล่", "หมูบด", "เครื่องในหมู", "หมูกรอบ"],
+    "🥬 ผักสด": ["ผักใบเขียว", "ผักกาด", "คะน้า", "ผักบุ้ง", "ผักชี/ต้นหอม", "พริก", "มะเขือ", "ถั่วฝักยาว", "แตงกวา", "บวบ", "ฟักทอง", "ข้าวโพด"],
+    "🌿 สมุนไพร & เครื่องเทศ": ["ขิง", "ข่า", "ตะไคร้", "ใบมะกรูด", "พริกไทย", "กระชาย", "กระเทียม", "หัวหอม", "มะนาว"],
+    "🦐 อาหารทะเลสด": ["กุ้ง", "ปลาน้ำจืด", "ปลาทะเล", "หมึก", "ปู", "หอย", "ปลาหมึก", "กุ้งแห้ง", "ปลาเค็ม"],
+    "🌶️ เครื่องแกง & พริกแกง": ["พริกแกงเผ็ด", "พริกแกงเขียวหวาน", "พริกแกงส้ม", "พริกแกงมัสมั่น", "พริกแกงกะหรี่", "น้ำพริกเผา", "น้ำพริกกะปิ"],
+    "🧂 ของแห้ง & เครื่องปรุง": ["กะปิ", "น้ำปลา", "ซีอิ๊ว", "น้ำตาล", "เกลือ", "ผงชูรส", "แป้ง", "วุ้นเส้น", "เส้นก๋วยเตี๋ยว"],
+    "🥛 ไข่ & ผลิตภัณฑ์นม": ["ไข่ไก่", "ไข่เป็ด", "ไข่นกกระทา", "นมสด", "เนย", "โยเกิร์ต"],
+    "🍄 เห็ด & พืชพิเศษ": ["เห็ดฟาง", "เห็ดนางฟ้า", "เห็ดหอม", "เห็ดเข็มทอง", "บัวหลวง", "ดอกไม้จีน"],
+    "🍌 ผลไม้สด": ["กล้วย", "มะม่วง", "ส้ม", "แตงโม", "สับปะรด", "มังคุด", "ทุเรียน", "ลำไย", "ลิ้นจี่"],
+    "🍜 อาหารสำเร็จรูป & อื่นๆ": ["น้ำซุป", "หมูยอ", "ไส้กรอก", "แหนม", "ลูกชิ้น", "เต้าหู้", "เครื่องจิ้ม"]
+};
+
+const STALL_PRODUCT_UNITS = [
+    "กก.", "ขีด", "กรัม", "ชิ้น", "ตัว", "ถุง", "แพ็ก", "กล่อง", "แผ่น",
+    "ฝัก", "หัว", "ต้น", "มัด", "ลูก", "ขวด", "ลิตร", "ฟอง"
+];
+
+// Synonyms and grocery search terms for Thai fresh market items
+const SUB_CATEGORY_SYNONYMS = {
+    "ชิ้นส่วนไก่": ["อกไก่", "น่องไก่", "ปีกไก่", "สะโพก", "สันในไก่", "โครงไก่", "ตีนไก่", "ข้อไก่", "ตับไก่", "กึ๋น", "หัวใจไก่", "ปีกกลาง", "ปีกบน", "ปีกปลาย"],
+    "ไก่สดทั้งตัว": ["ไก่สด", "ไก่ทั้งตัว", "ไก่ตอน", "ไก่เนื้อ"],
+    "เนื้อไก่แล่": ["แล่", "อกไก่แล่", "ไก่บด", "ไก่สับ", "เนื้อไก่สับ"],
+    "ไก่บ้าน": ["ไก่บ้าน", "ไก่พื้นเมือง"],
+    "เป็ด/นก": ["เป็ด", "เป็ดพะโล้", "เป็ดย่าง", "นกกระทา"],
+    "เนื้อวัว": ["เนื้อวัว", "เนื้อสัน", "เนื้อริบอาย", "เนื้อลาย", "เนื้อแดดเดียว", "เนื้อบด", "เนื้อน่องลาย"],
+    "หมูสามชั้น": ["สามชั้น", "หมูสามชั้น", "สามชั้นสไลซ์", "หมูกรอบ"],
+    "หมูสันนอก": ["สันนอก", "สันนอกสไลซ์", "พอร์คชอป"],
+    "หมูสันใน": ["สันใน", "สันในหมู"],
+    "ซี่โครงหมู": ["ซี่โครง", "กระดูกหมู", "กระดูกอ่อน", "เล้ง", "ซี่โครงอ่อน"],
+    "หมูสับ": ["หมูสับ", "หมูบด", "หมูเด้ง"],
+    "เนื้อหมูแล่": ["หมูแล่", "หมูหมัก", "หมูชาบู", "หมูสไลซ์"],
+    "เครื่องในหมู": ["ตับหมู", "ไส้อ่อน", "เซี่ยงจี้", "กระเพาะหมู", "หัวใจหมู", "ปอดหมู"],
+    "ผักใบเขียว": ["คะน้า", "กวางตุ้ง", "กะหล่ำ", "ผักบุ้ง", "ตำลึง", "ผักกาด", "ผักสลัด", "คื่นช่าย", "ผักโขม"],
+    "กุ้ง": ["กุ้ง", "กุ้งขาว", "กุ้งกุลา", "กุ้งแม่น้ำ", "กุ้งแชบ๊วย", "กุ้งลายเสือ"],
+    "ปลาทะเล": ["กะพง", "ปลากะพง", "ปลาทู", "แซลมอน", "ปลาอินทรีย์", "ปลาเก๋า", "ปลาซาบะ"],
+    "ปลาน้ำจืด": ["ปลาดุก", "ปลานิล", "ปลาช่อน", "ปลาสลิด", "ปลาทับทิม", "ปลาคัง"],
+    "หมึก": ["หมึก", "ปลาหมึก", "หมึกกล้วย", "หมึกกระดอง", "หมึกสาย", "หมึกหอม", "หมึกไข่"],
+    "หอย": ["หอย", "หอยแมลงภู่", "หอยแครง", "หอยลาย", "หอยนางรม", "หอยเชลล์"],
+    "ปู": ["ปู", "ปูดำ", "ปูม้า", "ปูทะเล", "เนื้อปู"],
+    "ไข่ไก่": ["ไข่ไก่", "ไข่สด", "ไข่เบอร์", "ไข่ไก่อินทรีย์"],
+    "ไข่เป็ด": ["ไข่เป็ด", "ไข่เค็ม", "ไข่เยี่ยวม้า"],
+    "ขิง": ["ขิงแก่", "ขิงอ่อน", "ขิงซอย"],
+    "ข่า": ["ข่าแก่", "ข่าอ่อน"],
+    "ตะไคร้": ["ตะไคร้", "ตะไคร้ซอย"],
+    "ใบมะกรูด": ["ใบมะกรูด", "ลูกมะกรูด"],
+    "พริกไทย": ["พริกไทยดำ", "พริกไทยขาว", "พริกไทยอ่อน"],
+    "กระเทียม": ["กระเทียมไทย", "กระเทียมจีน", "กระเทียมแกะกลีบ"],
+    "หัวหอม": ["หอมแดง", "หอมหัวใหญ่"],
+    "มะนาว": ["มะนาวแป้น", "น้ำมะนาว"],
+    "พริกแกงเผ็ด": ["พริกแกงเผ็ด", "เครื่องแกงเผ็ด"],
+    "พริกแกงเขียวหวาน": ["พริกแกงเขียวหวาน", "แกงเขียวหวาน"],
+    "พริกแกงส้ม": ["พริกแกงส้ม", "เครื่องแกงส้ม"],
+    "น้ำปลา": ["น้ำปลา", "น้ำปลาแท้"],
+    "กะปิ": ["กะปิตาดำ", "กะปิกุ้งเคย"]
+};
+
 // 2. Application Reactive State
 const state = {
     screenMode: (function() {
@@ -1596,7 +1655,11 @@ const state = {
     })(),
     currentRole: "customer",
     currentScreen: "market",
-    currentCategoryFilter: "all", // 'all' | 'chicken' | 'veggie' | 'pork' | 'curry' | 'seafood'
+    currentCategoryFilter: "all", // 'all' or main category name
+    currentSubCategoryFilter: null, // null | 'all_cat' | subcategory name
+    subCategoryPage: 1, // page counter for 15 items per page
+    subCategorySearchQuery: "", // in-subcategory search
+    subCategoryLoadedItems: [], // cache of loaded subcategory items
     currentSingleStall: null,     // null or stallId
     currentDirectoryZone: "all",
     searchQuery: "",
@@ -4718,6 +4781,13 @@ function renderCatalog() {
     const singleStallBanner = document.getElementById("single-stall-banner");
     if (!container) return;
 
+    // Dual-Tier Navigation: หากเลือกหมวดหลักและเลือกหมวดหมู่ย่อย ให้แสดงหน้ารวม 15 รายการคัดสรร
+    if (state.currentCategoryFilter && state.currentCategoryFilter !== "all" && state.currentSubCategoryFilter) {
+        if (singleStallBanner) singleStallBanner.classList.add("hidden");
+        renderSubCategoryProductView();
+        return;
+    }
+
     let filteredStalls = MARKET_DATA;
     let isSearchMode = state.searchQuery && state.searchQuery.trim() !== "";
     let isSuggestedMode = false;
@@ -5301,18 +5371,522 @@ function toggleFavoriteStall(stallId) {
 function filterByCategory(category) {
     state.currentCategoryFilter = category;
     state.currentSingleStall = null;
+    state.subCategoryPage = 1;
+    state.subCategorySearchQuery = "";
 
-    document.querySelectorAll(".cat-pill").forEach(pill => pill.classList.remove("active", "bg-emerald-700", "text-white"));
-    const activeBtn = (typeof event !== 'undefined' && event && event.currentTarget) ? event.currentTarget : document.querySelector(`.cat-pill[onclick*="${category}"]`);
-    if (activeBtn) activeBtn.classList.add("active", "bg-emerald-700", "text-white");
+    // Highlight main category tab
+    document.querySelectorAll("#category-tabs .cat-pill").forEach(pill => {
+        pill.classList.remove("active", "bg-emerald-700", "text-white", "font-bold");
+        pill.classList.add("bg-white", "text-slate-700", "font-medium");
+    });
 
-    selectRandomStallBatch();
-    state.stallRotation.remainingSeconds = state.stallRotation.intervalSeconds;
+    const activeBtn = (typeof event !== 'undefined' && event && event.currentTarget)
+        ? event.currentTarget
+        : document.querySelector(`#category-tabs .cat-pill[onclick*="${category}"]`);
+    if (activeBtn) {
+        activeBtn.classList.remove("bg-white", "text-slate-700", "font-medium");
+        activeBtn.classList.add("active", "bg-emerald-700", "text-white", "font-bold");
+    }
 
-    renderFavoriteStallsBar();
+    const subContainer = document.getElementById("subcategory-bar-container");
+    const subTabs = document.getElementById("subcategory-tabs");
+    const subTitle = document.getElementById("subcategory-bar-title");
+    const countHint = document.getElementById("subcategory-count-hint");
+
+    if (category === "all") {
+        // เมื่อเลือก "ทั้งหมด" ให้ซ่อนแถบหมวดหมู่ย่อย และแสดงตลาดสดตามปกติ
+        state.currentSubCategoryFilter = null;
+        if (subContainer) subContainer.classList.add("hidden");
+        if (subTabs) subTabs.innerHTML = "";
+
+        selectRandomStallBatch();
+        state.stallRotation.remainingSeconds = state.stallRotation.intervalSeconds;
+        renderFavoriteStallsBar();
+        renderCatalog();
+        updateStallRotationUI();
+        return;
+    }
+
+    // เมื่อเลือกหมวดหมู่วัตถุดิบหลัก ให้เปิดแถบหมวดหมู่ย่อย (Tier 2)
+    const subs = STALL_PRODUCT_CATEGORIES[category] || [];
+    if (subContainer) subContainer.classList.remove("hidden");
+    if (subTitle) subTitle.textContent = `หมวดหมู่ย่อยใน "${category}":`;
+    if (countHint) countHint.textContent = `${subs.length} หมวดย่อย`;
+
+    // Render Subcategory Chips
+    if (subTabs) {
+        let subHtml = `
+            <button type="button" onclick="selectSubCategory('all_cat')"
+                class="subcat-pill active px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap bg-emerald-700 text-white shadow-xs shrink-0 transition-all">
+                <span>🌟 ทั้งหมดในหมวดนี้</span>
+            </button>
+        `;
+
+        subs.forEach(sName => {
+            subHtml += `
+                <button type="button" onclick="selectSubCategory('${sName.replace(/'/g, "\\'")}')"
+                    class="subcat-pill px-3 py-1 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200/90 shrink-0 hover:bg-slate-50 transition-all">
+                    <span>${sName}</span>
+                </button>
+            `;
+        });
+
+        subTabs.innerHTML = subHtml;
+        subTabs.scrollLeft = 0;
+    }
+
+    // เริ่มต้นแสดง 15 รายการคัดสรรสำหรับหมวดหมู่นี้
+    state.currentSubCategoryFilter = "all_cat";
     renderCatalog();
-    updateStallRotationUI();
 }
+
+function selectSubCategory(subCat) {
+    state.currentSubCategoryFilter = subCat;
+    state.subCategoryPage = 1;
+    state.subCategorySearchQuery = "";
+
+    // Highlight active subcategory chip
+    document.querySelectorAll("#subcategory-tabs .subcat-pill").forEach(pill => {
+        pill.classList.remove("active", "bg-emerald-700", "text-white", "font-bold");
+        pill.classList.add("bg-white", "text-slate-700", "font-medium", "border", "border-slate-200/90");
+    });
+
+    const activeSubBtn = (typeof event !== 'undefined' && event && event.currentTarget)
+        ? event.currentTarget
+        : document.querySelector(`#subcategory-tabs .subcat-pill[onclick*="${subCat}"]`);
+    if (activeSubBtn) {
+        activeSubBtn.classList.remove("bg-white", "text-slate-700", "font-medium", "border", "border-slate-200/90");
+        activeSubBtn.classList.add("active", "bg-emerald-700", "text-white", "font-bold", "shadow-xs");
+    }
+
+    renderCatalog();
+}
+
+function scrollSubCategoryTabs(amount) {
+    const container = document.getElementById("subcategory-tabs");
+    if (container) {
+        container.scrollBy({ left: amount, behavior: 'smooth' });
+    }
+}
+
+// ── Smart Subcategory Matching & Ranking Engine (รูปแบบที่ 1) ──
+function matchItemToSubCategory(item, mainCat, subCat) {
+    if (!item) return false;
+    const name = (item.name || "").trim().toLowerCase();
+    const desc = (item.desc || item.spec || "").trim().toLowerCase();
+    const itemSub = (item.subCat || "").trim().toLowerCase();
+    const itemMain = (item.mainCat || "").trim().toLowerCase();
+    const targetSub = (subCat || "").trim().toLowerCase();
+    const targetMain = (mainCat || "").trim().toLowerCase();
+
+    // 1. ตรวจสอบจากการเลือก "ทั้งหมดในหมวดนี้"
+    if (targetSub === "all_cat" || !targetSub) {
+        if (itemMain && targetMain && (itemMain.includes(targetMain) || targetMain.includes(itemMain))) return true;
+        // ตรวจสอบกับรายการหมวดย่อยทั้งหมดของหมวดหลักนี้
+        const allSubsInMain = STALL_PRODUCT_CATEGORIES[mainCat] || [];
+        for (const s of allSubsInMain) {
+            if (name.includes(s.toLowerCase()) || desc.includes(s.toLowerCase()) || itemSub === s.toLowerCase()) return true;
+            const syns = SUB_CATEGORY_SYNONYMS[s] || [];
+            for (const syn of syns) {
+                if (name.includes(syn.toLowerCase()) || desc.includes(syn.toLowerCase())) return true;
+            }
+        }
+        return false;
+    }
+
+    // 2. ตรวจสอบตรงกับชื่อหมวดย่อยที่บันทึกไว้
+    if (itemSub && itemSub === targetSub) return true;
+
+    // 3. ตรวจสอบจากชื่อสินค้าหรือรายละเอียดสินค้า
+    if (name.includes(targetSub) || targetSub.includes(name)) return true;
+    if (desc.includes(targetSub)) return true;
+
+    // 4. ตรวจสอบจากพจนานุกรมคำพ้องความหมายวัตถุดิบ (Synonyms)
+    const syns = SUB_CATEGORY_SYNONYMS[subCat] || [];
+    for (const syn of syns) {
+        if (name.includes(syn.toLowerCase()) || desc.includes(syn.toLowerCase())) return true;
+    }
+
+    return false;
+}
+
+function calcSubCategoryItemScore(stall, product) {
+    let score = 0;
+    // 1. สถานะร้านเปิดอยู่ (ร้านพร้อมรับออเดอร์ได้คะแนนสูงสุด)
+    if (!stall.isClosed) score += 100;
+    // 2. แผงประจำ/ร้านโปรดของลูกค้า (+40 คะแนน)
+    if (state.favorites && state.favorites.includes(stall.stallId)) score += 40;
+    // 3. ป้ายการันตี/สินค้าแนะนำ/ป้ายเด่น (+20 คะแนน)
+    if (product.badge) score += 20;
+    // 4. Hub กลางตลาดสด (+15 คะแนน)
+    if (stall.isHub) score += 15;
+    // 5. ร้านยืนยันตัวตนแล้ว (+10 คะแนน)
+    if (stall.verified) score += 10;
+    // 6. ยอดขายจริงจากลูกค้า (+2 คะแนนต่อหน่วย)
+    const sales = Number(product.salesCount || product.sales || product.ordersCount || 0);
+    score += Math.min(sales * 2, 50);
+    return score;
+}
+
+function getSubCategoryProducts(mainCat, subCat, searchQuery = "", requestedCount = 15) {
+    const q = (searchQuery || "").trim().toLowerCase();
+    const seenItemKeys = new Set();
+    const stallTier1Count = {};
+
+    // ── Tier 1: รายการสินค้าจาก 10 รายการหน้าแผงค้าของแต่ละร้าน (Highlight Products) ──
+    const tier1Items = [];
+    const allStalls = (MARKET_DATA && MARKET_DATA.length > 0) ? MARKET_DATA : ALL_100_STALLS;
+
+    allStalls.forEach(stall => {
+        if (!stall) return;
+        const products = Array.isArray(stall.products) ? stall.products : [];
+        products.forEach(p => {
+            if (!p || !p.name) return;
+            const uniqueKey = `${stall.stallId}_${p.id || p.name}`;
+            if (seenItemKeys.has(uniqueKey)) return;
+
+            const matched = matchItemToSubCategory(p, mainCat, subCat);
+            if (!matched) return;
+
+            if (q) {
+                const name = (p.name || "").toLowerCase();
+                const desc = (p.desc || "").toLowerCase();
+                if (!name.includes(q) && !desc.includes(q)) return;
+            }
+
+            const itemObj = {
+                id: p.id || uniqueKey,
+                name: p.name,
+                desc: p.desc || p.subCat || mainCat || "",
+                price: Number(p.price) || 0,
+                unit: p.unit || "กก.",
+                image: p.image || stall.stallImage || (typeof MERCHANT_PRESET_IMAGES !== "undefined" ? MERCHANT_PRESET_IMAGES.stall.chicken : ""),
+                badge: p.badge || (stall.isHub ? "Hub ตลาด" : "ไฮไลท์ร้าน"),
+                stallId: stall.stallId,
+                stallName: stall.stallName,
+                stallNumber: stall.stallNumber,
+                stallTag: stall.stallTag,
+                zone: stall.zone,
+                isClosed: !!stall.isClosed,
+                sourceTier: 1, // Highlight 10
+                score: calcSubCategoryItemScore(stall, p)
+            };
+
+            tier1Items.push(itemObj);
+        });
+    });
+
+    // เรียงลำดับ Tier 1 ตามคะแนนประสิทธิภาพจากมากไปน้อย
+    tier1Items.sort((a, b) => b.score - a.score);
+
+    // กระจายสินค้าให้ทั่วถึง (Fair Distribution): ไม่เกิน 2 รายการต่อร้านค้าในรอบแรก
+    const fairTier1 = [];
+    const deferredTier1 = [];
+    tier1Items.forEach(it => {
+        const count = stallTier1Count[it.stallId] || 0;
+        if (count < 2) {
+            stallTier1Count[it.stallId] = count + 1;
+            fairTier1.push(it);
+            seenItemKeys.add(`${it.stallId}_${it.id || it.name}`);
+        } else {
+            deferredTier1.push(it);
+        }
+    });
+
+    const combinedList = [...fairTier1];
+    // ถ้ายังไม่ครบ requestedCount ให้นำรายการที่เหลือของร้านเดิมมาเสริม
+    if (combinedList.length < requestedCount) {
+        deferredTier1.forEach(it => {
+            const key = `${it.stallId}_${it.id || it.name}`;
+            if (combinedList.length < requestedCount && !seenItemKeys.has(key)) {
+                seenItemKeys.add(key);
+                combinedList.push(it);
+            }
+        });
+    }
+
+    // ── Tier 2: นำมาจากรายการเพิ่มเติม 50 รายการของแต่ละร้านค้า (Extended Catalog) ──
+    const tier2Items = [];
+    allStalls.forEach(stall => {
+        if (!stall) return;
+        const catalogGroups = (typeof getStallCatalogData === "function") ? getStallCatalogData(stall.stallId) : (stall.catalog || []);
+        if (!catalogGroups || !Array.isArray(catalogGroups)) return;
+
+        catalogGroups.forEach(group => {
+            (group.items || []).forEach(catItem => {
+                if (!catItem || !catItem.name) return;
+                const uniqueKey = `${stall.stallId}_${catItem.id || catItem.name}`;
+                if (seenItemKeys.has(uniqueKey)) return;
+
+                const checkItem = {
+                    name: catItem.name,
+                    desc: catItem.spec || "",
+                    subCat: catItem.subCat || group.groupName || "",
+                    mainCat: catItem.mainCat || ""
+                };
+
+                const matched = matchItemToSubCategory(checkItem, mainCat, subCat);
+                if (!matched) return;
+
+                if (q) {
+                    const name = (catItem.name || "").toLowerCase();
+                    const spec = (catItem.spec || "").toLowerCase();
+                    if (!name.includes(q) && !spec.includes(q)) return;
+                }
+
+                tier2Items.push({
+                    id: catItem.id || uniqueKey,
+                    name: catItem.name,
+                    desc: catItem.spec || catItem.subCat || group.groupName || "",
+                    price: Number(catItem.price) || 0,
+                    unit: catItem.unit || "กก.",
+                    image: catItem.image || stall.stallImage || (typeof MERCHANT_PRESET_IMAGES !== "undefined" ? MERCHANT_PRESET_IMAGES.stall.chicken : ""),
+                    badge: "📦 แคตตาล็อก",
+                    stallId: stall.stallId,
+                    stallName: stall.stallName,
+                    stallNumber: stall.stallNumber,
+                    stallTag: stall.stallTag,
+                    zone: stall.zone,
+                    isClosed: !!stall.isClosed,
+                    sourceTier: 2, // Extended 50 catalog
+                    score: calcSubCategoryItemScore(stall, catItem)
+                });
+            });
+        });
+    });
+
+    // เรียง Tier 2 ตามคะแนน
+    tier2Items.sort((a, b) => b.score - a.score);
+
+    // รวม Tier 1 และ Tier 2 ทั้งหมด
+    const allAvailable = [...combinedList];
+    tier2Items.forEach(it => {
+        const key = `${it.stallId}_${it.id || it.name}`;
+        if (!seenItemKeys.has(key)) {
+            seenItemKeys.add(key);
+            allAvailable.push(it);
+        }
+    });
+
+    const displayItems = allAvailable.slice(0, requestedCount);
+    const hasMore = allAvailable.length > displayItems.length;
+
+    return {
+        items: displayItems,
+        totalFound: allAvailable.length,
+        tier1Count: combinedList.length,
+        tier2Count: allAvailable.length - combinedList.length,
+        hasMore: hasMore
+    };
+}
+
+function renderSubCategoryProductView() {
+    const container = document.getElementById("products-catalog-container");
+    if (!container) return;
+
+    const mainCat = state.currentCategoryFilter;
+    const subCat = state.currentSubCategoryFilter;
+    const requestedCount = (state.subCategoryPage || 1) * 15;
+    const query = state.subCategorySearchQuery || "";
+
+    const queryResult = getSubCategoryProducts(mainCat, subCat, query, requestedCount);
+    const items = queryResult.items || [];
+    const totalFound = queryResult.totalFound || 0;
+    const hasMore = queryResult.hasMore;
+
+    const subCatDisplayTitle = (subCat === "all_cat" || !subCat) ? `ทั้งหมดในหมวด "${mainCat}"` : subCat;
+
+    let html = `
+        <div class="space-y-3 pb-6">
+            <!-- 1. Breadcrumb & Overview Bar -->
+            <div class="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white rounded-2xl p-3 sm:p-3.5 shadow-md flex items-center justify-between flex-wrap gap-2">
+                <div>
+                    <div class="flex items-center gap-1.5 text-[11px] text-emerald-200 font-medium">
+                        <span>${mainCat}</span>
+                        <span class="material-symbols-outlined text-xs">chevron_right</span>
+                        <span class="text-white font-bold">${subCatDisplayTitle}</span>
+                    </div>
+                    <h2 class="text-sm sm:text-base font-extrabold flex items-center gap-1.5 mt-0.5 text-white">
+                        <span>รายการคัดสรรยอดนิยม 15 รายการ</span>
+                        <span class="bg-emerald-500/40 text-emerald-100 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-400/40">
+                            แสดง ${items.length} จาก ${totalFound} รายการ
+                        </span>
+                    </h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="filterByCategory('all')" class="bg-white/15 hover:bg-white/25 active:scale-95 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl border border-white/20 transition-all flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">store</span>
+                        <span>ดูแผงค้าทั้งหมด</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. In-Subcategory Quick Filter & Search Bar -->
+            <div class="relative flex items-center">
+                <span class="material-symbols-outlined absolute left-3 text-emerald-700 text-base">search</span>
+                <input type="text"
+                    value="${state.subCategorySearchQuery || ''}"
+                    oninput="handleSubCategorySearch(this.value)"
+                    placeholder="ค้นหาใน ${subCatDisplayTitle} (เช่น อกไก่, น่อง, หมักกระเทียม)..."
+                    class="w-full pl-9 pr-8 py-2 rounded-xl bg-white text-slate-800 placeholder-slate-400 text-xs font-bold border border-emerald-600/30 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-xs transition-all">
+                ${state.subCategorySearchQuery ? `
+                    <button onclick="handleSubCategorySearch('')" class="absolute right-2.5 text-slate-400 hover:text-slate-700 text-sm" title="ล้างคำค้นหา">
+                        <span class="material-symbols-outlined text-base">cancel</span>
+                    </button>
+                ` : ''}
+            </div>
+    `;
+
+    if (items.length === 0) {
+        html += `
+            <div class="text-center py-12 px-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
+                <span class="material-symbols-outlined text-4xl text-slate-300">inventory_2</span>
+                <h4 class="font-extrabold text-sm text-slate-700">ยังไม่พบรายการสินค้าใน "${subCatDisplayTitle}"</h4>
+                <p class="text-xs text-slate-500 max-w-sm mx-auto">ขณะนี้แผงค้าในระบบอาจยังไม่ได้ลงรายการในหมวดนี้ คุณสามารถเลือกหมวดอื่น หรือดูรายการทั้งหมดของแผงค้าต่าง ๆ</p>
+                <div class="pt-1">
+                    <button onclick="filterByCategory('all')" class="px-4 py-2 bg-emerald-700 text-white font-bold rounded-xl text-xs hover:bg-emerald-800 active:scale-95 transition-all">
+                        ดูแผงค้าทั้งหมดในตลาดสด
+                    </button>
+                </div>
+            </div>
+        </div>`;
+        container.innerHTML = html;
+        return;
+    }
+
+    // 3. Product Cards Grid (15 items per batch)
+    html += `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">`;
+
+    items.forEach((item, idx) => {
+        const inCart = (state.cart || []).find(c => c && (c.productId === item.id || c.id === item.id));
+        const qtyInCart = inCart ? (Number(inCart.qty) || 0) : 0;
+        const isStallFav = (state.favorites || []).includes(item.stallId);
+        const stallShort = (item.stallName || "แผงค้า").replace("แผง", "").replace("ร้าน", "").trim();
+
+        html += `
+            <div class="bg-white rounded-2xl p-2.5 sm:p-3 border ${qtyInCart > 0 ? 'border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-400 shadow-sm' : 'border-slate-200/90 shadow-2xs hover:shadow-xs'} flex items-center justify-between gap-2.5 transition-all min-h-0">
+                <!-- Rank Badge & Image -->
+                <div class="relative w-14 h-14 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-200/80 flex items-center justify-center">
+                    <img src="${item.image || (typeof MERCHANT_PRESET_IMAGES !== 'undefined' ? MERCHANT_PRESET_IMAGES.stall.chicken : '')}" alt="${item.name}" class="w-full h-full object-cover">
+                    <span class="absolute top-0.5 left-0.5 ${qtyInCart > 0 ? 'bg-emerald-700 text-white' : 'bg-black/65 text-white'} text-[9px] font-black px-1 rounded-md leading-none shadow-xs">
+                        #${idx + 1}
+                    </span>
+                </div>
+
+                <!-- Product Details -->
+                <div class="flex-1 min-w-0 pr-0.5">
+                    <div class="flex items-center gap-1 flex-wrap">
+                        <span class="text-[9px] font-bold px-1.5 py-0.2 rounded-md ${item.sourceTier === 1 ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-blue-50 text-blue-800 border border-blue-200'}">
+                            ${item.sourceTier === 1 ? '⭐ รายการด่วน' : '📦 เพิ่มเติม 50 รายการ'}
+                        </span>
+                        ${item.badge ? `
+                            <span class="text-[8px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200 px-1 py-0.2 rounded shrink-0">
+                                ${item.badge}
+                            </span>
+                        ` : ''}
+                    </div>
+
+                    <h4 class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug mt-0.5" title="${item.name}">
+                        ${item.name}
+                    </h4>
+
+                    <!-- Shop Tag -->
+                    <button type="button" onclick="filterBySingleStall('${item.stallId}')" class="text-[10px] text-slate-600 hover:text-emerald-700 font-medium flex items-center gap-1 truncate text-left mt-0.5 group">
+                        <span class="text-amber-600">${isStallFav ? '⭐' : '🏪'}</span>
+                        <span class="font-bold text-slate-700 group-hover:text-emerald-700 underline decoration-slate-300">${item.stallNumber || ''} ${stallShort}</span>
+                        ${item.zone ? `<span class="text-slate-400 text-[9px]">(${item.zone})</span>` : ''}
+                    </button>
+
+                    <!-- Price & Unit -->
+                    <div class="flex items-center gap-1.5 mt-1">
+                        <span class="font-black text-sm text-orange-600 leading-none">
+                            ฿${item.price}
+                        </span>
+                        <span class="text-[10px] text-slate-500 font-bold bg-slate-100 px-1 py-0.2 rounded">
+                            / ${item.unit || 'กก.'}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Cart Button / Stepper -->
+                <div class="shrink-0 flex items-center justify-center">
+                    ${item.isClosed ? `
+                        <span class="text-[10px] text-slate-400 font-bold bg-slate-100 px-2 py-1 rounded-lg border border-slate-200">
+                            พักร้าน
+                        </span>
+                    ` : qtyInCart > 0 ? `
+                        <div class="flex items-center gap-0.5 bg-emerald-600 text-white rounded-xl px-1.5 py-1 text-[11px] shadow-sm ring-1 ring-emerald-400">
+                            <button type="button" onclick="changeCartQty('${item.id}', -1)" class="w-4 h-4 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-xs transition-transform cursor-pointer" title="ลดจำนวน">-</button>
+                            <span class="px-1 text-[11px] font-black min-w-[10px] text-center leading-none">${qtyInCart}</span>
+                            <button type="button" onclick="changeCartQty('${item.id}', 1)" class="w-4 h-4 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-xs transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
+                        </div>
+                    ` : `
+                        <button type="button" onclick="addToCartFromModal('${item.stallId}', '${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price}, '${item.unit || 'กก.'}')" class="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-95 text-white font-extrabold text-[11px] flex items-center gap-1 shadow-xs transition-all cursor-pointer" title="เพิ่ม ${item.name} ลงตะกร้า">
+                            <span class="material-symbols-outlined text-[15px]">shopping_cart</span>
+                            <span>ใส่ตะกร้า</span>
+                        </button>
+                    `}
+                </div>
+            </div>
+        `;
+    });
+
+    html += `</div>`;
+
+    // 4. Bottom "ค้นหา/โหลดเพิ่มเติมอีก 15 รายการ จาก 50 รายการเพิ่มเติม" Section
+    html += `
+        <div class="pt-2">
+            ${hasMore ? `
+                <div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200/90 rounded-2xl p-3 sm:p-4 text-center space-y-2 shadow-xs">
+                    <div class="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-900">
+                        <span class="material-symbols-outlined text-emerald-600 text-base">manage_search</span>
+                        <span>ยังไม่เจอรายการที่ต้องการใช่ไหม?</span>
+                    </div>
+                    <p class="text-[11px] text-slate-600 max-w-md mx-auto">
+                        ยังมีสินค้าที่ตรงกับหมวดหมู่นี้ใน <strong>รายการเพิ่มเติม 50 รายการ</strong> ของร้านต่าง ๆ อีก ${totalFound - items.length} รายการ
+                    </p>
+                    <button type="button" onclick="loadMoreSubCategoryProducts()" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 mx-auto cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">add_circle</span>
+                        <span>ค้นหา & นำรายการเพิ่มเติมออกมาแสดงอีก 15 รายการ</span>
+                    </button>
+                </div>
+            ` : `
+                <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center text-xs text-slate-500">
+                    ✅ แสดงรายการสินค้าที่ตรงกับหมวดนี้ครบถ้วนแล้ว (${items.length} รายการ จากแผงค้าทั้งหมดในตลาดสด)
+                </div>
+            `}
+
+            <div class="mt-3 text-center">
+                <button type="button" onclick="filterByCategory('all')" class="text-xs text-emerald-700 hover:text-emerald-900 font-extrabold hover:underline inline-flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm">arrow_back</span>
+                    <span>กลับสู่หน้าแผงค้าทั้งหมดในตลาด</span>
+                </button>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+function loadMoreSubCategoryProducts() {
+    state.subCategoryPage = (state.subCategoryPage || 1) + 1;
+    renderSubCategoryProductView();
+    showToast("📦 ดึงรายการเพิ่มเติมอีก 15 รายการเรียบร้อยแล้ว");
+}
+
+function handleSubCategorySearch(query) {
+    state.subCategorySearchQuery = query;
+    state.subCategoryPage = 1;
+    renderSubCategoryProductView();
+}
+
+window.filterByCategory = filterByCategory;
+window.selectSubCategory = selectSubCategory;
+window.scrollSubCategoryTabs = scrollSubCategoryTabs;
+window.loadMoreSubCategoryProducts = loadMoreSubCategoryProducts;
+window.handleSubCategorySearch = handleSubCategorySearch;
+window.renderSubCategoryProductView = renderSubCategoryProductView;
+
 
 function scrollCategoryTabs(amount) {
     const container = document.getElementById("category-tabs");
@@ -5351,7 +5925,7 @@ function scrollZoneTabs(amount) {
 
 // Enable Mouse Drag-to-Scroll on PC Desktop
 function enableDragToScroll() {
-    ['category-tabs', 'favorite-stalls-list', 'modal-stall-category-pills', 'directory-zone-tabs', 'merchant-portal-tab-bar'].forEach(id => {
+    ['category-tabs', 'subcategory-tabs', 'favorite-stalls-list', 'modal-stall-category-pills', 'directory-zone-tabs', 'merchant-portal-tab-bar'].forEach(id => {
         const slider = document.getElementById(id);
         if (!slider) return;
 
@@ -18172,25 +18746,7 @@ function fillSampleMerchantRegistration() {
 }
 window.fillSampleMerchantRegistration = fillSampleMerchantRegistration;
 
-// === หมวดหมู่สินค้าหลักและย่อย ===
-const STALL_PRODUCT_CATEGORIES = {
-    "🐔 ไก่สด & เนื้อสัตว์": ["ไก่สดทั้งตัว", "ชิ้นส่วนไก่", "เนื้อไก่แล่", "ไก่บ้าน", "เป็ด/นก", "เนื้อวัว", "เนื้อแพะ", "เครื่องในสัตว์ปีก"],
-    "🥩 หมูสด": ["หมูสามชั้น", "หมูสันนอก", "หมูสันใน", "ซี่โครงหมู", "หมูสับ", "เนื้อหมูแล่", "หมูบด", "เครื่องในหมู", "หมูกรอบ"],
-    "🥬 ผักสด": ["ผักใบเขียว", "ผักกาด", "คะน้า", "ผักบุ้ง", "ผักชี/ต้นหอม", "พริก", "มะเขือ", "ถั่วฝักยาว", "แตงกวา", "บวบ", "ฟักทอง", "ข้าวโพด"],
-    "🌿 สมุนไพร & เครื่องเทศ": ["ขิง", "ข่า", "ตะไคร้", "ใบมะกรูด", "พริกไทย", "กระชาย", "กระเทียม", "หัวหอม", "มะนาว"],
-    "🦐 อาหารทะเลสด": ["กุ้ง", "ปลาน้ำจืด", "ปลาทะเล", "หมึก", "ปู", "หอย", "ปลาหมึก", "กุ้งแห้ง", "ปลาเค็ม"],
-    "🌶️ เครื่องแกง & พริกแกง": ["พริกแกงเผ็ด", "พริกแกงเขียวหวาน", "พริกแกงส้ม", "พริกแกงมัสมั่น", "พริกแกงกะหรี่", "น้ำพริกเผา", "น้ำพริกกะปิ"],
-    "🧂 ของแห้ง & เครื่องปรุง": ["กะปิ", "น้ำปลา", "ซีอิ๊ว", "น้ำตาล", "เกลือ", "ผงชูรส", "แป้ง", "วุ้นเส้น", "เส้นก๋วยเตี๋ยว"],
-    "🥛 ไข่ & ผลิตภัณฑ์นม": ["ไข่ไก่", "ไข่เป็ด", "ไข่นกกระทา", "นมสด", "เนย", "โยเกิร์ต"],
-    "🍄 เห็ด & พืชพิเศษ": ["เห็ดฟาง", "เห็ดนางฟ้า", "เห็ดหอม", "เห็ดเข็มทอง", "บัวหลวง", "ดอกไม้จีน"],
-    "🍌 ผลไม้สด": ["กล้วย", "มะม่วง", "ส้ม", "แตงโม", "สับปะรด", "มังคุด", "ทุเรียน", "ลำไย", "ลิ้นจี่"],
-    "🍜 อาหารสำเร็จรูป & อื่นๆ": ["น้ำซุป", "หมูยอ", "ไส้กรอก", "แหนม", "ลูกชิ้น", "เต้าหู้", "เครื่องจิ้ม"]
-};
-
-const STALL_PRODUCT_UNITS = [
-    "กก.", "ขีด", "กรัม", "ชิ้น", "ตัว", "ถุง", "แพ็ก", "กล่อง", "แผ่น",
-    "ฝัก", "หัว", "ต้น", "มัด", "ลูก", "ขวด", "ลิตร", "ฟอง"
-];
+// === หมวดหมู่สินค้าหลักและย่อย (ถูกย้ายไปประกาศที่ต้นไฟล์แล้วเพื่อป้องกัน TDZ) ===
 
 function buildCategoryDropdown(id, selectedCat, onChange) {
     const cats = Object.keys(STALL_PRODUCT_CATEGORIES);
