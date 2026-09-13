@@ -438,6 +438,90 @@
                     <!-- JS จะ render เนื้อหาที่นี่โดยอัตโนมัติผ่าน updateCustomerLoyaltyBanner() -->
                 </div>
 
+
+                <!-- 2. FAVORITE STALLS BAR (แผงประจำของคุณ ⭐ - 5 ร้านค้าพร้อมปุ่มเลื่อนซ้ายขวา) -->
+                <div class="px-4 mt-2.5">
+                    <div
+                        class="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-2 flex items-center gap-1.5 shadow-xs">
+
+                        <!-- Label -->
+                        <span
+                            class="text-[11px] font-extrabold text-amber-900 flex items-center gap-1 whitespace-nowrap shrink-0 pl-1">
+                            <span class="material-symbols-outlined text-sm text-amber-600">stars</span>
+                            <span id="favorite-stalls-bar-label" class="text-[11px] font-extrabold text-amber-900 flex items-center gap-1 whitespace-nowrap shrink-0 pl-1"><span class="material-symbols-outlined text-sm text-amber-600">stars</span><span>แผงประจำ:</span></span>
+                        </span>
+
+                        <!-- Left Arrow Button for Favorite Stalls -->
+                        <button onclick="scrollFavoriteStalls(-140)"
+                            class="w-6 h-6 bg-white shadow-xs border border-amber-200/80 rounded-full flex items-center justify-center text-amber-800 hover:bg-amber-100 shrink-0 transition-transform active:scale-90 cursor-pointer"
+                            title="เลื่อนซ้าย">
+                            <span class="material-symbols-outlined text-xs font-bold">chevron_left</span>
+                        </button>
+
+                        <!-- 5 Favorite Stalls List (Horizontal Drag & Scroll) -->
+                        <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none text-[11px] w-full scroll-smooth cursor-grab active:cursor-grabbing select-none py-0.5"
+                            id="favorite-stalls-list">
+                        </div>
+
+                        <!-- Right Arrow Button for Favorite Stalls -->
+                        <button onclick="scrollFavoriteStalls(140)"
+                            class="w-6 h-6 bg-white shadow-xs border border-amber-200/80 rounded-full flex items-center justify-center text-amber-800 hover:bg-amber-100 shrink-0 transition-transform active:scale-90 cursor-pointer"
+                            title="เลื่อนขวา">
+                            <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Filter Clear Banner (when filtered by single stall) -->
+                <div id="single-stall-banner" class="px-4 mt-2 hidden">
+                    <div
+                        class="bg-emerald-50 border border-emerald-200 rounded-xl p-2 flex items-center justify-between text-xs">
+                        <span class="text-emerald-800 font-medium" id="single-stall-banner-text">กำลังดูแผง:
+                            ไก่สดเรา</span>
+                        <button onclick="filterByCategory('all')"
+                            class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
+                            <span>ดูทั้งหมด</span>
+                            <span class="material-symbols-outlined text-xs">close</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Randomized Stall Display Control Bar (ระบบสุ่มแสดงร้านค้าตามหมวดหมู่) -->
+                <div id="random-rotation-bar" class="px-4 mt-2 hidden">
+                    <div
+                        class="p-2.5 sm:p-3 bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white rounded-2xl shadow-sm border border-emerald-500/30 flex items-center justify-between gap-2 flex-wrap">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span
+                                class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-400/30 shrink-0">
+                                <span class="material-symbols-outlined text-lg">casino</span>
+                            </span>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span class="font-extrabold text-xs text-white">ระบบสุ่มหมุนเวียนร้านค้า</span>
+                                    <span
+                                        class="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.2 rounded-full border border-emerald-400/20">สุ่มสลับหมวดหมู่</span>
+                                </div>
+                                <div class="text-[11px] text-emerald-200/80 flex items-center gap-1 truncate">
+                                    <span id="rotation-countdown-text">⏳ หมุนเวียนรอบถัดไปใน 30 วิ</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <button onclick="triggerManualStallShuffle()"
+                                class="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold border border-white/10 flex items-center gap-1 active:scale-95 transition-all"
+                                title="สุ่มแผงค้าชุดใหม่ทันที">
+                                <span class="material-symbols-outlined text-sm text-emerald-300">shuffle</span>
+                                <span>สุ่มใหม่</span>
+                            </button>
+                            <button id="toggle-rotation-btn" onclick="toggleStallRotationPause()"
+                                class="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold border border-white/10 flex items-center gap-1 active:scale-95 transition-all"
+                                title="หยุดหมุนเวียนชั่วคราว">
+                                <span class="material-symbols-outlined text-sm" id="toggle-rotation-icon">pause</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 🔍 MAIN SEARCH BOX (ย้ายมาอยู่ระหว่างเปิดรับออเดอร์ และ ดูผัง 100 ร้าน) -->
                 <div class="px-4 mt-2.5">
                     <div class="relative flex items-center">
@@ -615,89 +699,6 @@
                                 class="w-7 h-7 bg-white shadow-xs border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
                                 title="เลื่อนขวา">
                                 <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 2. FAVORITE STALLS BAR (แผงประจำของคุณ ⭐ - 5 ร้านค้าพร้อมปุ่มเลื่อนซ้ายขวา) -->
-                <div class="px-4 mt-2.5">
-                    <div
-                        class="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-2 flex items-center gap-1.5 shadow-xs">
-
-                        <!-- Label -->
-                        <span
-                            class="text-[11px] font-extrabold text-amber-900 flex items-center gap-1 whitespace-nowrap shrink-0 pl-1">
-                            <span class="material-symbols-outlined text-sm text-amber-600">stars</span>
-                            <span>แผงประจำ:</span>
-                        </span>
-
-                        <!-- Left Arrow Button for Favorite Stalls -->
-                        <button onclick="scrollFavoriteStalls(-120)"
-                            class="w-6 h-6 bg-white shadow-xs border border-amber-200/80 rounded-full flex items-center justify-center text-amber-800 hover:bg-amber-100 shrink-0 transition-transform active:scale-90"
-                            title="เลื่อนซ้าย">
-                            <span class="material-symbols-outlined text-xs font-bold">chevron_left</span>
-                        </button>
-
-                        <!-- 5 Favorite Stalls List (Horizontal Drag & Scroll) -->
-                        <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none text-[11px] w-full scroll-smooth cursor-grab active:cursor-grabbing select-none py-0.5"
-                            id="favorite-stalls-list">
-                        </div>
-
-                        <!-- Right Arrow Button for Favorite Stalls -->
-                        <button onclick="scrollFavoriteStalls(120)"
-                            class="w-6 h-6 bg-white shadow-xs border border-amber-200/80 rounded-full flex items-center justify-center text-amber-800 hover:bg-amber-100 shrink-0 transition-transform active:scale-90"
-                            title="เลื่อนขวา">
-                            <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Active Filter Clear Banner (when filtered by single stall) -->
-                <div id="single-stall-banner" class="px-4 mt-2 hidden">
-                    <div
-                        class="bg-emerald-50 border border-emerald-200 rounded-xl p-2 flex items-center justify-between text-xs">
-                        <span class="text-emerald-800 font-medium" id="single-stall-banner-text">กำลังดูแผง:
-                            ไก่สดเรา</span>
-                        <button onclick="filterByCategory('all')"
-                            class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
-                            <span>ดูทั้งหมด</span>
-                            <span class="material-symbols-outlined text-xs">close</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Randomized Stall Display Control Bar (ระบบสุ่มแสดงร้านค้าตามหมวดหมู่) -->
-                <div id="random-rotation-bar" class="px-4 mt-2 hidden">
-                    <div
-                        class="p-2.5 sm:p-3 bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white rounded-2xl shadow-sm border border-emerald-500/30 flex items-center justify-between gap-2 flex-wrap">
-                        <div class="flex items-center gap-2.5 min-w-0">
-                            <span
-                                class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-400/30 shrink-0">
-                                <span class="material-symbols-outlined text-lg">casino</span>
-                            </span>
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-1.5 flex-wrap">
-                                    <span class="font-extrabold text-xs text-white">ระบบสุ่มหมุนเวียนร้านค้า</span>
-                                    <span
-                                        class="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.2 rounded-full border border-emerald-400/20">สุ่มสลับหมวดหมู่</span>
-                                </div>
-                                <div class="text-[11px] text-emerald-200/80 flex items-center gap-1 truncate">
-                                    <span id="rotation-countdown-text">⏳ หมุนเวียนรอบถัดไปใน 30 วิ</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            <button onclick="triggerManualStallShuffle()"
-                                class="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold border border-white/10 flex items-center gap-1 active:scale-95 transition-all"
-                                title="สุ่มแผงค้าชุดใหม่ทันที">
-                                <span class="material-symbols-outlined text-sm text-emerald-300">shuffle</span>
-                                <span>สุ่มใหม่</span>
-                            </button>
-                            <button id="toggle-rotation-btn" onclick="toggleStallRotationPause()"
-                                class="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold border border-white/10 flex items-center gap-1 active:scale-95 transition-all"
-                                title="หยุดหมุนเวียนชั่วคราว">
-                                <span class="material-symbols-outlined text-sm" id="toggle-rotation-icon">pause</span>
                             </button>
                         </div>
                     </div>
@@ -6235,7 +6236,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.51_guide_box"></script>
+    <script src="app.js?v=9.52_move_stalls_under_login"></script>
 </body>
 
 </html>

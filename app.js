@@ -5304,18 +5304,37 @@ function renderFavoriteStallsBar() {
     const container = document.getElementById("favorite-stalls-list");
     if (!container) return;
 
-    if (!state.favorites || state.favorites.length === 0) {
+    const labelEl = document.getElementById("favorite-stalls-bar-label");
+
+    // Check if user has saved favorites or fallback to top stalls in the market
+    const hasFavs = state.favorites && state.favorites.length > 0;
+    const allAvailableStalls = (typeof ALL_100_STALLS !== "undefined" && ALL_100_STALLS.length > 0)
+        ? ALL_100_STALLS
+        : (MARKET_DATA || []);
+    const stallIdsToRender = hasFavs
+        ? state.favorites.slice(0, 10)
+        : allAvailableStalls.slice(0, 10).map(s => s.stallId);
+
+    if (labelEl) {
+        if (hasFavs) {
+            labelEl.innerHTML = `<span class="material-symbols-outlined text-sm text-amber-600">stars</span><span>แผงประจำ:</span>`;
+        } else {
+            labelEl.innerHTML = `<span class="material-symbols-outlined text-sm text-amber-600">storefront</span><span>ร้านค้าต่าง ๆ:</span>`;
+        }
+    }
+
+    if (!stallIdsToRender || stallIdsToRender.length === 0) {
         container.innerHTML = `
             <span class="text-amber-800/80 text-[11px] font-medium py-1 px-2 whitespace-nowrap italic">
-                ยังไม่มีร้านโปรด แตะปุ่ม "⭐ บันทึกร้านโปรด" ที่หน้าร้านค้า
+                ยังไม่มีร้านค้าแสดงในขณะนี้
             </span>
         `;
         return;
     }
 
     let html = "";
-    state.favorites.slice(0, 5).forEach(stallId => {
-        const stall = ALL_100_STALLS.find(s => s.stallId === stallId) || MARKET_DATA.find(s => s.stallId === stallId);
+    stallIdsToRender.forEach(stallId => {
+        const stall = (typeof ALL_100_STALLS !== "undefined" ? ALL_100_STALLS.find(s => s.stallId === stallId) : null) || MARKET_DATA.find(s => s.stallId === stallId);
         if (!stall) return;
 
         let colorClass = "bg-white hover:bg-amber-50 text-slate-800 border-amber-200";
@@ -5326,21 +5345,24 @@ function renderFavoriteStallsBar() {
         else if (stall.category === "seafood") colorClass = "bg-white hover:bg-cyan-50 text-cyan-950 border-cyan-200";
 
         const isCurrentlySelected = state.currentSingleStall === stallId;
-        const activeRing = isCurrentlySelected ? "ring-2 ring-amber-500 bg-amber-50 font-extrabold" : "font-bold";
+        const activeRing = isCurrentlySelected ? "ring-2 ring-amber-500 bg-amber-100/90 font-extrabold shadow-sm" : "font-bold";
 
         // Emoji extraction
         const emoji = stall.stallTag ? stall.stallTag.split(" ")[0] : "🏪";
-        const shortName = stall.stallName.replace("แผง", "").replace("ร้าน", "").trim();
+        const shortName = (stall.stallName || "").replace("แผง", "").replace("ร้าน", "").trim();
 
         html += `
-            <button onclick="filterBySingleStall('${stall.stallId}')" class="${colorClass} ${activeRing} border px-2.5 py-1 rounded-xl whitespace-nowrap text-[11px] flex items-center gap-1 shadow-xs shrink-0 active:scale-95 transition-all" title="${stall.stallName}">
+            <button onclick="filterBySingleStall('${stall.stallId}')" class="${colorClass} ${activeRing} border px-2.5 py-1 rounded-xl whitespace-nowrap text-[11px] flex items-center gap-1 shadow-xs shrink-0 active:scale-95 transition-all cursor-pointer" title="${stall.stallName}">
                 <span>${emoji}</span>
-                <span>${stall.stallNumber} (${shortName})</span>
+                <span>${stall.stallNumber || ''} (${shortName})</span>
             </button>
         `;
     });
 
     container.innerHTML = html;
+    if (typeof setupDragScroll === 'function') {
+        setupDragScroll('favorite-stalls-list');
+    }
 }
 
 // Toggle Favorite Stall (Max 5 Stalls Saved in LocalStorage)
