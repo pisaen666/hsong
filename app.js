@@ -5417,7 +5417,7 @@ function filterByCategory(category) {
     if (subTabs) {
         let subHtml = `
             <button type="button" onclick="selectSubCategory('all_cat')"
-                class="subcat-pill active px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap bg-emerald-700 text-white shadow-xs shrink-0 transition-all">
+                class="subcat-pill active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-emerald-700 text-white shadow-xs shrink-0 transition-all cursor-pointer">
                 <span>🌟 ทั้งหมดในหมวดนี้</span>
             </button>
         `;
@@ -5425,7 +5425,7 @@ function filterByCategory(category) {
         subs.forEach(sName => {
             subHtml += `
                 <button type="button" onclick="selectSubCategory('${sName.replace(/'/g, "\\'")}')"
-                    class="subcat-pill px-3 py-1 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200/90 shrink-0 hover:bg-slate-50 transition-all">
+                    class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200/90 shrink-0 hover:bg-slate-50 transition-all cursor-pointer">
                     <span>${sName}</span>
                 </button>
             `;
@@ -5433,6 +5433,9 @@ function filterByCategory(category) {
 
         subTabs.innerHTML = subHtml;
         subTabs.scrollLeft = 0;
+        if (typeof setupDragScroll === 'function') {
+            setupDragScroll('subcategory-tabs');
+        }
     }
 
     // เริ่มต้นแสดง 15 รายการคัดสรรสำหรับหมวดหมู่นี้
@@ -5904,6 +5907,42 @@ function scrollCategoryTabs(amount) {
     if (container) {
         container.scrollBy({ left: amount, behavior: 'smooth' });
     }
+}
+
+function scrollSubCategoryTabs(amount) {
+    const container = document.getElementById("subcategory-tabs");
+    if (container) {
+        container.scrollBy({ left: amount, behavior: 'smooth' });
+    }
+}
+
+function setupDragScroll(elementId) {
+    const slider = document.getElementById(elementId);
+    if (!slider || slider._dragInitialized) return;
+    slider._dragInitialized = true;
+    let isDown = false;
+    let startX = 0;
+    let scrollLeft = 0;
+    let hasMoved = false;
+
+    slider.addEventListener('mousedown', (e) => {
+        isDown = true;
+        hasMoved = false;
+        startX = e.pageX - slider.offsetLeft;
+        scrollLeft = slider.scrollLeft;
+    });
+    window.addEventListener('mouseup', () => {
+        isDown = false;
+    });
+    slider.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        const x = e.pageX - slider.offsetLeft;
+        const walk = (x - startX) * 1.4;
+        if (Math.abs(walk) > 5) {
+            hasMoved = true;
+        }
+        slider.scrollLeft = scrollLeft - walk;
+    });
 }
 
 function scrollFavoriteStalls(amount) {
@@ -20212,6 +20251,124 @@ function goToPreviewBannerSlide(idx) {
 function nextPreviewBannerSlide() { goToPreviewBannerSlide(_previewSlideIndex + 1); }
 function prevPreviewBannerSlide() { goToPreviewBannerSlide(_previewSlideIndex - 1); }
 
+
+// ==========================================
+// 🌟 DEDICATED MARKET HERO CAROUSEL CONTROLLER
+// (3 Banners: 4:1 Aspect Ratio, Auto-rotate, Touch Swipe)
+// ==========================================
+let _currentMarketHeroSlide = 0;
+let _marketHeroInterval = null;
+let _marketHeroTouchStartX = 0;
+let _marketHeroTouchEndX = 0;
+
+function goToMarketHeroSlide(index) {
+    const track = document.getElementById("market-hero-track");
+    const dots = document.querySelectorAll("#market-hero-dots .market-hero-dot");
+    if (!track) return;
+
+    _currentMarketHeroSlide = ((index % 3) + 3) % 3;
+    track.style.transform = `translateX(-${_currentMarketHeroSlide * 100}%)`;
+
+    if (dots && dots.length > 0) {
+        dots.forEach((dot, idx) => {
+            if (idx === _currentMarketHeroSlide) {
+                dot.className = "market-hero-dot active w-5 h-1.5 rounded-full bg-emerald-400 transition-all shadow-xs cursor-pointer";
+            } else {
+                dot.className = "market-hero-dot w-1.5 h-1.5 rounded-full bg-white/50 hover:bg-white transition-all cursor-pointer";
+            }
+        });
+    }
+}
+
+function nextMarketHeroSlide(e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    goToMarketHeroSlide(_currentMarketHeroSlide + 1);
+    restartMarketHeroAutoplay();
+}
+
+function prevMarketHeroSlide(e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    goToMarketHeroSlide(_currentMarketHeroSlide - 1);
+    restartMarketHeroAutoplay();
+}
+
+function startMarketHeroAutoplay() {
+    stopMarketHeroAutoplay();
+    _marketHeroInterval = setInterval(() => {
+        goToMarketHeroSlide(_currentMarketHeroSlide + 1);
+    }, 4000);
+}
+
+function stopMarketHeroAutoplay() {
+    if (_marketHeroInterval) {
+        clearInterval(_marketHeroInterval);
+        _marketHeroInterval = null;
+    }
+}
+
+function restartMarketHeroAutoplay() {
+    startMarketHeroAutoplay();
+}
+
+function handleMarketHeroClick(index) {
+    if (index === 0) {
+        // Slide 1: รวมบิลร้านค้าต่าง ๆ สั่งหลายแผง ค่าส่งรอบเดียว
+        openDirectoryModal();
+        showToast("🏪 ดูผัง 100 แผงค้า สั่งหลายร้าน รวมส่งรอบเดียวได้เลยครับ");
+    } else if (index === 1) {
+        // Slide 2: สด ๆ ใหม่ ๆ จากร้านค้า ส่งไวใน 30 นาที
+        const catEl = document.getElementById("category-tabs");
+        if (catEl) {
+            catEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        showToast("⚡ สั่งของสดตอนนี้ การันตีสดใหม่ส่งไวใน 30 นาที!");
+    } else if (index === 2) {
+        // Slide 3: สิทธิพิเศษลูกค้าใหม่ รับส่วนลด & สะสมแต้มตลาดฮับ
+        const loyaltyBanner = document.getElementById("customer-loyalty-banner");
+        if (loyaltyBanner) {
+            loyaltyBanner.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        showToast("🎁 สิทธิพิเศษลูกค้าใหม่ รับส่วนลด ฿20 และสะสมแต้มทุกการสั่งซื้อ!");
+    }
+}
+
+function initMarketHeroCarousel() {
+    const container = document.getElementById("market-hero-carousel-container");
+    if (!container) return;
+
+    // Attach touch listeners for mobile swipe
+    container.addEventListener("touchstart", (e) => {
+        if (e.changedTouches && e.changedTouches[0]) {
+            _marketHeroTouchStartX = e.changedTouches[0].screenX;
+        }
+        stopMarketHeroAutoplay();
+    }, { passive: true });
+
+    container.addEventListener("touchend", (e) => {
+        if (e.changedTouches && e.changedTouches[0]) {
+            _marketHeroTouchEndX = e.changedTouches[0].screenX;
+            const diff = _marketHeroTouchStartX - _marketHeroTouchEndX;
+            if (Math.abs(diff) > 35) {
+                if (diff > 0) nextMarketHeroSlide();
+                else prevMarketHeroSlide();
+            }
+        }
+        startMarketHeroAutoplay();
+    }, { passive: true });
+
+    container.addEventListener("mouseenter", stopMarketHeroAutoplay);
+    container.addEventListener("mouseleave", startMarketHeroAutoplay);
+
+    goToMarketHeroSlide(0);
+    startMarketHeroAutoplay();
+}
+
+window.goToMarketHeroSlide = goToMarketHeroSlide;
+window.nextMarketHeroSlide = nextMarketHeroSlide;
+window.prevMarketHeroSlide = prevMarketHeroSlide;
+window.handleMarketHeroClick = handleMarketHeroClick;
+window.initMarketHeroCarousel = initMarketHeroCarousel;
+
 // Window registrations
 window.goToHeroBannerSlide = goToHeroBannerSlide;
 window.nextHeroBannerSlide = nextHeroBannerSlide;
@@ -20506,6 +20663,10 @@ function initTalatHubApp() {
     renderCatalog();
     updateCartUI();
     initHeroBannerCarousel();
+    initMarketHeroCarousel();
+    if (typeof setupDragScroll === 'function') {
+        setupDragScroll('category-tabs');
+    }
     updateAdminRiderBadges();
     updateAdminStallsBadge();
     initRiderRealtimeSync();

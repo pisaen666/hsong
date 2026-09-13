@@ -454,50 +454,50 @@
 
                 <!-- 🌟 HERO 3-BANNER CAROUSEL (สลับ 3 ป้ายอัตโนมัติ สัดส่วน 4:1 สูงครึ่งหนึ่งของป้ายหลัก) -->
                 <div class="px-4 mt-2.5">
-                    <div id="hero-banner-carousel-container"
+                    <div id="market-hero-carousel-container"
                         class="relative w-full aspect-[4/1] rounded-2xl overflow-hidden shadow-sm border border-slate-200/80 bg-slate-900 group select-none cursor-pointer">
                         <!-- Slides Track -->
-                        <div id="hero-carousel-track" class="flex h-full w-full transition-transform duration-500 ease-out">
+                        <div id="market-hero-track" class="flex h-full w-full transition-transform duration-500 ease-out">
                             <!-- Slide 1: รวมบิลหลายแผง ค่าส่งรอบเดียว -->
-                            <div class="min-w-full h-full relative" onclick="handleHeroBannerClick(0)">
+                            <div class="min-w-full w-full shrink-0 h-full relative" onclick="handleMarketHeroClick(0)">
                                 <img src="images/hero_banner_1.png" alt="รวมบิลร้านค้าต่าง ๆ สั่งหลายแผง ค่าส่งรอบเดียว"
                                     class="w-full h-full object-cover object-center pointer-events-none">
                             </div>
                             <!-- Slide 2: สดใหม่จากร้านค้า ส่งไวใน 30 นาที -->
-                            <div class="min-w-full h-full relative" onclick="handleHeroBannerClick(1)">
+                            <div class="min-w-full w-full shrink-0 h-full relative" onclick="handleMarketHeroClick(1)">
                                 <img src="images/hero_banner_2.png" alt="สด ๆ ใหม่ ๆ จากร้านค้า ส่งไวใน 30 นาที"
                                     class="w-full h-full object-cover object-center pointer-events-none">
                             </div>
                             <!-- Slide 3: สิทธิพิเศษลูกค้าใหม่ รับส่วนลด & สะสมแต้มตลาดฮับ -->
-                            <div class="min-w-full h-full relative" onclick="handleHeroBannerClick(2)">
+                            <div class="min-w-full w-full shrink-0 h-full relative" onclick="handleMarketHeroClick(2)">
                                 <img src="images/hero_banner_3.png" alt="สิทธิพิเศษลูกค้าใหม่ รับส่วนลด & สะสมแต้มตลาดฮับ"
                                     class="w-full h-full object-cover object-center pointer-events-none">
                             </div>
                         </div>
 
                         <!-- Left & Right Arrow Buttons -->
-                        <button type="button" onclick="prevHeroBannerSlide(event)"
-                            class="absolute left-1.5 top-1/2 -translate-y-1/2 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition-all z-10 opacity-70 group-hover:opacity-100 active:scale-90 shadow-sm cursor-pointer"
+                        <button type="button" onclick="prevMarketHeroSlide(event)"
+                            class="absolute left-1.5 top-1/2 -translate-y-1/2 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md cursor-pointer"
                             title="ป้ายก่อนหน้า">
-                            <span class="material-symbols-outlined text-xs sm:text-sm font-bold">chevron_left</span>
+                            <span class="material-symbols-outlined text-sm font-bold">chevron_left</span>
                         </button>
-                        <button type="button" onclick="nextHeroBannerSlide(event)"
-                            class="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition-all z-10 opacity-70 group-hover:opacity-100 active:scale-90 shadow-sm cursor-pointer"
+                        <button type="button" onclick="nextMarketHeroSlide(event)"
+                            class="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md cursor-pointer"
                             title="ป้ายถัดไป">
-                            <span class="material-symbols-outlined text-xs sm:text-sm font-bold">chevron_right</span>
+                            <span class="material-symbols-outlined text-sm font-bold">chevron_right</span>
                         </button>
 
                         <!-- Indicator Dots -->
-                        <div id="hero-banner-dots"
-                            class="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10 bg-black/35 px-2 py-0.5 rounded-full backdrop-blur-xs pointer-events-auto">
-                            <button type="button" onclick="event.stopPropagation(); goToHeroBannerSlide(0);"
-                                class="hero-dot active w-5 h-1.5 rounded-full bg-emerald-400 transition-all shadow-xs cursor-pointer"
+                        <div id="market-hero-dots"
+                            class="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 bg-black/40 px-2.5 py-0.5 rounded-full backdrop-blur-xs pointer-events-auto">
+                            <button type="button" onclick="event.stopPropagation(); goToMarketHeroSlide(0);"
+                                class="market-hero-dot active w-5 h-1.5 rounded-full bg-emerald-400 transition-all shadow-xs cursor-pointer"
                                 title="ป้ายที่ 1"></button>
-                            <button type="button" onclick="event.stopPropagation(); goToHeroBannerSlide(1);"
-                                class="hero-dot w-1.5 h-1.5 rounded-full bg-white/50 hover:bg-white transition-all cursor-pointer"
+                            <button type="button" onclick="event.stopPropagation(); goToMarketHeroSlide(1);"
+                                class="market-hero-dot w-1.5 h-1.5 rounded-full bg-white/50 hover:bg-white transition-all cursor-pointer"
                                 title="ป้ายที่ 2"></button>
-                            <button type="button" onclick="event.stopPropagation(); goToHeroBannerSlide(2);"
-                                class="hero-dot w-1.5 h-1.5 rounded-full bg-white/50 hover:bg-white transition-all cursor-pointer"
+                            <button type="button" onclick="event.stopPropagation(); goToMarketHeroSlide(2);"
+                                class="market-hero-dot w-1.5 h-1.5 rounded-full bg-white/50 hover:bg-white transition-all cursor-pointer"
                                 title="ป้ายที่ 3"></button>
                         </div>
                     </div>
@@ -517,42 +517,42 @@
                         </button>
                     </div>
 
-                    <!-- Scrollable Container with Left/Right Arrow Buttons for PC and Mobile -->
-                    <div class="relative flex items-center gap-1">
+                    <!-- Scrollable Container with Left/Right Arrow Buttons (2 Rows of Main Categories) -->
+                    <div class="relative flex items-center gap-1.5">
                         <!-- Left Arrow Button -->
-                        <button onclick="scrollCategoryTabs(-140)"
-                            class="w-7 h-7 bg-white shadow-md border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90"
+                        <button onclick="scrollCategoryTabs(-180)"
+                            class="w-7 h-7 sm:w-8 sm:h-8 bg-white shadow-md border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
                             title="เลื่อนซ้าย">
                             <span class="material-symbols-outlined text-sm font-bold">chevron_left</span>
                         </button>
 
-                        <!-- Category Tabs with Mouse-Drag Support -->
-                        <div class="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none w-full scroll-smooth cursor-grab active:cursor-grabbing select-none"
+                        <!-- Category Tabs: 2-Row Horizontal Scroll Grid with Mouse-Drag Support -->
+                        <div class="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto py-1 scrollbar-none w-full scroll-smooth cursor-grab active:cursor-grabbing select-none"
                             id="category-tabs">
-                            <button onclick="filterByCategory('all')" class="cat-pill active flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-emerald-700 text-white shadow-sm shrink-0"><span>🏠 ทั้งหมด</span></button>
-                            <button onclick="filterByCategory('🐔 ไก่สด & เนื้อสัตว์')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50"><span>🐔 ไก่สด & เนื้อสัตว์</span></button>
-                            <button onclick="filterByCategory('🥩 หมูสด')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50"><span>🥩 หมูสด</span></button>
-                            <button onclick="filterByCategory('🥬 ผักสด')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50"><span>🥬 ผักสด</span></button>
-                            <button onclick="filterByCategory('🦐 อาหารทะเลสด')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50"><span>🦐 อาหารทะเลสด</span></button>
-                            <button onclick="filterByCategory('🌿 สมุนไพร & เครื่องเทศ')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50"><span>🌿 สมุนไพร & เครื่องเทศ</span></button>
-                            <button onclick="filterByCategory('🌶️ เครื่องแกง & พริกแกง')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50"><span>🌶️ เครื่องแกง & พริกแกง</span></button>
-                            <button onclick="filterByCategory('🧂 ของแห้ง & เครื่องปรุง')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50"><span>🧂 ของแห้ง & เครื่องปรุง</span></button>
-                            <button onclick="filterByCategory('🥛 ไข่ & ผลิตภัณฑ์นม')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50"><span>🥛 ไข่ & นม</span></button>
-                            <button onclick="filterByCategory('🍄 เห็ด & พืชพิเศษ')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50"><span>🍄 เห็ด & พืชพิเศษ</span></button>
-                            <button onclick="filterByCategory('🍌 ผลไม้สด')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50"><span>🍌 ผลไม้สด</span></button>
-                            <button onclick="filterByCategory('🍜 อาหารสำเร็จรูป & อื่นๆ')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50"><span>🍜 อาหารสำเร็จรูป</span></button>
+                            <button onclick="filterByCategory('all')" class="cat-pill active flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-emerald-700 text-white shadow-sm shrink-0 cursor-pointer"><span>🏠 ทั้งหมด</span></button>
+                            <button onclick="filterByCategory('🐔 ไก่สด & เนื้อสัตว์')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🐔 ไก่สด & เนื้อสัตว์</span></button>
+                            <button onclick="filterByCategory('🥩 หมูสด')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🥩 หมูสด</span></button>
+                            <button onclick="filterByCategory('🥬 ผักสด')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🥬 ผักสด</span></button>
+                            <button onclick="filterByCategory('🦐 อาหารทะเลสด')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🦐 อาหารทะเลสด</span></button>
+                            <button onclick="filterByCategory('🌿 สมุนไพร & เครื่องเทศ')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🌿 สมุนไพร & เครื่องเทศ</span></button>
+                            <button onclick="filterByCategory('🌶️ เครื่องแกง & พริกแกง')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🌶️ เครื่องแกง & พริกแกง</span></button>
+                            <button onclick="filterByCategory('🧂 ของแห้ง & เครื่องปรุง')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🧂 ของแห้ง & เครื่องปรุง</span></button>
+                            <button onclick="filterByCategory('🥛 ไข่ & ผลิตภัณฑ์นม')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🥛 ไข่ & นม</span></button>
+                            <button onclick="filterByCategory('🍄 เห็ด & พืชพิเศษ')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🍄 เห็ด & พืชพิเศษ</span></button>
+                            <button onclick="filterByCategory('🍌 ผลไม้สด')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🍌 ผลไม้สด</span></button>
+                            <button onclick="filterByCategory('🍜 อาหารสำเร็จรูป & อื่นๆ')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🍜 อาหารสำเร็จรูป</span></button>
                         </div>
 
                         <!-- Right Arrow Button -->
-                        <button onclick="scrollCategoryTabs(140)"
-                            class="w-7 h-7 bg-white shadow-md border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90"
+                        <button onclick="scrollCategoryTabs(180)"
+                            class="w-7 h-7 sm:w-8 sm:h-8 bg-white shadow-md border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
                             title="เลื่อนขวา">
                             <span class="material-symbols-outlined text-sm font-bold">chevron_right</span>
                         </button>
                     </div>
 
-                    <!-- Subcategory Row (Tier 2 - Dynamic Chips) -->
-                    <div id="subcategory-bar-container" class="hidden mt-2 pt-2 border-t border-slate-200/80 transition-all duration-300">
+                    <!-- Subcategory Row (Tier 2 - 2 Rows Horizontal Scroll Grid) -->
+                    <div id="subcategory-bar-container" class="hidden mt-2.5 pt-2.5 border-t border-slate-200/80 transition-all duration-300">
                         <div class="flex items-center justify-between mb-1.5 px-0.5">
                             <span class="text-[11px] font-bold text-slate-700 flex items-center gap-1">
                                 <span class="material-symbols-outlined text-xs text-emerald-600">subdirectory_arrow_right</span>
@@ -560,18 +560,19 @@
                             </span>
                             <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60" id="subcategory-count-hint"></span>
                         </div>
-                        <div class="relative flex items-center gap-1">
-                            <button type="button" onclick="scrollSubCategoryTabs(-120)"
-                                class="w-6 h-6 bg-white shadow-xs border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90"
+                        <div class="relative flex items-center gap-1.5">
+                            <button type="button" onclick="scrollSubCategoryTabs(-160)"
+                                class="w-7 h-7 bg-white shadow-xs border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
                                 title="เลื่อนซ้าย">
                                 <span class="material-symbols-outlined text-xs font-bold">chevron_left</span>
                             </button>
-                            <div class="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none w-full scroll-smooth cursor-grab active:cursor-grabbing select-none"
+                            <!-- Subcategory Tabs: 2-Row Horizontal Scroll Grid -->
+                            <div class="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto py-1 scrollbar-none w-full scroll-smooth cursor-grab active:cursor-grabbing select-none"
                                 id="subcategory-tabs">
                                 <!-- Rendered dynamically by app.js -->
                             </div>
-                            <button type="button" onclick="scrollSubCategoryTabs(120)"
-                                class="w-6 h-6 bg-white shadow-xs border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90"
+                            <button type="button" onclick="scrollSubCategoryTabs(160)"
+                                class="w-7 h-7 bg-white shadow-xs border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
                                 title="เลื่อนขวา">
                                 <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
                             </button>
@@ -6194,7 +6195,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.42_fix_merchant_product_tabs_scroll"></script>
+    <script src="app.js?v=9.50_hero_carousel_2row_cats"></script>
 </body>
 
 </html>
