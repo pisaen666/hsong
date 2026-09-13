@@ -486,8 +486,22 @@ function initCustomStallsRealtimeSync() {
             }
 
             if (rawList.length > 0) {
-                localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(rawList));
+                try {
+                    localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(rawList));
+                } catch (e) { }
+
+                const currentApps = typeof loadMerchantApplications === "function" ? loadMerchantApplications() : [];
+                const unapprovedIds = new Set(
+                    currentApps
+                        .filter(a => a && a.status && a.status !== "approved")
+                        .map(a => a.stallData?.stallId || a.id)
+                        .filter(Boolean)
+                );
+
                 rawList.forEach(savedStall => {
+                    if (!savedStall || !savedStall.stallId || unapprovedIds.has(savedStall.stallId)) {
+                        return; // Do NOT push unapproved/pending stalls
+                    }
                     const existingIdx = MARKET_DATA.findIndex(s => s.stallId === savedStall.stallId);
                     if (existingIdx >= 0) {
                         MARKET_DATA[existingIdx] = { ...MARKET_DATA[existingIdx], ...savedStall };
@@ -20671,8 +20685,15 @@ async function fetchOnlineStallsStartup() {
         }
 
         if (customList.length > 0) {
+            const unapprovedIds = new Set(
+                appList
+                    .filter(a => a && a.status && a.status !== "approved")
+                    .map(a => a.stallData?.stallId || a.id)
+                    .filter(Boolean)
+            );
+
             customList.forEach(stall => {
-                if (stall && stall.stallId) {
+                if (stall && stall.stallId && !unapprovedIds.has(stall.stallId)) {
                     if (stall.products && Array.isArray(stall.products)) {
                         stall.products.forEach(p => { if (p && p.image) delete p.image; });
                     }
