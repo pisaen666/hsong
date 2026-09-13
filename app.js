@@ -5421,6 +5421,9 @@ function filterByCategory(category) {
         if (subContainer) subContainer.classList.add("hidden");
         if (subTabs) subTabs.innerHTML = "";
 
+        const subProdContainer = document.getElementById("subcategory-products-container");
+        if (subProdContainer) subProdContainer.innerHTML = "";
+
         selectRandomStallBatch();
         state.stallRotation.remainingSeconds = state.stallRotation.intervalSeconds;
         renderFavoriteStallsBar();
@@ -5463,6 +5466,12 @@ function filterByCategory(category) {
     // เริ่มต้นแสดง 15 รายการคัดสรรสำหรับหมวดหมู่นี้
     state.currentSubCategoryFilter = "all_cat";
     renderCatalog();
+    const subContainerEl = document.getElementById("subcategory-bar-container");
+    if (subContainerEl) {
+        setTimeout(() => {
+            subContainerEl.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+    }
 }
 
 function selectSubCategory(subCat) {
@@ -5706,7 +5715,7 @@ function getSubCategoryProducts(mainCat, subCat, searchQuery = "", requestedCoun
 }
 
 function renderSubCategoryProductView() {
-    const container = document.getElementById("products-catalog-container");
+    const container = document.getElementById("subcategory-products-container") || document.getElementById("products-catalog-container");
     if (!container) return;
 
     const mainCat = state.currentCategoryFilter;
