@@ -4721,7 +4721,7 @@ function updateStallRotationUI() {
 
     // ซ่อนแถบถ้ามีร้านค้าไม่เกิน 1 ร้าน (ยังไม่มีร้านลงทะเบียนเพิ่ม) หรือกำลังดูเฉพาะแผง หรือ กำลังค้นหา
     const eligibleStalls = MARKET_DATA.filter(s => s.products && s.products.length > 0);
-    if (eligibleStalls.length <= 1 || state.currentSingleStall || (state.searchQuery && state.searchQuery.trim() !== "")) {
+    if (eligibleStalls.length <= 1 || state.currentSingleStall || (state.searchQuery && state.searchQuery.trim() !== "") || (state.currentCategoryFilter !== "all" && state.currentSubCategoryFilter)) {
         rotBar.classList.add("hidden");
         return;
     } else {
@@ -5754,8 +5754,23 @@ function renderSubCategoryProductView() {
         return;
     }
 
-    // 3. Product Cards Grid (15 items per batch)
-    html += `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">`;
+    // 3. Product Table List (รูปแบบที่ 2 ตามภาพ: ตารางแนวนอน คมชัด อ่านง่าย ไม่ถูกบีบ)
+    html += `
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden p-2 sm:p-2.5 space-y-1.5">
+            <!-- Column Header -->
+            <div class="flex items-center justify-between text-[10px] font-extrabold text-slate-400 px-2.5 sm:px-3 pb-1 select-none border-b border-slate-100">
+                <span class="w-6 shrink-0 text-center">ลำดับ</span>
+                <span class="flex-1 min-w-0 pl-2">ชื่อรายการสินค้า</span>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span class="w-10 text-center">หน่วย</span>
+                    <span class="w-14 text-right">ราคา</span>
+                </div>
+                <span class="w-8 text-center shrink-0"></span>
+            </div>
+
+            <!-- Product Rows -->
+            <div class="space-y-1.5">
+    `;
 
     items.forEach((item, idx) => {
         const inCart = (state.cart || []).find(c => c && (c.productId === item.id || c.id === item.id));
@@ -5764,66 +5779,59 @@ function renderSubCategoryProductView() {
         const stallShort = (item.stallName || "แผงค้า").replace("แผง", "").replace("ร้าน", "").trim();
 
         html += `
-            <div class="bg-white rounded-2xl p-2.5 sm:p-3 border ${qtyInCart > 0 ? 'border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-400 shadow-sm' : 'border-slate-200/90 shadow-2xs hover:shadow-xs'} flex items-center justify-between gap-2.5 transition-all min-h-0">
-                <!-- Rank Badge & Image -->
-                <div class="relative w-14 h-14 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-200/80 flex items-center justify-center">
-                    <img src="${item.image || (typeof MERCHANT_PRESET_IMAGES !== 'undefined' ? MERCHANT_PRESET_IMAGES.stall.chicken : '')}" alt="${item.name}" class="w-full h-full object-cover">
-                    <span class="absolute top-0.5 left-0.5 ${qtyInCart > 0 ? 'bg-emerald-700 text-white' : 'bg-black/65 text-white'} text-[9px] font-black px-1 rounded-md leading-none shadow-xs">
-                        #${idx + 1}
-                    </span>
-                </div>
+            <div class="bg-white hover:bg-slate-50/90 rounded-xl py-1.5 px-2.5 sm:px-3 border ${qtyInCart > 0 ? 'border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-400 shadow-sm' : 'border-slate-200/80 shadow-2xs'} flex items-center justify-between gap-2 transition-all min-h-0">
+                <!-- 1. ลำดับ -->
+                <span class="w-6 h-6 rounded-md ${qtyInCart > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 font-bold'} text-xs flex items-center justify-center shrink-0 leading-none">
+                    ${idx + 1}
+                </span>
 
-                <!-- Product Details -->
-                <div class="flex-1 min-w-0 pr-0.5">
-                    <div class="flex items-center gap-1 flex-wrap">
-                        <span class="text-[9px] font-bold px-1.5 py-0.2 rounded-md ${item.sourceTier === 1 ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-blue-50 text-blue-800 border border-blue-200'}">
-                            ${item.sourceTier === 1 ? '⭐ รายการด่วน' : '📦 เพิ่มเติม 50 รายการ'}
-                        </span>
-                        ${item.badge ? `
-                            <span class="text-[8px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200 px-1 py-0.2 rounded shrink-0">
-                                ${item.badge}
-                            </span>
-                        ` : ''}
-                    </div>
-
-                    <h4 class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug mt-0.5" title="${item.name}">
+                <!-- 2. ชื่อรายการสินค้า + ป้าย + ร้านค้า -->
+                <div class="flex-1 min-w-0 flex items-center gap-1.5 pl-1.5 leading-none">
+                    <span class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug" title="${item.name}">
                         ${item.name}
-                    </h4>
-
-                    <!-- Shop Tag -->
-                    <button type="button" onclick="filterBySingleStall('${item.stallId}')" class="text-[10px] text-slate-600 hover:text-emerald-700 font-medium flex items-center gap-1 truncate text-left mt-0.5 group">
-                        <span class="text-amber-600">${isStallFav ? '⭐' : '🏪'}</span>
-                        <span class="font-bold text-slate-700 group-hover:text-emerald-700 underline decoration-slate-300">${item.stallNumber || ''} ${stallShort}</span>
-                        ${item.zone ? `<span class="text-slate-400 text-[9px]">(${item.zone})</span>` : ''}
+                    </span>
+                    ${item.badge ? `
+                        <span class="text-[8px] sm:text-[9px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.2 rounded shrink-0 leading-none">
+                            ${item.badge}
+                        </span>
+                    ` : ''}
+                    <button type="button" onclick="filterBySingleStall('${item.stallId}')" class="text-[9px] sm:text-[10px] text-slate-400 hover:text-emerald-700 font-medium shrink-0 flex items-center gap-0.5 truncate transition-colors" title="${item.stallName}">
+                        <span>${isStallFav ? '⭐' : '🏪'}</span>
+                        <span class="underline decoration-slate-200">${item.stallNumber || ''} ${stallShort}</span>
                     </button>
+                    ${item.sourceTier === 2 ? `
+                        <span class="text-[8px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1 py-0.2 rounded shrink-0 hidden sm:inline-block leading-none">
+                            คลัง 50
+                        </span>
+                    ` : ''}
+                </div>
 
-                    <!-- Price & Unit -->
-                    <div class="flex items-center gap-1.5 mt-1">
-                        <span class="font-black text-sm text-orange-600 leading-none">
-                            ฿${item.price}
-                        </span>
-                        <span class="text-[10px] text-slate-500 font-bold bg-slate-100 px-1 py-0.2 rounded">
-                            / ${item.unit || 'กก.'}
-                        </span>
+                <!-- 3 & 4. หน่วย + ราคา ขยับเข้ามาชิดกัน -->
+                <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                    <!-- 3. หน่วย -->
+                    <span class="w-10 text-center text-[10px] sm:text-[11px] font-bold text-slate-500 bg-slate-100/90 px-1 py-0.5 rounded-lg shrink-0 whitespace-nowrap leading-none">
+                        ${item.unit || 'กก.'}
+                    </span>
+
+                    <!-- 4. ราคา -->
+                    <div class="w-14 font-black text-xs sm:text-sm text-orange-600 shrink-0 text-right whitespace-nowrap leading-none">
+                        ฿${item.price}
                     </div>
                 </div>
 
-                <!-- Cart Button / Stepper -->
-                <div class="shrink-0 flex items-center justify-center">
+                <!-- 5. สัญลักษณ์ตะกร้า -->
+                <div class="w-8 shrink-0 flex items-center justify-center">
                     ${item.isClosed ? `
-                        <span class="text-[10px] text-slate-400 font-bold bg-slate-100 px-2 py-1 rounded-lg border border-slate-200">
-                            พักร้าน
-                        </span>
+                        <span class="text-[9px] text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">พัก</span>
                     ` : qtyInCart > 0 ? `
-                        <div class="flex items-center gap-0.5 bg-emerald-600 text-white rounded-xl px-1.5 py-1 text-[11px] shadow-sm ring-1 ring-emerald-400">
-                            <button type="button" onclick="changeCartQty('${item.id}', -1)" class="w-4 h-4 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-xs transition-transform cursor-pointer" title="ลดจำนวน">-</button>
-                            <span class="px-1 text-[11px] font-black min-w-[10px] text-center leading-none">${qtyInCart}</span>
-                            <button type="button" onclick="changeCartQty('${item.id}', 1)" class="w-4 h-4 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-xs transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
+                        <div class="flex items-center gap-0.5 bg-emerald-600 text-white rounded-lg px-1 py-0.5 text-[10px] shadow-sm ring-1 ring-emerald-400 h-6">
+                            <button type="button" onclick="changeCartQty('${item.id}', -1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="ลดจำนวน">-</button>
+                            <span class="px-0.5 text-[10px] font-black min-w-[8px] text-center leading-none">${qtyInCart}</span>
+                            <button type="button" onclick="changeCartQty('${item.id}', 1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
                         </div>
                     ` : `
-                        <button type="button" onclick="addToCartFromModal('${item.stallId}', '${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price}, '${item.unit || 'กก.'}')" class="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-95 text-white font-extrabold text-[11px] flex items-center gap-1 shadow-xs transition-all cursor-pointer" title="เพิ่ม ${item.name} ลงตะกร้า">
-                            <span class="material-symbols-outlined text-[15px]">shopping_cart</span>
-                            <span>ใส่ตะกร้า</span>
+                        <button type="button" onclick="addToCartFromModal('${item.stallId}', '${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price}, '${item.unit || 'กก.'}')" class="w-7 h-7 rounded-lg bg-orange-500 hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer shrink-0" title="เพิ่ม ${item.name} ลงตะกร้า">
+                            <span class="material-symbols-outlined text-[16px] font-bold">shopping_cart</span>
                         </button>
                     `}
                 </div>
@@ -5831,7 +5839,10 @@ function renderSubCategoryProductView() {
         `;
     });
 
-    html += `</div>`;
+    html += `
+            </div>
+        </div>
+    `;
 
     // 4. Bottom "ค้นหา/โหลดเพิ่มเติมอีก 15 รายการ จาก 50 รายการเพิ่มเติม" Section
     html += `
