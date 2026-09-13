@@ -12308,7 +12308,9 @@ function handleMerchantAppEditSubmit(e) {
 
     saveMerchantApplications(apps);
 
-    // Sync stall with MARKET_DATA and ALL_100_STALLS if approved
+    // Sync stall with MARKET_DATA and ALL_100_STALLS if approved, or remove if pending/rejected
+    const stallId = app.stallData?.stallId || app.id;
+    const sName = app.stallData?.stallName;
     if (status === "approved") {
         const stallObj = { ...app.stallData, accessCode: app.accessCode };
         const mIdx = MARKET_DATA.findIndex(s => s.stallId === stallObj.stallId || s.phone === phone);
@@ -12319,11 +12321,27 @@ function handleMerchantAppEditSubmit(e) {
         if (aIdx >= 0) ALL_100_STALLS[aIdx] = { ...ALL_100_STALLS[aIdx], ...stallObj };
         else ALL_100_STALLS.push(stallObj);
         saveMarketDataToStorage();
+    } else {
+        // If status is pending or rejected, immediately remove from active market!
+        for (let i = MARKET_DATA.length - 1; i >= 0; i--) {
+            if ((stallId && MARKET_DATA[i].stallId === stallId) || (phone && MARKET_DATA[i].phone === phone) || (sName && MARKET_DATA[i].stallName === sName)) {
+                MARKET_DATA.splice(i, 1);
+            }
+        }
+        for (let i = ALL_100_STALLS.length - 1; i >= 0; i--) {
+            if ((stallId && ALL_100_STALLS[i].stallId === stallId) || (phone && ALL_100_STALLS[i].phone === phone) || (sName && ALL_100_STALLS[i].stallName === sName)) {
+                ALL_100_STALLS.splice(i, 1);
+            }
+        }
+        saveMarketDataToStorage();
     }
 
     closeMerchantAppEditModal();
     updateAdminStallsBadge();
     renderAdminStalls();
+    if (typeof renderCatalog === "function") renderCatalog();
+    if (typeof renderFavoriteStallsBar === "function") renderFavoriteStallsBar();
+    if (typeof updateStallRotationUI === "function") updateStallRotationUI();
     showToast("💾 บันทึกการแก้ไขข้อมูลร้านค้าเรียบร้อยแล้ว");
 }
 window.handleMerchantAppEditSubmit = handleMerchantAppEditSubmit;
@@ -12334,8 +12352,28 @@ function reconsiderMerchantApplication(appId) {
     if (!app) return;
     app.status = "pending";
     saveMerchantApplications(apps);
+
+    // Immediately remove from active market when reverted to pending
+    const stallId = app.stallData?.stallId || app.id;
+    const phone = app.stallData?.phone || app.phone;
+    const sName = app.stallData?.stallName;
+    for (let i = MARKET_DATA.length - 1; i >= 0; i--) {
+        if ((stallId && MARKET_DATA[i].stallId === stallId) || (phone && MARKET_DATA[i].phone === phone) || (sName && MARKET_DATA[i].stallName === sName)) {
+            MARKET_DATA.splice(i, 1);
+        }
+    }
+    for (let i = ALL_100_STALLS.length - 1; i >= 0; i--) {
+        if ((stallId && ALL_100_STALLS[i].stallId === stallId) || (phone && ALL_100_STALLS[i].phone === phone) || (sName && ALL_100_STALLS[i].stallName === sName)) {
+            ALL_100_STALLS.splice(i, 1);
+        }
+    }
+    saveMarketDataToStorage();
+
     updateAdminStallsBadge();
     renderAdminStalls();
+    if (typeof renderCatalog === "function") renderCatalog();
+    if (typeof renderFavoriteStallsBar === "function") renderFavoriteStallsBar();
+    if (typeof updateStallRotationUI === "function") updateStallRotationUI();
     if (document.getElementById("merchant-app-detail-modal") && !document.getElementById("merchant-app-detail-modal").classList.contains("hidden")) {
         viewMerchantAppDetail(appId);
     }
@@ -12683,8 +12721,12 @@ function initMerchantRealtimeSync() {
             localStorage.setItem("talathub_merchant_applications", JSON.stringify(rawList));
             updateAdminStallsBadge();
 
-            // Sync approved stalls into MARKET_DATA and ALL_100_STALLS across all online clients
+            // Sync approved stalls into MARKET_DATA and ALL_100_STALLS across all online clients, and remove non-approved
             rawList.forEach(app => {
+                const stallId = app?.stallData?.stallId || app?.id;
+                const phone = app?.stallData?.phone || app?.phone;
+                const sName = app?.stallData?.stallName;
+
                 if (app && app.status === "approved" && app.stallData) {
                     const sData = { ...app.stallData, accessCode: app.accessCode || app.stallData.accessCode };
                     const mIdx = MARKET_DATA.findIndex(s => s.stallId === sData.stallId);
@@ -12703,6 +12745,20 @@ function initMerchantRealtimeSync() {
                     }
                     if (sData.catalog && Array.isArray(sData.catalog)) {
                         STALL_CATALOG_DATABASE[sData.stallId] = sData.catalog;
+                    }
+                } else if (app && app.status !== "approved") {
+                    // Remove from active market on all listening clients
+                    for (let i = MARKET_DATA.length - 1; i >= 0; i--) {
+                        if ((stallId && MARKET_DATA[i].stallId === stallId) || (phone && MARKET_DATA[i].phone === phone) || (sName && MARKET_DATA[i].stallName === sName)) {
+                            MARKET_DATA.splice(i, 1);
+                        }
+                    }
+                    if (typeof ALL_100_STALLS !== "undefined" && Array.isArray(ALL_100_STALLS)) {
+                        for (let i = ALL_100_STALLS.length - 1; i >= 0; i--) {
+                            if ((stallId && ALL_100_STALLS[i].stallId === stallId) || (phone && ALL_100_STALLS[i].phone === phone) || (sName && ALL_100_STALLS[i].stallName === sName)) {
+                                ALL_100_STALLS.splice(i, 1);
+                            }
+                        }
                     }
                 }
             });
