@@ -17372,6 +17372,8 @@ function switchMerchantPortalTab(tabId) {
         activeBtn.classList.remove("bg-transparent", "text-slate-600", "font-medium");
         activeBtn.classList.add("active", "bg-white", "text-emerald-800", "shadow-xs", "font-bold");
     }
+    const scrollContent = document.getElementById("merchant-portal-content");
+    if (scrollContent) scrollContent.scrollTop = 0;
     validateMerchantForm();
 }
 
