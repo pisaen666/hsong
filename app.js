@@ -20363,11 +20363,23 @@ function initMarketHeroCarousel() {
     startMarketHeroAutoplay();
 }
 
+function focusMainSearchInput() {
+    const input = document.getElementById("market-search-input");
+    if (input) {
+        input.scrollIntoView({ behavior: "smooth", block: "center" });
+        setTimeout(() => {
+            input.focus();
+        }, 300);
+        showToast("🔍 พิมพ์ชื่อสินค้าหรือวัตถุดิบที่ต้องการได้เลยครับ");
+    }
+}
+
 window.goToMarketHeroSlide = goToMarketHeroSlide;
 window.nextMarketHeroSlide = nextMarketHeroSlide;
 window.prevMarketHeroSlide = prevMarketHeroSlide;
 window.handleMarketHeroClick = handleMarketHeroClick;
 window.initMarketHeroCarousel = initMarketHeroCarousel;
+window.focusMainSearchInput = focusMainSearchInput;
 
 // Window registrations
 window.goToHeroBannerSlide = goToHeroBannerSlide;
