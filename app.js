@@ -11609,6 +11609,13 @@ function switchAdminTab(tabName) {
         initMerchantRealtimeSync();
         renderAdminStalls();
     } else if (tabName === "riders") {
+        initRiderRealtimeSync();
+        const rApps = loadRiderApplications();
+        const pendingRiders = rApps.filter(a => a.status === "pending").length;
+        if (pendingRiders > 0) {
+            _adminRiderSubTab = "roster";
+            _adminRiderRosterView = "applications";
+        }
         renderAdminRiders();
         setTimeout(() => initAdminRiderRadarMap(), 150);
     } else if (tabName === "settings") {
@@ -12622,10 +12629,32 @@ function saveCommunityRiders(list) {
                 console.warn("Firebase save community_riders failed:", err);
             });
         }
+        try {
+            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/community_riders.json", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(cleaned)
+            }).catch(() => {});
+        } catch (e) {}
     } catch (e) {
         console.error("Error saving community riders:", e);
     }
 }
+
+// ── Rider Code Normalizer (แปลงเป็นตัวอักษร 2 ตัว + ตัวเลข 4 ตัว เช่น RD6735)
+function normalizeRiderCode(code) {
+    if (!code) return "";
+    let clean = String(code).trim().toUpperCase();
+    if (clean.startsWith("APP-RD-")) {
+        clean = "RD" + clean.replace("APP-RD-", "");
+    } else if (clean.startsWith("APP-RD")) {
+        clean = "RD" + clean.replace("APP-RD", "");
+    } else if (clean.startsWith("APP-")) {
+        clean = clean.replace("APP-", "");
+    }
+    return clean;
+}
+window.normalizeRiderCode = normalizeRiderCode;
 
 // ── Rider Applications Management (ใบสมัครไรเดอร์ส่งของสด)
 function loadRiderApplications() {
@@ -12634,7 +12663,12 @@ function loadRiderApplications() {
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-                return parsed.filter(a => a && !isMockRiderApplication(a));
+                return parsed.filter(a => a && !isMockRiderApplication(a)).map(a => {
+                    if (a.id) a.id = normalizeRiderCode(a.id);
+                    if (a.accessCode) a.accessCode = normalizeRiderCode(a.accessCode);
+                    else a.accessCode = a.id;
+                    return a;
+                });
             }
         }
     } catch (e) {
@@ -12645,13 +12679,25 @@ function loadRiderApplications() {
 
 function saveRiderApplications(apps) {
     try {
-        const cleaned = (apps || []).filter(a => a && !isMockRiderApplication(a));
+        const cleaned = (apps || []).filter(a => a && !isMockRiderApplication(a)).map(a => {
+            if (a.id) a.id = normalizeRiderCode(a.id);
+            if (a.accessCode) a.accessCode = normalizeRiderCode(a.accessCode);
+            else a.accessCode = a.id;
+            return a;
+        });
         localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
         if (isFirebaseReady() && db) {
             db.ref("rider_applications").set(cleaned).catch(err => {
                 console.warn("Firebase save rider_applications failed:", err);
             });
         }
+        try {
+            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/rider_applications.json", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(cleaned)
+            }).catch(() => {});
+        } catch (e) {}
     } catch (e) {
         console.error("Error saving rider applications:", e);
     }
@@ -12661,6 +12707,24 @@ function saveRiderApplications(apps) {
 let _isRiderSyncInitialized = false;
 
 function initRiderRealtimeSync() {
+    // Also fetch immediately via REST to ensure instant hydration
+    try {
+        fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/rider_applications.json")
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (!data) return;
+                let rawList = Array.isArray(data) ? data.filter(Boolean) : Object.values(data).filter(Boolean);
+                const cleaned = rawList.filter(a => a && !isMockRiderApplication(a));
+                if (cleaned.length > 0) {
+                    localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
+                    updateAdminRiderBadges();
+                    if (state.currentRole === "admin" && _activeAdminTab === "riders") {
+                        renderAdminRiders();
+                    }
+                }
+            }).catch(() => {});
+    } catch(e) {}
+
     if (!isFirebaseReady() || _isRiderSyncInitialized) return;
     _isRiderSyncInitialized = true;
 
@@ -13098,8 +13162,16 @@ function handleRiderRegisterSubmit(e) {
     const apps = loadRiderApplications();
     const existingIndex = apps.findIndex(a => (a.phone || "").replace(/[-\s]/g, "") === phone);
 
+    let riderCode;
+    if (existingIndex >= 0 && apps[existingIndex].id) {
+        riderCode = normalizeRiderCode(apps[existingIndex].id);
+    } else {
+        riderCode = generate6DigitAccessCode("RD");
+    }
+
     const newApp = {
-        id: existingIndex >= 0 ? apps[existingIndex].id : `APP-RD-${Date.now().toString().slice(-4)}`,
+        id: riderCode,
+        accessCode: riderCode,
         fullName,
         nickname,
         phone,
@@ -13153,7 +13225,7 @@ function populateRiderSuccessView(app) {
     const elPhone = document.getElementById("nextstep-app-phone");
     const elStatus = document.getElementById("nextstep-app-status");
 
-    if (elId) elId.textContent = app.id || "APP-RD-xxxx";
+    if (elId) elId.textContent = app.id || "RDxxxx";
     if (elName) elName.textContent = app.fullName + (app.nickname ? ` (${app.nickname})` : "");
     if (elPhone) elPhone.textContent = app.phone || "-";
     if (elStatus) {
@@ -13190,6 +13262,7 @@ function goToAdminToApproveRider(appId) {
     // Set active tab to 'riders' before role view switch to prevent race condition
     _activeAdminTab = "riders";
     _adminRiderAppFilter = "pending";
+    _adminRiderRosterView = "applications";
 
     setActiveRoleView("admin");
     switchAdminTab("riders");
@@ -13351,7 +13424,8 @@ window.toggleAdminRiderAppsHistory = toggleAdminRiderAppsHistory;
 function approveRiderApplication(appId) {
     const apps = loadRiderApplications();
     const cleanId = String(appId || "").trim();
-    const app = apps.find(x => x.id === cleanId) || 
+    const cleanNorm = typeof normalizeRiderCode === "function" ? normalizeRiderCode(cleanId) : cleanId;
+    const app = apps.find(x => x.id === cleanId || (x.id && normalizeRiderCode(x.id) === cleanNorm)) || 
                 apps.find(x => (x.phone || "").replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, ""));
 
     if (!app) {
@@ -13360,7 +13434,13 @@ function approveRiderApplication(appId) {
     }
 
     if (!app.accessCode) {
-        app.accessCode = generate6DigitAccessCode();
+        if (/^[A-Z]{2}\d{4}$/.test(app.id)) {
+            app.accessCode = app.id;
+        } else {
+            app.accessCode = generate6DigitAccessCode("RD");
+        }
+    } else {
+        app.accessCode = normalizeRiderCode(app.accessCode);
     }
     app.status = "approved";
     app.approvedAt = new Date().toISOString();
@@ -15228,10 +15308,11 @@ function createSampleRiderApplication() {
         { name: "อนุสรณ์ ขยันส่ง", nick: "บอย", phone: "092-333-8899", model: "Honda PCX 160", plate: "3ขข-7711 ระยอง", bank: "กรุงไทย", shifts: ["ทั้งวัน (05:00 - 18:30)"] }
     ];
     const picked = samplePool[Math.floor(Math.random() * samplePool.length)];
-    const newId = `APP-RD-${Date.now().toString().slice(-4)}`;
+    const newId = generate6DigitAccessCode("RD");
     
     const sampleApp = {
         id: newId,
+        accessCode: newId,
         fullName: picked.name,
         nickname: picked.nick,
         idCard: "1209900" + Math.floor(100000 + Math.random() * 900000),
@@ -17496,14 +17577,15 @@ function handleRiderPhoneLoginSubmit() {
 
     const cleanRaw = raw.replace(/[-\s]/g, "");
     const upperRaw = cleanRaw.toUpperCase();
+    const normRaw = typeof normalizeRiderCode === "function" ? normalizeRiderCode(upperRaw) : upperRaw;
 
     const riders = loadCommunityRiders();
 
     // 1. ตรวจสอบในรายชื่อไรเดอร์ที่ได้รับการอนุมัติแล้ว (ตรวจทั้งรหัสผ่าน 6 หลัก, เบอร์โทร, หรือ ID)
     let r = riders.find(x => 
-        (x.accessCode && x.accessCode.trim().toUpperCase() === upperRaw) ||
+        (x.accessCode && (x.accessCode.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.accessCode) === normRaw)) ||
         (x.phone && x.phone.replace(/[-\s]/g, "") === cleanRaw) ||
-        (x.id && x.id.trim().toUpperCase() === upperRaw)
+        (x.id && (x.id.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.id) === normRaw))
     );
     if (r) {
         loginRiderWithProfile(r);
@@ -17513,9 +17595,9 @@ function handleRiderPhoneLoginSubmit() {
     // 2. ตรวจสอบในข้อมูลใบสมัคร (Rider Applications)
     const apps = loadRiderApplications();
     const app = apps.find(x => 
-        (x.accessCode && x.accessCode.trim().toUpperCase() === upperRaw) ||
+        (x.accessCode && (x.accessCode.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.accessCode) === normRaw)) ||
         (x.phone && x.phone.replace(/[-\s]/g, "") === cleanRaw) ||
-        (x.id && x.id.trim().toUpperCase() === upperRaw)
+        (x.id && (x.id.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.id) === normRaw))
     );
 
     if (app) {
@@ -20821,10 +20903,16 @@ if (document.readyState === 'loading') {
 // ==========================================
 // 6-DIGIT RANDOM ACCESS CODE GENERATOR & APPROVAL LIFECYCLE
 // ==========================================
-function generate6DigitAccessCode() {
-    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const char1 = letters.charAt(Math.floor(Math.random() * letters.length));
-    const char2 = letters.charAt(Math.floor(Math.random() * letters.length));
+function generate6DigitAccessCode(prefix = "") {
+    let char1, char2;
+    if (prefix && prefix.length >= 2) {
+        char1 = prefix.charAt(0).toUpperCase();
+        char2 = prefix.charAt(1).toUpperCase();
+    } else {
+        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        char1 = letters.charAt(Math.floor(Math.random() * letters.length));
+        char2 = letters.charAt(Math.floor(Math.random() * letters.length));
+    }
 
     let digits = "";
     let isValid = false;

@@ -8,6 +8,7 @@
       "**/.*/**",
       "**/node_modules/**",
       "server.js",
+      "scratch/**",
       "*.zip"
     ],
     "headers": [
