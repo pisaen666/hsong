@@ -9,7 +9,9 @@
       "**/node_modules/**",
       "server.js",
       "scratch/**",
-      "*.zip"
+      "*.zip",
+      "*-export.json",
+      "database.rules.json"
     ],
     "headers": [
       {

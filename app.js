@@ -1597,63 +1597,216 @@ function copyRiderGPSCoords() {
     }
 }
 
-// === หมวดหมู่สินค้าหลักและย่อย (Global Standard Categories) ===
-const STALL_PRODUCT_CATEGORIES = {
-    "🐔 ไก่สด & เนื้อสัตว์": ["ไก่สดทั้งตัว", "ชิ้นส่วนไก่", "เนื้อไก่แล่", "ไก่บ้าน", "เป็ด/นก", "เนื้อวัว", "เนื้อแพะ", "เครื่องในสัตว์ปีก"],
-    "🥩 หมูสด": ["หมูสามชั้น", "หมูสันนอก", "หมูสันใน", "ซี่โครงหมู", "หมูสับ", "เนื้อหมูแล่", "หมูบด", "เครื่องในหมู", "หมูกรอบ"],
-    "🥬 ผักสด": ["ผักใบเขียว", "ผักกาด", "คะน้า", "ผักบุ้ง", "ผักชี/ต้นหอม", "พริก", "มะเขือ", "ถั่วฝักยาว", "แตงกวา", "บวบ", "ฟักทอง", "ข้าวโพด"],
-    "🌿 สมุนไพร & เครื่องเทศ": ["ขิง", "ข่า", "ตะไคร้", "ใบมะกรูด", "พริกไทย", "กระชาย", "กระเทียม", "หัวหอม", "มะนาว"],
-    "🦐 อาหารทะเลสด": ["กุ้ง", "ปลาน้ำจืด", "ปลาทะเล", "หมึก", "ปู", "หอย", "ปลาหมึก", "กุ้งแห้ง", "ปลาเค็ม"],
-    "🌶️ เครื่องแกง & พริกแกง": ["พริกแกงเผ็ด", "พริกแกงเขียวหวาน", "พริกแกงส้ม", "พริกแกงมัสมั่น", "พริกแกงกะหรี่", "น้ำพริกเผา", "น้ำพริกกะปิ"],
-    "🧂 ของแห้ง & เครื่องปรุง": ["กะปิ", "น้ำปลา", "ซีอิ๊ว", "น้ำตาล", "เกลือ", "ผงชูรส", "แป้ง", "วุ้นเส้น", "เส้นก๋วยเตี๋ยว"],
-    "🥛 ไข่ & ผลิตภัณฑ์นม": ["ไข่ไก่", "ไข่เป็ด", "ไข่นกกระทา", "นมสด", "เนย", "โยเกิร์ต"],
-    "🍄 เห็ด & พืชพิเศษ": ["เห็ดฟาง", "เห็ดนางฟ้า", "เห็ดหอม", "เห็ดเข็มทอง", "บัวหลวง", "ดอกไม้จีน"],
-    "🍌 ผลไม้สด": ["กล้วย", "มะม่วง", "ส้ม", "แตงโม", "สับปะรด", "มังคุด", "ทุเรียน", "ลำไย", "ลิ้นจี่"],
-    "🍜 อาหารสำเร็จรูป & อื่นๆ": ["น้ำซุป", "หมูยอ", "ไส้กรอก", "แหนม", "ลูกชิ้น", "เต้าหู้", "เครื่องจิ้ม"]
+// === หมวดหมู่สินค้า 3 ระดับ (3-Tier Global Standard Category Taxonomy) ===
+// ระดับ 1: หมวดหมู่หลัก 9 รายการ (Main Categories)
+// ระดับ 2: หมวดหมู่รอง (Sub-Categories) เช่น เนื้อสัตว์และสัตว์ปีก มี 8 รายการ
+// ระดับ 3: หมวดหมู่ย่อย (Micro-Categories) เช่น ไก่สดและชิ้นส่วนไก่ มี 7 รายการ
+const CATEGORY_TAXONOMY_3TIER = {
+    "🥩 เนื้อสัตว์และสัตว์ปีก": {
+        "ไก่สดและชิ้นส่วนไก่": [
+            "ไก่ตัวและไก่บ้าน",
+            "เนื้อไก่ชิ้นส่วนหลัก",
+            "ชิ้นส่วนปีกไก่",
+            "โครงไก่และส่วนต้มซุป",
+            "เครื่องในและเลือดไก่",
+            "ชิ้นส่วนย่อยและเศษ",
+            "ไก่บดและไก่หมัก"
+        ],
+        "หมูสดและชิ้นส่วนหมู": [
+            "หมูสามชั้น",
+            "หมูสันนอกและสันใน",
+            "ซี่โครงและกระดูกหมู",
+            "หมูสับและหมูบด",
+            "เนื้อหมูแล่และสไลซ์",
+            "เครื่องในหมู",
+            "หมูหมักและปรุงรส"
+        ],
+        "เนื้อวัวสด": [
+            "เนื้อวัวสันในและสันนอก",
+            "เนื้อน่องลายและเศษเนื้อ",
+            "เนื้อวัวบดและสับ",
+            "เครื่องในวัว",
+            "เนื้อวัวแดดเดียวและหมัก"
+        ],
+        "เป็ดสด": [
+            "เป็ดสดทั้งตัว",
+            "ชิ้นส่วนเป็ดและเนื้อแล่",
+            "เครื่องในและเลือดเป็ด",
+            "เป็ดพะโล้และเป็ดย่าง"
+        ],
+        "เครื่องในสัตว์": [
+            "ตับและหัวใจ",
+            "ไส้อ่อนและเซี่ยงจี้",
+            "กระเพาะและปอด",
+            "เลือดก้อน"
+        ],
+        "เนื้อสัตว์บดและสับ": [
+            "หมูบดอนามัย",
+            "ไก่บดสด",
+            "เนื้อวัวบด",
+            "หมูเด้งและหมูปั้นก้อน"
+        ],
+        "เนื้อสัตว์หมักและปรุงรส": [
+            "หมูหมักนุ่ม",
+            "ไก่หมักบาร์บีคิว/พริกไทยดำ",
+            "หมูแดดเดียว",
+            "เนื้อแดดเดียว"
+        ],
+        "เนื้อสัตว์สไลด์พร้อมทาน": [
+            "หมูสามชั้นสไลซ์ชาบู",
+            "สันคอหมูสไลซ์",
+            "เนื้อวัวสไลซ์ริบอาย",
+            "หมูหมูกระทะ"
+        ]
+    },
+    "🦐 อาหารทะเล": {
+        "กุ้งและกั้ง": ["กุ้งขาว", "กุ้งกุลาดำ", "กุ้งแม่น้ำ", "กุ้งแชบ๊วย", "กั้ง"],
+        "ปลาทะเลสด": ["ปลากะพงขาว", "ปลาทูสด", "ปลาแซลมอน", "ปลาเก๋า", "ปลาอินทรีย์"],
+        "ปลาน้ำจืด": ["ปลานิล", "ปลาดุก", "ปลาช่อน", "ปลาทับทิม", "ปลาสลิด"],
+        "หมึกสด": ["หมึกกล้วย", "หมึกกระดอง", "หมึกสาย", "หมึกไข่"],
+        "ปูสด": ["ปูม้า", "ปูดำ/ปูทะเล", "เนื้อปูแกะ"],
+        "หอยสด": ["หอยแมลงภู่", "หอยแครง", "หอยลาย", "หอยนางรม", "หอยเชลล์"],
+        "อาหารทะเลแห้งและแปรรูป": ["กุ้งแห้ง", "ปลาหมึกแห้ง", "ปลาเค็ม", "กะปิเคย"]
+    },
+    "🥬 ผักสด": {
+        "ผักใบเขียว": ["คะน้า", "กวางตุ้ง", "ผักบุ้ง", "กะหล่ำปลี", "ผักกาดขาว", "ผักสลัด", "ตำลึง"],
+        "พืชสมุนไพรและเครื่องต้มยำ": ["ขิง", "ข่า", "ตะไคร้", "ใบมะกรูด", "กระชาย", "กะเพรา", "โหระพา"],
+        "พริก กระเทียม และหัวหอม": ["พริกขี้หนู", "พริกชี้ฟ้า", "กระเทียมไทย/จีน", "หอมแดง", "หอมหัวใหญ่"],
+        "ผักกินผล": ["แตงกวา", "มะเขือเปราะ", "มะเขือเทศ", "ถั่วฝักยาว", "บวบ", "ฟักทอง", "ข้าวโพด"],
+        "ผักกินหัวและราก": ["หัวไชเท้า", "แครอท", "เผือก", "มันเทศ", "มันฝรั่ง"],
+        "เห็ดสด": ["เห็ดฟาง", "เห็ดนางฟ้า", "เห็ดเข็มทอง", "เห็ดหอมสด", "เห็ดออรินจิ"]
+    },
+    "🍌 ผลไม้สด": {
+        "ผลไม้ตามฤดูกาล": ["มะม่วง", "ส้ม", "กล้วยหอม/กล้วยน้ำว้า", "แตงโม", "สับปะรด"],
+        "ผลไม้เมืองหนาวและนำเข้า": ["แอปเปิ้ล", "องุ่น", "สาลี่", "สตรอว์เบอร์รี"],
+        "ผลไม้ตัดแต่งพร้อมทาน": ["แตงโมชิ้น", "สับปะรดชิ้น", "มะละกอชิ้น", "ฝรั่งพร้อมพริกเกลือ"]
+    },
+    "🧊 อาหารแปรรูปและของสดแช่แข็ง": {
+        "ลูกชิ้นและไส้กรอก": ["ลูกชิ้นหมู/เอ็นหมู", "ลูกชิ้นเนื้อ", "ลูกชิ้นปลา", "ไส้กรอกหมู/ไก่", "โบโลน่า"],
+        "อาหารหมักดองและแปรรูป": ["หมูยอ", "กุนเชียง", "แหนม", "ปลาเค็ม", "ผักกาดดอง"],
+        "ของสดแช่แข็ง": ["เฟรนช์ฟรายส์", "นักเก็ต", "อาหารทะเลแช่แข็ง", "เกี๊ยวซ่า"]
+    },
+    "🧂 ของชำและเครื่องปรุง": {
+        "เครื่องแกงและน้ำพริก": ["พริกแกงเผ็ด", "พริกแกงเขียวหวาน", "พริกแกงส้ม", "พริกแกงมัสมั่น", "น้ำพริกเผา"],
+        "เครื่องปรุงรสพื้นฐาน": ["น้ำปลาแท้", "ซีอิ๊วขาว/ดำ", "น้ำมันหอย", "น้ำตาลทราย", "เกลือสมุทร", "ผงชูรส/รสดี"],
+        "น้ำมันพืชและกะทิ": ["น้ำมันปาล์ม", "น้ำมันถั่วเหลือง", "กะทิกล่อง/สด"],
+        "เส้นและแป้ง": ["วุ้นเส้น", "เส้นหมี่/ก๋วยเตี๋ยว", "แป้งทอดกรอบ", "แป้งข้าวเจ้า"],
+        "ไข่สด": ["ไข่ไก่สดคละเบอร์", "ไข่เป็ดสด", "ไข่เค็ม", "ไข่เยี่ยวม้า", "ไข่นกกระทา"]
+    },
+    "🍲 อาหารปรุงสุกและพร้อมทาน": {
+        "กับข้าวและแกงถุง": ["ต้มยำ/ต้มจืด", "แกงกะทิ/แกงเผ็ด", "ผัดผัก/ผัดกะเพรา", "ทอดและย่าง"],
+        "อาหารจานเดียว": ["ข้าวผัด", "ข้าวหมูทอด", "ผัดซีอิ๊ว/ราดหน้า", "ก๋วยเตี๋ยว"],
+        "ของทอดและของทานเล่น": ["กล้วยทอด", "ลูกชิ้นทอด", "เกี๊ยวทอด", "ปอเปี๊ยะทอด"]
+    },
+    "🧋 เครื่องดื่มและขนมหวาน": {
+        "เครื่องดื่มชงสด": ["ชาเย็น/ชาไทย", "ชาเขียว", "กาแฟโบราณ/โอเลี้ยง", "นมชมพู", "น้ำสมุนไพร"],
+        "น้ำผลไม้และน้ำอัดลม": ["น้ำส้มคั้น", "น้ำมะพร้าวสด", "น้ำอัดลมกระป๋อง/ขวด", "น้ำดื่มขวด"],
+        "ขนมไทยและของหวาน": ["ลอดช่อง", "ทับทิมกรอบ", "ทองหยิบ/ทองหยอด", "ขนมหม้อแกง", "กล้วยบวชชี"]
+    },
+    "📦 บรรจุภัณฑ์และของใช้เบ็ดเตล็ด": {
+        "ถุงพลาสติกและกล่องอาหาร": ["ถุงหูหิ้ว", "ถุงร้อนใส่อาหาร", "กล่องโฟม/กล่องชานอ้อย", "ถ้วยน้ำจิ้ม"],
+        "แก้ว หลอด และช้อนส้อม": ["แก้วพลาสติก", "หลอดดูดน้ำ", "ช้อนส้อมพลาสติก", "ไม้จิ้มฟัน"],
+        "ของใช้ทำความสะอาด": ["น้ำยาล้างจาน", "ถุงขยะ", "ฟองน้ำล้างจาน", "กระดาษทิชชู่"]
+    }
 };
+
+// Helper Functions สำหรับดึงข้อมูลแต่ละระดับ
+function getMainCategories() {
+    return Object.keys(CATEGORY_TAXONOMY_3TIER);
+}
+
+function getSubCategories(mainCat) {
+    if (!mainCat) return [];
+    // รองรับทั้งชื่อใหม่และชื่อเก่าสำหรับ backward-compatibility
+    if (CATEGORY_TAXONOMY_3TIER[mainCat]) {
+        return Object.keys(CATEGORY_TAXONOMY_3TIER[mainCat]);
+    }
+    if (mainCat.includes("เนื้อ") || mainCat.includes("ไก่") || mainCat.includes("หมู")) {
+        return Object.keys(CATEGORY_TAXONOMY_3TIER["🥩 เนื้อสัตว์และสัตว์ปีก"]);
+    }
+    if (mainCat.includes("ทะเล")) {
+        return Object.keys(CATEGORY_TAXONOMY_3TIER["🦐 อาหารทะเล"]);
+    }
+    if (mainCat.includes("ผัก") || mainCat.includes("สมุนไพร")) {
+        return Object.keys(CATEGORY_TAXONOMY_3TIER["🥬 ผักสด"]);
+    }
+    if (mainCat.includes("ผลไม้")) {
+        return Object.keys(CATEGORY_TAXONOMY_3TIER["🍌 ผลไม้สด"]);
+    }
+    if (mainCat.includes("แช่แข็ง") || mainCat.includes("แปรรูป")) {
+        return Object.keys(CATEGORY_TAXONOMY_3TIER["🧊 อาหารแปรรูปและของสดแช่แข็ง"]);
+    }
+    if (mainCat.includes("ของแห้ง") || mainCat.includes("เครื่องปรุง") || mainCat.includes("เครื่องแกง") || mainCat.includes("ไข่")) {
+        return Object.keys(CATEGORY_TAXONOMY_3TIER["🧂 ของชำและเครื่องปรุง"]);
+    }
+    return [];
+}
+
+function getMicroCategories(mainCat, subCat) {
+    if (!mainCat || !subCat) return [];
+    // ตรวจสอบตรงตัว
+    if (CATEGORY_TAXONOMY_3TIER[mainCat] && CATEGORY_TAXONOMY_3TIER[mainCat][subCat]) {
+        return CATEGORY_TAXONOMY_3TIER[mainCat][subCat];
+    }
+    // ค้นหาในหมวดรองของทุกหมวดหลัก
+    for (const m of Object.keys(CATEGORY_TAXONOMY_3TIER)) {
+        if (CATEGORY_TAXONOMY_3TIER[m][subCat]) {
+            return CATEGORY_TAXONOMY_3TIER[m][subCat];
+        }
+    }
+    return [];
+}
+
+// Global Category Mapping (รักษาความเข้ากันได้กับโค้ดเดิม 100%)
+const STALL_PRODUCT_CATEGORIES = {};
+Object.keys(CATEGORY_TAXONOMY_3TIER).forEach(mCat => {
+    STALL_PRODUCT_CATEGORIES[mCat] = Object.keys(CATEGORY_TAXONOMY_3TIER[mCat]);
+});
+// Aliases เก่าเพื่อไม่ให้โค้ดส่วนเดิมพัง
+STALL_PRODUCT_CATEGORIES["🐔 ไก่สด & เนื้อสัตว์"] = STALL_PRODUCT_CATEGORIES["🥩 เนื้อสัตว์และสัตว์ปีก"];
+STALL_PRODUCT_CATEGORIES["🥩 หมูสด"] = STALL_PRODUCT_CATEGORIES["🥩 เนื้อสัตว์และสัตว์ปีก"];
+STALL_PRODUCT_CATEGORIES["🦐 อาหารทะเลสด"] = STALL_PRODUCT_CATEGORIES["🦐 อาหารทะเล"];
+STALL_PRODUCT_CATEGORIES["🌿 สมุนไพร & เครื่องเทศ"] = STALL_PRODUCT_CATEGORIES["🥬 ผักสด"];
+STALL_PRODUCT_CATEGORIES["🌶️ เครื่องแกง & พริกแกง"] = STALL_PRODUCT_CATEGORIES["🧂 ของชำและเครื่องปรุง"];
+STALL_PRODUCT_CATEGORIES["🧂 ของแห้ง & เครื่องปรุง"] = STALL_PRODUCT_CATEGORIES["🧂 ของชำและเครื่องปรุง"];
+STALL_PRODUCT_CATEGORIES["🥛 ไข่ & ผลิตภัณฑ์นม"] = STALL_PRODUCT_CATEGORIES["🧂 ของชำและเครื่องปรุง"];
+STALL_PRODUCT_CATEGORIES["🍄 เห็ด & พืชพิเศษ"] = STALL_PRODUCT_CATEGORIES["🥬 ผักสด"];
+STALL_PRODUCT_CATEGORIES["🍜 อาหารสำเร็จรูป & อื่นๆ"] = STALL_PRODUCT_CATEGORIES["🍲 อาหารปรุงสุกและพร้อมทาน"];
 
 const STALL_PRODUCT_UNITS = [
     "กก.", "ขีด", "กรัม", "ชิ้น", "ตัว", "ถุง", "แพ็ก", "กล่อง", "แผ่น",
     "ฝัก", "หัว", "ต้น", "มัด", "ลูก", "ขวด", "ลิตร", "ฟอง"
 ];
 
-// Synonyms and grocery search terms for Thai fresh market items
+// Synonyms and grocery search terms for Thai fresh market items (3-Tier Extended)
 const SUB_CATEGORY_SYNONYMS = {
-    "ชิ้นส่วนไก่": ["อกไก่", "น่องไก่", "ปีกไก่", "สะโพก", "สันในไก่", "โครงไก่", "ตีนไก่", "ข้อไก่", "ตับไก่", "กึ๋น", "หัวใจไก่", "ปีกกลาง", "ปีกบน", "ปีกปลาย"],
-    "ไก่สดทั้งตัว": ["ไก่สด", "ไก่ทั้งตัว", "ไก่ตอน", "ไก่เนื้อ"],
-    "เนื้อไก่แล่": ["แล่", "อกไก่แล่", "ไก่บด", "ไก่สับ", "เนื้อไก่สับ"],
-    "ไก่บ้าน": ["ไก่บ้าน", "ไก่พื้นเมือง"],
-    "เป็ด/นก": ["เป็ด", "เป็ดพะโล้", "เป็ดย่าง", "นกกระทา"],
-    "เนื้อวัว": ["เนื้อวัว", "เนื้อสัน", "เนื้อริบอาย", "เนื้อลาย", "เนื้อแดดเดียว", "เนื้อบด", "เนื้อน่องลาย"],
-    "หมูสามชั้น": ["สามชั้น", "หมูสามชั้น", "สามชั้นสไลซ์", "หมูกรอบ"],
-    "หมูสันนอก": ["สันนอก", "สันนอกสไลซ์", "พอร์คชอป"],
-    "หมูสันใน": ["สันใน", "สันในหมู"],
-    "ซี่โครงหมู": ["ซี่โครง", "กระดูกหมู", "กระดูกอ่อน", "เล้ง", "ซี่โครงอ่อน"],
-    "หมูสับ": ["หมูสับ", "หมูบด", "หมูเด้ง"],
-    "เนื้อหมูแล่": ["หมูแล่", "หมูหมัก", "หมูชาบู", "หมูสไลซ์"],
-    "เครื่องในหมู": ["ตับหมู", "ไส้อ่อน", "เซี่ยงจี้", "กระเพาะหมู", "หัวใจหมู", "ปอดหมู"],
-    "ผักใบเขียว": ["คะน้า", "กวางตุ้ง", "กะหล่ำ", "ผักบุ้ง", "ตำลึง", "ผักกาด", "ผักสลัด", "คื่นช่าย", "ผักโขม"],
-    "กุ้ง": ["กุ้ง", "กุ้งขาว", "กุ้งกุลา", "กุ้งแม่น้ำ", "กุ้งแชบ๊วย", "กุ้งลายเสือ"],
-    "ปลาทะเล": ["กะพง", "ปลากะพง", "ปลาทู", "แซลมอน", "ปลาอินทรีย์", "ปลาเก๋า", "ปลาซาบะ"],
-    "ปลาน้ำจืด": ["ปลาดุก", "ปลานิล", "ปลาช่อน", "ปลาสลิด", "ปลาทับทิม", "ปลาคัง"],
-    "หมึก": ["หมึก", "ปลาหมึก", "หมึกกล้วย", "หมึกกระดอง", "หมึกสาย", "หมึกหอม", "หมึกไข่"],
-    "หอย": ["หอย", "หอยแมลงภู่", "หอยแครง", "หอยลาย", "หอยนางรม", "หอยเชลล์"],
-    "ปู": ["ปู", "ปูดำ", "ปูม้า", "ปูทะเล", "เนื้อปู"],
-    "ไข่ไก่": ["ไข่ไก่", "ไข่สด", "ไข่เบอร์", "ไข่ไก่อินทรีย์"],
-    "ไข่เป็ด": ["ไข่เป็ด", "ไข่เค็ม", "ไข่เยี่ยวม้า"],
-    "ขิง": ["ขิงแก่", "ขิงอ่อน", "ขิงซอย"],
-    "ข่า": ["ข่าแก่", "ข่าอ่อน"],
-    "ตะไคร้": ["ตะไคร้", "ตะไคร้ซอย"],
-    "ใบมะกรูด": ["ใบมะกรูด", "ลูกมะกรูด"],
-    "พริกไทย": ["พริกไทยดำ", "พริกไทยขาว", "พริกไทยอ่อน"],
-    "กระเทียม": ["กระเทียมไทย", "กระเทียมจีน", "กระเทียมแกะกลีบ"],
-    "หัวหอม": ["หอมแดง", "หอมหัวใหญ่"],
-    "มะนาว": ["มะนาวแป้น", "น้ำมะนาว"],
-    "พริกแกงเผ็ด": ["พริกแกงเผ็ด", "เครื่องแกงเผ็ด"],
-    "พริกแกงเขียวหวาน": ["พริกแกงเขียวหวาน", "แกงเขียวหวาน"],
-    "พริกแกงส้ม": ["พริกแกงส้ม", "เครื่องแกงส้ม"],
-    "น้ำปลา": ["น้ำปลา", "น้ำปลาแท้"],
-    "กะปิ": ["กะปิตาดำ", "กะปิกุ้งเคย"]
+    // ระดับ 2: เนื้อสัตว์
+    "ไก่สดและชิ้นส่วนไก่": ["ไก่สด", "ไก่ทั้งตัว", "ชิ้นส่วนไก่", "อกไก่", "น่องไก่", "ปีกไก่", "สะโพกไก่", "โครงไก่", "ตับไก่", "กึ๋น", "เลือดไก่", "ไก่บด"],
+    "หมูสดและชิ้นส่วนหมู": ["หมูสด", "หมูสามชั้น", "หมูสันนอก", "หมูสันใน", "ซี่โครงหมู", "หมูสับ", "หมูบด", "ตับหมู", "หมูหมัก"],
+    "เนื้อวัวสด": ["เนื้อวัว", "เนื้อสัน", "ริบอาย", "เนื้อน่องลาย", "เนื้อวัวบด", "เนื้อแดดเดียว"],
+    "เป็ดสด": ["เป็ด", "เป็ดสด", "เป็ดพะโล้", "เป็ดย่าง", "เครื่องในเป็ด"],
+    "เครื่องในสัตว์": ["เครื่องใน", "ตับ", "ไส้อ่อน", "เซี่ยงจี้", "หัวใจ", "กระเพาะ", "เลือด"],
+    "เนื้อสัตว์บดและสับ": ["หมูบด", "หมูสับ", "ไก่บด", "ไก่สับ", "เนื้อบด", "หมูเด้ง"],
+    "เนื้อสัตว์หมักและปรุงรส": ["หมูหมัก", "ไก่หมัก", "หมูแดดเดียว", "เนื้อแดดเดียว"],
+    "เนื้อสัตว์สไลด์พร้อมทาน": ["หมูสไลซ์", "ชาบู", "สามชั้นสไลซ์", "สันคอสไลซ์", "หมูกระทะ"],
+
+    // ระดับ 3: หมวดย่อยของไก่สดและชิ้นส่วนไก่ (7 รายการตามรูปที่ 3)
+    "ไก่ตัวและไก่บ้าน": ["ไก่สด", "ไก่ทั้งตัว", "ไก่ตอน", "ไก่เนื้อ", "ไก่บ้าน", "ไก่พื้นเมือง", "ไก่ไข่ปลดระวาง"],
+    "เนื้อไก่ชิ้นส่วนหลัก": ["อกไก่", "น่องไก่", "สะโพกไก่", "น่องติดสะโพก", "สันในไก่", "เนื้ออก", "เนื้อสะโพก"],
+    "ชิ้นส่วนปีกไก่": ["ปีกไก่", "ปีกกลาง", "ปีกบน", "ปีกปลาย", "โคนปีก", "ปลายปีก"],
+    "โครงไก่และส่วนต้มซุป": ["โครงไก่", "กระดูกไก่", "ตีนไก่", "ซุปเปอร์ขาไก่", "ข้อไก่", "เอ็นข้อไก่", "หัวไก่"],
+    "เครื่องในและเลือดไก่": ["เครื่องในไก่", "ตับไก่", "กึ๋นไก่", "หัวใจไก่", "เลือดไก่", "พวงไข่อ่อน"],
+    "ชิ้นส่วนย่อยและเศษ": ["เศษไก่", "หนังไก่", "มันไก่", "ข้อต่อ", "เศษเนื้อไก่"],
+    "ไก่บดและไก่หมัก": ["ไก่บด", "ไก่สับ", "เนื้อไก่สับ", "ไก่หมัก", "ไก่หมักนุ่ม", "ไก่หมักกระเทียม"],
+
+    // ทะเลและอื่นๆ
+    "กุ้งและกั้ง": ["กุ้ง", "กุ้งขาว", "กุ้งกุลา", "กุ้งแม่น้ำ", "กุ้งแชบ๊วย", "กั้ง"],
+    "ปลาทะเลสด": ["กะพง", "ปลากะพง", "ปลาทู", "แซลมอน", "ปลาอินทรีย์", "ปลาเก๋า"],
+    "ปลาน้ำจืด": ["ปลาดุก", "ปลานิล", "ปลาช่อน", "ปลาสลิด", "ปลาทับทิม"],
+    "หมึกสด": ["หมึก", "ปลาหมึก", "หมึกกล้วย", "หมึกกระดอง", "หมึกสาย", "หมึกไข่"],
+    "ปูสด": ["ปู", "ปูดำ", "ปูม้า", "เนื้อปู"],
+    "หอยสด": ["หอย", "หอยแมลงภู่", "หอยแครง", "หอยลาย", "หอยนางรม"],
+    "ผักใบเขียว": ["คะน้า", "กวางตุ้ง", "กะหล่ำ", "ผักบุ้ง", "ตำลึง", "ผักกาด", "ผักสลัด"]
 };
 
 // 2. Application Reactive State
@@ -1669,8 +1822,9 @@ const state = {
     })(),
     currentRole: "customer",
     currentScreen: "market",
-    currentCategoryFilter: "all", // 'all' or main category name
-    currentSubCategoryFilter: null, // null | 'all_cat' | subcategory name
+    currentCategoryFilter: "all", // 'all' or main category name (Tier 1)
+    currentSubCategoryFilter: null, // null | 'all_sub' | subcategory name (Tier 2)
+    currentMicroCategoryFilter: null, // null | 'all_micro' | microcategory name (Tier 3)
     subCategoryPage: 1, // page counter for 15 items per page
     subCategorySearchQuery: "", // in-subcategory search
     subCategoryLoadedItems: [], // cache of loaded subcategory items
@@ -5429,11 +5583,17 @@ function filterByCategory(category) {
     const subTitle = document.getElementById("subcategory-bar-title");
     const countHint = document.getElementById("subcategory-count-hint");
 
+    const microContainer = document.getElementById("microcategory-bar-container");
+    const microTabs = document.getElementById("microcategory-tabs");
+
     if (category === "all") {
-        // เมื่อเลือก "ทั้งหมด" ให้ซ่อนแถบหมวดหมู่ย่อย และแสดงตลาดสดตามปกติ
+        // เมื่อเลือก "ทั้งหมด" ให้ซ่อนทั้งแถบหมวดหมู่รอง และแถบหมวดหมู่ย่อย
         state.currentSubCategoryFilter = null;
+        state.currentMicroCategoryFilter = null;
         if (subContainer) subContainer.classList.add("hidden");
         if (subTabs) subTabs.innerHTML = "";
+        if (microContainer) microContainer.classList.add("hidden");
+        if (microTabs) microTabs.innerHTML = "";
 
         const subProdContainer = document.getElementById("subcategory-products-container");
         if (subProdContainer) subProdContainer.innerHTML = "";
@@ -5446,16 +5606,21 @@ function filterByCategory(category) {
         return;
     }
 
-    // เมื่อเลือกหมวดหมู่วัตถุดิบหลัก ให้เปิดแถบหมวดหมู่ย่อย (Tier 2)
-    const subs = STALL_PRODUCT_CATEGORIES[category] || [];
+    // เมื่อเลือกหมวดหมู่วัตถุดิบหลัก (ระดับ 1) -> เปิดแถบหมวดหมู่รอง (ระดับ 2)
+    const subs = getSubCategories(category);
     if (subContainer) subContainer.classList.remove("hidden");
-    if (subTitle) subTitle.textContent = `หมวดหมู่ย่อยใน "${category}":`;
-    if (countHint) countHint.textContent = `${subs.length} หมวดย่อย`;
+    if (subTitle) subTitle.textContent = `เลือกหมวดหมู่รองใน "${category}":`;
+    if (countHint) countHint.textContent = `${subs.length} หมวดรอง`;
 
-    // Render Subcategory Chips
+    // ซ่อนแถบหมวดย่อย (ระดับ 3) ชั่วคราว จนกว่าจะเลือกหมวดรอง
+    if (microContainer) microContainer.classList.add("hidden");
+    if (microTabs) microTabs.innerHTML = "";
+    state.currentMicroCategoryFilter = null;
+
+    // Render Subcategory Chips (Tier 2)
     if (subTabs) {
         let subHtml = `
-            <button type="button" onclick="selectSubCategory('all_cat')"
+            <button type="button" onclick="selectSubCategory('all_sub')"
                 class="subcat-pill active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-emerald-700 text-white shadow-xs shrink-0 transition-all cursor-pointer">
                 <span>🌟 ทั้งหมดในหมวดนี้</span>
             </button>
@@ -5477,8 +5642,9 @@ function filterByCategory(category) {
         }
     }
 
-    // เริ่มต้นแสดง 15 รายการคัดสรรสำหรับหมวดหมู่นี้
-    state.currentSubCategoryFilter = "all_cat";
+    // เริ่มต้นแสดงรายการทั้งหมดในหมวดหลักนี้
+    state.currentSubCategoryFilter = "all_sub";
+    state.currentMicroCategoryFilter = "all_micro";
     renderCatalog();
     const subContainerEl = document.getElementById("subcategory-bar-container");
     if (subContainerEl) {
@@ -5490,6 +5656,7 @@ function filterByCategory(category) {
 
 function selectSubCategory(subCat) {
     state.currentSubCategoryFilter = subCat;
+    state.currentMicroCategoryFilter = "all_micro";
     state.subCategoryPage = 1;
     state.subCategorySearchQuery = "";
 
@@ -5507,6 +5674,67 @@ function selectSubCategory(subCat) {
         activeSubBtn.classList.add("active", "bg-emerald-700", "text-white", "font-bold", "shadow-xs");
     }
 
+    // จัดการแถบหมวดหมู่ย่อย (Tier 3 - Micro Cuts / Variations)
+    const microContainer = document.getElementById("microcategory-bar-container");
+    const microTabs = document.getElementById("microcategory-tabs");
+    const microTitle = document.getElementById("microcategory-bar-title");
+    const microHint = document.getElementById("microcategory-count-hint");
+
+    const micros = (subCat && subCat !== "all_sub") ? getMicroCategories(state.currentCategoryFilter, subCat) : [];
+
+    if (micros.length > 0 && microContainer && microTabs) {
+        microContainer.classList.remove("hidden");
+        if (microTitle) microTitle.textContent = `เลือกหมวดย่อยใน "${subCat}":`;
+        if (microHint) microHint.textContent = `${micros.length} หมวดย่อย`;
+
+        let microHtml = `
+            <button type="button" onclick="selectMicroCategory('all_micro')"
+                class="microcat-pill active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-teal-700 text-white shadow-xs shrink-0 transition-all cursor-pointer">
+                <span>🌟 ทั้งหมดใน "${subCat}"</span>
+            </button>
+        `;
+
+        micros.forEach(mName => {
+            microHtml += `
+                <button type="button" onclick="selectMicroCategory('${mName.replace(/'/g, "\\'")}')"
+                    class="microcat-pill px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200/90 shrink-0 hover:bg-teal-50 hover:text-teal-800 transition-all cursor-pointer">
+                    <span>${mName}</span>
+                </button>
+            `;
+        });
+
+        microTabs.innerHTML = microHtml;
+        microTabs.scrollLeft = 0;
+        if (typeof setupDragScroll === 'function') {
+            setupDragScroll('microcategory-tabs');
+        }
+    } else {
+        if (microContainer) microContainer.classList.add("hidden");
+        if (microTabs) microTabs.innerHTML = "";
+    }
+
+    renderCatalog();
+}
+
+function selectMicroCategory(microCat) {
+    state.currentMicroCategoryFilter = microCat;
+    state.subCategoryPage = 1;
+    state.subCategorySearchQuery = "";
+
+    // Highlight active microcategory chip
+    document.querySelectorAll("#microcategory-tabs .microcat-pill").forEach(pill => {
+        pill.classList.remove("active", "bg-teal-700", "text-white", "font-bold");
+        pill.classList.add("bg-white", "text-slate-700", "font-medium", "border", "border-slate-200/90");
+    });
+
+    const activeMicroBtn = (typeof event !== 'undefined' && event && event.currentTarget)
+        ? event.currentTarget
+        : document.querySelector(`#microcategory-tabs .microcat-pill[onclick*="${microCat}"]`);
+    if (activeMicroBtn) {
+        activeMicroBtn.classList.remove("bg-white", "text-slate-700", "font-medium", "border", "border-slate-200/90");
+        activeMicroBtn.classList.add("active", "bg-teal-700", "text-white", "font-bold", "shadow-xs");
+    }
+
     renderCatalog();
 }
 
@@ -5517,45 +5745,84 @@ function scrollSubCategoryTabs(amount) {
     }
 }
 
-// ── Smart Subcategory Matching & Ranking Engine (รูปแบบที่ 1) ──
-function matchItemToSubCategory(item, mainCat, subCat) {
+function scrollMicroCategoryTabs(amount) {
+    const container = document.getElementById("microcategory-tabs");
+    if (container) {
+        container.scrollBy({ left: amount, behavior: 'smooth' });
+    }
+}
+
+// ── Smart 3-Tier Category Matching Engine ──
+function matchItemToSubCategory(item, mainCat, subCat, microCat) {
     if (!item) return false;
     const name = (item.name || "").trim().toLowerCase();
     const desc = (item.desc || item.spec || "").trim().toLowerCase();
-    const itemSub = (item.subCat || "").trim().toLowerCase();
     const itemMain = (item.mainCat || "").trim().toLowerCase();
-    const targetSub = (subCat || "").trim().toLowerCase();
-    const targetMain = (mainCat || "").trim().toLowerCase();
+    const itemSub = (item.subCat || "").trim().toLowerCase();
+    const itemMicro = (item.microCat || "").trim().toLowerCase();
 
-    // 1. ตรวจสอบจากการเลือก "ทั้งหมดในหมวดนี้"
-    if (targetSub === "all_cat" || !targetSub) {
-        if (itemMain && targetMain && (itemMain.includes(targetMain) || targetMain.includes(itemMain))) return true;
-        // ตรวจสอบกับรายการหมวดย่อยทั้งหมดของหมวดหลักนี้
-        const allSubsInMain = STALL_PRODUCT_CATEGORIES[mainCat] || [];
-        for (const s of allSubsInMain) {
-            if (name.includes(s.toLowerCase()) || desc.includes(s.toLowerCase()) || itemSub === s.toLowerCase()) return true;
-            const syns = SUB_CATEGORY_SYNONYMS[s] || [];
+    const targetMain = (mainCat || "").trim().toLowerCase();
+    const targetSub = (subCat || "").trim().toLowerCase();
+    const targetMicro = (microCat || "").trim().toLowerCase();
+
+    // 1. ตรวจสอบระดับ 1 (หมวดหลัก)
+    if (targetMain && targetMain !== "all") {
+        const isMainMatch = itemMain && (itemMain.includes(targetMain) || targetMain.includes(itemMain));
+        if (!isMainMatch) {
+            // Backward-compat check: ตรวจสอบกับหมวดรองและคำค้นหาของหมวดหลักนี้
+            const allSubs = getSubCategories(mainCat);
+            let inAnySub = false;
+            for (const s of allSubs) {
+                if (name.includes(s.toLowerCase()) || desc.includes(s.toLowerCase()) || itemSub === s.toLowerCase()) {
+                    inAnySub = true;
+                    break;
+                }
+            }
+            if (!inAnySub && itemMain !== "") return false;
+        }
+    }
+
+    // 2. ตรวจสอบระดับ 2 (หมวดรอง)
+    if (targetSub && targetSub !== "all_sub" && targetSub !== "all_cat") {
+        let subMatched = false;
+        if (itemSub && (itemSub === targetSub || itemSub.includes(targetSub) || targetSub.includes(itemSub))) {
+            subMatched = true;
+        } else if (name.includes(targetSub) || desc.includes(targetSub)) {
+            subMatched = true;
+        } else {
+            // ตรวจกับ Synonyms ของหมวดรอง
+            const syns = SUB_CATEGORY_SYNONYMS[subCat] || [];
             for (const syn of syns) {
-                if (name.includes(syn.toLowerCase()) || desc.includes(syn.toLowerCase())) return true;
+                if (name.includes(syn.toLowerCase()) || desc.includes(syn.toLowerCase())) {
+                    subMatched = true;
+                    break;
+                }
             }
         }
-        return false;
+        if (!subMatched) return false;
     }
 
-    // 2. ตรวจสอบตรงกับชื่อหมวดย่อยที่บันทึกไว้
-    if (itemSub && itemSub === targetSub) return true;
-
-    // 3. ตรวจสอบจากชื่อสินค้าหรือรายละเอียดสินค้า
-    if (name.includes(targetSub) || targetSub.includes(name)) return true;
-    if (desc.includes(targetSub)) return true;
-
-    // 4. ตรวจสอบจากพจนานุกรมคำพ้องความหมายวัตถุดิบ (Synonyms)
-    const syns = SUB_CATEGORY_SYNONYMS[subCat] || [];
-    for (const syn of syns) {
-        if (name.includes(syn.toLowerCase()) || desc.includes(syn.toLowerCase())) return true;
+    // 3. ตรวจสอบระดับ 3 (หมวดย่อย ชิ้นส่วน/ชนิด)
+    if (targetMicro && targetMicro !== "all_micro" && targetMicro !== "") {
+        let microMatched = false;
+        if (itemMicro && (itemMicro === targetMicro || itemMicro.includes(targetMicro) || targetMicro.includes(itemMicro))) {
+            microMatched = true;
+        } else if (name.includes(targetMicro) || desc.includes(targetMicro)) {
+            microMatched = true;
+        } else {
+            // ตรวจกับ Synonyms ของหมวดย่อย (เช่น ไก่ตัวและไก่บ้าน, เนื้อไก่ชิ้นส่วนหลัก, ฯลฯ)
+            const syns = SUB_CATEGORY_SYNONYMS[microCat] || [];
+            for (const syn of syns) {
+                if (name.includes(syn.toLowerCase()) || desc.includes(syn.toLowerCase())) {
+                    microMatched = true;
+                    break;
+                }
+            }
+        }
+        if (!microMatched) return false;
     }
 
-    return false;
+    return true;
 }
 
 function calcSubCategoryItemScore(stall, product) {
@@ -5576,7 +5843,7 @@ function calcSubCategoryItemScore(stall, product) {
     return score;
 }
 
-function getSubCategoryProducts(mainCat, subCat, searchQuery = "", requestedCount = 15) {
+function getSubCategoryProducts(mainCat, subCat, microCat, searchQuery = "", requestedCount = 15) {
     const q = (searchQuery || "").trim().toLowerCase();
     const seenItemKeys = new Set();
     const stallTier1Count = {};
@@ -5593,7 +5860,7 @@ function getSubCategoryProducts(mainCat, subCat, searchQuery = "", requestedCoun
             const uniqueKey = `${stall.stallId}_${p.id || p.name}`;
             if (seenItemKeys.has(uniqueKey)) return;
 
-            const matched = matchItemToSubCategory(p, mainCat, subCat);
+            const matched = matchItemToSubCategory(p, mainCat, subCat, microCat);
             if (!matched) return;
 
             if (q) {
@@ -5605,7 +5872,7 @@ function getSubCategoryProducts(mainCat, subCat, searchQuery = "", requestedCoun
             const itemObj = {
                 id: p.id || uniqueKey,
                 name: p.name,
-                desc: p.desc || p.subCat || mainCat || "",
+                desc: p.desc || p.microCat || p.subCat || mainCat || "",
                 price: Number(p.price) || 0,
                 unit: p.unit || "กก.",
                 image: p.image || stall.stallImage || (typeof MERCHANT_PRESET_IMAGES !== "undefined" ? MERCHANT_PRESET_IMAGES.stall.chicken : ""),
@@ -5642,7 +5909,6 @@ function getSubCategoryProducts(mainCat, subCat, searchQuery = "", requestedCoun
     });
 
     const combinedList = [...fairTier1];
-    // ถ้ายังไม่ครบ requestedCount ให้นำรายการที่เหลือของร้านเดิมมาเสริม
     if (combinedList.length < requestedCount) {
         deferredTier1.forEach(it => {
             const key = `${it.stallId}_${it.id || it.name}`;
@@ -5670,10 +5936,11 @@ function getSubCategoryProducts(mainCat, subCat, searchQuery = "", requestedCoun
                     name: catItem.name,
                     desc: catItem.spec || "",
                     subCat: catItem.subCat || group.groupName || "",
-                    mainCat: catItem.mainCat || ""
+                    mainCat: catItem.mainCat || "",
+                    microCat: catItem.microCat || ""
                 };
 
-                const matched = matchItemToSubCategory(checkItem, mainCat, subCat);
+                const matched = matchItemToSubCategory(checkItem, mainCat, subCat, microCat);
                 if (!matched) return;
 
                 if (q) {
@@ -5685,7 +5952,7 @@ function getSubCategoryProducts(mainCat, subCat, searchQuery = "", requestedCoun
                 tier2Items.push({
                     id: catItem.id || uniqueKey,
                     name: catItem.name,
-                    desc: catItem.spec || catItem.subCat || group.groupName || "",
+                    desc: catItem.spec || catItem.microCat || catItem.subCat || group.groupName || "",
                     price: Number(catItem.price) || 0,
                     unit: catItem.unit || "กก.",
                     image: catItem.image || stall.stallImage || (typeof MERCHANT_PRESET_IMAGES !== "undefined" ? MERCHANT_PRESET_IMAGES.stall.chicken : ""),
@@ -5734,27 +6001,35 @@ function renderSubCategoryProductView() {
 
     const mainCat = state.currentCategoryFilter;
     const subCat = state.currentSubCategoryFilter;
+    const microCat = state.currentMicroCategoryFilter;
     const requestedCount = (state.subCategoryPage || 1) * 15;
     const query = state.subCategorySearchQuery || "";
 
-    const queryResult = getSubCategoryProducts(mainCat, subCat, query, requestedCount);
+    const queryResult = getSubCategoryProducts(mainCat, subCat, microCat, query, requestedCount);
     const items = queryResult.items || [];
     const totalFound = queryResult.totalFound || 0;
     const hasMore = queryResult.hasMore;
 
-    const subCatDisplayTitle = (subCat === "all_cat" || !subCat) ? `ทั้งหมดในหมวด "${mainCat}"` : subCat;
+    const subCatDisplayTitle = (subCat === "all_sub" || subCat === "all_cat" || !subCat) ? `ทั้งหมดใน "${mainCat}"` : subCat;
+    const microCatDisplayTitle = (microCat && microCat !== "all_micro") ? microCat : "";
 
     let html = `
         <div class="space-y-3 pb-6">
-            <!-- 1. Breadcrumb & Overview Bar -->
+            <!-- 1. Breadcrumb & Overview Bar (3-Tier Navigation) -->
             <div class="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white rounded-2xl p-3 sm:p-3.5 shadow-md flex items-center justify-between flex-wrap gap-2">
                 <div>
-                    <div class="flex items-center gap-1.5 text-[11px] text-emerald-200 font-medium">
-                        <span>${mainCat}</span>
-                        <span class="material-symbols-outlined text-xs">chevron_right</span>
-                        <span class="text-white font-bold">${subCatDisplayTitle}</span>
+                    <div class="flex items-center gap-1.5 text-[11px] text-emerald-200 font-medium flex-wrap">
+                        <button type="button" onclick="filterByCategory('${mainCat.replace(/'/g, "\\'")}')" class="hover:underline text-emerald-200">${mainCat}</button>
+                        ${subCatDisplayTitle ? `
+                            <span class="material-symbols-outlined text-xs">chevron_right</span>
+                            <button type="button" onclick="selectSubCategory('${subCat.replace(/'/g, "\\'")}')" class="hover:underline text-white font-bold">${subCatDisplayTitle}</button>
+                        ` : ''}
+                        ${microCatDisplayTitle ? `
+                            <span class="material-symbols-outlined text-xs">chevron_right</span>
+                            <span class="bg-teal-500/40 text-teal-100 px-2 py-0.5 rounded-full font-extrabold border border-teal-300/40">${microCatDisplayTitle}</span>
+                        ` : ''}
                     </div>
-                    <h2 class="text-sm sm:text-base font-extrabold flex items-center gap-1.5 mt-0.5 text-white">
+                    <h2 class="text-sm sm:text-base font-extrabold flex items-center gap-1.5 mt-1 text-white">
                         <span>รายการคัดสรรยอดนิยม 15 รายการ</span>
                         <span class="bg-emerald-500/40 text-emerald-100 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-400/40">
                             แสดง ${items.length} จาก ${totalFound} รายการ
@@ -5769,13 +6044,13 @@ function renderSubCategoryProductView() {
                 </div>
             </div>
 
-            <!-- 2. In-Subcategory Quick Filter & Search Bar -->
+            <!-- 2. In-Category Quick Filter & Search Bar -->
             <div class="relative flex items-center">
                 <span class="material-symbols-outlined absolute left-3 text-emerald-700 text-base">search</span>
                 <input type="text"
                     value="${state.subCategorySearchQuery || ''}"
                     oninput="handleSubCategorySearch(this.value)"
-                    placeholder="ค้นหาใน ${subCatDisplayTitle} (เช่น อกไก่, น่อง, หมักกระเทียม)..."
+                    placeholder="ค้นหาใน ${microCatDisplayTitle || subCatDisplayTitle} (เช่น อกไก่, น่อง, โครงไก่)..."
                     class="w-full pl-9 pr-8 py-2 rounded-xl bg-white text-slate-800 placeholder-slate-400 text-xs font-bold border border-emerald-600/30 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-xs transition-all">
                 ${state.subCategorySearchQuery ? `
                     <button onclick="handleSubCategorySearch('')" class="absolute right-2.5 text-slate-400 hover:text-slate-700 text-sm" title="ล้างคำค้นหา">
@@ -5789,7 +6064,7 @@ function renderSubCategoryProductView() {
         html += `
             <div class="text-center py-12 px-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
                 <span class="material-symbols-outlined text-4xl text-slate-300">inventory_2</span>
-                <h4 class="font-extrabold text-sm text-slate-700">ยังไม่พบรายการสินค้าใน "${subCatDisplayTitle}"</h4>
+                <h4 class="font-extrabold text-sm text-slate-700">ยังไม่พบรายการสินค้าใน "${microCatDisplayTitle || subCatDisplayTitle}"</h4>
                 <p class="text-xs text-slate-500 max-w-sm mx-auto">ขณะนี้แผงค้าในระบบอาจยังไม่ได้ลงรายการในหมวดนี้ คุณสามารถเลือกหมวดอื่น หรือดูรายการทั้งหมดของแผงค้าต่าง ๆ</p>
                 <div class="pt-1">
                     <button onclick="filterByCategory('all')" class="px-4 py-2 bg-emerald-700 text-white font-bold rounded-xl text-xs hover:bg-emerald-800 active:scale-95 transition-all">
@@ -5802,7 +6077,7 @@ function renderSubCategoryProductView() {
         return;
     }
 
-    // 3. Product Table List (รูปแบบที่ 2 ตามภาพ: ตารางแนวนอน คมชัด อ่านง่าย ไม่ถูกบีบ)
+    // 3. Product Table List (ตารางแนวนอน คมชัด อ่านง่าย ไม่ถูกบีบ)
     html += `
         <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden p-2 sm:p-2.5 space-y-1.5">
             <!-- Column Header -->
@@ -5941,10 +6216,17 @@ function handleSubCategorySearch(query) {
 
 window.filterByCategory = filterByCategory;
 window.selectSubCategory = selectSubCategory;
+window.selectMicroCategory = selectMicroCategory;
 window.scrollSubCategoryTabs = scrollSubCategoryTabs;
+window.scrollMicroCategoryTabs = scrollMicroCategoryTabs;
 window.loadMoreSubCategoryProducts = loadMoreSubCategoryProducts;
 window.handleSubCategorySearch = handleSubCategorySearch;
 window.renderSubCategoryProductView = renderSubCategoryProductView;
+window.getMainCategories = getMainCategories;
+window.getSubCategories = getSubCategories;
+window.getMicroCategories = getMicroCategories;
+window.CATEGORY_TAXONOMY_3TIER = CATEGORY_TAXONOMY_3TIER;
+window.matchItemToSubCategory = matchItemToSubCategory;
 
 
 function scrollCategoryTabs(amount) {
@@ -18982,7 +19264,7 @@ window.fillSampleMerchantRegistration = fillSampleMerchantRegistration;
 // === หมวดหมู่สินค้าหลักและย่อย (ถูกย้ายไปประกาศที่ต้นไฟล์แล้วเพื่อป้องกัน TDZ) ===
 
 function buildCategoryDropdown(id, selectedCat, onChange) {
-    const cats = Object.keys(STALL_PRODUCT_CATEGORIES);
+    const cats = getMainCategories();
     let opts = cats.map(c => `<option value="${c}" ${c === selectedCat ? 'selected' : ''}>${c}</option>`).join('');
     return `<select id="${id}" onchange="${onChange}" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs font-medium bg-white">
         <option value="">-- เลือกหมวดหมู่หลัก --</option>
@@ -18990,11 +19272,21 @@ function buildCategoryDropdown(id, selectedCat, onChange) {
     </select>`;
 }
 
-function buildSubCategoryDropdown(id, mainCat, selectedSub) {
-    const subs = (mainCat && STALL_PRODUCT_CATEGORIES[mainCat]) ? STALL_PRODUCT_CATEGORIES[mainCat] : [];
+function buildSubCategoryDropdown(id, mainCat, selectedSub, onChange) {
+    const subs = getSubCategories(mainCat);
     let opts = subs.map(s => `<option value="${s}" ${s === selectedSub ? 'selected' : ''}>${s}</option>`).join('');
+    const onchAttr = onChange ? `onchange="${onChange}"` : '';
+    return `<select id="${id}" ${onchAttr} class="w-full p-1.5 rounded-lg border border-slate-200 text-xs bg-white">
+        <option value="">-- เลือกหมวดหมู่รอง --</option>
+        ${opts}
+    </select>`;
+}
+
+function buildMicroCategoryDropdown(id, mainCat, subCat, selectedMicro) {
+    const micros = getMicroCategories(mainCat, subCat);
+    let opts = micros.map(m => `<option value="${m}" ${m === selectedMicro ? 'selected' : ''}>${m}</option>`).join('');
     return `<select id="${id}" class="w-full p-1.5 rounded-lg border border-slate-200 text-xs bg-white">
-        <option value="">-- เลือกหมวดย่อย --</option>
+        <option value="">-- เลือกหมวดย่อย (ชิ้นส่วน/ชนิด) --</option>
         ${opts}
     </select>`;
 }
@@ -19010,24 +19302,65 @@ function onCatalogMainCatChange(selectEl) {
     const row = selectEl.closest('.catalog-item-container, tr');
     if (!row) return;
     const subSelect = row.querySelector('.catalog-sub-cat-select');
-    if (!subSelect) return;
+    const microSelect = row.querySelector('.catalog-micro-cat-select');
     const mainCat = selectEl.value;
-    const subs = (mainCat && STALL_PRODUCT_CATEGORIES[mainCat]) ? STALL_PRODUCT_CATEGORIES[mainCat] : [];
-    subSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย --</option>' +
-        subs.map(s => `<option value="${s}">${s}</option>`).join('');
+    const subs = getSubCategories(mainCat);
+
+    if (subSelect) {
+        subSelect.innerHTML = '<option value="">-- เลือกหมวดหมู่รอง --</option>' +
+            subs.map(s => `<option value="${s}">${s}</option>`).join('');
+    }
+    if (microSelect) {
+        microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย --</option>';
+    }
 }
 window.onCatalogMainCatChange = onCatalogMainCatChange;
 
+function onCatalogSubCatChange(selectEl) {
+    const row = selectEl.closest('.catalog-item-container, tr');
+    if (!row) return;
+    const mainSelect = row.querySelector('.catalog-main-cat-select');
+    const microSelect = row.querySelector('.catalog-micro-cat-select');
+    if (!microSelect) return;
+
+    const mainCat = mainSelect ? mainSelect.value : "";
+    const subCat = selectEl.value;
+    const micros = getMicroCategories(mainCat, subCat);
+
+    microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย (ชิ้นส่วน/ชนิด) --</option>' +
+        micros.map(m => `<option value="${m}">${m}</option>`).join('');
+}
+window.onCatalogSubCatChange = onCatalogSubCatChange;
+
 function onHighlightMainCatChange(selectEl, index) {
     const mainCat = selectEl.value;
-    const subSelectId = `m-p-subcat-${index}`;
-    const subSelect = document.getElementById(subSelectId);
-    if (!subSelect) return;
-    const subs = (mainCat && STALL_PRODUCT_CATEGORIES[mainCat]) ? STALL_PRODUCT_CATEGORIES[mainCat] : [];
-    subSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย --</option>' +
-        subs.map(s => `<option value="${s}">${s}</option>`).join('');
+    const subSelect = document.getElementById(`m-p-subcat-${index}`);
+    const microSelect = document.getElementById(`m-p-microcat-${index}`);
+    const subs = getSubCategories(mainCat);
+
+    if (subSelect) {
+        subSelect.innerHTML = '<option value="">-- เลือกหมวดหมู่รอง --</option>' +
+            subs.map(s => `<option value="${s}">${s}</option>`).join('');
+    }
+    if (microSelect) {
+        microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย --</option>';
+    }
 }
 window.onHighlightMainCatChange = onHighlightMainCatChange;
+
+function onHighlightSubCatChange(selectEl, index) {
+    const mainSelect = document.getElementById(`m-p-maincat-${index}`);
+    const microSelect = document.getElementById(`m-p-microcat-${index}`);
+    if (!microSelect) return;
+
+    const mainCat = mainSelect ? mainSelect.value : "";
+    const subCat = selectEl.value;
+    const micros = getMicroCategories(mainCat, subCat);
+
+    microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย (ชิ้นส่วน/ชนิด) --</option>' +
+        micros.map(m => `<option value="${m}">${m}</option>`).join('');
+}
+window.onHighlightSubCatChange = onHighlightSubCatChange;
 
 function registerNewMerchantStall() {
     closeMerchantLoginModal();
@@ -19137,15 +19470,18 @@ function renderMerchantTop6ProductsForm(products) {
     const HIGHLIGHT_COUNT = 10;
     let html = "";
     for (let i = 0; i < HIGHLIGHT_COUNT; i++) {
-        const p = products[i] || { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "", mainCat: "", subCat: "" };
-        const pImg = p.image || "";
+        const p = products[i] || { name: "", desc: "", price: "", unit: "กก.", badge: "", image: "", mainCat: "", subCat: "", microCat: "" };
         const priceVal = (p.price !== undefined && p.price !== null && p.price !== "") ? p.price : "";
         const mainCat = p.mainCat || "";
         const subCat = p.subCat || "";
-        const cats = Object.keys(STALL_PRODUCT_CATEGORIES);
+        const microCat = p.microCat || "";
+
+        const cats = getMainCategories();
         const catOptions = cats.map(c => `<option value="${c}" ${c === mainCat ? 'selected' : ''}>${c}</option>`).join('');
-        const subs = (mainCat && STALL_PRODUCT_CATEGORIES[mainCat]) ? STALL_PRODUCT_CATEGORIES[mainCat] : [];
+        const subs = getSubCategories(mainCat);
         const subOptions = subs.map(s => `<option value="${s}" ${s === subCat ? 'selected' : ''}>${s}</option>`).join('');
+        const micros = getMicroCategories(mainCat, subCat);
+        const microOptions = micros.map(m => `<option value="${m}" ${m === microCat ? 'selected' : ''}>${m}</option>`).join('');
         const unitOptions = STALL_PRODUCT_UNITS.map(u => `<option value="${u}" ${u === (p.unit||'กก.') ? 'selected' : ''}>${u}</option>`).join('');
 
         html += `
@@ -19158,7 +19494,7 @@ function renderMerchantTop6ProductsForm(products) {
                     <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">แสดงบนการ์ดหน้าแรก</span>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่หลัก</label>
                         <select id="m-p-maincat-${i}" onchange="onHighlightMainCatChange(this, ${i})" class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs font-medium">
@@ -19167,10 +19503,17 @@ function renderMerchantTop6ProductsForm(products) {
                         </select>
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่ย่อย</label>
-                        <select id="m-p-subcat-${i}" class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs">
-                            <option value="">-- เลือกหมวดย่อย --</option>
+                        <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่รอง</label>
+                        <select id="m-p-subcat-${i}" onchange="onHighlightSubCatChange(this, ${i})" class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs">
+                            <option value="">-- เลือกหมวดหมู่รอง --</option>
                             ${subOptions}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่ย่อย (ชิ้นส่วน/ชนิด)</label>
+                        <select id="m-p-microcat-${i}" class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs">
+                            <option value="">-- เลือกหมวดย่อย --</option>
+                            ${microOptions}
                         </select>
                     </div>
                 </div>
@@ -19247,7 +19590,8 @@ function renderMerchantCatalogTable(groups) {
                     if (cleanName && !highlightNames.includes(cleanName.toLowerCase())) {
                         const mainCat = item.mainCat || g.groupName || "";
                         const subCat = item.subCat || "";
-                        const { catOptions, subOptions } = buildCatalogCategorySelects(mainCat, subCat);
+                        const microCat = item.microCat || "";
+                        const { catOptions, subOptions, microOptions, unitOptions } = buildCatalogCategorySelects(mainCat, subCat, microCat);
 
                         const newRow = document.createElement("div");
                         newRow.className = "catalog-item-container p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 relative shadow-sm";
@@ -19263,7 +19607,7 @@ function renderMerchantCatalogTable(groups) {
                                 </button>
                             </div>
 
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <div>
                                     <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่หลัก</label>
                                     <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs font-medium catalog-main-cat-select" onchange="onCatalogMainCatChange(this)">
@@ -19272,10 +19616,17 @@ function renderMerchantCatalogTable(groups) {
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่ย่อย</label>
-                                    <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs catalog-sub-cat-select">
-                                        <option value="">-- หมวดย่อย --</option>
+                                    <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่รอง</label>
+                                    <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs catalog-sub-cat-select" onchange="onCatalogSubCatChange(this)">
+                                        <option value="">-- หมวดรอง --</option>
                                         ${subOptions}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่ย่อย (ชิ้นส่วน/ชนิด)</label>
+                                    <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs catalog-micro-cat-select">
+                                        <option value="">-- หมวดย่อย --</option>
+                                        ${microOptions}
                                     </select>
                                 </div>
                             </div>
@@ -19292,7 +19643,7 @@ function renderMerchantCatalogTable(groups) {
                                 <div>
                                     <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หน่วยขาย</label>
                                     <select class="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs catalog-unit-select">
-                                        ${STALL_PRODUCT_UNITS.map(u => `<option value="${u}" ${u === (item.unit || 'กก.') ? 'selected' : ''}>${u}</option>`).join('')}
+                                        ${unitOptions}
                                     </select>
                                 </div>
                             </div>
@@ -19313,13 +19664,15 @@ function renderMerchantCatalogTable(groups) {
     }
 }
 
-function buildCatalogCategorySelects(mainCat, subCat) {
-    const cats = Object.keys(STALL_PRODUCT_CATEGORIES);
+function buildCatalogCategorySelects(mainCat, subCat, microCat) {
+    const cats = getMainCategories();
     const catOptions = cats.map(c => `<option value="${c}" ${c === mainCat ? 'selected' : ''}>${c}</option>`).join('');
-    const subs = (mainCat && STALL_PRODUCT_CATEGORIES[mainCat]) ? STALL_PRODUCT_CATEGORIES[mainCat] : [];
+    const subs = getSubCategories(mainCat);
     const subOptions = subs.map(s => `<option value="${s}" ${s === subCat ? 'selected' : ''}>${s}</option>`).join('');
+    const micros = getMicroCategories(mainCat, subCat);
+    const microOptions = micros.map(m => `<option value="${m}" ${m === microCat ? 'selected' : ''}>${m}</option>`).join('');
     const unitOptions = STALL_PRODUCT_UNITS.map(u => `<option value="${u}">${u}</option>`).join('');
-    return { catOptions, subOptions, unitOptions };
+    return { catOptions, subOptions, microOptions, unitOptions };
 }
 
 function addMerchantCatalogRow() {
@@ -19333,7 +19686,7 @@ function addMerchantCatalogRow() {
     }
 
     const index = existingRows;
-    const { catOptions, subOptions, unitOptions } = buildCatalogCategorySelects("", "");
+    const { catOptions, subOptions, microOptions, unitOptions } = buildCatalogCategorySelects("", "", "");
 
     const newRow = document.createElement("div");
     newRow.className = "catalog-item-container p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 relative shadow-sm";
@@ -19349,7 +19702,7 @@ function addMerchantCatalogRow() {
             </button>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
                 <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่หลัก</label>
                 <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs font-medium catalog-main-cat-select" onchange="onCatalogMainCatChange(this)">
@@ -19358,10 +19711,17 @@ function addMerchantCatalogRow() {
                 </select>
             </div>
             <div>
-                <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่ย่อย</label>
-                <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs catalog-sub-cat-select">
-                    <option value="">-- หมวดย่อย --</option>
+                <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่รอง</label>
+                <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs catalog-sub-cat-select" onchange="onCatalogSubCatChange(this)">
+                    <option value="">-- หมวดรอง --</option>
                     ${subOptions}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หมวดหมู่ย่อย (ชิ้นส่วน/ชนิด)</label>
+                <select class="w-full p-1.5 rounded-xl bg-white border border-slate-300 text-xs catalog-micro-cat-select">
+                    <option value="">-- หมวดย่อย --</option>
+                    ${microOptions}
                 </select>
             </div>
         </div>
@@ -19470,7 +19830,7 @@ async function saveMerchantStallData() {
             return;
         }
 
-        // Collect 10 Highlight products
+        // Collect 10 Highlight products (พร้อม microCat 3 ระดับ)
         const HIGHLIGHT_COUNT = 10;
         const products = [];
         const highlightNames = [];
@@ -19483,6 +19843,7 @@ async function saveMerchantStallData() {
             const unit = unitEl ? (unitEl.value || "กก.") : "กก.";
             const mainCat = document.getElementById(`m-p-maincat-${i}`)?.value || "";
             const subCat = document.getElementById(`m-p-subcat-${i}`)?.value || "";
+            const microCat = document.getElementById(`m-p-microcat-${i}`)?.value || "";
             if (name) {
                 products.push({
                     id: `${activeMerchantStallId}_p${i + 1}`,
@@ -19492,7 +19853,8 @@ async function saveMerchantStallData() {
                     unit: unit,
                     badge: badge,
                     mainCat: mainCat,
-                    subCat: subCat
+                    subCat: subCat,
+                    microCat: microCat
                 });
                 highlightNames.push(name.toLowerCase());
             }
@@ -19521,17 +19883,19 @@ async function saveMerchantStallData() {
             return;
         }
 
-        // Collect full catalog rows with new category dropdowns
+        // Collect full catalog rows with new 3-tier category dropdowns
         const groupMap = {};
         tableRows.forEach((r, idx) => {
             const mainCatEl = r.querySelector(".catalog-main-cat-select");
             const subCatEl = r.querySelector(".catalog-sub-cat-select");
+            const microCatEl = r.querySelector(".catalog-micro-cat-select");
             const nameInput = r.querySelector(".catalog-item-name-input");
             const priceInput = r.querySelector(".catalog-item-price-input");
             const unitEl = r.querySelector(".catalog-unit-select");
 
             const mainCatVal = mainCatEl ? mainCatEl.value.trim() : "";
             const subCatVal = subCatEl ? subCatEl.value.trim() : "";
+            const microCatVal = microCatEl ? microCatEl.value.trim() : "";
             const itemName = nameInput ? nameInput.value.trim() : "";
             const itemPrice = parseFloat(priceInput?.value || "0") || 0;
             const itemUnit = unitEl ? (unitEl.value || "กก.") : "กก.";
@@ -19546,7 +19910,8 @@ async function saveMerchantStallData() {
                     price: itemPrice,
                     unit: itemUnit,
                     mainCat: mainCatVal,
-                    subCat: subCatVal
+                    subCat: subCatVal,
+                    microCat: microCatVal
                 });
             }
         });
@@ -19566,13 +19931,14 @@ async function saveMerchantStallData() {
                         products.push({
                             id: `${activeMerchantStallId}_p${pCount}`,
                             name: it.name,
-                            desc: it.spec || it.subCat || it.mainCat || "",
+                            desc: it.spec || it.microCat || it.subCat || it.mainCat || "",
                             price: it.price || 0,
                             unit: it.unit || "กก.",
                             badge: "สินค้าแนะนำ",
                             image: stallImage,
                             mainCat: it.mainCat || g.groupName || "",
-                            subCat: it.subCat || ""
+                            subCat: it.subCat || "",
+                            microCat: it.microCat || ""
                         });
                     }
                 });

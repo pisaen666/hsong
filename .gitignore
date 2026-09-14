@@ -2,3 +2,6 @@
 .DS_Store
 Thumbs.db
 scratch/
+firebase-rtdb-export.json
+*-export.json
+database.rules.json
