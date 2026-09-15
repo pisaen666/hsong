@@ -1905,62 +1905,85 @@ function getMainCategories() {
     return Object.keys(CATEGORY_TAXONOMY_3TIER);
 }
 
-function getSubCategories(mainCat) {
-    if (!mainCat) return [];
-    // 1. ตรวจสอบตรงตัว
-    if (CATEGORY_TAXONOMY_3TIER[mainCat]) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER[mainCat]);
+// ฟังก์ชันแปลงชื่อหมวดหมู่ให้เป็นชื่อหมวดหลักมาตรฐาน 10 หมวด (+1 อื่นๆ)
+function normalizeMainCategoryName(catName) {
+    if (!catName || typeof catName !== "string") return "";
+    const clean = catName.replace(/^[^\s\w\u0E00-\u0E7F]+\s*/, '').trim().toLowerCase();
+    
+    // 1. หมวดเนื้อสัตว์และสัตว์ปีก
+    if (clean.includes("เนื้อสัตว์") || clean.includes("สัตว์ปีก") || clean.includes("ไก่สด") || clean.includes("หมูสด") || clean.includes("เนื้อวัว") || clean.includes("เป็ดสด") || clean === "chicken" || clean === "pork" || clean === "beef" || clean === "meat") {
+        return "🥩 เนื้อสัตว์และสัตว์ปีก";
     }
-    // 2. ตรวจสอบโดยตัด emoji ออก
-    const cleanMain = mainCat.replace(/^[^\s]+\s+/, '').trim();
-    for (const key of Object.keys(CATEGORY_TAXONOMY_3TIER)) {
-        const cleanKey = key.replace(/^[^\s]+\s+/, '').trim();
-        if (cleanKey === cleanMain || key.includes(cleanMain) || cleanMain.includes(cleanKey)) {
-            return Object.keys(CATEGORY_TAXONOMY_3TIER[key]);
+    // 2. หมวดอาหารทะเล
+    if (clean.includes("อาหารทะเล") || clean.includes("กุ้ง") || clean.includes("ปลาทะเล") || clean.includes("ปลาน้ำจืด") || clean.includes("หมึก") || clean.includes("ปูสด") || clean.includes("หอย") || clean === "seafood" || clean === "fish") {
+        return "🦐 อาหารทะเลสดและแปรรูป";
+    }
+    // 3. หมวดผักสดและเห็ด
+    if (clean.includes("ผักสด") || clean.includes("เห็ด") || clean.includes("สมุนไพร") || clean === "vegetable") {
+        return "🥬 ผักสด และเห็ด";
+    }
+    // 4. หมวดผลไม้สด
+    if (clean.includes("ผลไม้") || clean === "fruit") {
+        return "🍌 ผลไม้สด";
+    }
+    // 5. หมวดข้าวสาร ของชำ และไข่ไก่
+    if (clean.includes("ข้าวสาร") || clean.includes("ของชำ") || clean.includes("เครื่องแกง") || clean.includes("พริกแกง") || clean.includes("เครื่องปรุง") || clean.includes("ของแห้ง") || clean.includes("ไข่") || clean === "grocery" || clean === "rice" || clean === "egg") {
+        return "🌾 ข้าวสาร ของชำ และไข่ไก่";
+    }
+    // 6. หมวดอาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง
+    if (clean.includes("อาหารแปรรูป") || clean.includes("เส้นก๋วยเตี๋ยว") || clean.includes("แช่แข็ง") || clean.includes("ลูกชิ้น") || clean.includes("ไส้กรอก") || clean.includes("หมูยอ") || clean.includes("เต้าหู้") || clean === "frozen" || clean === "processed") {
+        return "🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง";
+    }
+    // 7. หมวดอาหารปรุงสุก ของทอด และพร้อมทาน (รวม อาหารสำเร็จรูป)
+    if (clean.includes("อาหารสำเร็จรูป") || clean.includes("อาหารปรุงสุก") || clean.includes("ของทอด") || clean.includes("ของย่าง") || clean.includes("พร้อมทาน") || clean.includes("แกงถุง") || clean.includes("อาหารจานเดียว") || clean === "cooked") {
+        return "🍲 อาหารปรุงสุก ของทอด และพร้อมทาน";
+    }
+    // 8. หมวดเครื่องดื่ม ขนมหวาน และเบเกอรี่
+    if (clean.includes("เครื่องดื่ม") || clean.includes("ขนมหวาน") || clean.includes("เบเกอรี่") || clean.includes("กาแฟ") || clean.includes("ชา") || clean === "beverage" || clean === "dessert") {
+        return "🧋 เครื่องดื่ม ขนมหวาน และเบเกอรี่";
+    }
+    // 9. หมวดดอกไม้สด และสังฆภัณฑ์
+    if (clean.includes("ดอกไม้") || clean.includes("สังฆภัณฑ์") || clean.includes("พวงมาลัย") || clean.includes("ไหว้เจ้า") || clean === "flower") {
+        return "💐 ดอกไม้สด และสังฆภัณฑ์";
+    }
+    // 10. หมวดบรรจุภัณฑ์ ของใช้ และอื่นๆ (เน้นคำว่า บรรจุภัณฑ์, ของใช้, สัตว์เลี้ยง)
+    if (clean.includes("บรรจุภัณฑ์") || clean.includes("ของใช้") || clean.includes("สัตว์เลี้ยง") || clean.includes("ถุงพลาสติก") || clean.includes("กล่องใส่อาหาร") || clean === "packaging") {
+        return "📦 บรรจุภัณฑ์ ของใช้ และอื่นๆ";
+    }
+    // 11. หมวดอื่นๆ (เฉพาะเมื่อระบุว่า อื่นๆ/เบ็ดเตล็ด โดยไม่มีคำว่า บรรจุภัณฑ์ หรือ ของใช้)
+    if (clean === "อื่นๆ" || clean === "อื่น ๆ" || clean === "🏷️ อื่นๆ" || clean.includes("เบ็ดเตล็ด")) {
+        return "🏷️ อื่นๆ";
+    }
+    
+    // ตรวจสอบตรงตัวกับ Key ใน CATEGORY_TAXONOMY_3TIER
+    for (const k of Object.keys(CATEGORY_TAXONOMY_3TIER)) {
+        const cleanK = k.replace(/^[^\s\w\u0E00-\u0E7F]+\s*/, '').trim().toLowerCase();
+        if (cleanK === clean || k.includes(clean) || clean.includes(cleanK)) {
+            return k;
         }
     }
-    // 3. Keyword matching fallbacks สำหรับข้อมูลเดิม
-    if (mainCat.includes("เนื้อ") || mainCat.includes("ไก่") || mainCat.includes("หมู") || mainCat.includes("วัว") || mainCat.includes("เป็ด")) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER["🥩 เนื้อสัตว์และสัตว์ปีก"]);
+
+    return catName.trim();
+}
+
+function getSubCategories(mainCat) {
+    if (!mainCat) return [];
+    const normalized = normalizeMainCategoryName(mainCat);
+    if (CATEGORY_TAXONOMY_3TIER[normalized]) {
+        return Object.keys(CATEGORY_TAXONOMY_3TIER[normalized]);
     }
-    if (mainCat.includes("ทะเล") || mainCat.includes("กุ้ง") || mainCat.includes("ปลา") || mainCat.includes("หมึก") || mainCat.includes("หอย") || mainCat.includes("ปู")) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER["🦐 อาหารทะเลสดและแปรรูป"]);
-    }
-    if (mainCat.includes("ผัก") || mainCat.includes("เห็ด") || mainCat.includes("สมุนไพร")) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER["🥬 ผักสด และเห็ด"]);
-    }
-    if (mainCat.includes("ผลไม้")) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER["🍌 ผลไม้สด"]);
-    }
-    if (mainCat.includes("ข้าว") || mainCat.includes("ของชำ") || mainCat.includes("เครื่องปรุง") || mainCat.includes("ไข่") || mainCat.includes("พริกแกง") || mainCat.includes("กะทิ")) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER["🌾 ข้าวสาร ของชำ และไข่ไก่"]);
-    }
-    if (mainCat.includes("แช่แข็ง") || mainCat.includes("แปรรูป") || mainCat.includes("ก๋วยเตี๋ยว") || mainCat.includes("เส้น") || mainCat.includes("ลูกชิ้น") || mainCat.includes("ไส้กรอก")) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER["🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง"]);
-    }
-    if (mainCat.includes("ปรุงสุก") || mainCat.includes("ของทอด") || mainCat.includes("พร้อมทาน") || mainCat.includes("แกงถุง") || mainCat.includes("อาหารจานเดียว") || mainCat.includes("ส้มตำ")) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER["🍲 อาหารปรุงสุก ของทอด และพร้อมทาน"]);
-    }
-    if (mainCat.includes("เครื่องดื่ม") || mainCat.includes("ขนม") || mainCat.includes("เบเกอรี่") || mainCat.includes("กาแฟ") || mainCat.includes("ชา")) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER["🧋 เครื่องดื่ม ขนมหวาน และเบเกอรี่"]);
-    }
-    if (mainCat.includes("ดอกไม้") || mainCat.includes("สังฆภัณฑ์") || mainCat.includes("พวงมาลัย") || mainCat.includes("ไหว้เจ้า")) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER["💐 ดอกไม้สด และสังฆภัณฑ์"]);
-    }
-    if (mainCat.includes("บรรจุภัณฑ์") || mainCat.includes("ของใช้") || mainCat.includes("สัตว์เลี้ยง") || mainCat.includes("เบ็ดเตล็ด")) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER["📦 บรรจุภัณฑ์ ของใช้ และอื่นๆ"]);
-    }
-    if (mainCat.includes("อื่น")) {
-        return Object.keys(CATEGORY_TAXONOMY_3TIER["🏷️ อื่นๆ"] || { "อื่นๆ": ["อื่นๆ"] });
+    if (CATEGORY_TAXONOMY_3TIER[mainCat]) {
+        return Object.keys(CATEGORY_TAXONOMY_3TIER[mainCat]);
     }
     return ["อื่นๆ"];
 }
 
 function getMicroCategories(mainCat, subCat) {
     if (!subCat) return ["อื่นๆ"];
+    const normalizedMain = normalizeMainCategoryName(mainCat);
     // 1. ตรวจสอบตรงตัวทั้ง mainCat และ subCat
-    if (mainCat && CATEGORY_TAXONOMY_3TIER[mainCat] && CATEGORY_TAXONOMY_3TIER[mainCat][subCat]) {
-        return CATEGORY_TAXONOMY_3TIER[mainCat][subCat];
+    if (normalizedMain && CATEGORY_TAXONOMY_3TIER[normalizedMain] && CATEGORY_TAXONOMY_3TIER[normalizedMain][subCat]) {
+        return CATEGORY_TAXONOMY_3TIER[normalizedMain][subCat];
     }
     // 2. ค้นหาในทุกหมวดหลัก
     for (const m of Object.keys(CATEGORY_TAXONOMY_3TIER)) {
@@ -1972,9 +1995,6 @@ function getMicroCategories(mainCat, subCat) {
                 return CATEGORY_TAXONOMY_3TIER[m][s];
             }
         }
-    }
-    if (subCat === "อื่นๆ" || subCat.includes("อื่น")) {
-        return ["อื่นๆ"];
     }
     return ["อื่นๆ"];
 }
@@ -6038,76 +6058,132 @@ function matchItemToSubCategory(item, mainCat, subCat, microCat) {
     if (!item) return false;
     const name = (item.name || "").trim().toLowerCase();
     const desc = (item.desc || item.spec || "").trim().toLowerCase();
-    const itemMain = (item.mainCat || item.category || "").trim().toLowerCase();
+    const rawItemMain = (item.mainCat || item.category || "").trim();
     const itemSub = (item.subCat || item.subCategory || "").trim().toLowerCase();
     const itemMicro = (item.microCat || item.microCategory || "").trim().toLowerCase();
 
-    const targetMain = (mainCat || "").trim().toLowerCase();
+    const normalizedTargetMain = normalizeMainCategoryName(mainCat);
+    const normalizedItemMain = rawItemMain ? normalizeMainCategoryName(rawItemMain) : "";
+
     const targetSub = (subCat || "").trim().toLowerCase();
     const targetMicro = (microCat || "").trim().toLowerCase();
 
     // 1. ตรวจสอบระดับ 1 (หมวดหลัก)
-    if (targetMain && targetMain !== "all") {
-        const isMainMatch = itemMain && (
-            itemMain.includes(targetMain) || 
-            targetMain.includes(itemMain) || 
-            (targetMain.includes("อื่น") && itemMain.includes("อื่น"))
-        );
+    if (mainCat && mainCat !== "all") {
+        let isMainMatch = false;
+
+        // 1.1 ถ้าสินค้ามีหมวดหลักระบุไว้ และหมวดหลักที่ normalize แล้วตรงกัน
+        if (normalizedItemMain && normalizedTargetMain) {
+            if (normalizedItemMain === normalizedTargetMain) {
+                isMainMatch = true;
+            }
+        }
+
+        // 1.2 ถ้าหมวดหลักยังไม่ตรง หรือสินค้าไม่มีหมวดหลัก ให้ตรวจจับผ่าน Synonyms / คำเฉพาะของหมวดหลักเป้าหมาย
         if (!isMainMatch) {
-            // Backward-compat check: ตรวจสอบกับหมวดรองและคำค้นหาของหมวดหลักนี้
             const allSubs = getSubCategories(mainCat);
-            let inAnySub = false;
             for (const s of allSubs) {
-                if (name.includes(s.toLowerCase()) || desc.includes(s.toLowerCase()) || itemSub === s.toLowerCase()) {
-                    inAnySub = true;
+                const sClean = s.trim().toLowerCase();
+                if (sClean === "อื่นๆ" || sClean === "อื่น ๆ") continue; // ห้ามใช้คำว่า "อื่นๆ" มาจับมั่วข้ามหมวด!
+                
+                // ตรวจชื่อหมวดรอง
+                if (itemSub && (itemSub === sClean || itemSub.includes(sClean))) {
+                    isMainMatch = true;
                     break;
                 }
+                if (name.includes(sClean) || desc.includes(sClean)) {
+                    isMainMatch = true;
+                    break;
+                }
+                
+                // ตรวจ synonyms ประจำหมวดรอง
+                const syns = SUB_CATEGORY_SYNONYMS[s] || [];
+                for (const syn of syns) {
+                    const synLower = syn.toLowerCase();
+                    if (synLower === "อื่นๆ" || synLower === "อื่น ๆ") continue;
+                    if (name.includes(synLower) || desc.includes(synLower) || itemSub.includes(synLower)) {
+                        isMainMatch = true;
+                        break;
+                    }
+                }
+                if (isMainMatch) break;
             }
-            if (!inAnySub && itemMain !== "") return false;
         }
+
+        // หากไม่ตรงกับหมวดหลักเป้าหมายนี้เลย ให้ปฏิเสธทันที
+        if (!isMainMatch) return false;
     }
 
     // 2. ตรวจสอบระดับ 2 (หมวดรอง)
     if (targetSub && targetSub !== "all_sub" && targetSub !== "all_cat") {
         let subMatched = false;
-        if (itemSub && (itemSub === targetSub || itemSub.includes(targetSub) || targetSub.includes(itemSub) || (targetSub.includes("อื่น") && itemSub.includes("อื่น")))) {
-            subMatched = true;
-        } else if (targetSub.includes("อื่น") && (!itemSub || itemSub === "อื่นๆ")) {
-            subMatched = true;
-        } else if (name.includes(targetSub) || desc.includes(targetSub)) {
-            subMatched = true;
-        } else {
-            // ตรวจกับ Synonyms ของหมวดรอง
-            const syns = SUB_CATEGORY_SYNONYMS[subCat] || [];
-            for (const syn of syns) {
-                if (name.includes(syn.toLowerCase()) || desc.includes(syn.toLowerCase())) {
-                    subMatched = true;
-                    break;
+        const isTargetOther = (targetSub === "อื่นๆ" || targetSub === "อื่น ๆ");
+
+        if (itemSub) {
+            if (itemSub === targetSub || itemSub.includes(targetSub) || targetSub.includes(itemSub)) {
+                subMatched = true;
+            } else if (isTargetOther && (itemSub === "อื่นๆ" || itemSub === "อื่น ๆ")) {
+                subMatched = true;
+            }
+        }
+
+        if (!subMatched && !isTargetOther) {
+            if (name.includes(targetSub) || desc.includes(targetSub)) {
+                subMatched = true;
+            } else {
+                const syns = SUB_CATEGORY_SYNONYMS[subCat] || [];
+                for (const syn of syns) {
+                    const synLower = syn.toLowerCase();
+                    if (synLower === "อื่นๆ" || synLower === "อื่น ๆ") continue;
+                    if (name.includes(synLower) || desc.includes(synLower)) {
+                        subMatched = true;
+                        break;
+                    }
                 }
             }
         }
+
+        // ถ้าเลือกหมวดรอง "อื่นๆ" ให้ยอมรับรายการที่ไม่ได้ระบุหมวดรอง หรือระบุว่าอื่นๆ
+        if (!subMatched && isTargetOther && (!itemSub || itemSub === "อื่นๆ" || itemSub === "อื่น ๆ")) {
+            subMatched = true;
+        }
+
         if (!subMatched) return false;
     }
 
     // 3. ตรวจสอบระดับ 3 (หมวดย่อย ชิ้นส่วน/ชนิด)
     if (targetMicro && targetMicro !== "all_micro" && targetMicro !== "") {
         let microMatched = false;
-        if (itemMicro && (itemMicro === targetMicro || itemMicro.includes(targetMicro) || targetMicro.includes(itemMicro) || (targetMicro.includes("อื่น") && itemMicro.includes("อื่น")))) {
-            microMatched = true;
-        } else if (targetMicro.includes("อื่น") && (!itemMicro || itemMicro === "อื่นๆ")) {
-            microMatched = true;
-        } else if (name.includes(targetMicro) || desc.includes(targetMicro)) {
-            microMatched = true;
-        } else {
-            // ตรวจกับ Synonyms ของหมวดย่อย (เช่น ไก่ตัวและไก่บ้าน, เนื้อไก่ชิ้นส่วนหลัก, ฯลฯ)
-            const syns = SUB_CATEGORY_SYNONYMS[microCat] || [];
-            for (const syn of syns) {
-                if (name.includes(syn.toLowerCase()) || desc.includes(syn.toLowerCase())) {
-                    microMatched = true;
-                    break;
+        const isTargetOther = (targetMicro === "อื่นๆ" || targetMicro === "อื่น ๆ");
+
+        if (itemMicro) {
+            if (itemMicro === targetMicro || itemMicro.includes(targetMicro) || targetMicro.includes(itemMicro)) {
+                microMatched = true;
+            } else if (isTargetOther && (itemMicro === "อื่นๆ" || itemMicro === "อื่น ๆ")) {
+                microMatched = true;
+            }
+        }
+
+        if (!microMatched && !isTargetOther) {
+            if (name.includes(targetMicro) || desc.includes(targetMicro)) {
+                microMatched = true;
+            } else {
+                const syns = SUB_CATEGORY_SYNONYMS[microCat] || [];
+                for (const syn of syns) {
+                    const synLower = syn.toLowerCase();
+                    if (synLower === "อื่นๆ" || synLower === "อื่น ๆ") continue;
+                    if (name.includes(synLower) || desc.includes(synLower)) {
+                        microMatched = true;
+                        break;
+                    }
                 }
             }
         }
+
+        if (!microMatched && isTargetOther && (!itemMicro || itemMicro === "อื่นๆ" || itemMicro === "อื่น ๆ")) {
+            microMatched = true;
+        }
+
         if (!microMatched) return false;
     }
 
@@ -6149,7 +6225,13 @@ function getSubCategoryProducts(mainCat, subCat, microCat, searchQuery = "", req
             const uniqueKey = `${stall.stallId}_${p.id || p.name}`;
             if (seenItemKeys.has(uniqueKey)) return;
 
-            const matched = matchItemToSubCategory(p, mainCat, subCat, microCat);
+            const checkP = {
+                ...p,
+                mainCat: p.mainCat || stall.category || "",
+                subCat: p.subCat || "",
+                microCat: p.microCat || ""
+            };
+            const matched = matchItemToSubCategory(checkP, mainCat, subCat, microCat);
             if (!matched) return;
 
             if (q) {
@@ -6225,7 +6307,7 @@ function getSubCategoryProducts(mainCat, subCat, microCat, searchQuery = "", req
                     name: catItem.name,
                     desc: catItem.spec || "",
                     subCat: catItem.subCat || group.groupName || "",
-                    mainCat: catItem.mainCat || "",
+                    mainCat: catItem.mainCat || group.groupName || stall.category || "",
                     microCat: catItem.microCat || ""
                 };
 
