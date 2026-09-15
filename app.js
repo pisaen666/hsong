@@ -13263,7 +13263,6 @@ function isMockCommunityRider(r) {
     if (r.isMock) return true;
     if (r.id && (MOCK_COMMUNITY_RIDER_IDS.includes(r.id) || r.id === "RIDER-8923")) return true;
     if (r.name && (r.name.includes("ใจ มุ่งมั่น") || r.name.includes("ไว มุ่งมั่น"))) return true;
-    if (r.phone && r.phone.replace(/[-\s]/g, "") === "0815887400") return true;
     return false;
 }
 
@@ -13273,15 +13272,71 @@ function isMockRiderApplication(a) {
     return false;
 }
 
+// ── Helper: Reconcile Approved Applications into Community Riders
+function reconcileApprovedRiders(apps, currentRiders) {
+    const riders = Array.isArray(currentRiders) ? [...currentRiders] : [];
+    const approvedApps = (apps || []).filter(a => a && a.status === "approved" && !isMockRiderApplication(a));
+    let changed = false;
+
+    approvedApps.forEach(app => {
+        const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
+        const existingIdx = riders.findIndex(r => (r.phone || "").replace(/[-\s]/g, "") === cleanPhone || (r.accessCode && r.accessCode === app.accessCode));
+        const displayName = app.nickname ? `${app.fullName} (${app.nickname})` : app.fullName;
+
+        if (existingIdx === -1) {
+            riders.unshift({
+                id: app.id || app.accessCode || `RD-${Date.now().toString().slice(-4)}`,
+                name: displayName,
+                phone: app.phone,
+                plate: app.plate || app.vehiclePlate || "-",
+                zone: app.zone || "รอบตลาดวิศิษฐ์ชัย",
+                status: "available",
+                baseFee: 40,
+                lat: Number((MARKET_ORIGIN.lat + (Math.random() - 0.5) * 0.01).toFixed(4)),
+                lng: Number((MARKET_ORIGIN.lng + (Math.random() - 0.5) * 0.01).toFixed(4)),
+                avatar: "🛵",
+                motorcycleModel: app.motorcycleModel || "",
+                promptPay: app.promptPayNumber || app.phone || "",
+                accessCode: app.accessCode || app.id,
+                codSettledToday: 0
+            });
+            changed = true;
+        } else {
+            let r = riders[existingIdx];
+            if (!r.name || r.name !== displayName || !r.accessCode) {
+                r.name = displayName;
+                r.accessCode = app.accessCode || app.id || r.accessCode;
+                r.plate = app.plate || app.vehiclePlate || r.plate;
+                r.zone = app.zone || r.zone;
+                changed = true;
+            }
+        }
+    });
+
+    return { riders, changed };
+}
+window.reconcileApprovedRiders = reconcileApprovedRiders;
+
 function loadCommunityRiders() {
     try {
         const raw = localStorage.getItem("talathub_community_riders");
+        let list = [];
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-                return parsed.filter(r => r && !isMockCommunityRider(r));
+                list = parsed.filter(r => r && !isMockCommunityRider(r));
             }
         }
+        // Auto-reconcile with approved applications so approved riders never vanish
+        const apps = loadRiderApplications();
+        const { riders: reconciledRiders, changed } = reconcileApprovedRiders(apps, list);
+        if (changed) {
+            try {
+                localStorage.setItem("talathub_community_riders", JSON.stringify(reconciledRiders));
+            } catch (e) {}
+            return reconciledRiders;
+        }
+        return list;
     } catch (e) {
         console.error("Error loading community riders:", e);
     }
@@ -13375,22 +13430,49 @@ function saveRiderApplications(apps) {
 let _isRiderSyncInitialized = false;
 
 function initRiderRealtimeSync() {
-    // Also fetch immediately via REST to ensure instant hydration
+    // Instant hydration via REST for both applications & community riders
     try {
-        fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/rider_applications.json")
-            .then(res => res.ok ? res.json() : null)
-            .then(data => {
-                if (!data) return;
-                let rawList = Array.isArray(data) ? data.filter(Boolean) : Object.values(data).filter(Boolean);
-                const cleaned = rawList.filter(a => a && !isMockRiderApplication(a));
-                if (cleaned.length > 0) {
-                    localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
-                    updateAdminRiderBadges();
-                    if (state.currentRole === "admin" && _activeAdminTab === "riders") {
-                        renderAdminRiders();
-                    }
+        Promise.all([
+            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/rider_applications.json").then(res => res.ok ? res.json() : null),
+            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/community_riders.json").then(res => res.ok ? res.json() : null)
+        ]).then(([appsData, ridersData]) => {
+            let apps = [];
+            if (appsData) {
+                const rawApps = Array.isArray(appsData) ? appsData.filter(Boolean) : Object.values(appsData).filter(Boolean);
+                apps = rawApps.filter(a => a && !isMockRiderApplication(a)).map(a => {
+                    if (a.id) a.id = normalizeRiderCode(a.id);
+                    if (a.accessCode) a.accessCode = normalizeRiderCode(a.accessCode);
+                    else a.accessCode = a.id;
+                    return a;
+                });
+                if (apps.length > 0) {
+                    localStorage.setItem("talathub_rider_applications", JSON.stringify(apps));
                 }
-            }).catch(() => {});
+            } else {
+                apps = loadRiderApplications();
+            }
+
+            let riders = [];
+            if (ridersData) {
+                const rawRiders = Array.isArray(ridersData) ? ridersData.filter(Boolean) : Object.values(ridersData).filter(Boolean);
+                riders = rawRiders.filter(r => r && !isMockCommunityRider(r));
+            } else {
+                riders = loadCommunityRiders();
+            }
+
+            // Auto-reconcile: If application is approved, guarantee rider is in community_riders
+            const { riders: reconciledRiders, changed } = reconcileApprovedRiders(apps, riders);
+            if (changed || (reconciledRiders.length > 0 && (!ridersData || ridersData.length === 0))) {
+                saveCommunityRiders(reconciledRiders);
+            } else if (riders.length > 0) {
+                localStorage.setItem("talathub_community_riders", JSON.stringify(riders));
+            }
+
+            updateAdminRiderBadges();
+            if (state.currentRole === "admin" && _activeAdminTab === "riders") {
+                renderAdminRiders();
+            }
+        }).catch(() => {});
     } catch(e) {}
 
     if (!isFirebaseReady() || _isRiderSyncInitialized) return;
@@ -13407,8 +13489,21 @@ function initRiderRealtimeSync() {
                 rawList = Object.values(data).filter(Boolean);
             }
 
-            const cleaned = rawList.filter(a => a && !isMockRiderApplication(a));
+            const cleaned = rawList.filter(a => a && !isMockRiderApplication(a)).map(a => {
+                if (a.id) a.id = normalizeRiderCode(a.id);
+                if (a.accessCode) a.accessCode = normalizeRiderCode(a.accessCode);
+                else a.accessCode = a.id;
+                return a;
+            });
             localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
+
+            // Auto-reconcile with community riders
+            const currentRiders = loadCommunityRiders();
+            const { riders: reconciledRiders, changed } = reconcileApprovedRiders(cleaned, currentRiders);
+            if (changed) {
+                saveCommunityRiders(reconciledRiders);
+            }
+
             updateAdminRiderBadges();
 
             if (state.currentRole === "admin") {
@@ -13434,7 +13529,18 @@ function initRiderRealtimeSync() {
                 rawList = Object.values(data).filter(Boolean);
             }
 
-            const cleaned = rawList.filter(r => r && !isMockCommunityRider(r));
+            let cleaned = rawList.filter(r => r && !isMockCommunityRider(r));
+
+            // Reconcile with approved applications
+            const apps = loadRiderApplications();
+            const { riders: reconciledRiders, changed } = reconcileApprovedRiders(apps, cleaned);
+            if (changed) {
+                cleaned = reconciledRiders;
+                if (isFirebaseReady() && db) {
+                    db.ref("community_riders").set(cleaned).catch(() => {});
+                }
+            }
+
             localStorage.setItem("talathub_community_riders", JSON.stringify(cleaned));
 
             if (state.currentRole === "admin" && _activeAdminTab === "riders") {
