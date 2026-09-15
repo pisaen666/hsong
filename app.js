@@ -10719,10 +10719,10 @@ function shareMerchantTrackingToLine(orderId) {
 
             <!-- Action buttons -->
             <div class="space-y-2 pt-1">
-                <a href="${lineUrl}" target="_blank" class="w-full py-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
+                <button type="button" onclick="if(isMobileDevice()){ window.open('${lineUrl}','_blank'); } else { document.getElementById('merchant-share-line-modal').classList.add('hidden'); showLinePcModal('แชร์สถานะให้ลูกค้าทาง LINE', document.getElementById('merchant-share-textarea').value); }" class="w-full py-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
                     <span class="material-symbols-outlined text-base">send</span>
                     <span>เปิด LINE เพื่อส่งให้ลูกค้าทันที</span>
-                </a>
+                </button>
                 <div class="grid grid-cols-2 gap-2">
                     <button type="button" onclick="copyMerchantShareText()" class="py-2.5 bg-slate-800 hover:bg-black text-white rounded-xl font-bold flex items-center justify-center gap-1 active:scale-95 transition-all text-xs">
                         <span class="material-symbols-outlined text-xs">content_copy</span>
@@ -14156,7 +14156,7 @@ function approveRiderApplication(appId) {
     showToast(`🎉 อนุมัติ ${displayName} เป็นไรเดอร์สำเร็จ! รหัสผ่าน: ${app.accessCode}`);
     closeRiderAppDetailModal();
     renderAdminRiders();
-    openSimulatedSmsModal(app.phone, app.accessCode, displayName, "rider");
+    openSimulatedSmsModal(app.phone, app.accessCode, displayName, "rider", app.lineId);
     setTimeout(() => initAdminRiderRadarMap(), 150);
 }
 window.approveRiderApplication = approveRiderApplication;
@@ -16976,6 +16976,9 @@ function generateLineOrderMessage(order) {
 }
 
 function isMobileDevice() {
+    if (/Windows NT|Macintosh|X11/i.test(navigator.userAgent)) {
+        return false;
+    }
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
         || (window.matchMedia && window.matchMedia("(max-width: 768px)").matches && ('ontouchstart' in window));
 }
@@ -21702,8 +21705,8 @@ window.generate6DigitAccessCode = generate6DigitAccessCode;
 
 let _lastGeneratedSmsInfo = null;
 
-function openSimulatedSmsModal(phone, codeVal, name, roleType) {
-    _lastGeneratedSmsInfo = { phone: phone, code: codeVal, name: name, roleType: roleType };
+function openSimulatedSmsModal(phone, codeVal, name, roleType, lineId) {
+    _lastGeneratedSmsInfo = { phone: phone, code: codeVal, name: name, roleType: roleType, lineId: lineId };
     const modal = document.getElementById("simulated-sms-modal");
     if (!modal) return;
 
@@ -21737,11 +21740,19 @@ window.closeSimulatedSmsModal = closeSimulatedSmsModal;
 
 function copyGeneratedCode() {
     if (_lastGeneratedSmsInfo && _lastGeneratedSmsInfo.code) {
-        navigator.clipboard.writeText(_lastGeneratedSmsInfo.code).then(() => {
-            showToast("📋 คัดลอกรหัส " + _lastGeneratedSmsInfo.code + " แล้ว!");
-        }).catch(() => {
-            showToast("รหัสของคุณคือ: " + _lastGeneratedSmsInfo.code);
-        });
+        const { phone, code, name, roleType } = _lastGeneratedSmsInfo;
+        const fullMsg = getApprovalNotificationText(phone, code, name, roleType);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(fullMsg).then(() => {
+                showToast("📋 คัดลอกรหัส " + code + " และข้อความทั้งหมดเรียบร้อยแล้ว!");
+            }).catch(() => {
+                copyTextToClipboard(fullMsg);
+                showToast("📋 คัดลอกรหัสและข้อความทั้งหมดแล้ว!");
+            });
+        } else {
+            copyTextToClipboard(fullMsg);
+            showToast("📋 คัดลอกรหัสและข้อความทั้งหมดแล้ว!");
+        }
     }
 }
 window.copyGeneratedCode = copyGeneratedCode;
@@ -21794,9 +21805,17 @@ window.sendRealSmsToApplicant = sendRealSmsToApplicant;
 
 function sendLineNotificationToApplicant(lineTarget, code, name, roleType) {
     const text = getApprovalNotificationText("", code, name, roleType);
-    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
-    window.open(lineUrl, "_blank");
-    showToast("💬 กำลังเปิด LINE เพื่อส่งข้อความแจ้งเตือน...");
+    if (isMobileDevice()) {
+        const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
+        try {
+            window.location.href = lineUrl;
+        } catch (e) {
+            window.open(lineUrl, "_blank");
+        }
+        showToast("💬 กำลังเปิดแอป LINE เพื่อส่งข้อความแจ้งเตือน...");
+    } else {
+        showLinePcModal(`ส่งรหัสผ่านให้ ${name || 'ผู้สมัคร'} ทาง LINE${lineTarget ? ` (LINE: ${lineTarget})` : ''}`, text);
+    }
 }
 window.sendLineNotificationToApplicant = sendLineNotificationToApplicant;
 
@@ -21823,8 +21842,8 @@ window.sendRealSmsFromModal = sendRealSmsFromModal;
 
 function sendLineFromModal() {
     if (!_lastGeneratedSmsInfo) return;
-    const { phone, code, name, roleType } = _lastGeneratedSmsInfo;
-    sendLineNotificationToApplicant(phone, code, name, roleType);
+    const { phone, code, name, roleType, lineId } = _lastGeneratedSmsInfo;
+    sendLineNotificationToApplicant(lineId || phone, code, name, roleType);
 }
 window.sendLineFromModal = sendLineFromModal;
 
@@ -22093,7 +22112,7 @@ function approveMerchantApplication(appId) {
     }
 
     showToast("🎉 อนุมัติเปิดร้าน \"" + stallObj.stallName + "\" สำเร็จ! รหัสผ่าน: " + code);
-    openSimulatedSmsModal(stallObj.phone, code, stallObj.stallName, "merchant");
+    openSimulatedSmsModal(stallObj.phone, code, stallObj.stallName, "merchant", stallObj.lineId || (app && app.lineId));
 }
 window.approveMerchantApplication = approveMerchantApplication;
 
