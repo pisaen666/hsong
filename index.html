@@ -4760,14 +4760,14 @@
             <div
                 class="bg-emerald-50 border border-emerald-200/80 rounded-2xl p-3.5 text-xs text-emerald-950 space-y-2">
                 <div class="font-bold flex items-center gap-1 text-emerald-800">
-                    <span class="material-symbols-outlined text-sm text-emerald-600">tips_and_updates</span>
-                    <span>วิธีส่งข้อความใน LINE บนเครื่อง PC ง่าย ๆ ใน 2 สเต็ป:</span>
+                    <span class="material-symbols-outlined text-sm text-emerald-600">check_circle</span>
+                    <span>ระบบคัดลอกข้อความและรหัสผ่านลง Clipboard ให้เรียบร้อยแล้ว!</span>
                 </div>
-                <ol class="text-[11px] leading-relaxed text-slate-700 list-decimal list-inside space-y-1 pl-1">
-                    <li>คลิกปุ่มสีเขียว <strong>"เปิดแอป LINE ในเครื่อง PC"</strong> ด้านล่าง (เพื่อสลับไปหน้าจอ LINE)
-                    </li>
-                    <li>เข้าห้องแชทของลูกค้า แล้วกดปุ่ม <strong>Ctrl + V</strong> (วางข้อความ) และกดส่งได้ทันที!</li>
-                </ol>
+                <div class="text-[11px] leading-relaxed text-slate-700 space-y-1 pl-1">
+                    <p>💡 <strong>วิธีส่งให้ไรเดอร์ / ร้านค้า:</strong></p>
+                    <p>1. สลับไปที่หน้าต่างโปรแกรม LINE บนคอมพิวเตอร์ของคุณ</p>
+                    <p>2. เปิดห้องแชท แล้วกดปุ่ม <strong>Ctrl + V</strong> (วางข้อความ) และกดส่งได้ทันที</p>
+                </div>
             </div>
 
             <div>
@@ -4784,25 +4784,16 @@
             </div>
 
             <div class="space-y-2 pt-1 text-xs">
-                <!-- Action 1: Open LINE PC App directly -->
-                <button onclick="launchLinePcApp()"
+                <button onclick="copyLinePcModalText()"
                     class="w-full bg-[#06C755] hover:bg-[#05a847] text-white font-extrabold py-3 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all">
-                    <span class="material-symbols-outlined text-base">open_in_new</span>
-                    <span>1. เปิดแอป LINE บนเครื่อง PC (line://)</span>
+                    <span class="material-symbols-outlined text-base">content_copy</span>
+                    <span>📋 คัดลอกข้อความทั้งหมด (พร้อมไปกด Ctrl+V ใน LINE)</span>
                 </button>
 
-                <!-- Action 2: Copy again and Close -->
-                <div class="flex items-center gap-2">
-                    <button onclick="copyLinePcModalText()"
-                        class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-1.5">
-                        <span class="material-symbols-outlined text-sm">content_copy</span>
-                        <span>คัดลอกข้อความ</span>
-                    </button>
-                    <button onclick="closeLinePcModal()"
-                        class="px-5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl active:scale-95 transition-all">
-                        ปิดหน้าต่าง
-                    </button>
-                </div>
+                <button onclick="closeLinePcModal()"
+                    class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl active:scale-95 transition-all">
+                    ปิดหน้าต่าง
+                </button>
             </div>
         </div>
     </div>

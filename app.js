@@ -17023,14 +17023,7 @@ function showLinePcModal(title, msg) {
     if (textEl) textEl.value = msg;
     if (modal) modal.classList.remove("hidden");
 
-    showToast("📋 คัดลอกข้อความแล้ว! พร้อมกด Ctrl+V วางใน LINE บน PC");
-
-    // เปิดแอป LINE บน Windows ผ่าน line:// โดยไม่ส่ง msg/text เพื่อป้องกันข้อความเตือนบน LINE Desktop
-    try {
-        window.location.href = "line://";
-    } catch (e) {
-        console.warn("Launch line:// failed", e);
-    }
+    showToast("📋 คัดลอกข้อความแล้ว! พร้อมกด Ctrl+V วางใน LINE บน PC ได้ทันที");
 }
 
 function closeLinePcModal() {
@@ -17048,12 +17041,8 @@ function copyLinePcModalText() {
 }
 
 function launchLinePcApp() {
-    try {
-        window.location.href = "line://";
-        showToast("🚀 กำลังสลับไปแอป LINE บนเครื่อง PC...");
-    } catch (e) {
-        showToast("⚠️ ไม่สามารถเปิดแอป LINE ได้ กรุณาเปิดจากทาสก์บาร์");
-    }
+    copyLinePcModalText();
+    showToast("📋 คัดลอกข้อความแล้ว! สลับไปที่หน้าต่าง LINE แล้วกด Ctrl+V ได้ทันที");
 }
 
 function sendLineOrderNotification(order) {
