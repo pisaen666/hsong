@@ -12125,8 +12125,23 @@ function setActiveRoleView(role) {
         renderAdminView();
     }
     renderScreenModeButton();
+    if (typeof updateRoleSelectorVisibility === "function") {
+        updateRoleSelectorVisibility();
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
+
+// 🔒 Role-Locking UI: ซ่อนแถบสลับบทบาทเมื่อไรเดอร์เข้าสู่ระบบ เพื่อไม่ให้กดข้ามไปแอดมินหรือบทบาทอื่น
+function updateRoleSelectorVisibility() {
+    const roleBar = document.getElementById("main-role-selector-bar");
+    if (!roleBar) return;
+    if (state.activeRider && state.activeRider.isLoggedIn && state.currentRole === "rider") {
+        roleBar.classList.add("hidden");
+    } else {
+        roleBar.classList.remove("hidden");
+    }
+}
+window.updateRoleSelectorVisibility = updateRoleSelectorVisibility;
 
 // ==========================================
 // PC / MOBILE SCREEN MODE CONTROLLER
@@ -13670,15 +13685,11 @@ function goToAdminRiderSettlementFromComplete() {
 window.goToAdminRiderSettlementFromComplete = goToAdminRiderSettlementFromComplete;
 
 function goToAdminRiderSettlement(riderId) {
-    // 1. ตรวจสอบสถานะการเข้าสู่ระบบแอดมิน (Auto-login เพื่อความราบรื่นในการทดสอบ)
+    // 🔒 SECURITY: ตรวจสอบสถานะการเข้าสู่ระบบแอดมิน (ต้องใส่ PIN เท่านั้น ไม่อนุญาต Auto-login ข้ามบทบาท)
     if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
-        state.activeAdmin = {
-            isLoggedIn: true,
-            name: "เฮียส่ง",
-            role: "Super Admin",
-            loggedInAt: Date.now()
-        };
-        saveAdminToStorage(state.activeAdmin);
+        openAdminLoginModal();
+        showToast("🔒 กรุณากรอกรหัส PIN ผู้ดูแลระบบ (Admin) เพื่อเข้าสู่ระบบเคลียร์เงิน");
+        return;
     }
     renderAuthHeaderButtons();
 
@@ -13900,15 +13911,11 @@ function goToAdminToApproveRider(appId) {
     closeRiderRegisterModal();
     closeRiderLoginModal();
 
-    // Auto-login Admin if not already logged in
+    // 🔒 SECURITY: Require Admin PIN authentication (No auto-login)
     if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
-        state.activeAdmin = {
-            isLoggedIn: true,
-            name: "เฮียส่ง",
-            role: "Super Admin",
-            loggedInAt: Date.now()
-        };
-        saveAdminToStorage(state.activeAdmin);
+        openAdminLoginModal();
+        showToast("🔒 กรุณากรอกรหัส PIN ผู้ดูแลระบบ เพื่อตรวจสอบและอนุมัติใบสมัคร");
+        return;
     }
     renderAuthHeaderButtons();
 
@@ -18300,11 +18307,21 @@ function loginRiderWithProfile(r) {
         license: r.plate
     };
     saveRiderToStorage(state.activeRider);
+
+    // 🔒 SECURITY: Clear Admin and Merchant sessions when Rider logs in to prevent cross-role access
+    state.activeAdmin = null;
+    saveAdminToStorage(null);
+    state.activeMerchant = null;
+    saveMerchantToStorage(null);
+
     closeRiderLoginModal();
     setActiveRoleView("rider");
     renderAuthHeaderButtons();
     renderRiderScreen();
     updateRiderRoleButtonUI();
+    if (typeof updateRoleSelectorVisibility === "function") {
+        updateRoleSelectorVisibility();
+    }
     showToast(`🎉 เข้าสู่ระบบไรเดอร์สำเร็จ! ยินดีต้อนรับ ${r.name}`);
 }
 window.loginRiderWithProfile = loginRiderWithProfile;
@@ -18315,6 +18332,9 @@ function logoutRider() {
     setActiveRoleView("customer");
     renderAuthHeaderButtons();
     updateRiderRoleButtonUI();
+    if (typeof updateRoleSelectorVisibility === "function") {
+        updateRoleSelectorVisibility();
+    }
     showToast("🚪 ออกจากระบบไรเดอร์เรียบร้อยแล้ว");
 }
 window.logoutRider = logoutRider;
@@ -19451,6 +19471,13 @@ function loginAsMerchantStall(stallId) {
         stallNumber: stall.stallNumber
     };
     saveMerchantToStorage(state.activeMerchant);
+
+    // 🔒 SECURITY: Clear Admin and Rider sessions when Merchant logs in
+    state.activeAdmin = null;
+    saveAdminToStorage(null);
+    state.activeRider = null;
+    saveRiderToStorage(null);
+
     renderAuthHeaderButtons();
 
     // Switch directly to Role 3: Merchant Dashboard
@@ -22072,13 +22099,11 @@ window.approveMerchantApplication = approveMerchantApplication;
 
 function goToAdminToApproveMerchantFromSuccess() {
     closeMerchantPortalModal();
+    // 🔒 SECURITY: Require Admin PIN authentication (No auto-login)
     if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
-        state.activeAdmin = {
-            isLoggedIn: true,
-            name: "แอดมินเฮียส่ง",
-            role: "super_admin"
-        };
-        saveAdminToStorage(state.activeAdmin);
+        openAdminLoginModal();
+        showToast("🔒 กรุณากรอกรหัส PIN ผู้ดูแลระบบ เพื่อตรวจสอบและอนุมัติแผงค้า");
+        return;
     }
     setActiveRoleView("admin");
     renderAuthHeaderButtons();

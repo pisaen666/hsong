@@ -1650,12 +1650,6 @@
                         <span class="material-symbols-outlined text-xs text-sky-400">two_wheeler</span>
                         <span>4. ไรเดอร์</span>
                     </button>
-                    <button type="button" onclick="switchRole('admin')"
-                        class="px-2.5 py-1 bg-gradient-to-r from-purple-800 to-indigo-800 hover:from-purple-700 hover:to-indigo-700 text-white border border-purple-400/40 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
-                        title="5. สลับไปศูนย์แอดมิน">
-                        <span class="material-symbols-outlined text-xs text-purple-300">admin_panel_settings</span>
-                        <span>5. แอดมิน</span>
-                    </button>
                 </div>
             </div>
 
@@ -1918,41 +1912,6 @@
                 </div>
             </div>
 
-            <!-- Cross-Role Quick Navigation Bar for Rider (เชื่อมโยงไปยังทุกบทบาท) -->
-            <div
-                class="bg-slate-900 text-slate-300 px-3 py-2 border-b border-slate-800 flex items-center justify-between gap-2 overflow-x-auto text-[11px] shrink-0">
-                <div class="flex items-center gap-1 shrink-0 text-slate-400 font-bold">
-                    <span class="material-symbols-outlined text-xs text-sky-400">sync_alt</span>
-                    <span>สลับบทบาท:</span>
-                </div>
-                <div class="flex items-center gap-1.5 shrink-0">
-                    <button type="button" onclick="switchRole('customer')"
-                        class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95"
-                        title="1. สลับไปสั่งของสด">
-                        <span class="material-symbols-outlined text-xs text-emerald-400">shopping_cart</span>
-                        <span>1. ลูกค้า</span>
-                    </button>
-                    <button type="button" onclick="switchRole('hub')"
-                        class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95"
-                        title="2. สลับไปศูนย์จัดของฮับ">
-                        <span class="material-symbols-outlined text-xs text-amber-400">inventory_2</span>
-                        <span>2. จัดส่ง</span>
-                    </button>
-                    <button type="button" onclick="switchRole('merchant')"
-                        class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95"
-                        title="3. สลับไปหน้าร้านแผงค้า">
-                        <span class="material-symbols-outlined text-xs text-orange-400">store</span>
-                        <span>3. แผงค้า</span>
-                    </button>
-                    <button type="button" onclick="goToAdminRiderSettlement()"
-                        class="px-2.5 py-1 bg-gradient-to-r from-purple-800 to-indigo-800 hover:from-purple-700 hover:to-indigo-700 text-white border border-purple-400/40 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
-                        title="5. ไปหน้าแอดมินเพื่อเคลียร์เงิน COD & รับค่ารอบ">
-                        <span class="material-symbols-outlined text-xs text-purple-300">payments</span>
-                        <span>5. แอดมิน (เคลียร์ COD)</span>
-                    </button>
-                </div>
-            </div>
-
             <!-- Rider Sub-Tabs Navigation Bar -->
             <div
                 class="bg-white border-b border-slate-200 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto text-xs shrink-0 shadow-xs">
@@ -2132,11 +2091,11 @@
                                 <p class="text-xs text-emerald-100 font-medium">
                                     ลูกค้าตรวจรับของสดและเปิดให้รีวิวความสดสะสมแต้มแล้ว</p>
                                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1">
-                                    <button type="button" onclick="goToAdminRiderSettlement()"
-                                        class="py-2.5 px-2 bg-gradient-to-r from-purple-800 to-indigo-900 hover:from-purple-900 hover:to-indigo-950 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
-                                        title="นำส่งเงินสด COD ให้แอดมิน">
-                                        <span class="material-symbols-outlined text-xs">payments</span>
-                                        <span>5. เคลียร์ COD</span>
+                                    <button type="button" onclick="switchRiderMainTab('wallet')"
+                                        class="py-2.5 px-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
+                                        title="ดูกระเป๋าเงินและยอดสรุป COD">
+                                        <span class="material-symbols-outlined text-xs">account_balance_wallet</span>
+                                        <span>กระเป๋าเงินไรเดอร์</span>
                                     </button>
                                     <button type="button" onclick="goToCustomerTrackingFromRiderComplete()"
                                         class="py-2.5 px-2 bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
@@ -2173,34 +2132,6 @@
                     <div id="rider-wallet-container">
                         <!-- Populated dynamically via renderRiderWallet() -->
                     </div>
-                </div>
-
-                <!-- Bottom Multi-Role Switcher for Rider -->
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <button type="button" onclick="switchRole('customer'); goToTrackingScreen();"
-                        class="p-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs"
-                        title="สลับกลับไปหน้าจอลูกค้า">
-                        <span class="material-symbols-outlined text-base text-emerald-600">shopping_cart</span>
-                        <span>1. หน้าจอลูกค้า</span>
-                    </button>
-                    <button type="button" onclick="switchRole('hub')"
-                        class="p-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs"
-                        title="สลับไปศูนย์จัดของฮับ">
-                        <span class="material-symbols-outlined text-base text-amber-600">inventory_2</span>
-                        <span>2. ศูนย์จัดของฮับ</span>
-                    </button>
-                    <button type="button" onclick="switchRole('merchant')"
-                        class="p-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs"
-                        title="สลับไปหน้าร้านค้า">
-                        <span class="material-symbols-outlined text-base text-orange-600">store</span>
-                        <span>3. หน้าร้านแผงค้า</span>
-                    </button>
-                    <button type="button" onclick="goToAdminRiderSettlement()"
-                        class="p-3 bg-purple-50 hover:bg-purple-100 text-purple-900 font-extrabold rounded-2xl border border-purple-200 shadow-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs"
-                        title="สลับไปหน้าแอดมิน">
-                        <span class="material-symbols-outlined text-base text-purple-700">admin_panel_settings</span>
-                        <span>5. แอดมิน (เคลียร์เงิน)</span>
-                    </button>
                 </div>
             </div>
         </section>
@@ -4972,10 +4903,10 @@
 
             <!-- Cross-Role Collaborative Action Buttons -->
             <div class="space-y-2 pt-1">
-                <button type="button" onclick="goToAdminRiderSettlementFromComplete()"
-                    class="w-full py-2.5 px-3 bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white font-extrabold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
-                    <span class="material-symbols-outlined text-sm">payments</span>
-                    <span>1. ไปหน้าแอดมิน (Role 5) เคลียร์ COD & ค่ารอบ</span>
+                <button type="button" onclick="closeDispatchSuccessModal(); switchRiderMainTab('wallet');"
+                    class="w-full py-2.5 px-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">account_balance_wallet</span>
+                    <span>1. เปิดดูกระเป๋าเงินไรเดอร์ & สรุปยอด COD</span>
                 </button>
                 <div class="grid grid-cols-2 gap-2">
                     <button type="button" onclick="goToCustomerTrackingFromRiderComplete()"
@@ -6229,16 +6160,11 @@
                     <span class="material-symbols-outlined text-sm">how_to_reg</span>
                     <span>ยังไม่ได้เป็นไรเดอร์? กรอกฟอร์มสมัครที่นี่</span>
                 </button>
-                <div class="grid grid-cols-2 gap-1.5">
+                <div>
                     <button type="button" onclick="closeRiderLoginModal(); openStatusCheckModal();"
-                        class="py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all">
+                        class="w-full py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all">
                         <span class="material-symbols-outlined text-xs">search</span>
-                        <span>เช็กรหัส SMS</span>
-                    </button>
-                    <button type="button" onclick="closeRiderLoginModal(); switchRole('admin');"
-                        class="py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all">
-                        <span class="material-symbols-outlined text-xs">admin_panel_settings</span>
-                        <span>แอดมิน (Role 5)</span>
+                        <span>เช็กรหัสผ่าน 6 หลัก / รหัส SMS ของไรเดอร์</span>
                     </button>
                 </div>
             </div>
@@ -6406,11 +6332,11 @@
             <div class="space-y-2 pt-1">
                 <div class="text-[11px] font-bold text-slate-600 text-left">เลือกขั้นตอนถัดไปเชื่อมโยงแต่ละบทบาท:</div>
 
-                <!-- 1. Go to Admin to clear COD & get delivery fee -->
-                <button type="button" onclick="goToAdminRiderSettlementFromComplete()"
-                    class="w-full py-3 bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer">
-                    <span class="material-symbols-outlined text-base">payments</span>
-                    <span>1. ไปหน้าแอดมิน (Role 5) เพื่อเคลียร์เงิน COD & รับค่ารอบ</span>
+                <!-- 1. Go to Rider Wallet & Settlement Summary -->
+                <button type="button" onclick="closeRiderDeliveryCompleteModal(); switchRiderMainTab('wallet');"
+                    class="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer">
+                    <span class="material-symbols-outlined text-base">account_balance_wallet</span>
+                    <span>1. เปิดดูกระเป๋าเงินไรเดอร์ & สรุปยอด COD</span>
                 </button>
 
                 <!-- 2. View customer tracking screen -->
