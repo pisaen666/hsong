@@ -20266,6 +20266,7 @@ async function saveMerchantStallData() {
             phone: phone,
             phone2: phone2,
             line: line,
+            lineId: line,
             contacts: contacts,
             bankInfo: bankInfo,
             bankName: bankName,
