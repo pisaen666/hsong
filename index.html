@@ -2894,6 +2894,42 @@
                 </div>
             </div>
 
+            <!-- Smart Place & Landmark Search Bar (ช่องค้นหาสถานที่ & ปักหมุดด่วน) -->
+            <div class="relative space-y-1.5" id="location-search-wrapper">
+                <div class="relative flex items-center">
+                    <span class="material-symbols-outlined absolute left-3 text-emerald-600 text-lg pointer-events-none">search</span>
+                    <input type="text" id="location-search-input"
+                        placeholder="🔍 ค้นหาสถานที่, หมู่บ้าน, ซอย, จุดสังเกตในบ้านบึง..."
+                        class="w-full pl-9 pr-14 py-2.5 rounded-2xl border border-slate-300 font-bold text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-slate-50 shadow-inner transition-all"
+                        autocomplete="off"
+                        oninput="handleLocationSearchInput(event)"
+                        onkeydown="if(event.key==='Enter') executeLocationSearchNow()">
+                    <div class="absolute right-2.5 flex items-center gap-1">
+                        <span id="location-search-spinner" class="hidden text-xs text-emerald-600 animate-spin">⏳</span>
+                        <button type="button" id="btn-clear-location-search" onclick="clearLocationSearch()" class="hidden text-slate-400 hover:text-slate-600 p-1 rounded-full text-xs cursor-pointer" title="ล้างการค้นหา">
+                            <span class="material-symbols-outlined text-base">close</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Search Results Dropdown List -->
+                <div id="location-search-dropdown" class="hidden absolute left-0 right-0 top-11 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-emerald-300 divide-y divide-slate-100 max-h-56 overflow-y-auto z-[999] animate-fade-in text-xs">
+                    <div id="location-search-results-list" class="p-1 space-y-0.5"></div>
+                </div>
+
+                <!-- Quick Ban Bueng Landmark Tags (ปุ่มลัดสถานที่ยอดนิยมในบ้านบึง) -->
+                <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] no-scrollbar">
+                    <span class="text-[10px] text-slate-400 font-bold shrink-0">จุดด่วน:</span>
+                    <button type="button" onclick="selectQuickLandmark('hosp')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏥 รพ.บ้านบึง</button>
+                    <button type="button" onclick="selectQuickLandmark('district')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏢 ที่ว่าการอำเภอ</button>
+                    <button type="button" onclick="selectQuickLandmark('sensiri')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏡 ม.เซนสิริ</button>
+                    <button type="button" onclick="selectQuickLandmark('nongchak')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">📍 แยกหนองชาก</button>
+                    <button type="button" onclick="selectQuickLandmark('mabphai')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">📍 มาบไผ่</button>
+                    <button type="button" onclick="selectQuickLandmark('nongsamsak')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">📍 หนองซ้ำซาก</button>
+                    <button type="button" onclick="selectQuickLandmark('market')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏪 ตลาดเนื่องจำนงค์</button>
+                </div>
+            </div>
+
             <!-- Interactive Leaflet Map Container -->
             <div class="space-y-1">
                 <div class="flex items-center justify-between text-[11px]">

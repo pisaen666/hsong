@@ -1445,8 +1445,415 @@ function applyResolvedGPSLocation(lat, lng, accuracy, sourceName) {
     showToast(`📍 พบพิกัด GPS จริงสำเร็จ! (${sourceName}) ระยะทาง ${distStr} จากตลาด • ค่าบริการจัดส่ง ${feeStr}`);
 }
 
+// ==========================================
+// BAN BUENG LOCAL LANDMARKS & SMART SEARCH
+// ==========================================
+const BANBUENG_LANDMARKS = [
+    {
+        id: "hosp",
+        title: "โรงพยาบาลบ้านบึง (Ban Bueng Hospital)",
+        shortTitle: "รพ.บ้านบึง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "โรงพยาบาลบ้านบึง",
+        soiRoad: "ถนนชลบุรี-แกลง",
+        lat: 13.3108,
+        lng: 101.1165,
+        icon: "local_hospital"
+    },
+    {
+        id: "district",
+        title: "ที่ว่าการอำเภอบ้านบึง (District Office)",
+        shortTitle: "ที่ว่าการอำเภอบ้านบึง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ที่ว่าการอำเภอบ้านบึง",
+        soiRoad: "ถนนเทศบาล 1",
+        lat: 13.3134,
+        lng: 101.1138,
+        icon: "apartment"
+    },
+    {
+        id: "police",
+        title: "สถานีตำรวจภูธรบ้านบึง (สภ.บ้านบึง)",
+        shortTitle: "สภ.บ้านบึง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ตรงข้ามที่ว่าการอำเภอบ้านบึง",
+        soiRoad: "ถนนเทศบาล 1",
+        lat: 13.3122,
+        lng: 101.1142,
+        icon: "local_police"
+    },
+    {
+        id: "market_hub",
+        title: "ศูนย์กระจายตลาดสดวิศิษฐ์ชัย (Hub)",
+        shortTitle: "ตลาดสดวิศิษฐ์ชัย (ฮับ)",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ตลาดสดวิศิษฐ์ชัย ล็อคกลาง",
+        soiRoad: "ถนนวิศิษฐ์ชัย",
+        lat: 13.3080,
+        lng: 101.1214,
+        icon: "storefront"
+    },
+    {
+        id: "market",
+        title: "ตลาดเนื่องจำนงค์ บ้านบึง",
+        shortTitle: "ตลาดเนื่องจำนงค์",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ตลาดเนื่องจำนงค์",
+        soiRoad: "ถนนสถาวร",
+        lat: 13.3095,
+        lng: 101.1190,
+        icon: "storefront"
+    },
+    {
+        id: "school",
+        title: "โรงเรียนบ้านบึง (อุตสาหกรรมนุเคราะห์)",
+        shortTitle: "รร.บ้านบึง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ใกล้โรงเรียนบ้านบึง",
+        soiRoad: "ถนนสถาวร",
+        lat: 13.3032,
+        lng: 101.1172,
+        icon: "school"
+    },
+    {
+        id: "sensiri",
+        title: "หมู่บ้านเซนสิริ ทาวน์ บ้านบึง (Censiri Town)",
+        shortTitle: "ม.เซนสิริ ทาวน์",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "หมู่บ้านเซนสิริ ทาวน์",
+        soiRoad: "ซอยเซิดน้อย",
+        lat: 13.3155,
+        lng: 101.1284,
+        icon: "home"
+    },
+    {
+        id: "piyawat",
+        title: "หมู่บ้านปิยวัฒน์ บ้านบึง (Piyawat)",
+        shortTitle: "ม.ปิยวัฒน์ บ้านบึง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "หมู่บ้านปิยวัฒน์",
+        soiRoad: "ถนนชลบุรี-บ้านบึง",
+        lat: 13.3120,
+        lng: 101.1350,
+        icon: "home"
+    },
+    {
+        id: "sirinari",
+        title: "หมู่บ้านสิรินารี บ้านบึง (Sirinari Village)",
+        shortTitle: "ม.สิรินารี บ้านบึง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "หมู่บ้านสิรินารี",
+        soiRoad: "ถนนสถาวร-เซิดน้อย",
+        lat: 13.3040,
+        lng: 101.1320,
+        icon: "home"
+    },
+    {
+        id: "nongchak",
+        title: "แยกหนองชาก / ตลาดหนองชาก (Nong Chak)",
+        shortTitle: "แยกหนองชาก",
+        subdistrict: "ต.หนองชาก อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ใกล้แยกหนองชาก",
+        soiRoad: "ถนนสาย 344",
+        lat: 13.3020,
+        lng: 101.1820,
+        icon: "location_on"
+    },
+    {
+        id: "mabphai",
+        title: "ตำบลมาบไผ่ / เทศบาลตำบลมาบไผ่ (Mab Phai)",
+        shortTitle: "ต.มาบไผ่",
+        subdistrict: "ต.มาบไผ่ อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ใกล้เทศบาลตำบลมาบไผ่",
+        soiRoad: "ถนนสุขุมวิท-มาบไผ่",
+        lat: 13.3550,
+        lng: 101.0750,
+        icon: "location_on"
+    },
+    {
+        id: "nongsamsak",
+        title: "ตำบลหนองซ้ำซาก / วัดหนองซ้ำซาก (Nong Sam Sak)",
+        shortTitle: "ต.หนองซ้ำซาก",
+        subdistrict: "ต.หนองซ้ำซาก อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ใกล้วัดหนองซ้ำซาก",
+        soiRoad: "ถนนสาย 344",
+        lat: 13.3350,
+        lng: 101.0550,
+        icon: "location_on"
+    },
+    {
+        id: "lotus",
+        title: "โลตัส ซูเปอร์เซ็นเตอร์ บ้านบึง (Lotus's Ban Bueng)",
+        shortTitle: "โลตัส บ้านบึง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "หน้าห้างโลตัส บ้านบึง",
+        soiRoad: "ถนนชลบุรี-แกลง",
+        lat: 13.3175,
+        lng: 101.1122,
+        icon: "shopping_cart"
+    },
+    {
+        id: "bigc",
+        title: "บิ๊กซี ซูเปอร์เซ็นเตอร์ บ้านบึง (Big C Ban Bueng)",
+        shortTitle: "บิ๊กซี บ้านบึง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "หน้าห้างบิ๊กซี บ้านบึง",
+        soiRoad: "ถนนชลบุรี-แกลง",
+        lat: 13.3195,
+        lng: 101.1095,
+        icon: "shopping_cart"
+    }
+];
+
+let _locSearchTimer = null;
+let _locSearchController = null;
+
+function handleLocationSearchInput(event) {
+    const q = (event.target.value || "").trim();
+    const clearBtn = document.getElementById("btn-clear-location-search");
+    if (clearBtn) {
+        if (q.length > 0) clearBtn.classList.remove("hidden");
+        else clearBtn.classList.add("hidden");
+    }
+
+    if (!q) {
+        hideLocationSearchDropdown();
+        return;
+    }
+
+    // 1. Instant local landmark filtering
+    const localMatches = BANBUENG_LANDMARKS.filter(item => {
+        const full = (item.title + " " + item.shortTitle + " " + (item.landmark || "") + " " + (item.soiRoad || "")).toLowerCase();
+        return full.includes(q.toLowerCase());
+    });
+
+    if (localMatches.length > 0) {
+        renderLocationSearchResults(localMatches);
+    }
+
+    // 2. Debounced OSM Nominatim Online Search
+    if (_locSearchTimer) clearTimeout(_locSearchTimer);
+    _locSearchTimer = setTimeout(() => {
+        if (q.length >= 2) {
+            fetchOnlineLocationSearch(q, localMatches);
+        }
+    }, 400);
+}
+
+async function fetchOnlineLocationSearch(query, existingMatches = []) {
+    const spinner = document.getElementById("location-search-spinner");
+    if (spinner) spinner.classList.remove("hidden");
+
+    if (_locSearchController) {
+        _locSearchController.abort();
+    }
+    _locSearchController = new AbortController();
+
+    try {
+        const trimmed = query.trim();
+        let queryStr = trimmed;
+        if (!trimmed.includes("บ้านบึง") && !trimmed.includes("ชลบุรี")) {
+            queryStr = trimmed + " ชลบุรี";
+        }
+        let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryStr)}&countrycodes=th&addressdetails=1&limit=6&viewbox=100.95,13.48,101.35,13.10`;
+        let res = await fetch(url, {
+            headers: { "Accept-Language": "th,en" },
+            signal: _locSearchController.signal
+        });
+
+        let data = res.ok ? await res.json() : [];
+        if (!Array.isArray(data) || data.length === 0) {
+            // Fallback: search pure query
+            const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(trimmed)}&countrycodes=th&addressdetails=1&limit=6`;
+            const res2 = await fetch(fallbackUrl, {
+                headers: { "Accept-Language": "th,en" },
+                signal: _locSearchController.signal
+            });
+            if (res2.ok) data = await res2.json();
+        }
+
+        if (Array.isArray(data)) {
+            const onlineResults = [];
+            data.forEach(item => {
+                    const lat = parseFloat(item.lat);
+                    const lng = parseFloat(item.lon);
+                    if (isNaN(lat) || isNaN(lng)) return;
+
+                    // Parse address
+                    const addr = item.address || {};
+                    const sub = addr.subdistrict || addr.suburb || addr.village || addr.town || "";
+                    const dis = addr.district || addr.county || addr.city || "อ.บ้านบึง";
+                    const prov = addr.province || addr.state || "จ.ชลบุรี";
+                    const road = addr.road || "";
+                    const subdistrictStr = [sub, dis, prov].filter(Boolean).join(" ");
+
+                    // Avoid duplicate coordinates with existing local landmarks
+                    const isDup = existingMatches.some(m => Math.abs(m.lat - lat) < 0.001 && Math.abs(m.lng - lng) < 0.001);
+                    if (!isDup) {
+                        onlineResults.push({
+                            title: item.display_name.split(",")[0] || query,
+                            shortTitle: item.name || item.display_name.split(",")[0] || query,
+                            subdistrict: subdistrictStr,
+                            landmark: item.name || "",
+                            soiRoad: road,
+                            lat: lat,
+                            lng: lng,
+                            icon: "place"
+                        });
+                    }
+                });
+
+            const combined = [...existingMatches, ...onlineResults];
+            renderLocationSearchResults(combined);
+        }
+    } catch (e) {
+        if (e.name !== "AbortError") {
+            console.warn("Location search error:", e);
+        }
+    } finally {
+        if (spinner) spinner.classList.add("hidden");
+    }
+}
+
+function executeLocationSearchNow() {
+    const input = document.getElementById("location-search-input");
+    if (!input) return;
+    const q = input.value.trim();
+    if (q.length >= 1) {
+        const localMatches = BANBUENG_LANDMARKS.filter(item => {
+            const full = (item.title + " " + item.shortTitle).toLowerCase();
+            return full.includes(q.toLowerCase());
+        });
+        fetchOnlineLocationSearch(q, localMatches);
+    }
+}
+
+function renderLocationSearchResults(results) {
+    const dropdown = document.getElementById("location-search-dropdown");
+    const list = document.getElementById("location-search-results-list");
+    if (!dropdown || !list) return;
+
+    if (!Array.isArray(results) || results.length === 0) {
+        list.innerHTML = `
+            <div class="p-3 text-center text-slate-500 text-xs">
+                <span>🔍 ไม่พบสถานที่ที่ค้นหา ลองใช้คำค้นหาที่กว้างขึ้น เช่น ชื่อซอย หรือหมู่บ้าน</span>
+            </div>
+        `;
+        dropdown.classList.remove("hidden");
+        return;
+    }
+
+    let html = "";
+    results.slice(0, 7).forEach((item, idx) => {
+        const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, item.lat, item.lng);
+        const fee = calculateDeliveryFee(distKm);
+        const itemJson = JSON.stringify(item).replace(/"/g, '&quot;');
+        const iconName = item.icon || "location_on";
+
+        html += `
+            <div onclick="selectLocationSearchResult(${itemJson})" class="p-2.5 hover:bg-emerald-50/80 rounded-xl cursor-pointer flex items-center justify-between gap-2.5 transition-all text-left group">
+                <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                    <span class="w-8 h-8 rounded-xl bg-emerald-100 group-hover:bg-emerald-600 text-emerald-700 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
+                        <span class="material-symbols-outlined text-base">${iconName}</span>
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <div class="font-extrabold text-slate-900 group-hover:text-emerald-950 text-xs truncate">${item.shortTitle || item.title}</div>
+                        <div class="text-[10px] text-slate-500 truncate">${item.subdistrict || 'อ.บ้านบึง จ.ชลบุรี'}</div>
+                    </div>
+                </div>
+                <div class="text-right shrink-0">
+                    <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full whitespace-nowrap">~${distKm.toFixed(1)} กม. (฿${fee})</span>
+                </div>
+            </div>
+        `;
+    });
+
+    list.innerHTML = html;
+    dropdown.classList.remove("hidden");
+}
+
+function selectLocationSearchResult(item) {
+    if (!item || typeof item.lat !== "number" || typeof item.lng !== "number") return;
+    const lat = item.lat;
+    const lng = item.lng;
+
+    // 1. Move map & pin
+    if (locationPickerMap) {
+        locationPickerMap.setView([lat, lng], 17);
+        if (locationPickerMarker) {
+            locationPickerMarker.setLatLng([lat, lng]);
+        }
+        setTimeout(() => {
+            if (locationPickerMap) locationPickerMap.invalidateSize();
+        }, 150);
+    } else {
+        initLocationPickerMap(lat, lng);
+    }
+
+    // 2. Trigger map updates (calculate distance, fee, coordinates)
+    onMapCoordinatesChanged(lat, lng, false);
+
+    // 3. Auto-fill address fields if available
+    const soiInput = document.getElementById("input-addr-soi");
+    const subInput = document.getElementById("input-addr-subdistrict");
+    const landInput = document.getElementById("input-addr-landmark");
+    if (soiInput && item.soiRoad && !soiInput.value) soiInput.value = item.soiRoad;
+    if (subInput && item.subdistrict) subInput.value = item.subdistrict;
+    if (landInput && (item.landmark || item.shortTitle || item.title)) {
+        landInput.value = item.landmark || item.shortTitle || item.title;
+    }
+    updateModalAddressPreview();
+
+    // 4. Update search input and hide dropdown
+    const searchInput = document.getElementById("location-search-input");
+    if (searchInput) searchInput.value = item.shortTitle || item.title;
+    const clearBtn = document.getElementById("btn-clear-location-search");
+    if (clearBtn) clearBtn.classList.remove("hidden");
+    hideLocationSearchDropdown();
+
+    const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+    const fee = calculateDeliveryFee(distKm);
+    showToast(`📍 ปักหมุดที่ "${item.shortTitle || item.title}" (~${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee})`);
+}
+
+function selectQuickLandmark(id) {
+    const found = BANBUENG_LANDMARKS.find(x => x.id === id);
+    if (found) {
+        selectLocationSearchResult(found);
+    }
+}
+
+function clearLocationSearch() {
+    const input = document.getElementById("location-search-input");
+    if (input) input.value = "";
+    const clearBtn = document.getElementById("btn-clear-location-search");
+    if (clearBtn) clearBtn.classList.add("hidden");
+    hideLocationSearchDropdown();
+}
+
+function hideLocationSearchDropdown() {
+    const dropdown = document.getElementById("location-search-dropdown");
+    if (dropdown) dropdown.classList.add("hidden");
+}
+
+window.handleLocationSearchInput = handleLocationSearchInput;
+window.executeLocationSearchNow = executeLocationSearchNow;
+window.selectLocationSearchResult = selectLocationSearchResult;
+window.selectQuickLandmark = selectQuickLandmark;
+window.clearLocationSearch = clearLocationSearch;
+window.hideLocationSearchDropdown = hideLocationSearchDropdown;
+
+// Close search dropdown on click outside
+document.addEventListener("click", function (e) {
+    const wrapper = document.getElementById("location-search-wrapper");
+    if (wrapper && !wrapper.contains(e.target)) {
+        hideLocationSearchDropdown();
+    }
+});
+
 function openLocationModal() {
     updateDeliveryLocationUI();
+    clearLocationSearch();
     document.getElementById("location-modal").classList.remove("hidden");
 
     const loc = state.deliveryLocation;
