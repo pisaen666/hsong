@@ -1705,8 +1705,8 @@ const BANBUENG_LANDMARKS = [
 ];
 
 // Google Plus Code (Open Location Code) Decoder for Ban Bueng / Chonburi
-function decodePlusCode(input, defaultPrefix = "7P53") {
-    if (!input) return null;
+function decodePlusCode(input, refLat = 13.311374, refLng = 101.115456) {
+    if (!input || typeof input !== "string") return null;
     const ALPHABET = "23456789CFGHJMPQRVWX";
     const match = input.toUpperCase().match(/([23456789CFGHJMPQRVWX]{4,8})\+([23456789CFGHJMPQRVWX]{2,4})/);
     if (!match) return null;
@@ -1714,33 +1714,73 @@ function decodePlusCode(input, defaultPrefix = "7P53") {
     let prefix = match[1];
     let suffix = match[2];
     let full = prefix + "+" + suffix;
-    if (prefix.length <= 6) {
-        full = defaultPrefix.substring(0, 8 - prefix.length) + full;
+    let cleanShort = full.replace("+", "");
+
+    function decodeFullCode(clean) {
+        let lat = -90, lng = -180;
+        let latVal = 20, lngVal = 20;
+        for (let i = 0; i < 10 && i < clean.length; i += 2) {
+            latVal /= 20;
+            lngVal /= 20;
+            const latIdx = ALPHABET.indexOf(clean[i]);
+            const lngIdx = ALPHABET.indexOf(clean[i + 1]);
+            if (latIdx === -1 || lngIdx === -1) return null;
+            lat += latIdx * latVal * 20;
+            lng += lngIdx * lngVal * 20;
+        }
+        return {
+            lat: lat + latVal * 10,
+            lng: lng + lngVal * 10
+        };
     }
 
-    let clean = full.replace("+", "");
-    let lat = -90, lng = -180;
-    let latVal = 20, lngVal = 20;
-    for (let i = 0; i < 10 && i < clean.length; i += 2) {
-        latVal /= 20;
-        lngVal /= 20;
-        const latIdx = ALPHABET.indexOf(clean[i]);
-        const lngIdx = ALPHABET.indexOf(clean[i + 1]);
-        if (latIdx === -1 || lngIdx === -1) return null;
-        lat += latIdx * latVal * 20;
-        lng += lngIdx * lngVal * 20;
+    // If it's already a full 10-char code (e.g. 7P538496+GP or 8 chars before +)
+    if (cleanShort.length >= 10) {
+        const decoded = decodeFullCode(cleanShort);
+        if (decoded) {
+            return {
+                lat: Number(decoded.lat.toFixed(6)),
+                lng: Number(decoded.lng.toFixed(6)),
+                code: prefix + "+" + suffix
+            };
+        }
     }
-    return {
-        lat: Number((lat + latVal * 10).toFixed(6)),
-        lng: Number((lng + lngVal * 10).toFixed(6)),
-        code: prefix + "+" + suffix
-    };
+
+    // For short codes (e.g. 8WGQ+JQ8 or 75X4+MW2), recover 4-char prefix based on proximity to refLat, refLng
+    let bestDist = Infinity;
+    let bestCoords = null;
+    for (let dLat = -1; dLat <= 1; dLat++) {
+        for (let dLng = -1; dLng <= 1; dLng++) {
+            const testLat = refLat + dLat;
+            const testLng = refLng + dLng;
+            let latNorm = testLat + 90;
+            let lngNorm = testLng + 180;
+            let p1 = ALPHABET[Math.floor(latNorm / 20)];
+            let p2 = ALPHABET[Math.floor(lngNorm / 20)];
+            let p3 = ALPHABET[Math.floor((testLat + 90) % 20)];
+            let p4 = ALPHABET[Math.floor((testLng + 180) % 20)];
+            let fullCode = p1 + p2 + p3 + p4 + cleanShort;
+            let decoded = decodeFullCode(fullCode);
+            if (decoded) {
+                let dist = Math.hypot(decoded.lat - refLat, decoded.lng - refLng);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestCoords = {
+                        lat: Number(decoded.lat.toFixed(6)),
+                        lng: Number(decoded.lng.toFixed(6)),
+                        code: prefix + "+" + suffix
+                    };
+                }
+            }
+        }
+    }
+    return bestCoords;
 }
 
-// Parse DMS (Degrees Minutes Seconds, e.g. 13°17'40.7"N 101°09'53.8"E)
+// Parse DMS (Degrees Minutes Seconds, e.g. 13°17'40.7"N 101°09'53.8"E or Unicode 13°17′40.7″N 101°09′53.8″E)
 function parseDMSCoordinates(str) {
     if (!str || typeof str !== "string") return null;
-    const dmsRegex = /(\d{1,2})[°\s]+(\d{1,2})['\s]+(\d{1,2}(?:\.\d+)?)["]?\s*([NSns])[\s,\+]+(\d{2,3})[°\s]+(\d{1,2})['\s]+(\d{1,2}(?:\.\d+)?)["]?\s*([EWew])/;
+    const dmsRegex = /(\d{1,2})[°˚\s]+(\d{1,2})['′\s]+(\d{1,2}(?:\.\d+)?)[″"”]?\s*([NSns])[\s,\+]+(\d{2,3})[°˚\s]+(\d{1,2})['′\s]+(\d{1,2}(?:\.\d+)?)[″"”]?\s*([EWew])/;
     const m = str.match(dmsRegex);
     if (!m) return null;
     let lat = parseInt(m[1], 10) + parseInt(m[2], 10) / 60 + parseFloat(m[3]) / 3600;
@@ -1754,47 +1794,53 @@ function parseDMSCoordinates(str) {
 function extractCoordinatesFromUrlOrText(input) {
     if (!input || typeof input !== "string") return null;
 
-    // 1. Check DMS format (e.g. 13°17'40.7"N 101°09'53.8"E)
+    // 1. Check DMS format (e.g. 13°17′40.7″N 101°09′53.8″E)
     const dms = parseDMSCoordinates(input);
     if (dms && dms.lat >= -90 && dms.lat <= 90 && dms.lng >= -180 && dms.lng <= 180) {
         return { lat: dms.lat, lng: dms.lng, source: "dms" };
     }
 
-    // Try decoding up to 2 times for nested/encoded URLs (e.g. q%3D13.3188%2C101.1118 or continue=https%3A...)
+    // 2. Check Plus Code inside text (e.g. 8WGQ+JQ8 or 75X4+MW2)
+    const pc = decodePlusCode(input);
+    if (pc && pc.lat >= -90 && pc.lat <= 90 && pc.lng >= -180 && pc.lng <= 180) {
+        return { lat: pc.lat, lng: pc.lng, source: "plus_code", code: pc.code };
+    }
+
+    // Try decoding up to 2 times for nested/encoded URLs
     let decoded = input;
     try { decoded = decodeURIComponent(decodeURIComponent(input)); } catch (_) {
         try { decoded = decodeURIComponent(input); } catch (__) {}
     }
 
-    // 2. Check !3d and !4d (Google Maps exact pinpoint)
+    // 3. Check !3d and !4d (Google Maps exact pinpoint)
     let m = decoded.match(/!3d(-?\d{1,2}\.\d+)!4d(-?\d{2,3}\.\d+)/);
     if (m) {
         const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
         if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng, source: "!3d!4d" };
     }
 
-    // 3. Check ?q=lat,lng or &q=lat,lng (Google Maps search/pin parameter)
+    // 4. Check ?q=lat,lng or &q=lat,lng (Google Maps search/pin parameter)
     m = decoded.match(/[?&]q=(-?\d{1,2}\.\d+)[,\s]+(-?\d{2,3}\.\d+)/);
     if (m) {
         const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
         if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng, source: "q=" };
     }
 
-    // 4. Check @lat,lng (Google Maps camera/viewport position)
+    // 5. Check @lat,lng (Google Maps camera/viewport position)
     m = decoded.match(/@(-?\d{1,2}\.\d+),(-?\d{2,3}\.\d+)/);
     if (m) {
         const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
         if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng, source: "@lat,lng" };
     }
 
-    // 5. Check other common URL parameters: ll, query, destination, center, saddr, daddr
-    m = decoded.match(/[?&](?:ll|query|destination|center|saddr|daddr)=(-?\d{1,2}\.\d+)[,\s]+(-?\d{2,3}\.\d+)/);
+    // 6. Check other common URL parameters: center, markers, ll, query, destination, saddr, daddr
+    m = decoded.match(/[?&](?:center|markers|ll|query|destination|saddr|daddr)=(-?\d{1,2}\.\d+)[,\s%2C]+(-?\d{2,3}\.\d+)/i);
     if (m) {
         const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
         if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng, source: "url_param" };
     }
 
-    // 6. Generic coordinates in text (e.g. 13.3188, 101.1118)
+    // 7. Generic coordinates in text (e.g. 13.3188, 101.1118)
     m = decoded.match(/(-?\d{1,2}\.\d{3,})[,\s]+(-?\d{2,3}\.\d{3,})/);
     if (m) {
         const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
@@ -1846,15 +1892,15 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
                 <span id="shortlink-loading-badge" class="text-[10px] text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full font-bold animate-pulse">กำลังอ่านพิกัดอัตโนมัติ...</span>
             </div>
             <p class="text-[11px] text-slate-600 leading-relaxed truncate" title="${safeDisplayUrl}">
-                ลิงก์สั้น <code class="font-mono text-blue-800 bg-blue-100/80 px-1 py-0.5 rounded font-bold">${safeDisplayUrl}</code>
+                ลิงก์: <code class="font-mono text-blue-800 bg-blue-100/80 px-1 py-0.5 rounded font-bold">${safeDisplayUrl}</code>
             </p>
 
-            <!-- 2 Action Buttons (Visible Immediately!) -->
+            <!-- 2 Action Buttons -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                 <a href="${safeDisplayUrl}" target="_blank" rel="noopener noreferrer"
                    class="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all text-center">
                     <span class="material-symbols-outlined text-base">open_in_new</span>
-                    <span>1. เปิดลิงก์ใน Google Maps</span>
+                    <span>1. เปิดใน Google Maps</span>
                 </a>
                 <button type="button" onclick="pasteFromClipboardToSearch()"
                    class="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all cursor-pointer text-center">
@@ -1866,31 +1912,69 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
             <div class="p-2.5 bg-amber-50/90 rounded-xl border border-amber-200 text-[11px] text-amber-950 space-y-1">
                 <div class="font-bold text-amber-900 flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm text-amber-600">lightbulb</span>
-                    <span>วิธีนำพิกัดมาปักหมุด 100%:</span>
+                    <span>คำแนะนำการปักหมุด:</span>
                 </div>
                 <div class="text-slate-600 leading-normal">
-                    กดปุ่มสีฟ้าด้านบนเพื่อเปิดดูใน Google Maps จะมีรหัส <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1 py-0.5 rounded border border-amber-300">75X4+MW2</span>) แตะคัดลอก แล้วกลับมากดปุ่มสีเขียว <strong>"2. วาง Plus Code"</strong> ได้ทันทีครับ
+                    ระบบกำลังถอดรหัสพิกัดจากลิงก์ให้อัตโนมัติ (1-2 วินาที) หากไม่พบ ให้กดปุ่มสีฟ้าเปิด Google Maps แล้วแตะคัดลอก <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1 py-0.5 rounded border border-amber-300">8WGQ+JQ8</span>) หรือตัวเลขพิกัด แล้วกลับมากดปุ่มสีเขียว <strong>"2. วาง Plus Code"</strong> ได้ทันทีครับ
                 </div>
             </div>
         </div>
     `;
     dropdown.classList.remove("hidden");
 
-    // Try unshortening via JSON proxy with 4.5s timeout
     let resolvedCoords = null;
+    let resolvedPlaceName = "";
+
+    // Provider 1: microlink.io (Extracts full Google Maps page metadata, redirects & DMS/Plus Code title)
     try {
         const controller = new AbortController();
         const tid = setTimeout(() => controller.abort(), 4500);
-        const res = await fetch("https://unshorten.me/json/" + encodeURIComponent(cleanUrl), { signal: controller.signal });
+        const res = await fetch("https://api.microlink.io/?url=" + encodeURIComponent(cleanUrl), { signal: controller.signal });
         clearTimeout(tid);
         if (res.ok) {
-            const data = await res.json();
-            if (data && data.resolved_url) {
-                resolvedCoords = extractCoordinatesFromUrlOrText(data.resolved_url);
+            const json = await res.json();
+            const d = json.data || {};
+            const candidates = [
+                d.title,
+                d.description,
+                d.publisher,
+                d.url,
+                d.image && d.image.url
+            ];
+            if (Array.isArray(json.redirects)) {
+                json.redirects.forEach(r => { if (r && r.url) candidates.push(r.url); });
+            }
+            for (const cand of candidates) {
+                if (cand) {
+                    const coords = extractCoordinatesFromUrlOrText(cand);
+                    if (coords) {
+                        resolvedCoords = coords;
+                        resolvedPlaceName = d.title || "";
+                        break;
+                    }
+                }
             }
         }
     } catch (e) {
-        console.warn("Google Maps unshorten attempt failed:", e);
+        console.warn("microlink attempt failed:", e);
+    }
+
+    // Provider 2: unshorten.me (Fallback)
+    if (!resolvedCoords) {
+        try {
+            const controller = new AbortController();
+            const tid = setTimeout(() => controller.abort(), 4500);
+            const res = await fetch("https://unshorten.me/json/" + encodeURIComponent(cleanUrl), { signal: controller.signal });
+            clearTimeout(tid);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.resolved_url) {
+                    resolvedCoords = extractCoordinatesFromUrlOrText(data.resolved_url);
+                }
+            }
+        } catch (e) {
+            console.warn("unshorten.me fallback attempt failed:", e);
+        }
     }
 
     const badge = document.getElementById("shortlink-loading-badge");
@@ -1904,22 +1988,26 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
         const lng = resolvedCoords.lng;
         const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
         const fee = calculateDeliveryFee(distKm);
+
+        let displayTitle = resolvedPlaceName ? resolvedPlaceName.split("·")[0].trim() : "";
+        if (!displayTitle || displayTitle.includes("Google Maps")) {
+            displayTitle = `พิกัด Google Maps (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+        }
+
         const item = {
-            title: `📍 พิกัดจาก Google Maps: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-            shortTitle: `พิกัด Google Maps (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-            subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+            title: `📍 ${displayTitle}`,
+            shortTitle: displayTitle,
+            subdistrict: "อ.บ้านบึง จ.ชลบุรี",
             landmark: `พิกัดจากลิงก์ Google Maps (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
             soiRoad: "",
             lat: lat,
             lng: lng,
             icon: "pin_drop"
         };
-        renderLocationSearchResults([item]);
         selectLocationSearchResult(item);
     } else {
-        // Unshortening failed or hit rate limit: stop pulsing loader
         if (badge) {
-            badge.textContent = "⚠️ แนะนำเปิดดู Plus Code";
+            badge.textContent = "⚠️ ไม่พบพิกัดในลิงก์อัตโนมัติ";
             badge.className = "text-[10px] text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full font-bold";
         }
     }
@@ -1959,10 +2047,11 @@ function handleLocationSearchInput(event) {
             icon: "my_location"
         };
         renderLocationSearchResults([coordItem]);
+        selectLocationSearchResult(coordItem);
         return;
     }
 
-    // 2. Check if user pasted a Google Plus Code (e.g. 75X4+MW2 or 75X4+MW2 หนองชาก)
+    // 2. Check if user pasted a Google Plus Code (e.g. 75X4+MW2 or 8WGQ+JQ8)
     const plusCodeRes = decodePlusCode(q);
     if (plusCodeRes) {
         const lat = plusCodeRes.lat;
@@ -1972,7 +2061,7 @@ function handleLocationSearchInput(event) {
         const plusItem = {
             title: `📍 Google Plus Code: ${plusCodeRes.code}`,
             shortTitle: `Plus Code (${plusCodeRes.code})`,
-            subdistrict: "ต.หนองชาก อ.บ้านบึง จ.ชลบุรี",
+            subdistrict: "อ.บ้านบึง จ.ชลบุรี",
             landmark: `พิกัดระบุจาก Google Plus Code (${plusCodeRes.code})`,
             soiRoad: "",
             lat: lat,
@@ -1980,6 +2069,7 @@ function handleLocationSearchInput(event) {
             icon: "pin_drop"
         };
         renderLocationSearchResults([plusItem]);
+        selectLocationSearchResult(plusItem);
         return;
     }
 
@@ -2238,11 +2328,37 @@ async function pasteFromClipboardToSearch() {
     if (!input) return;
     try {
         if (navigator.clipboard && navigator.clipboard.readText) {
-            const text = await navigator.clipboard.readText();
-            if (text && text.trim()) {
-                input.value = text.trim();
-                handleLocationSearchInput({ target: { value: text.trim() } });
-                showToast("📋 วางรหัส/พิกัดจากคลิปบอร์ดแล้ว");
+            const rawText = await navigator.clipboard.readText();
+            const text = (rawText || "").trim();
+            if (text) {
+                input.value = text;
+
+                // 1. If text is a Google Maps short link
+                if (text.includes("maps.app.goo.gl") || text.includes("goo.gl/maps")) {
+                    showToast("🔍 กำลังดึงพิกัดจากลิงก์ Google Maps...");
+                    renderGoogleMapsShortlinkHelper(text);
+                    return;
+                }
+
+                // 2. If text is a Plus Code
+                const pc = decodePlusCode(text);
+                if (pc) {
+                    showToast(`📍 ปักหมุดจาก Plus Code: ${pc.code}`);
+                    handleLocationSearchInput({ target: { value: text } });
+                    return;
+                }
+
+                // 3. If text contains coordinates (DMS, lat/lng, url query)
+                const coords = extractCoordinatesFromUrlOrText(text);
+                if (coords) {
+                    showToast("📍 ปักหมุดจากพิกัด GPS สำเร็จ");
+                    handleLocationSearchInput({ target: { value: text } });
+                    return;
+                }
+
+                // 4. Default: regular search
+                handleLocationSearchInput({ target: { value: text } });
+                showToast("📋 วางข้อความจากคลิปบอร์ดแล้ว");
                 return;
             }
         }
@@ -2261,6 +2377,7 @@ window.selectQuickLandmark = selectQuickLandmark;
 window.clearLocationSearch = clearLocationSearch;
 window.hideLocationSearchDropdown = hideLocationSearchDropdown;
 window.pasteFromClipboardToSearch = pasteFromClipboardToSearch;
+window.decodePlusCode = decodePlusCode;
 window.parseDMSCoordinates = parseDMSCoordinates;
 window.extractCoordinatesFromUrlOrText = extractCoordinatesFromUrlOrText;
 window.renderGoogleMapsShortlinkHelper = renderGoogleMapsShortlinkHelper;
