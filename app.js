@@ -2005,7 +2005,7 @@ function renderLocationSearchResults(results) {
         const iconName = item.icon || "location_on";
 
         html += `
-            <div onclick="selectLocationSearchResult(${itemJson})" class="p-2.5 hover:bg-emerald-50/80 rounded-xl cursor-pointer flex items-center justify-between gap-2.5 transition-all text-left group">
+            <div onclick="selectLocationSearchResult(${itemJson})" onpointerdown="selectLocationSearchResult(${itemJson})" class="p-2.5 hover:bg-emerald-50/80 active:bg-emerald-100 rounded-xl cursor-pointer flex items-center justify-between gap-2.5 transition-all text-left group touch-manipulation">
                 <div class="flex items-center gap-2.5 min-w-0 flex-1">
                     <span class="w-8 h-8 rounded-xl bg-emerald-100 group-hover:bg-emerald-600 text-emerald-700 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
                         <span class="material-symbols-outlined text-base">${iconName}</span>
@@ -2098,15 +2098,37 @@ function hideLocationSearchDropdown() {
     if (dropdown) dropdown.classList.add("hidden");
 }
 
+async function pasteFromClipboardToSearch() {
+    const input = document.getElementById("location-search-input");
+    if (!input) return;
+    try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+            const text = await navigator.clipboard.readText();
+            if (text && text.trim()) {
+                input.value = text.trim();
+                handleLocationSearchInput({ target: { value: text.trim() } });
+                showToast("📋 วางรหัส/พิกัดจากคลิปบอร์ดแล้ว");
+                return;
+            }
+        }
+    } catch (err) {
+        console.warn("Clipboard read error:", err);
+    }
+    input.focus();
+    input.select();
+    showToast("💡 แตะค้างที่ช่องค้นหาแล้วกด 'วาง' (Paste) ได้เลยครับ");
+}
+
 window.handleLocationSearchInput = handleLocationSearchInput;
 window.executeLocationSearchNow = executeLocationSearchNow;
 window.selectLocationSearchResult = selectLocationSearchResult;
 window.selectQuickLandmark = selectQuickLandmark;
 window.clearLocationSearch = clearLocationSearch;
 window.hideLocationSearchDropdown = hideLocationSearchDropdown;
+window.pasteFromClipboardToSearch = pasteFromClipboardToSearch;
 
-// Close search dropdown on click outside
-document.addEventListener("click", function (e) {
+// Close search dropdown on click/pointerdown outside
+document.addEventListener("pointerdown", function (e) {
     const wrapper = document.getElementById("location-search-wrapper");
     if (wrapper && !wrapper.contains(e.target)) {
         hideLocationSearchDropdown();
