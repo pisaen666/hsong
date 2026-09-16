@@ -1449,6 +1449,67 @@ function applyResolvedGPSLocation(lat, lng, accuracy, sourceName) {
 // BAN BUENG LOCAL LANDMARKS & SMART SEARCH
 // ==========================================
 const BANBUENG_LANDMARKS = [
+    // ร้านอาหารและสตรีทฟู้ดยอดนิยมในบ้านบึง
+    {
+        id: "somtum_dekwat",
+        title: "ร้านส้มตำเด็ก วัดบ้านบึง (ส้มตำเด็กวัด by แอน)",
+        shortTitle: "ร้านส้มตำเด็ก วัดบ้านบึง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ถนนบ้านบึง-พัฒนา (ใกล้ The Friendly Roaster / บิ๊กซี-โลตัส)",
+        soiRoad: "ถนนบ้านบึง-พัฒนา",
+        keywords: "ส้มตำเด็กวัด ส้มตำเด็ก วัดบ้านบึง ส้มตำเด็กวัดบ้านบึง ส้มตำแอน อาหารอีสาน",
+        lat: 13.3188,
+        lng: 101.1118,
+        icon: "restaurant"
+    },
+    {
+        id: "friendly_roaster",
+        title: "The Friendly Roaster บ้านบึง (คาเฟ่และโรงคั่วกาแฟ)",
+        shortTitle: "The Friendly Roaster",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ถนนบ้านบึง-พัฒนา ตรงข้ามร้านส้มตำเด็กวัด",
+        soiRoad: "ถนนบ้านบึง-พัฒนา",
+        keywords: "the friendly roaster ร้านกาแฟ คาเฟ่ โรงคั่ว",
+        lat: 13.3185,
+        lng: 101.1122,
+        icon: "coffee"
+    },
+    {
+        id: "tidman_bb",
+        title: "ร้านติดมันส์ บุฟเฟต์ปิ้งย่างกระทะร้อน สาขาบ้านบึง",
+        shortTitle: "ติดมันส์ สาขาบ้านบึง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ติดถนนชลบุรี-แกลง 344 ใกล้บิ๊กซี",
+        soiRoad: "ถนนชลบุรี-แกลง",
+        keywords: "ติดมันส์ บุฟเฟต์ ปิ้งย่าง ชลบุรีแกลง 344",
+        lat: 13.3180,
+        lng: 101.1132,
+        icon: "restaurant"
+    },
+    {
+        id: "soho_hotel",
+        title: "โรงแรมโซโฮ วิลล่า บ้านบึง (Soho Hotel)",
+        shortTitle: "โรงแรมโซโฮ บ้านบึง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ซอยข้างถนน 344 ตรงข้ามโรงเรียนบ้านบึง",
+        soiRoad: "ถนนเทศบาล 2",
+        keywords: "โซโฮ โรงแรมโซโฮ soho hotel ที่พักบ้านบึง",
+        lat: 13.3160,
+        lng: 101.1140,
+        icon: "hotel"
+    },
+    {
+        id: "ptt_344",
+        title: "ปั๊มน้ำมัน ปตท. ชลบุรี-แกลง (กม.14 บ้านบึง)",
+        shortTitle: "ปั๊ม ปตท. บ้านบึง 344",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ปั๊ม ปตท. ขาออก ถนนชลบุรี-แกลง",
+        soiRoad: "ถนนชลบุรี-แกลง (สาย 344)",
+        keywords: "ปั๊มน้ำมัน ปตท ptt อเมซอน 7-11 ปั๊มใกล้ฉัน",
+        lat: 13.3170,
+        lng: 101.1100,
+        icon: "local_gas_station"
+    },
     {
         id: "hosp",
         title: "โรงพยาบาลบ้านบึง (Ban Bueng Hospital)",
@@ -1456,6 +1517,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
         landmark: "โรงพยาบาลบ้านบึง",
         soiRoad: "ถนนชลบุรี-แกลง",
+        keywords: "โรงพยาบาลบ้านบึง รพ บ้านบึง หมอ อนามัย",
         lat: 13.3108,
         lng: 101.1165,
         icon: "local_hospital"
@@ -1467,6 +1529,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
         landmark: "ที่ว่าการอำเภอบ้านบึง",
         soiRoad: "ถนนเทศบาล 1",
+        keywords: "ที่ว่าการอำเภอบ้านบึง อำเภอ เทศบาล",
         lat: 13.3134,
         lng: 101.1138,
         icon: "apartment"
@@ -1478,6 +1541,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
         landmark: "ตรงข้ามที่ว่าการอำเภอบ้านบึง",
         soiRoad: "ถนนเทศบาล 1",
+        keywords: "สถานีตำรวจภูธรบ้านบึง สภ บ้านบึง ตำรวจ",
         lat: 13.3122,
         lng: 101.1142,
         icon: "local_police"
@@ -1489,6 +1553,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
         landmark: "ตลาดสดวิศิษฐ์ชัย ล็อคกลาง",
         soiRoad: "ถนนวิศิษฐ์ชัย",
+        keywords: "ตลาดสดวิศิษฐ์ชัย วิศิษฐ์ชัย ตลาดสด ฮับ ตลาดวิศิษฐ์ชัย",
         lat: 13.3080,
         lng: 101.1214,
         icon: "storefront"
@@ -1500,6 +1565,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
         landmark: "ตลาดเนื่องจำนงค์",
         soiRoad: "ถนนสถาวร",
+        keywords: "ตลาดเนื่องจำนงค์ เนื่องจำนงค์",
         lat: 13.3095,
         lng: 101.1190,
         icon: "storefront"
@@ -1511,6 +1577,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
         landmark: "ใกล้โรงเรียนบ้านบึง",
         soiRoad: "ถนนสถาวร",
+        keywords: "โรงเรียนบ้านบึง รร บ้านบึง อุตสาหกรรมนุเคราะห์",
         lat: 13.3032,
         lng: 101.1172,
         icon: "school"
@@ -1522,6 +1589,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
         landmark: "หมู่บ้านเซนสิริ ทาวน์",
         soiRoad: "ซอยเซิดน้อย",
+        keywords: "เซนสิริ censiri ม เซนสิริ ทาวน์",
         lat: 13.3155,
         lng: 101.1284,
         icon: "home"
@@ -1533,6 +1601,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
         landmark: "หมู่บ้านปิยวัฒน์",
         soiRoad: "ถนนชลบุรี-บ้านบึง",
+        keywords: "ปิยวัฒน์ piyawat ม ปิยวัฒน์",
         lat: 13.3120,
         lng: 101.1350,
         icon: "home"
@@ -1544,6 +1613,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
         landmark: "หมู่บ้านสิรินารี",
         soiRoad: "ถนนสถาวร-เซิดน้อย",
+        keywords: "สิรินารี sirinari ม สิรินารี",
         lat: 13.3040,
         lng: 101.1320,
         icon: "home"
@@ -1555,6 +1625,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.หนองชาก อ.บ้านบึง จ.ชลบุรี",
         landmark: "ใกล้แยกหนองชาก",
         soiRoad: "ถนนสาย 344",
+        keywords: "หนองชาก แยกหนองชาก ตลาดหนองชาก",
         lat: 13.3020,
         lng: 101.1820,
         icon: "location_on"
@@ -1566,6 +1637,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.มาบไผ่ อ.บ้านบึง จ.ชลบุรี",
         landmark: "ใกล้เทศบาลตำบลมาบไผ่",
         soiRoad: "ถนนสุขุมวิท-มาบไผ่",
+        keywords: "มาบไผ่ เทศบาลมาบไผ่ วัดมาบไผ่",
         lat: 13.3550,
         lng: 101.0750,
         icon: "location_on"
@@ -1577,6 +1649,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.หนองซ้ำซาก อ.บ้านบึง จ.ชลบุรี",
         landmark: "ใกล้วัดหนองซ้ำซาก",
         soiRoad: "ถนนสาย 344",
+        keywords: "หนองซ้ำซาก วัดหนองซ้ำซาก",
         lat: 13.3350,
         lng: 101.0550,
         icon: "location_on"
@@ -1588,6 +1661,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
         landmark: "หน้าห้างโลตัส บ้านบึง",
         soiRoad: "ถนนชลบุรี-แกลง",
+        keywords: "โลตัส lotus โลตัสบ้านบึง ห้างโลตัส",
         lat: 13.3175,
         lng: 101.1122,
         icon: "shopping_cart"
@@ -1599,6 +1673,7 @@ const BANBUENG_LANDMARKS = [
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
         landmark: "หน้าห้างบิ๊กซี บ้านบึง",
         soiRoad: "ถนนชลบุรี-แกลง",
+        keywords: "บิ๊กซี big c บิ๊กซีบ้านบึง",
         lat: 13.3195,
         lng: 101.1095,
         icon: "shopping_cart"
@@ -1621,17 +1696,41 @@ function handleLocationSearchInput(event) {
         return;
     }
 
-    // 1. Instant local landmark filtering
+    // 1. Check if user pasted coordinates or Google Maps URL (e.g. 13.3188, 101.1118 or maps.google.com/?q=...)
+    const coordMatch = q.match(/(-?\d{1,2}\.\d{3,})[,\s]+(-?\d{2,3}\.\d{3,})/);
+    if (coordMatch) {
+        const lat = parseFloat(coordMatch[1]);
+        const lng = parseFloat(coordMatch[2]);
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+            const fee = calculateDeliveryFee(distKm);
+            const coordItem = {
+                title: `📍 พิกัด GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+                shortTitle: `พิกัด GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+                subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+                landmark: `พิกัดระบุเอง (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
+                soiRoad: "",
+                lat: lat,
+                lng: lng,
+                icon: "my_location"
+            };
+            renderLocationSearchResults([coordItem]);
+            return;
+        }
+    }
+
+    // 2. Normalized local fuzzy matching
+    const cleanQ = q.replace(/\s+/g, "").toLowerCase();
     const localMatches = BANBUENG_LANDMARKS.filter(item => {
-        const full = (item.title + " " + item.shortTitle + " " + (item.landmark || "") + " " + (item.soiRoad || "")).toLowerCase();
-        return full.includes(q.toLowerCase());
+        const full = (item.title + " " + item.shortTitle + " " + (item.keywords || "") + " " + (item.landmark || "") + " " + (item.soiRoad || "")).replace(/\s+/g, "").toLowerCase();
+        return full.includes(cleanQ);
     });
 
     if (localMatches.length > 0) {
         renderLocationSearchResults(localMatches);
     }
 
-    // 2. Debounced OSM Nominatim Online Search
+    // 3. Debounced OSM Nominatim Online Search
     if (_locSearchTimer) clearTimeout(_locSearchTimer);
     _locSearchTimer = setTimeout(() => {
         if (q.length >= 2) {
@@ -1675,33 +1774,33 @@ async function fetchOnlineLocationSearch(query, existingMatches = []) {
         if (Array.isArray(data)) {
             const onlineResults = [];
             data.forEach(item => {
-                    const lat = parseFloat(item.lat);
-                    const lng = parseFloat(item.lon);
-                    if (isNaN(lat) || isNaN(lng)) return;
+                const lat = parseFloat(item.lat);
+                const lng = parseFloat(item.lon);
+                if (isNaN(lat) || isNaN(lng)) return;
 
-                    // Parse address
-                    const addr = item.address || {};
-                    const sub = addr.subdistrict || addr.suburb || addr.village || addr.town || "";
-                    const dis = addr.district || addr.county || addr.city || "อ.บ้านบึง";
-                    const prov = addr.province || addr.state || "จ.ชลบุรี";
-                    const road = addr.road || "";
-                    const subdistrictStr = [sub, dis, prov].filter(Boolean).join(" ");
+                // Parse address
+                const addr = item.address || {};
+                const sub = addr.subdistrict || addr.suburb || addr.village || addr.town || "";
+                const dis = addr.district || addr.county || addr.city || "อ.บ้านบึง";
+                const prov = addr.province || addr.state || "จ.ชลบุรี";
+                const road = addr.road || "";
+                const subdistrictStr = [sub, dis, prov].filter(Boolean).join(" ");
 
-                    // Avoid duplicate coordinates with existing local landmarks
-                    const isDup = existingMatches.some(m => Math.abs(m.lat - lat) < 0.001 && Math.abs(m.lng - lng) < 0.001);
-                    if (!isDup) {
-                        onlineResults.push({
-                            title: item.display_name.split(",")[0] || query,
-                            shortTitle: item.name || item.display_name.split(",")[0] || query,
-                            subdistrict: subdistrictStr,
-                            landmark: item.name || "",
-                            soiRoad: road,
-                            lat: lat,
-                            lng: lng,
-                            icon: "place"
-                        });
-                    }
-                });
+                // Avoid duplicate coordinates with existing local landmarks
+                const isDup = existingMatches.some(m => Math.abs(m.lat - lat) < 0.001 && Math.abs(m.lng - lng) < 0.001);
+                if (!isDup) {
+                    onlineResults.push({
+                        title: item.display_name.split(",")[0] || query,
+                        shortTitle: item.name || item.display_name.split(",")[0] || query,
+                        subdistrict: subdistrictStr,
+                        landmark: item.name || "",
+                        soiRoad: road,
+                        lat: lat,
+                        lng: lng,
+                        icon: "place"
+                    });
+                }
+            });
 
             const combined = [...existingMatches, ...onlineResults];
             renderLocationSearchResults(combined);
@@ -1720,9 +1819,10 @@ function executeLocationSearchNow() {
     if (!input) return;
     const q = input.value.trim();
     if (q.length >= 1) {
+        const cleanQ = q.replace(/\s+/g, "").toLowerCase();
         const localMatches = BANBUENG_LANDMARKS.filter(item => {
-            const full = (item.title + " " + item.shortTitle).toLowerCase();
-            return full.includes(q.toLowerCase());
+            const full = (item.title + " " + item.shortTitle + " " + (item.keywords || "")).replace(/\s+/g, "").toLowerCase();
+            return full.includes(cleanQ);
         });
         fetchOnlineLocationSearch(q, localMatches);
     }
@@ -1733,10 +1833,29 @@ function renderLocationSearchResults(results) {
     const list = document.getElementById("location-search-results-list");
     if (!dropdown || !list) return;
 
+    const currentQuery = (document.getElementById("location-search-input")?.value || "").trim();
+
     if (!Array.isArray(results) || results.length === 0) {
         list.innerHTML = `
-            <div class="p-3 text-center text-slate-500 text-xs">
-                <span>🔍 ไม่พบสถานที่ที่ค้นหา ลองใช้คำค้นหาที่กว้างขึ้น เช่น ชื่อซอย หรือหมู่บ้าน</span>
+            <div class="p-3.5 text-center space-y-2 bg-gradient-to-b from-blue-50/50 to-white rounded-2xl border border-blue-100">
+                <div class="text-slate-800 text-xs font-bold flex items-center justify-center gap-1.5 text-blue-950">
+                    <span class="material-symbols-outlined text-base text-blue-600">travel_explore</span>
+                    <span>ไม่พบ "${escapeHtml(currentQuery)}" ในระบบค้นหาด่วน</span>
+                </div>
+                <p class="text-[11px] text-slate-500 leading-snug">
+                    ร้านค้าหรือซอยย่อยเปิดใหม่ในบ้านบึง อาจมีเฉพาะใน <strong>Google Maps</strong> ครับ
+                </p>
+                <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(currentQuery + ' บ้านบึง ชลบุรี')}"
+                   target="_blank" rel="noopener noreferrer"
+                   class="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-sm active:scale-95 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">open_in_new</span>
+                    <span>🗺️ ค้นหาใน Google Maps เพื่อดูพิกัด</span>
+                </a>
+                <div class="text-[10px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 text-left space-y-1">
+                    <div class="font-bold text-slate-700">💡 วิธีนำพิกัดจาก Google Maps มาใช้:</div>
+                    <div>1. เมื่อเจอสถานที่ใน Google Maps ให้แตะปุ่ม <strong>"แชร์"</strong> หรือกดค้างที่หมุดเพื่อคัดลอกพิกัด (เช่น <span class="font-mono text-emerald-700 font-bold">13.3188, 101.1118</span>)</div>
+                    <div>2. นำมากด <strong>"วาง" (Paste)</strong> ในช่องค้นหานี้ หมุดจะเด้งไปทันที 100%!</div>
+                </div>
             </div>
         `;
         dropdown.classList.remove("hidden");
@@ -1771,6 +1890,14 @@ function renderLocationSearchResults(results) {
     list.innerHTML = html;
     dropdown.classList.remove("hidden");
 }
+
+function openGoogleMapsSearchHelper() {
+    const searchInput = document.getElementById("location-search-input");
+    const q = (searchInput?.value || "").trim();
+    const queryParam = q ? encodeURIComponent(q + " บ้านบึง ชลบุรี") : encodeURIComponent("ตลาดวิศิษฐ์ชัย บ้านบึง ชลบุรี");
+    window.open(`https://www.google.com/maps/search/?api=1&query=${queryParam}`, "_blank");
+}
+window.openGoogleMapsSearchHelper = openGoogleMapsSearchHelper;
 
 function selectLocationSearchResult(item) {
     if (!item || typeof item.lat !== "number" || typeof item.lng !== "number") return;

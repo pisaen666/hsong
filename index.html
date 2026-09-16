@@ -2920,13 +2920,17 @@
                 <!-- Quick Ban Bueng Landmark Tags (ปุ่มลัดสถานที่ยอดนิยมในบ้านบึง) -->
                 <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] no-scrollbar">
                     <span class="text-[10px] text-slate-400 font-bold shrink-0">จุดด่วน:</span>
+                    <button type="button" onclick="selectQuickLandmark('somtum_dekwat')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🌶️ ส้มตำเด็กวัด</button>
                     <button type="button" onclick="selectQuickLandmark('hosp')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏥 รพ.บ้านบึง</button>
                     <button type="button" onclick="selectQuickLandmark('district')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏢 ที่ว่าการอำเภอ</button>
                     <button type="button" onclick="selectQuickLandmark('sensiri')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏡 ม.เซนสิริ</button>
                     <button type="button" onclick="selectQuickLandmark('nongchak')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">📍 แยกหนองชาก</button>
                     <button type="button" onclick="selectQuickLandmark('mabphai')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">📍 มาบไผ่</button>
                     <button type="button" onclick="selectQuickLandmark('nongsamsak')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">📍 หนองซ้ำซาก</button>
-                    <button type="button" onclick="selectQuickLandmark('market')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏪 ตลาดเนื่องจำนงค์</button>
+                    <button type="button" onclick="openGoogleMapsSearchHelper()" class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs text-blue-600">open_in_new</span>
+                        <span>🗺️ หาใน Google Maps</span>
+                    </button>
                 </div>
             </div>
 
