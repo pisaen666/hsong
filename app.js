@@ -1667,6 +1667,18 @@ const BANBUENG_LANDMARKS = [
         icon: "shopping_cart"
     },
     {
+        id: "namsai_carcare",
+        title: "น้ำใส คาร์แคร์ หนองชาก (ล้างรถ/คาร์แคร์)",
+        shortTitle: "น้ำใส คาร์แคร์",
+        subdistrict: "ต.หนองชาก อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ตำบลหนองชาก อำเภอบ้านบึง (75X4+MW2)",
+        soiRoad: "ถนนสาย 344 หนองชาก",
+        keywords: "น้ำใส คาร์แคร์ น้ำใสคาร์แคร์ หนองชาก ล้างรถ 75X4+MW2 75x4+mw2",
+        lat: 13.299188,
+        lng: 101.157313,
+        icon: "local_car_wash"
+    },
+    {
         id: "bigc",
         title: "บิ๊กซี ซูเปอร์เซ็นเตอร์ บ้านบึง (Big C Ban Bueng)",
         shortTitle: "บิ๊กซี บ้านบึง",
@@ -1679,6 +1691,102 @@ const BANBUENG_LANDMARKS = [
         icon: "shopping_cart"
     }
 ];
+
+// Google Plus Code (Open Location Code) Decoder for Ban Bueng / Chonburi
+function decodePlusCode(input, defaultPrefix = "7P53") {
+    if (!input) return null;
+    const ALPHABET = "23456789CFGHJMPQRVWX";
+    const match = input.toUpperCase().match(/([23456789CFGHJMPQRVWX]{4,8})\+([23456789CFGHJMPQRVWX]{2,4})/);
+    if (!match) return null;
+
+    let prefix = match[1];
+    let suffix = match[2];
+    let full = prefix + "+" + suffix;
+    if (prefix.length <= 6) {
+        full = defaultPrefix.substring(0, 8 - prefix.length) + full;
+    }
+
+    let clean = full.replace("+", "");
+    let lat = -90, lng = -180;
+    let latVal = 20, lngVal = 20;
+    for (let i = 0; i < 10 && i < clean.length; i += 2) {
+        latVal /= 20;
+        lngVal /= 20;
+        const latIdx = ALPHABET.indexOf(clean[i]);
+        const lngIdx = ALPHABET.indexOf(clean[i + 1]);
+        if (latIdx === -1 || lngIdx === -1) return null;
+        lat += latIdx * latVal * 20;
+        lng += lngIdx * lngVal * 20;
+    }
+    return {
+        lat: Number((lat + latVal * 10).toFixed(6)),
+        lng: Number((lng + lngVal * 10).toFixed(6)),
+        code: prefix + "+" + suffix
+    };
+}
+
+async function renderGoogleMapsShortlinkHelper(shortUrl) {
+    const dropdown = document.getElementById("location-search-dropdown");
+    const list = document.getElementById("location-search-results-list");
+    if (!dropdown || !list) return;
+
+    list.innerHTML = `
+        <div class="p-3.5 space-y-2.5 bg-gradient-to-b from-blue-50/90 via-sky-50/50 to-white rounded-2xl border border-blue-200 text-left">
+            <div class="font-extrabold text-blue-950 text-xs flex items-center justify-between">
+                <span class="flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-blue-600 text-base">link</span>
+                    <span>ตรวจพบคลิปลิงก์จาก Google Maps</span>
+                </span>
+                <span id="shortlink-loading-badge" class="text-[10px] text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full font-bold animate-pulse">กำลังอ่านพิกัด...</span>
+            </div>
+            <p class="text-[11px] text-slate-600 leading-relaxed">
+                ลิงก์สั้น <code class="font-mono text-blue-800 bg-blue-100/80 px-1 py-0.5 rounded font-bold">maps.app.goo.gl</code> ถูกสร้างเป็นรหัสย่อของ Google Maps
+            </p>
+            <div class="p-3 bg-amber-50/90 rounded-2xl border border-amber-200 text-xs text-amber-950 space-y-1.5">
+                <div class="font-bold flex items-center gap-1 text-amber-900">
+                    <span class="material-symbols-outlined text-base text-amber-600">tips_and_updates</span>
+                    <span>วิธีปักหมุดจุดนี้ให้ตรงเป๊ะ 100%:</span>
+                </div>
+                <div class="space-y-1.5 text-[11px] leading-normal">
+                    <div>1. <strong>ใช้รหัส Plus Code (ง่ายที่สุด):</strong> ดูใต้ชื่อสถานที่ในหน้า Google Maps จะมีรหัส <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-amber-300">75X4+MW2</span>) แตะคัดลอกมาวางในช่องนี้ได้เลย หมุดจะปักทันที!</div>
+                    <div>2. <strong>ใช้ตัวเลขพิกัด:</strong> แตะค้างที่จุดบนแผนที่ Google Maps แล้วก็อปปี้ตัวเลข (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-amber-300">13.2991, 101.1573</span>) มาวาง</div>
+                    <div>3. <strong>พิมพ์ชื่อสถานที่:</strong> ลองพิมพ์ชื่อร้าน เช่น <span class="font-bold text-slate-900">"น้ำใส คาร์แคร์"</span> หรือ <span class="font-bold text-slate-900">"หนองชาก"</span></div>
+                </div>
+            </div>
+        </div>
+    `;
+    dropdown.classList.remove("hidden");
+
+    // Try unshortening via JSON proxy
+    try {
+        const res = await fetch("https://unshorten.me/json/" + encodeURIComponent(shortUrl));
+        if (res.ok) {
+            const data = await res.json();
+            const resolved = data.resolved_url || "";
+            const m = resolved.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || resolved.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+            if (m) {
+                const lat = parseFloat(m[1]);
+                const lng = parseFloat(m[2]);
+                const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+                const fee = calculateDeliveryFee(distKm);
+                const item = {
+                    title: `📍 พิกัดจาก Google Maps: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+                    shortTitle: `พิกัด Google Maps (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+                    subdistrict: "ต.หนองชาก อ.บ้านบึง จ.ชลบุรี",
+                    landmark: `พิกัดจากลิงก์ Google Maps (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
+                    soiRoad: "",
+                    lat: lat,
+                    lng: lng,
+                    icon: "pin_drop"
+                };
+                renderLocationSearchResults([item]);
+                selectLocationSearchResult(item);
+            }
+        }
+    } catch (e) {
+        // Fallback card is already displayed
+    }
+}
 
 let _locSearchTimer = null;
 let _locSearchController = null;
@@ -1696,7 +1804,7 @@ function handleLocationSearchInput(event) {
         return;
     }
 
-    // 1. Check if user pasted coordinates or Google Maps URL (e.g. 13.3188, 101.1118 or maps.google.com/?q=...)
+    // 1. Check if user pasted coordinates or Google Maps URL containing coordinates (e.g. 13.3188, 101.1118 or maps.google.com/?q=...)
     const coordMatch = q.match(/(-?\d{1,2}\.\d{3,})[,\s]+(-?\d{2,3}\.\d{3,})/);
     if (coordMatch) {
         const lat = parseFloat(coordMatch[1]);
@@ -1719,7 +1827,34 @@ function handleLocationSearchInput(event) {
         }
     }
 
-    // 2. Normalized local fuzzy matching
+    // 2. Check if user pasted a Google Plus Code (e.g. 75X4+MW2 or 75X4+MW2 หนองชาก)
+    const plusCodeRes = decodePlusCode(q);
+    if (plusCodeRes) {
+        const lat = plusCodeRes.lat;
+        const lng = plusCodeRes.lng;
+        const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+        const fee = calculateDeliveryFee(distKm);
+        const plusItem = {
+            title: `📍 Google Plus Code: ${plusCodeRes.code}`,
+            shortTitle: `Plus Code (${plusCodeRes.code})`,
+            subdistrict: "ต.หนองชาก อ.บ้านบึง จ.ชลบุรี",
+            landmark: `พิกัดระบุจาก Google Plus Code (${plusCodeRes.code})`,
+            soiRoad: "",
+            lat: lat,
+            lng: lng,
+            icon: "pin_drop"
+        };
+        renderLocationSearchResults([plusItem]);
+        return;
+    }
+
+    // 3. Check if user pasted a Google Maps short link (maps.app.goo.gl or goo.gl/maps)
+    if (q.includes("maps.app.goo.gl") || q.includes("goo.gl/maps")) {
+        renderGoogleMapsShortlinkHelper(q);
+        return;
+    }
+
+    // 4. Normalized local fuzzy matching
     const cleanQ = q.replace(/\s+/g, "").toLowerCase();
     const localMatches = BANBUENG_LANDMARKS.filter(item => {
         const full = (item.title + " " + item.shortTitle + " " + (item.keywords || "") + " " + (item.landmark || "") + " " + (item.soiRoad || "")).replace(/\s+/g, "").toLowerCase();
@@ -1730,7 +1865,7 @@ function handleLocationSearchInput(event) {
         renderLocationSearchResults(localMatches);
     }
 
-    // 3. Debounced OSM Nominatim Online Search
+    // 5. Debounced OSM Nominatim Online Search
     if (_locSearchTimer) clearTimeout(_locSearchTimer);
     _locSearchTimer = setTimeout(() => {
         if (q.length >= 2) {
