@@ -2397,7 +2397,7 @@ function goToTrackingScreen() {
 }
 
 function switchHubTab(tabName) {
-    const tabs = ["picking", "settlement", "monitor", "report"];
+    const tabs = ["picking", "settlement", "monitor"];
     tabs.forEach(t => {
         const btn = document.getElementById(`hub-tab-${t}`);
         const content = document.getElementById(`hub-content-${t}`);
@@ -2426,10 +2426,6 @@ function switchHubTab(tabName) {
         startMonitorAutoRefresh();
     } else {
         stopMonitorAutoRefresh();
-    }
-
-    if (tabName === "report") {
-        renderHubDailyReport();
     }
 }
 
@@ -3094,25 +3090,8 @@ function navigateReportDay(direction) {
 
 // ── UI Renderer สำหรับแท็บรายงานประจำวัน (Widescreen PC View in Admin)
 function renderHubDailyReport(targetDateKey) {
-    const container = document.getElementById("admin-content-report") || document.getElementById("hub-content-report");
+    const container = document.getElementById("admin-content-report");
     if (!container) return;
-
-    const hubReportContainer = document.getElementById("hub-content-report");
-    if (hubReportContainer && hubReportContainer !== container) {
-        hubReportContainer.innerHTML = `
-            <div class="bg-white rounded-3xl p-6 text-center border border-purple-200 shadow-sm space-y-3">
-                <div class="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mx-auto text-2xl font-bold">
-                    <span class="material-symbols-outlined text-2xl">admin_panel_settings</span>
-                </div>
-                <h3 class="font-extrabold text-sm text-slate-800">ศูนย์รายงานและบัญชีถูกย้ายไปที่ห้อง Admin (จอใหญ่ PC)</h3>
-                <p class="text-slate-500 text-xs max-w-sm mx-auto">เพื่อความสะดวกและอ่านง่ายเต็มหน้าจอพีซี รายงานทุกประเภทได้ถูกแยกไปยังห้องผู้ดูแลระบบแล้ว</p>
-                <button onclick="handleAdminButtonClick()" class="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-extrabold rounded-xl text-xs shadow-md active:scale-95 transition-all inline-flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-sm">open_in_new</span>
-                    <span>เปิดห้องแอดมิน & ดูรายงานเต็มจอ</span>
-                </button>
-            </div>
-        `;
-    }
 
     if (!targetDateKey) {
         targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());

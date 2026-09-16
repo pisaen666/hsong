@@ -1551,13 +1551,6 @@
                     <span id="hub-monitor-alert-badge"
                         class="hidden bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse">!</span>
                 </button>
-                <span class="text-slate-300 shrink-0">|</span>
-                <button onclick="switchHubTab('report')" id="hub-tab-report"
-                    class="font-medium text-slate-500 pb-1 hover:text-slate-800 whitespace-nowrap px-1 flex items-center gap-1">
-                    📑 รายงานประจำวัน
-                    <span
-                        class="bg-amber-100 text-amber-800 text-[9px] font-black px-1.5 py-0.2 rounded-full shadow-2xs">DB</span>
-                </button>
             </div>
 
             <!-- Tab 1: Picking List (Dynamic) -->
@@ -1573,11 +1566,6 @@
             <!-- Tab 3: Order Status Monitor Board (Dynamic) -->
             <div id="hub-content-monitor" class="flex-1 overflow-y-auto hidden">
                 <!-- Dynamically populated via renderHubMonitorBoard() -->
-            </div>
-
-            <!-- Tab 4: Daily Operations & Settlements Database Report (Dynamic) -->
-            <div id="hub-content-report" class="p-3.5 sm:p-4 flex-1 overflow-y-auto space-y-3.5 hidden text-xs">
-                <!-- Dynamically populated via renderHubDailyReport() -->
             </div>
         </section>
 
