@@ -17741,6 +17741,13 @@ function completePickingAndDispatchOrder(orderId) {
     // Open Success Next Step Modal
     const modal = document.getElementById("dispatch-success-modal");
     if (modal) {
+        const order = state.activeOrder;
+        const setVal = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+        if (order) {
+            setVal("dispatch-modal-order-id", order.orderId || "#TH-XXXX");
+            setVal("dispatch-modal-customer", `${order.customerName || 'ลูกค้าทั่วไป'} (${order.customerPhone || '-'})`);
+            setVal("dispatch-modal-rider", order.riderName || (state.activeRider ? state.activeRider.name : "ไรเดอร์ประจำตลาด"));
+        }
         modal.classList.remove("hidden");
     }
 
