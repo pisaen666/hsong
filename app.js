@@ -3255,6 +3255,8 @@ function renderHubDailyReport(targetDateKey) {
         `;
     }
 
+    const pendingVerifyOrders = (report.ordersList || []).filter(o => o.paymentVerified !== true && o.paymentType !== 'cod');
+
     let html = `
     ${pendingBannerHtml}
     <!-- Top Filter Bar & Controls -->
@@ -3650,6 +3652,33 @@ function renderHubDailyReport(targetDateKey) {
             </span>
         </div>
 
+        ${pendingVerifyOrders.length > 0 ? `
+        <div class="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 rounded-2xl p-3.5 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in border border-amber-300">
+            <div class="flex items-center gap-2.5">
+                <span class="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center font-black text-base shrink-0">
+                    ⏳
+                </span>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-black text-xs sm:text-sm">มี ${pendingVerifyOrders.length} ออเดอร์ที่รอยืนยันยอดโอนเข้าบัญชี</span>
+                        <span class="bg-white text-orange-800 text-[10px] font-black px-2 py-0.5 rounded-full">ตรวจสลิปก่อนปล่อยงาน</span>
+                    </div>
+                    <div class="text-[10.5px] text-amber-50 leading-snug mt-0.5">
+                        ตรวจสอบสลิปและเปรียบเทียบยอดมีเศษสตางค์ในแอปธนาคาร เพื่อให้มั่นใจ 100% ว่าได้รับเงินจริง
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-1.5 flex-wrap shrink-0">
+                ${pendingVerifyOrders.slice(0, 3).map(p => `
+                    <button onclick="openOrderSlipVerificationModal('${p.orderId}')" class="px-3 py-1.5 bg-white hover:bg-orange-50 text-orange-950 font-black rounded-xl text-[11px] shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-xs text-orange-600">receipt_long</span>
+                        <span>ตรวจ ${p.orderId} (฿${p.payAmountExact !== undefined && p.payAmountExact !== null ? Number(p.payAmountExact).toFixed(2) : (p.grandTotal || p.total || 0).toLocaleString()})</span>
+                    </button>
+                `).join("")}
+            </div>
+        </div>
+        ` : ''}
+
         ${report.ordersList.length === 0 ? `
         <div class="p-6 text-center text-slate-400 bg-slate-50 rounded-2xl">
             <span class="material-symbols-outlined text-3xl mb-1 text-slate-300">inbox</span>
@@ -3672,6 +3701,12 @@ function renderHubDailyReport(targetDateKey) {
                     ${report.ordersList.map(o => {
                         const timeStr = o.savedAt ? new Date(o.savedAt).toLocaleTimeString("th-TH", { hour: '2-digit', minute: '2-digit' }) : (o.orderTime || "--:--");
                         const cfg = ORDER_STATUS_CONFIG[o.status] || ORDER_STATUS_CONFIG.picking;
+                        const isPaymentVerified = o.paymentVerified === true || o.paymentType === "cod";
+                        const exactAmtDisplay = (o.payAmountExact !== undefined && o.payAmountExact !== null)
+                            ? Number(o.payAmountExact).toFixed(2)
+                            : (o.grandTotal || o.total || 0).toLocaleString();
+                        const payChannelLabel = o.paymentType === 'cod' ? '💵 เงินสด COD' : (o.paymentType === 'bank_transfer' ? '🏦 โอน SCB' : '📱 พร้อมเพย์');
+
                         return `
                         <tr class="hover:bg-slate-50/70 transition-colors">
                             <td class="p-2.5">
@@ -3683,11 +3718,26 @@ function renderHubDailyReport(targetDateKey) {
                                 <div class="text-[10px] text-slate-500 font-mono">${o.customerPhone || "-"}</div>
                             </td>
                             <td class="p-2.5">
-                                <span class="font-bold text-slate-700">${o.paymentType === 'cod' ? '💵 เงินสด COD' : (o.paymentType === 'bank_transfer' ? '🏦 โอน SCB' : '📱 พร้อมเพย์')}</span>
+                                <div class="font-bold text-slate-700">${payChannelLabel}</div>
+                                <div class="mt-0.5">
+                                    ${o.paymentType === 'cod' ? `
+                                        <span class="text-[9.5px] text-slate-500 font-medium">รอเก็บเงินสด</span>
+                                    ` : isPaymentVerified ? `
+                                        <span class="inline-flex items-center gap-0.5 text-[9.5px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded-full">
+                                            <span class="material-symbols-outlined text-[10px]">verified</span>
+                                            <span>เงินเข้าแล้ว</span>
+                                        </span>
+                                    ` : `
+                                        <button onclick="openOrderSlipVerificationModal('${o.orderId}')" class="inline-flex items-center gap-0.5 text-[9.5px] bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.2 rounded-full border border-amber-300 animate-pulse cursor-pointer">
+                                            <span class="material-symbols-outlined text-[10px]">hourglass_top</span>
+                                            <span>รอยืนยันเงิน</span>
+                                        </button>
+                                    `}
+                                </div>
                             </td>
                             <td class="p-2.5 text-right">
-                                <div class="font-black text-xs text-emerald-700">฿${(o.grandTotal || o.total || 0).toLocaleString()}</div>
-                                <div class="text-[9px] text-slate-400">(ค่าส่ง ฿${o.deliveryFee || 20})</div>
+                                <div class="font-black text-xs ${o.payAmountExact ? 'text-amber-800' : 'text-emerald-700'}">฿${exactAmtDisplay}</div>
+                                ${o.payAmountExact ? '<div class="text-[8.5px] font-bold text-amber-600">(เศษสตางค์)</div>' : `<div class="text-[9px] text-slate-400">(ค่าส่ง ฿${o.deliveryFee || 20})</div>`}
                             </td>
                             <td class="p-2.5">
                                 <div class="font-bold text-sky-700">${o.riderName || "ยังไม่ได้ assign"}</div>
@@ -3699,13 +3749,19 @@ function renderHubDailyReport(targetDateKey) {
                             </td>
                             <td class="p-2.5 text-center">
                                 <div class="flex items-center justify-center gap-1.5 flex-wrap">
-                                    <button onclick="printThermalOrderSlip('${o.orderId}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเสร็จ/ใบส่งของเครื่องพิมพ์ความร้อน 80x80">
+                                    ${o.paymentType !== 'cod' ? `
+                                        <button onclick="openOrderSlipVerificationModal('${o.orderId}')" class="px-2 py-1.5 ${isPaymentVerified ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black animate-pulse'} font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ตรวจสอบสลิปและยืนยันยอดเงิน">
+                                            <span class="material-symbols-outlined text-xs">${isPaymentVerified ? 'check_circle' : 'receipt_long'}</span>
+                                            <span>${isPaymentVerified ? 'ดูสลิป' : 'ตรวจสลิป'}</span>
+                                        </button>
+                                    ` : ''}
+                                    <button onclick="printThermalOrderSlip('${o.orderId}', '${targetDateKey}')" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเสร็จ/ใบส่งของเครื่องพิมพ์ความร้อน 80x80">
                                         <span class="material-symbols-outlined text-xs">print</span>
                                         <span>สลิป</span>
                                     </button>
-                                    <button onclick="openOrderLineNoticeModal('${o.orderId}')" class="px-2.5 py-1.5 bg-[#06C755]/15 hover:bg-[#06C755]/25 text-[#04883b] border border-[#06C755]/40 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ส่งข้อมูลสรุปออเดอร์ให้ลูกค้าทาง LINE">
+                                    <button onclick="openOrderLineNoticeModal('${o.orderId}')" class="px-2 py-1.5 bg-[#06C755]/15 hover:bg-[#06C755]/25 text-[#04883b] border border-[#06C755]/40 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ส่งข้อมูลสรุปออเดอร์ให้ลูกค้าทาง LINE">
                                         <span class="text-xs">💬</span>
-                                        <span>ส่ง LINE</span>
+                                        <span>LINE</span>
                                     </button>
                                 </div>
                             </td>
@@ -4403,6 +4459,10 @@ function printThermalOrderSlip(orderId, dateKey) {
     const grandTotal = Number(o.grandTotal || o.total || 0);
     const delFee = Number(o.deliveryFee || 20);
     const goodsTotal = Math.max(0, grandTotal - delFee);
+    const exactGrandTotalDisplay = (o.payAmountExact !== undefined && o.payAmountExact !== null)
+        ? Number(o.payAmountExact).toFixed(2)
+        : grandTotal.toLocaleString();
+    const verifiedTag = o.paymentVerified ? " [ตรวจรับเงินแล้ว ✓]" : (o.paymentType === 'cod' ? "" : " [รอยืนยันเงิน]");
 
     const content = `
         <div class="slip-brand">
@@ -4426,10 +4486,11 @@ function printThermalOrderSlip(orderId, dateKey) {
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">รวมค่าสินค้า:</span><span class="slip-value">฿${goodsTotal.toLocaleString()}</span></div>
         <div class="slip-row"><span class="slip-label">ค่าบริการจัดส่ง:</span><span class="slip-value">฿${delFee.toLocaleString()}</span></div>
+
         <div class="settle-box">
             <div class="settle-title">ยอดชำระรวมทั้งสิ้น</div>
-            <div class="settle-amount">฿${grandTotal.toLocaleString()}</div>
-            <div class="settle-sub">${paymentLabel}</div>
+            <div class="settle-amount">฿${exactGrandTotalDisplay}</div>
+            <div class="settle-sub">${paymentLabel}${verifiedTag}</div>
         </div>
         <div class="divider-dashed" style="margin-top: 8px;"></div>
         <div class="slip-footer">
@@ -4719,6 +4780,11 @@ function printA4OrdersAuditLedger(dateKey) {
         const pLabel = pType === "cod" || pType === "cash" ? "COD (เงินสด)" : (pType === "bank_transfer" || pType === "scb" ? "โอน SCB" : "พร้อมเพย์");
         const statusLabel = o.status === "delivered" ? "จัดส่งสำเร็จ" : (o.status === "on_the_way" ? "กำลังนำส่ง" : "กำลังจัดของ");
 
+        const exactAmtA4 = (o.payAmountExact !== undefined && o.payAmountExact !== null)
+            ? `฿${Number(o.payAmountExact).toFixed(2)}`
+            : `฿${(o.grandTotal || o.total || 0).toLocaleString()}`;
+        const verifyA4 = o.paymentVerified ? " [ตรวจแล้ว ✓]" : (pType === "cod" ? "" : " [รอตรวจ]");
+
         tableRows += `
             <tr>
                 <td class="text-center">${idx + 1}</td>
@@ -4726,8 +4792,8 @@ function printA4OrdersAuditLedger(dateKey) {
                 <td class="text-center">${timeStr} น.</td>
                 <td>${o.customerName || 'ลูกค้าทั่วไป'}</td>
                 <td class="text-center">${o.customerPhone || '-'}</td>
-                <td class="text-center">${pLabel}</td>
-                <td class="text-right font-bold">฿${(o.grandTotal || o.total || 0).toLocaleString()}</td>
+                <td class="text-center">${pLabel} <span style="font-size: 8.5px; color: ${o.paymentVerified ? '#047857' : '#b45309'};">${verifyA4}</span></td>
+                <td class="text-right font-bold">${exactAmtA4}</td>
                 <td class="text-center">${o.deliveryFee ? `฿${o.deliveryFee}` : '฿20'}</td>
                 <td>${o.riderName || '-'}</td>
                 <td class="text-center font-bold">${statusLabel}</td>
@@ -7750,18 +7816,88 @@ function processOrderCheckout() {
     const selectedRadio = document.querySelector('input[name="payment_method"]:checked');
     const selectedPayment = selectedRadio ? selectedRadio.value : "promptpay";
 
+    // ── สุ่มเศษสตางค์เฉพาะออเดอร์นี้ (Unique Decimal Satang)
+    state.checkoutPayInfo = generateUniquePaymentAmount(totals.grandTotal);
+    state.currentUploadedSlip = null; // รีเซ็ตสลิปเดิม
+
     if (selectedPayment === "promptpay") {
         const qrTotal = document.getElementById("modal-qr-grand-total");
-        if (qrTotal) qrTotal.textContent = `฿${totals.grandTotal}.00`;
+        if (qrTotal) qrTotal.textContent = `฿${state.checkoutPayInfo.exactAmount.toFixed(2)}`;
+        clearPromptPaySlip();
         document.getElementById("promptpay-modal").classList.remove("hidden");
     } else if (selectedPayment === "bank_transfer") {
         const scbAmount = document.getElementById("scb-modal-amount");
-        if (scbAmount) scbAmount.textContent = `฿${totals.grandTotal}.00`;
+        if (scbAmount) scbAmount.textContent = `฿${state.checkoutPayInfo.exactAmount.toFixed(2)}`;
+        clearSCBSlip();
         document.getElementById("scb-transfer-modal").classList.remove("hidden");
     } else {
         simulatePaymentSuccess("cod");
     }
 }
+
+// ── UNIQUE DECIMAL SATANG GENERATION (แนวทางที่ 2: สุ่มเศษสตางค์เฉพาะออเดอร์)
+function generateUniquePaymentAmount(baseTotal) {
+    const rawTotal = Math.floor(Number(baseTotal) || 0);
+    // สุ่มเศษสตางค์ 2 หลัก ระหว่าง .11 ถึง .98
+    const satang = (Math.floor(Math.random() * 88) + 11) / 100;
+    const exactAmount = Number((rawTotal + satang).toFixed(2));
+    return {
+        base: rawTotal,
+        satang: satang,
+        exactAmount: exactAmount,
+        formatted: `฿${exactAmount.toFixed(2)}`
+    };
+}
+window.generateUniquePaymentAmount = generateUniquePaymentAmount;
+
+function copyPromptPayAmount() {
+    const amt = (state.checkoutPayInfo && state.checkoutPayInfo.exactAmount)
+        ? state.checkoutPayInfo.exactAmount.toFixed(2)
+        : (calculateCartTotals().grandTotal + ".00");
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(amt).then(() => {
+            showToast(`📋 คัดลอกยอดโอน ฿${amt} เรียบร้อยแล้ว!`);
+        }).catch(() => {
+            showToast(`ยอดโอน: ฿${amt}`);
+        });
+    } else {
+        showToast(`ยอดโอน: ฿${amt}`);
+    }
+}
+window.copyPromptPayAmount = copyPromptPayAmount;
+
+// ── SLIP IMAGE COMPRESSION FOR REALTIME DATABASE (บีบอัดสลิปไม่เกิน 800px ~60-90KB)
+function compressSlipImage(file, callback) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        const img = new Image();
+        img.onload = function () {
+            const canvas = document.createElement("canvas");
+            let width = img.width;
+            let height = img.height;
+            const maxDim = 800;
+            if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                } else {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.72);
+            callback(compressedDataUrl);
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+window.compressSlipImage = compressSlipImage;
 
 // PromptPay Modal Functions
 function closePromptPayModal() {
@@ -7782,24 +7918,29 @@ function downloadPromptPayQR() {
 function handlePromptPaySlipUpload(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function (e) {
+    showToast("⏳ กำลังเตรียมรูปสลิป...");
+    compressSlipImage(file, function (dataUrl) {
+        state.currentUploadedSlip = dataUrl;
         const img = document.getElementById("promptpay-slip-img");
         const previewBox = document.getElementById("promptpay-slip-preview-box");
+        const labelEl = document.getElementById("promptpay-upload-label");
         if (img && previewBox) {
-            img.src = e.target.result;
+            img.src = dataUrl;
             previewBox.classList.remove("hidden");
+            if (labelEl) labelEl.textContent = "เปลี่ยนสลิปใหม่";
             showToast("📁 แนบสลิปพร้อมเพย์เรียบร้อยแล้ว!");
         }
-    };
-    reader.readAsDataURL(file);
+    });
 }
 
 function clearPromptPaySlip() {
+    state.currentUploadedSlip = null;
     const previewBox = document.getElementById("promptpay-slip-preview-box");
     const img = document.getElementById("promptpay-slip-img");
+    const labelEl = document.getElementById("promptpay-upload-label");
     if (previewBox) previewBox.classList.add("hidden");
     if (img) img.src = "";
+    if (labelEl) labelEl.textContent = "แนบสลิปโอนเงิน";
 }
 
 // SCB Bank Transfer Modal Functions
@@ -7822,36 +7963,41 @@ function copySCBAccount() {
 }
 
 function copyTransferAmount() {
-    const totals = calculateCartTotals();
-    const amtStr = totals.grandTotal.toString();
+    const amt = (state.checkoutPayInfo && state.checkoutPayInfo.exactAmount)
+        ? state.checkoutPayInfo.exactAmount.toFixed(2)
+        : (calculateCartTotals().grandTotal + ".00");
     if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(amtStr).then(() => {
-            showToast(`📋 คัดลอกยอดเงิน ฿${totals.grandTotal} เรียบร้อยแล้ว!`);
+        navigator.clipboard.writeText(amt).then(() => {
+            showToast(`📋 คัดลอกยอดเงิน ฿${amt} เรียบร้อยแล้ว!`);
         }).catch(() => {
-            showToast(`ยอดเงิน: ฿${totals.grandTotal}`);
+            showToast(`ยอดเงิน: ฿${amt}`);
         });
     } else {
-        showToast(`ยอดเงิน: ฿${totals.grandTotal}`);
+        showToast(`ยอดเงิน: ฿${amt}`);
     }
 }
+window.copyTransferAmount = copyTransferAmount;
+window.handlePromptPaySlipUpload = handlePromptPaySlipUpload;
+window.handleSCBSlipUpload = handleSCBSlipUpload;
 
 function handleSCBSlipUpload(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function (e) {
+    showToast("⏳ กำลังเตรียมรูปสลิป...");
+    compressSlipImage(file, function (dataUrl) {
+        state.currentUploadedSlip = dataUrl;
         const img = document.getElementById("scb-slip-img");
         const previewBox = document.getElementById("scb-slip-preview-box");
         if (img && previewBox) {
-            img.src = e.target.result;
+            img.src = dataUrl;
             previewBox.classList.remove("hidden");
             showToast("📁 แนบสลิปโอนเงิน SCB เรียบร้อยแล้ว!");
         }
-    };
-    reader.readAsDataURL(file);
+    });
 }
 
 function clearSCBSlip() {
+    state.currentUploadedSlip = null;
     const previewBox = document.getElementById("scb-slip-preview-box");
     const img = document.getElementById("scb-slip-img");
     if (previewBox) previewBox.classList.add("hidden");
@@ -7865,13 +8011,41 @@ function confirmSCBPayment() {
 
 // Payment Success Simulation & Order Creation
 function simulatePaymentSuccess(paymentType = "promptpay") {
+    // 🛡️ Safeguard: ถ้าโอนเงินผ่าน PromptPay หรือ SCB ต้องแนบสลิปก่อน
+    if (paymentType === "promptpay" || paymentType === "bank_transfer") {
+        if (!state.currentUploadedSlip) {
+            showToast("⚠️ กรุณาแนบรูปสลิปหลักฐานการโอนเงิน เพื่อให้ทีมงานยืนยันยอดได้");
+            const boxId = paymentType === "promptpay" ? "promptpay-slip-preview-box" : "scb-slip-preview-box";
+            const box = document.getElementById(boxId);
+            if (box) {
+                box.classList.remove("hidden");
+                box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            return;
+        }
+    }
+
     closePromptPayModal();
     closeSCBModal();
     const totals = calculateCartTotals();
 
+    const exactPayAmount = (state.checkoutPayInfo && state.checkoutPayInfo.exactAmount)
+        ? state.checkoutPayInfo.exactAmount
+        : Number(totals.grandTotal || 0);
+
     let paymentDesc = "จ่ายผ่านพร้อมเพย์แล้ว";
-    if (paymentType === "bank_transfer") paymentDesc = "โอนผ่าน SCB แล้ว (4111305737)";
-    else if (paymentType === "cod") paymentDesc = "เก็บเงินสดปลายทาง (COD)";
+    let paymentStatus = "pending_verification";
+    let paymentVerified = false;
+
+    if (paymentType === "bank_transfer") {
+        paymentDesc = "โอนผ่าน SCB แล้ว (4111305737)";
+        paymentStatus = "pending_verification";
+        paymentVerified = false;
+    } else if (paymentType === "cod") {
+        paymentDesc = "เก็บเงินสดปลายทาง (COD)";
+        paymentStatus = "cod_pending";
+        paymentVerified = true;
+    }
 
     const noteInput = document.getElementById("delivery-note-input");
     const noteVal = noteInput ? noteInput.value.trim() : "อยู่ติดกับ 7-11";
@@ -7923,8 +8097,15 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         total: Number(totals.grandTotal || 0),
         grandTotal: Number(totals.grandTotal || 0),
         deliveryFee: Number(totals.deliveryFee || 20),
+        payAmountExact: exactPayAmount,
         paymentType: paymentType,
         paymentDesc: paymentDesc,
+        paymentStatus: paymentStatus,
+        paymentVerified: paymentVerified,
+        slipImage: state.currentUploadedSlip || "",
+        slipUploadedAt: state.currentUploadedSlip ? nowTime : null,
+        paymentVerifiedAt: null,
+        paymentVerifiedBy: null,
         deliveryNote: orderLandmark,
         customerName: (state.customer && state.customer.isLoggedIn) ? state.customer.identifier : "ลูกค้าทั่วไป",
         customerPhone: (state.customer && state.customer.phone) ? state.customer.phone : ((state.customer && state.customer.identifier && /^\d+$/.test(state.customer.identifier.replace(/-/g,''))) ? state.customer.identifier : "-"),
@@ -7940,6 +8121,10 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         createdAt: nowTime,
         orderTime: timeStr
     };
+
+    // Clear uploaded slip cache
+    state.currentUploadedSlip = null;
+    state.checkoutPayInfo = null;
 
     // Clear cart
     state.cart = [];
@@ -8011,9 +8196,14 @@ function renderTrackingScreen() {
 
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} น.`;
-    const payMethodText = order.paymentType === "bank_transfer" ? "โอน SCB" : (order.paymentType === "cod" ? "เก็บเงินสด COD" : "พร้อมเพย์");
+    const exactPayStr = (order.payAmountExact !== undefined && order.payAmountExact !== null)
+        ? Number(order.payAmountExact).toFixed(2)
+        : Number(order.total || 0).toLocaleString();
+    const payStatusNote = order.paymentVerified
+        ? " • ✓ เงินเข้าแล้ว"
+        : (order.paymentType === "cod" ? " • 💵 เก็บเงินสด COD" : " • ⏳ แนบสลิปแล้ว/รอตรวจยอด");
 
-    setVal("tracking-step1-subtitle", `${timeStr} • ยอดรวม ฿${order.total} (${payMethodText})`);
+    setVal("tracking-step1-subtitle", `${timeStr} • ยอดรวม ฿${exactPayStr} (${payMethodText}${payStatusNote})`);
 
     const stallsCount = order.stalls ? order.stalls.length : 3;
     setVal("tracking-step2-title", `กำลังเดินรวบรวมของสด (${stallsCount} แผง)`);
@@ -8038,9 +8228,14 @@ function renderTrackingScreen() {
     const orderStatus = order.status || "picking";
 
     if (orderStatus === "picking") {
+        const isVerified = order.paymentVerified === true || order.paymentType === "cod";
         if (statusIcon) statusIcon.textContent = "storefront";
         if (statusTitle) statusTitle.textContent = "ทีมงานกำลังเดินหยิบของสดในตลาด";
-        if (statusDesc) statusDesc.textContent = "กำลังรวบรวมชิ้นส่วนไก่ และผักสดจากแผงค้า";
+        if (statusDesc) {
+            statusDesc.textContent = isVerified
+                ? "ตรวจสอบยอดเงินเข้าบัญชีเรียบร้อยแล้ว • กำลังรวบรวมของสดจากแผงค้า"
+                : "แนบสลิปแล้ว • ระบบกำลังตรวจยอดโอนและรวบรวมของสดจากแผงค้า";
+        }
         if (etaPill) etaPill.innerHTML = `<span class="material-symbols-outlined text-xs text-amber-600">alarm</span><span>คาดว่าจะถึงในเวลา <strong>09:15 น.</strong> (อีกประมาณ 20 นาที)</span>`;
 
         if (stepPicking) {
@@ -17129,6 +17324,13 @@ function generateLineOrderMessage(order) {
     if (order.status === "delivered") statusText = "จัดส่งสำเร็จเรียบร้อยแล้ว 🎉";
     else if (order.status === "delivering" || order.status === "on_the_way") statusText = "ไรเดอร์กำลังนำของสดไปส่งถึงบ้านลูกค้า 🛵";
 
+    const exactPayStr = (order.payAmountExact !== undefined && order.payAmountExact !== null)
+        ? `฿${Number(order.payAmountExact).toFixed(2)}`
+        : `฿${(order.grandTotal || order.total || 0).toLocaleString()}`;
+    const payStatusStr = order.paymentVerified
+        ? "✅ ยอดเข้าบัญชีแล้ว (ตรวจสอบแล้ว)"
+        : (order.paymentType === "cod" ? "💵 รอเก็บเงินสดปลายทาง (COD)" : "⏳ แนบสลิปแล้ว • รอฮับ/แอดมินตรวจยอดเข้าบัญชี");
+
     return `🛒【ตลาดสดเฮียส่ง】ยืนยันการรับออเดอร์เรียบร้อยแล้ว! 🥦🥩
 ━━━━━━━━━━━━━━━━━━
 📦 รหัสออเดอร์: ${order.orderId}
@@ -17139,8 +17341,9 @@ function generateLineOrderMessage(order) {
 ━━━━━━━━━━━━━━━━━━
 🛒 รายการสินค้าที่สั่ง:${itemsList}
 ━━━━━━━━━━━━━━━━━━
-💰 ยอดชำระรวม: ฿${(order.grandTotal || order.total || 0).toLocaleString()} (${order.paymentDesc || 'ชำระแล้ว'})
-🛵 สถานะ: ${statusText}
+💰 ยอดชำระรวม: ${exactPayStr} (${order.paymentDesc || 'ชำระแล้ว'})
+🧾 สถานะตรวจสอบเงิน: ${payStatusStr}
+🛵 สถานะจัดส่ง: ${statusText}
 ━━━━━━━━━━━━━━━━━━
 🔗 ลูกค้าตรวจสอบสถานะและพิกัด GPS สดๆ ได้ที่:
 👉 ${trackUrl}`;
@@ -17698,6 +17901,11 @@ function renderHubPickingList() {
             `;
         }
 
+        const isPaymentVerified = order.paymentVerified === true || (order.paymentType === "cod");
+        const exactAmtDisplay = (order.payAmountExact !== undefined && order.payAmountExact !== null)
+            ? Number(order.payAmountExact).toFixed(2)
+            : Number(order.grandTotal || order.total || 0).toLocaleString();
+
         finalHtml += `
             <div class="bg-white rounded-3xl p-4 sm:p-5 shadow-card border border-slate-200 space-y-3.5 animate-fade-in text-left">
                 <div class="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -17710,7 +17918,7 @@ function renderHubPickingList() {
                         <div class="text-[11px] text-slate-500">โทร: ${customerPhone} • โน้ต: ${note}</div>
                     </div>
                     <div class="text-right">
-                        <span class="text-sm font-black text-orange-600">฿${total}</span>
+                        <span class="text-sm font-black text-orange-600">฿${exactAmtDisplay}</span>
                         <div class="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full mt-1 font-bold">${paymentDesc}</div>
                     </div>
                 </div>
@@ -17727,6 +17935,44 @@ function renderHubPickingList() {
                     </button>
                 </div>
 
+                <!-- Payment Verification Audit Banner (แนวทางที่ 1 + แนวทางที่ 2) -->
+                ${!isPaymentVerified ? `
+                    <div class="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white rounded-2xl p-3.5 shadow-md space-y-2.5 animate-fade-in text-left">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2 font-black text-xs">
+                                <span class="text-base">⏳</span>
+                                <span>รอยืนยันยอดโอน: ฿${exactAmtDisplay}</span>
+                            </div>
+                            <span class="bg-white/25 text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full border border-white/30">ยอดมีเศษสตางค์</span>
+                        </div>
+                        <div class="text-[11px] text-amber-50 leading-snug">
+                            ลูกค้าแจ้งโอนผ่าน <strong>${paymentDesc}</strong> • กรุณาตรวจรูปสลิปหรือเทียบยอด <strong>฿${exactAmtDisplay}</strong> ในแอปธนาคารก่อนปล่อยงาน
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            <button type="button" onclick="openOrderSlipVerificationModal('${order.orderId}')" class="py-2 px-3 bg-white text-orange-950 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                <span class="material-symbols-outlined text-sm text-orange-600">receipt_long</span>
+                                <span>📷 ตรวจรูปสลิป (${order.slipImage ? 'แนบแล้ว' : 'ยังไม่แนบ'})</span>
+                            </button>
+                            <button type="button" onclick="approveOrderPayment('${order.orderId}')" class="py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer border border-emerald-400">
+                                <span class="material-symbols-outlined text-sm">verified</span>
+                                <span>✅ ยืนยันเงินเข้าแล้ว (ปลดล็อค)</span>
+                            </button>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="bg-emerald-50 border border-emerald-300 rounded-2xl p-2.5 flex items-center justify-between gap-2 shadow-2xs text-xs">
+                        <div class="flex items-center gap-1.5 font-extrabold text-emerald-900">
+                            <span class="material-symbols-outlined text-base text-emerald-700">verified</span>
+                            <span>ยอดเงิน ฿${exactAmtDisplay} เข้าบัญชีแล้ว • ตรวจสอบสลิปเรียบร้อย</span>
+                        </div>
+                        ${order.slipImage ? `
+                            <button type="button" onclick="openOrderSlipVerificationModal('${order.orderId}')" class="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-[10.5px] font-bold shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                📷 ดูสลิป
+                            </button>
+                        ` : ''}
+                    </div>
+                `}
+
                 ${refundAlertHtml}
 
                 <div class="space-y-3 pt-1">
@@ -17739,10 +17985,24 @@ function renderHubPickingList() {
                 </div>
 
                 <div class="pt-3 border-t border-slate-100 space-y-2">
-                    <button onclick="completePickingAndDispatchOrder('${order.orderId}')" class="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold py-3.5 rounded-2xl shadow-lg flex items-center justify-center gap-2 text-xs active:scale-95 transition-all cursor-pointer">
-                        <span class="material-symbols-outlined text-base">moped</span>
-                        <span>รวมถุงเสร็จแล้ว • ปล่อยไรเดอร์ออกเดินทาง 🚀</span>
-                    </button>
+                    ${!isPaymentVerified ? `
+                        <div class="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-1">
+                            <div class="text-xs font-bold text-rose-800 flex items-center justify-center gap-1">
+                                <span class="material-symbols-outlined text-sm">lock</span>
+                                <span>ล็อคการปล่อยงาน: ต้องตรวจสลิปและกดยืนยันยอดโอน ฿${exactAmtDisplay} ก่อน</span>
+                            </div>
+                            <p class="text-[10.5px] text-rose-600">เพื่อความมั่นใจ 100% ว่าเงินเข้าบัญชีจริงก่อนปล่อยสินค้าและจ่ายงานให้ไรเดอร์</p>
+                            <button type="button" onclick="openOrderSlipVerificationModal('${order.orderId}')" class="mt-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-extrabold rounded-xl text-xs inline-flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer">
+                                <span class="material-symbols-outlined text-sm">receipt_long</span>
+                                <span>📷 เปิดตรวจสลิป & ปลดล็อคจ่ายงาน</span>
+                            </button>
+                        </div>
+                    ` : `
+                        <button onclick="completePickingAndDispatchOrder('${order.orderId}')" class="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold py-3.5 rounded-2xl shadow-lg flex items-center justify-center gap-2 text-xs active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-base">moped</span>
+                            <span>รวมถุงเสร็จแล้ว • ปล่อยไรเดอร์ออกเดินทาง 🚀</span>
+                        </button>
+                    `}
                 </div>
             </div>
         `;
@@ -17841,6 +18101,14 @@ function updateHubItemWeight(stallIndex, itemIndex) {
 
 function completePickingAndDispatchOrder(orderId) {
     if (!state.activeOrder) return;
+
+    // 🛡️ Safeguard: ล็อคการปล่อยงานหากยังไม่ได้ตรวจสอบยอดเงินโอน
+    if (state.activeOrder.paymentVerified === false && state.activeOrder.paymentType !== "cod") {
+        showToast("⚠️ ไม่สามารถปล่อยงานได้: กรุณาตรวจและกดยืนยันยอดเงินโอนเข้าบัญชีก่อน");
+        openOrderSlipVerificationModal(orderId);
+        return;
+    }
+
     state.activeOrder.status = "delivering";
     if (state.activeOrder.stalls) {
         state.activeOrder.stalls.forEach(s => {
@@ -22692,6 +22960,186 @@ function approveHubMerchantExpressSlip(orderId) {
     assignExpressOrderToRider(orderId, 'R1');
 }
 window.approveHubMerchantExpressSlip = approveHubMerchantExpressSlip;
+
+// ── GROCERY ORDER SLIP VERIFICATION MODAL & APPROVAL (แนวทางที่ 1 + แนวทางที่ 2) ──
+function openOrderSlipVerificationModal(orderId) {
+    let order = (state.activeOrder && state.activeOrder.orderId === orderId) ? state.activeOrder : null;
+    if (!order) {
+        const all = (typeof _collectAllOrders === "function") ? _collectAllOrders() : [];
+        order = all.find(o => o && o.orderId === orderId);
+    }
+    if (!order && state.activeOrder) order = state.activeOrder;
+    if (!order) {
+        showToast("⚠️ ไม่พบข้อมูลคำสั่งซื้อ");
+        return;
+    }
+
+    let modal = document.getElementById("order-slip-verify-modal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "order-slip-verify-modal";
+        modal.className = "fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[140] flex items-center justify-center p-3 sm:p-4 animate-fade-in";
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove("hidden");
+
+    const slipImg = order.slipImage || "";
+    const exactAmtDisplay = (order.payAmountExact !== undefined && order.payAmountExact !== null)
+        ? Number(order.payAmountExact).toFixed(2)
+        : Number(order.grandTotal || order.total || 0).toLocaleString();
+    const orderTimeStr = order.orderTime || (order.createdAt ? new Date(order.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น." : "-");
+    const isVerified = order.paymentVerified === true;
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-3xl max-w-sm sm:max-w-md w-full p-4 sm:p-5 space-y-3.5 shadow-2xl animate-scale-up text-left text-slate-800 text-xs border border-slate-200 max-h-[95vh] overflow-y-auto">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-orange-100 text-orange-800 flex items-center justify-center text-base font-bold shadow-2xs">🔍</span>
+                    <div>
+                        <div class="font-extrabold text-sm text-slate-900">ตรวจสอบสลิปการโอนเงิน</div>
+                        <div class="text-[10px] text-slate-400">ออเดอร์ <span class="font-mono font-bold text-slate-700">${order.orderId}</span> • เวลาสั่ง ${orderTimeStr}</div>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('order-slip-verify-modal').classList.add('hidden')" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold transition-all cursor-pointer">✕</button>
+            </div>
+
+            <!-- Target Match Info Banner -->
+            <div class="bg-gradient-to-r from-amber-50 to-orange-50 p-3 rounded-2xl border border-orange-200 space-y-1.5 shadow-2xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600 font-bold text-[11px]">ยอดเงินที่ต้องตรงกัน (มีเศษสตางค์):</span>
+                    <span class="text-lg font-black text-orange-600 tracking-tight">฿${exactAmtDisplay}</span>
+                </div>
+                <div class="text-[10.5px] text-slate-600 leading-snug">
+                    ช่องทาง: <strong>${order.paymentDesc || 'โอนเงิน'}</strong> • ลูกค้า: <strong>${order.customerName || 'ลูกค้า'}</strong> (${order.customerPhone || '-'})
+                </div>
+                <div class="bg-white/80 p-1.5 rounded-xl text-[10px] text-amber-900 font-medium flex items-center gap-1 border border-amber-200">
+                    <span class="text-xs">💡</span>
+                    <span>เทียบยอด <strong>฿${exactAmtDisplay}</strong> ในสลิปด้านล่าง หรือดู Noti เงินเข้าในมือถือบัญชี SCB/KBank</span>
+                </div>
+            </div>
+
+            <!-- Slip Image Preview Box -->
+            <div class="bg-slate-900 rounded-2xl p-2 flex flex-col items-center justify-center overflow-hidden border border-slate-800 relative group min-h-[220px]">
+                ${slipImg ? `
+                    <img src="${slipImg}" alt="สลิปโอนเงินของลูกค้า" class="max-h-80 w-auto object-contain rounded-xl select-none">
+                    <a href="${slipImg}" target="_blank" download="slip_${order.orderId}.jpg" class="absolute bottom-3 right-3 bg-black/70 hover:bg-black text-white text-[10.5px] font-bold px-2.5 py-1 rounded-lg backdrop-blur-xs flex items-center gap-1 opacity-90 hover:opacity-100 transition-opacity">
+                        <span class="material-symbols-outlined text-xs">open_in_new</span>
+                        <span>ดูภาพเต็ม</span>
+                    </a>
+                ` : `
+                    <div class="py-12 text-center text-slate-400 space-y-2">
+                        <span class="material-symbols-outlined text-4xl text-slate-500">hide_image</span>
+                        <div class="text-xs font-bold text-slate-300">ลูกค้ายังไม่ได้แนบรูปสลิป</div>
+                        <div class="text-[10px] text-slate-500">กรุณาติดต่อลูกค้าทางโทรศัพท์หรือ LINE เพื่อขอหลักฐานการโอน</div>
+                    </div>
+                `}
+            </div>
+
+            <!-- Status Indicator -->
+            <div class="flex items-center justify-between text-xs px-1">
+                <span class="text-slate-500 font-medium">สถานะการเงินปัจจุบัน:</span>
+                <span class="font-extrabold ${isVerified ? 'text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200' : 'text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200'}">
+                    ${isVerified ? '✓ ตรวจสอบและอนุมัติแล้ว' : '⏳ รอการยืนยันยอดเงิน'}
+                </span>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="space-y-2 pt-1 border-t border-slate-100">
+                ${!isVerified ? `
+                    <button type="button" onclick="approveOrderPayment('${order.orderId}')" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-base">verified</span>
+                        <span>✅ ยืนยันเงินเข้าบัญชีแล้ว (อนุมัติยอด ฿${exactAmtDisplay})</span>
+                    </button>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" onclick="callContactDirect('${order.customerPhone || '0812345678'}', 'คุณ${order.customerName || 'ลูกค้า'}', 'ลูกค้า')" class="py-2 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-xs">call</span>
+                            <span>โทรหาลูกค้า</span>
+                        </button>
+                        <button type="button" onclick="rejectOrderPayment('${order.orderId}')" class="py-2 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-xs">cancel</span>
+                            <span>สลิปไม่ถูกต้อง</span>
+                        </button>
+                    </div>
+                ` : `
+                    <div class="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-center text-emerald-900 font-bold text-xs">
+                        ✓ ออเดอร์นี้ได้รับการยืนยันการชำระเงินเรียบร้อยแล้ว ฮับสามารถจัดของและจ่ายงานไรเดอร์ได้ทันที
+                    </div>
+                    <button type="button" onclick="document.getElementById('order-slip-verify-modal').classList.add('hidden')" class="w-full py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-xs cursor-pointer">
+                        ปิดหน้าต่าง
+                    </button>
+                `}
+            </div>
+        </div>
+    `;
+}
+window.openOrderSlipVerificationModal = openOrderSlipVerificationModal;
+
+function approveOrderPayment(orderId) {
+    let order = (state.activeOrder && state.activeOrder.orderId === orderId) ? state.activeOrder : null;
+    if (!order) {
+        const all = (typeof _collectAllOrders === "function") ? _collectAllOrders() : [];
+        order = all.find(o => o && o.orderId === orderId);
+    }
+    if (!order && state.activeOrder) order = state.activeOrder;
+    if (!order) {
+        showToast("⚠️ ไม่พบข้อมูลคำสั่งซื้อ");
+        return;
+    }
+
+    order.paymentVerified = true;
+    order.paymentStatus = "verified";
+    order.paymentVerifiedAt = Date.now();
+    order.paymentVerifiedBy = (state.activeAdmin && state.activeAdmin.name) ? state.activeAdmin.name : "ศูนย์ฮับ";
+
+    // ปิด modal ถ้าเปิดอยู่
+    const modal = document.getElementById("order-slip-verify-modal");
+    if (modal) modal.classList.add("hidden");
+
+    // บันทึกและซิงค์ Firebase & LocalStorage
+    saveActiveOrderToStorage(order);
+    if (typeof updateOrderStatusInFirebase === "function") {
+        updateOrderStatusInFirebase(order.orderId, order.status);
+    }
+    if (typeof isFirebaseReady === "function" && isFirebaseReady() && typeof toFirebaseKey === "function" && typeof db !== "undefined") {
+        try {
+            db.ref(`orders/${toFirebaseKey(order.orderId)}`).update({
+                paymentVerified: true,
+                paymentStatus: "verified",
+                paymentVerifiedAt: order.paymentVerifiedAt,
+                paymentVerifiedBy: order.paymentVerifiedBy
+            }).catch(e => console.warn("Firebase update payment error:", e));
+        } catch (e) {
+            console.warn("Firebase update payment try error:", e);
+        }
+    }
+
+    showToast(`✅ ยืนยันยอดเงินออเดอร์ ${order.orderId} สำเร็จ! ปลดล็อคการจ่ายงานแล้ว`);
+    playOrderAlertSound();
+
+    renderHubPickingList();
+    renderTrackingScreen();
+    if (typeof renderAdminReport === "function") renderAdminReport();
+}
+window.approveOrderPayment = approveOrderPayment;
+
+function rejectOrderPayment(orderId) {
+    let order = (state.activeOrder && state.activeOrder.orderId === orderId) ? state.activeOrder : null;
+    if (!order && state.activeOrder) order = state.activeOrder;
+    if (!order) return;
+
+    const modal = document.getElementById("order-slip-verify-modal");
+    if (modal) modal.classList.add("hidden");
+
+    order.paymentVerified = false;
+    order.paymentStatus = "rejected";
+    saveActiveOrderToStorage(order);
+
+    showToast(`⚠️ สลิปออเดอร์ ${order.orderId} ถูกปฏิเสธ กรุณาติดต่อลูกค้าขอหลักฐานใหม่`);
+    renderHubPickingList();
+    renderTrackingScreen();
+}
+window.rejectOrderPayment = rejectOrderPayment;
 
 // ── Role 4 Rider Sub-Tab Navigation & Extensions ─────────────────────────
 
