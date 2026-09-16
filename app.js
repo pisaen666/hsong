@@ -3632,7 +3632,7 @@ function renderHubDailyReport(targetDateKey) {
                         <th class="p-2.5 text-right">ยอดรวม</th>
                         <th class="p-2.5">ไรเดอร์นำส่ง</th>
                         <th class="p-2.5 text-center">สถานะ</th>
-                        <th class="p-2.5 text-center rounded-r-xl">พิมพ์ (80mm)</th>
+                        <th class="p-2.5 text-center rounded-r-xl">จัดการ / พิมพ์สลิป</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -3665,10 +3665,16 @@ function renderHubDailyReport(targetDateKey) {
                                 </span>
                             </td>
                             <td class="p-2.5 text-center">
-                                <button onclick="printThermalOrderSlip('${o.orderId}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์ใบเสร็จ/ใบส่งของเครื่องพิมพ์ความร้อน 80x80">
-                                    <span class="material-symbols-outlined text-xs">print</span>
-                                    <span>พิมพ์สลิป</span>
-                                </button>
+                                <div class="flex items-center justify-center gap-1.5 flex-wrap">
+                                    <button onclick="printThermalOrderSlip('${o.orderId}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเสร็จ/ใบส่งของเครื่องพิมพ์ความร้อน 80x80">
+                                        <span class="material-symbols-outlined text-xs">print</span>
+                                        <span>สลิป</span>
+                                    </button>
+                                    <button onclick="openOrderLineNoticeModal('${o.orderId}')" class="px-2.5 py-1.5 bg-[#06C755]/15 hover:bg-[#06C755]/25 text-[#04883b] border border-[#06C755]/40 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ส่งข้อมูลสรุปออเดอร์ให้ลูกค้าทาง LINE">
+                                        <span class="text-xs">💬</span>
+                                        <span>ส่ง LINE</span>
+                                    </button>
+                                </div>
                             </td>
                         </tr>`;
                     }).join("")}
@@ -7932,6 +7938,8 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
     }
 
     goToTrackingScreen();
+    // ✅ เปิดป๊อปอัปสรุปออเดอร์พร้อมแชร์เข้า LINE ทันที
+    openOrderLineNoticeModal(state.activeOrder, true);
 }
 
 // ==========================================
@@ -17065,11 +17073,15 @@ function playOrderAlertSound() {
     }
 }
 
+let _currentOrderLineMessage = "";
+
 function generateLineOrderMessage(order) {
     if (!order) return "";
     const slot = getNextDeliverySlotInfo();
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const cleanId = (order.orderId || "").replace(/#/g, '');
+    const trackUrl = `https://pisaen666.github.io/hsong/?track=${encodeURIComponent(cleanId)}`;
 
     let itemsList = "";
     let itemIndex = 1;
@@ -17077,27 +17089,119 @@ function generateLineOrderMessage(order) {
         order.stalls.forEach(stall => {
             itemsList += `\n📍 ${stall.name}:`;
             (stall.items || []).forEach(item => {
-                const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
-                itemsList += `\n   ${itemIndex++}. ${item.name} - ฿${price}`;
+                const price = item.actualPrice !== undefined ? item.actualPrice : (item.price || 0);
+                const qty = item.qty || 1;
+                itemsList += `\n   ${itemIndex++}. ${item.name} (x${qty}) - ฿${price * qty}`;
             });
         });
     }
 
-    return `🔔【เฮียส่ง】มีออเดอร์ใหม่เข้ามาแล้ว!
+    let statusText = "ทีมงานกำลังจัดของสด & เตรียมส่งต่อให้ไรเดอร์";
+    if (order.status === "delivered") statusText = "จัดส่งสำเร็จเรียบร้อยแล้ว 🎉";
+    else if (order.status === "delivering" || order.status === "on_the_way") statusText = "ไรเดอร์กำลังนำของสดไปส่งถึงบ้านลูกค้า 🛵";
+
+    return `🛒【ตลาดสดเฮียส่ง】ยืนยันการรับออเดอร์เรียบร้อยแล้ว! 🥦🥩
 ━━━━━━━━━━━━━━━━━━
 📦 รหัสออเดอร์: ${order.orderId}
 ⏰ เวลาสั่งซื้อ: ${timeStr} น. (${slot.slotText})
-👤 ผู้สั่ง: ${order.customerName || 'ลูกค้าทั่วไป'} (${order.customerPhone || '-'})
+👤 คุณ: ${order.customerName || 'ลูกค้าทั่วไป'} (${order.customerPhone || '-'})
 📍 ที่อยู่จัดส่ง: ${order.address || 'ตามพิกัดจัดส่ง'}
 📝 โน้ตถึงไรเดอร์: ${order.deliveryNote || order.note || '-'}
 ━━━━━━━━━━━━━━━━━━
-🛒 รายการสินค้าที่ต้องจัด:${itemsList}
+🛒 รายการสินค้าที่สั่ง:${itemsList}
 ━━━━━━━━━━━━━━━━━━
-💰 ยอดชำระรวม: ฿${order.grandTotal || order.total || 0} (${order.paymentDesc || 'ชำระแล้ว'})
-🛵 สถานะ: รอทีมงานจัดของสด & ปล่อยไรเดอร์
+💰 ยอดชำระรวม: ฿${(order.grandTotal || order.total || 0).toLocaleString()} (${order.paymentDesc || 'ชำระแล้ว'})
+🛵 สถานะ: ${statusText}
 ━━━━━━━━━━━━━━━━━━
-👉 ดูใบจัดของสด: https://pisaen666.github.io/hsong/`;
+🔗 ลูกค้าตรวจสอบสถานะและพิกัด GPS สดๆ ได้ที่:
+👉 ${trackUrl}`;
 }
+
+function openOrderLineNoticeModal(orderOrId, isCustomerOrder = false) {
+    let order = null;
+    if (typeof orderOrId === "object" && orderOrId !== null) {
+        order = orderOrId;
+    } else if (typeof orderOrId === "string") {
+        if (state.activeOrder && state.activeOrder.orderId === orderOrId) {
+            order = state.activeOrder;
+        } else {
+            const all = (typeof _collectAllOrders === "function") ? _collectAllOrders() : [];
+            order = all.find(o => o.orderId === orderOrId);
+        }
+    }
+    if (!order && state.activeOrder) {
+        order = state.activeOrder;
+    }
+    if (!order) {
+        showToast("⚠️ ไม่พบข้อมูลออเดอร์ที่ต้องการแจ้งเตือน");
+        return;
+    }
+
+    const modal = document.getElementById("order-success-line-modal");
+    if (!modal) return;
+
+    const msg = generateLineOrderMessage(order);
+    _currentOrderLineMessage = msg;
+
+    const setVal = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+    setVal("order-success-modal-title", isCustomerOrder ? "สั่งซื้อ & ชำระเงินสำเร็จแล้ว! 🎉" : "ข้อมูลสรุปออเดอร์สำหรับแจ้งลูกค้าทาง LINE 💬");
+    setVal("order-success-modal-subtitle", isCustomerOrder ? "ออเดอร์ถูกส่งไปยังฮับเรียบร้อยแล้ว ส่งใบเสร็จ/สรุปเข้า LINE ได้ทันที" : "คัดลอกหรือส่งข้อความยืนยันออเดอร์ให้ลูกค้าได้โดยตรง");
+    setVal("os-modal-order-id", order.orderId || "#TH-XXXX");
+    setVal("os-modal-order-amount", `฿${(order.grandTotal || order.total || 0).toLocaleString()}`);
+    setVal("os-modal-customer", `${order.customerName || 'ลูกค้าทั่วไป'} (${order.customerPhone || '-'})`);
+    setVal("os-modal-payment", order.paymentDesc || (order.paymentType === "bank_transfer" ? "โอน SCB แล้ว" : (order.paymentType === "cod" ? "เก็บเงินสด COD" : "พร้อมเพย์")));
+
+    const textEl = document.getElementById("os-modal-line-text");
+    if (textEl) textEl.value = msg;
+
+    const closeBtnText = document.getElementById("os-modal-close-btn-text");
+    if (closeBtnText) {
+        closeBtnText.textContent = isCustomerOrder ? "ไปหน้าจอติดตามของสด (Live Tracking)" : "ปิดหน้าต่าง";
+    }
+
+    modal.classList.remove("hidden");
+
+    // Auto copy text for instant readiness
+    copyTextToClipboard(msg);
+}
+window.openOrderLineNoticeModal = openOrderLineNoticeModal;
+
+function closeOrderSuccessLineModal() {
+    const modal = document.getElementById("order-success-line-modal");
+    if (modal) modal.classList.add("hidden");
+}
+window.closeOrderSuccessLineModal = closeOrderSuccessLineModal;
+
+function copyOrderSuccessLineText() {
+    const textEl = document.getElementById("os-modal-line-text");
+    const text = textEl ? textEl.value : _currentOrderLineMessage;
+    if (text) {
+        copyTextToClipboard(text);
+        showToast("📋 คัดลอกข้อความสรุปออเดอร์แล้ว! นำไปวางในห้องแชท LINE ได้ทันที");
+    }
+}
+window.copyOrderSuccessLineText = copyOrderSuccessLineText;
+
+function sendOrderSuccessLineApp() {
+    const textEl = document.getElementById("os-modal-line-text");
+    const text = textEl ? textEl.value : _currentOrderLineMessage;
+    if (!text) return;
+
+    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
+    if (isMobileDevice()) {
+        try {
+            window.location.href = lineUrl;
+        } catch(e) {
+            window.open(lineUrl, "_blank");
+        }
+        showToast("💬 กำลังเปิดแอป LINE เพื่อส่งข้อความ...");
+    } else {
+        copyTextToClipboard(text);
+        showToast("📋 คัดลอกข้อความแล้ว! สลับไปที่หน้าต่างโปรแกรม LINE แล้วกด Ctrl+V ส่งได้ทันที");
+    }
+}
+window.sendOrderSuccessLineApp = sendOrderSuccessLineApp;
 
 function isMobileDevice() {
     if (/Windows NT|Macintosh|X11/i.test(navigator.userAgent)) {
@@ -17194,18 +17298,14 @@ function sendLineOrderNotification(order) {
 }
 
 function openLineShareApp() {
-    if (!state.activeOrder && !state.latestLineMessage) {
+    if (!state.activeOrder) {
+        state.activeOrder = loadSavedActiveOrder();
+    }
+    if (!state.activeOrder) {
         showToast("⚠️ ยังไม่มีออเดอร์ใหม่ในระบบ");
         return;
     }
-    const msg = state.latestLineMessage || generateLineOrderMessage(state.activeOrder);
-
-    if (isMobileDevice()) {
-        const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
-        window.open(lineUrl, '_blank');
-    } else {
-        showLinePcModal("แชร์ใบจัดของสดเข้า LINE", msg);
-    }
+    openOrderLineNoticeModal(state.activeOrder, false);
 }
 
 // ==========================================
