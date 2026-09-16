@@ -3184,6 +3184,10 @@ function renderHubDailyReport(targetDateKey) {
                     <span class="material-symbols-outlined text-sm">print</span>
                     <span>พิมพ์รายงาน A4</span>
                 </button>
+                <button onclick="clearAdminOrdersAndReports()" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs" title="เคลียร์ตัวเลขและประวัติออเดอร์ทั้งหมดให้เป็น 0">
+                    <span class="material-symbols-outlined text-sm">delete_sweep</span>
+                    <span>เคลียร์ข้อมูล/รีเซ็ตเป็น 0</span>
+                </button>
             </div>
         </div>
 
@@ -3734,6 +3738,54 @@ function settleAllVendors(dateKey) {
     showToast(`🎉 บันทึกการโอนเคลียร์เงินให้แผงค้าทั้งหมด (${report.vendorSettlement.stalls.length} แผง) เรียบร้อย!`);
     renderHubDailyReport(dateKey);
 }
+
+// ── ล้างประวัติออเดอร์และรายงานสรุปทั้งหมดให้กลายเป็น 0
+function clearAdminOrdersAndReports() {
+    if (!confirm("⚠️ คุณต้องการเคลียร์ข้อมูลออเดอร์ ยอดขาย และประวัติการเคลียร์เงินทั้งหมดให้เป็น 0 ใช่หรือไม่? (สามารถเริ่มต้นบันทึกข้อมูลใหม่ได้ทันที)")) {
+        return;
+    }
+
+    // 1. ล้าง localStorage ที่เกี่ยวข้องกับ Orders & Settlements
+    localStorage.removeItem("talathub_order_history");
+    localStorage.removeItem("talathub_active_order");
+    localStorage.removeItem("hsong_active_order");
+    localStorage.removeItem("hsong_merchant_express_orders");
+    localStorage.removeItem("hsong_orders");
+    localStorage.removeItem("talathub_mock_orders");
+
+    // ล้าง daily reports และ settlement states ทั้งหมดใน localStorage
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith("talathub_daily_report_") || key.startsWith("talathub_settled_riders_") || key.startsWith("talathub_settled_vendors_"))) {
+            keysToRemove.push(key);
+        }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+
+    // 2. เคลียร์ memory state
+    state.activeOrder = null;
+    state.orders = [];
+    state.merchantExpressOrders = [];
+    if (window._cachedFirebaseOrders) window._cachedFirebaseOrders = [];
+
+    // 3. เคลียร์ Firebase Realtime Database
+    if (isFirebaseReady()) {
+        db.ref("orders").remove().catch(e => console.warn("Firebase orders clear failed:", e));
+        db.ref("daily_reports").remove().catch(e => console.warn("Firebase daily_reports clear failed:", e));
+    }
+
+    // 4. รีเฟรชหน้าจอรายงานและสถิติ
+    const curDate = _activeReportDateKey || getReportDateKey(Date.now());
+    renderHubDailyReport(curDate);
+    renderAdminAnalytics();
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
+    if (typeof renderHubMonitorBoard === "function") renderHubMonitorBoard();
+    if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
+
+    showToast("✨ เคลียร์ข้อมูลและรีเซ็ตตัวเลขทุกแท็บเป็น 0 เรียบร้อยแล้ว!");
+}
+window.clearAdminOrdersAndReports = clearAdminOrdersAndReports;
 
 // ── CSV Export Function
 function exportDailyReportCSV(dateKey) {
@@ -12342,9 +12394,15 @@ function renderAdminAnalytics() {
                     </h3>
                     <p class="text-xs text-slate-500">วิเคราะห์ข้อมูลคำสั่งซื้อและยอดขายทั้งหมดที่บันทึกในระบบ</p>
                 </div>
-                <span class="text-xs bg-purple-100 text-purple-800 font-bold px-3 py-1 rounded-full">
-                    ทั้งหมด ${allOrders.length} ออเดอร์
-                </span>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs bg-purple-100 text-purple-800 font-bold px-3 py-1 rounded-full">
+                        ทั้งหมด ${allOrders.length} ออเดอร์
+                    </span>
+                    <button onclick="clearAdminOrdersAndReports()" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 text-xs shadow-2xs" title="เคลียร์ประวัติและสถิติยอดขายสะสมเป็น 0">
+                        <span class="material-symbols-outlined text-sm">delete_sweep</span>
+                        <span>เคลียร์สถิติเป็น 0</span>
+                    </button>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -21579,6 +21637,27 @@ function autoSanitizeProductionData() {
         localStorage.removeItem("talathub_pending_stalls");
         localStorage.removeItem("talathub_mock_orders");
         localStorage.removeItem("talathub_rating_reviews");
+    } catch (e) {}
+
+    // 11. One-time clean reset for Admin Daily Report & Analytics test data
+    try {
+        if (localStorage.getItem("talathub_admin_reports_clean_v10") !== "true") {
+            localStorage.removeItem("talathub_order_history");
+            localStorage.removeItem("talathub_active_order");
+            localStorage.removeItem("hsong_active_order");
+            localStorage.removeItem("hsong_merchant_express_orders");
+            localStorage.removeItem("hsong_orders");
+
+            const keysToDel = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && (k.startsWith("talathub_daily_report_") || k.startsWith("talathub_settled_riders_") || k.startsWith("talathub_settled_vendors_"))) {
+                    keysToDel.push(k);
+                }
+            }
+            keysToDel.forEach(k => localStorage.removeItem(k));
+            localStorage.setItem("talathub_admin_reports_clean_v10", "true");
+        }
     } catch (e) {}
 
 }
