@@ -125,6 +125,18 @@ function saveRiderToStorage(rider) {
 // CART & ORDER PERSISTENCE — Firebase Realtime Database + localStorage fallback
 // ==========================================
 
+// ── Helper: escape HTML entities for safe UI rendering
+function escapeHtml(str) {
+    if (str == null) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+window.escapeHtml = escapeHtml;
+
 // ── Helper: sanitize phone/id เพื่อใช้เป็น Firebase key (ห้ามมี . # $ [ ] /)
 function toFirebaseKey(str) {
     return (str || "guest").replace(/[.#$\[\]\/]/g, "_");
@@ -1822,6 +1834,7 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
     // Extract clean short URL (strips leading Thai text, trailing parameters, etc.)
     const cleanMatch = (rawInput || "").match(/https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps)\/[A-Za-z0-9_-]+/i);
     const cleanUrl = cleanMatch ? cleanMatch[0] : (rawInput || "").trim();
+    const safeDisplayUrl = escapeHtml(cleanUrl);
 
     list.innerHTML = `
         <div id="shortlink-helper-container" class="p-3.5 space-y-2.5 bg-gradient-to-b from-blue-50/90 via-sky-50/50 to-white rounded-2xl border border-blue-200 text-left shadow-xs">
@@ -1830,21 +1843,33 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
                     <span class="material-symbols-outlined text-blue-600 text-base">link</span>
                     <span>ตรวจพบคลิปลิงก์จาก Google Maps</span>
                 </span>
-                <span id="shortlink-loading-badge" class="text-[10px] text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full font-bold animate-pulse">กำลังอ่านพิกัด...</span>
+                <span id="shortlink-loading-badge" class="text-[10px] text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full font-bold animate-pulse">กำลังอ่านพิกัดอัตโนมัติ...</span>
             </div>
-            <p class="text-[11px] text-slate-600 leading-relaxed truncate" title="${escapeHtml(cleanUrl)}">
-                ลิงก์สั้น <code class="font-mono text-blue-800 bg-blue-100/80 px-1 py-0.5 rounded font-bold">${escapeHtml(cleanUrl)}</code>
+            <p class="text-[11px] text-slate-600 leading-relaxed truncate" title="${safeDisplayUrl}">
+                ลิงก์สั้น <code class="font-mono text-blue-800 bg-blue-100/80 px-1 py-0.5 rounded font-bold">${safeDisplayUrl}</code>
             </p>
-            <div id="shortlink-action-area" class="space-y-2">
-                <div class="p-3 bg-amber-50/90 rounded-2xl border border-amber-200 text-xs text-amber-950 space-y-1.5">
-                    <div class="font-bold flex items-center gap-1 text-amber-900">
-                        <span class="material-symbols-outlined text-base text-amber-600">tips_and_updates</span>
-                        <span>วิธีปักหมุดจุดนี้ให้ตรงเป๊ะ 100%:</span>
-                    </div>
-                    <div class="space-y-1.5 text-[11px] leading-normal">
-                        <div>1. <strong>ใช้รหัส Plus Code (ง่ายที่สุด):</strong> ดูใต้ชื่อสถานที่ในหน้า Google Maps จะมีรหัส <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-amber-300">75X4+MW2</span>) แตะคัดลอกมาวางในช่องนี้ได้เลย หมุดจะปักทันที!</div>
-                        <div>2. <strong>ใช้ตัวเลขพิกัด:</strong> แตะค้างที่จุดบนแผนที่ Google Maps แล้วก็อปปี้ตัวเลข (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-amber-300">13.2991, 101.1573</span>) มาวาง</div>
-                    </div>
+
+            <!-- 2 Action Buttons (Visible Immediately!) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <a href="${safeDisplayUrl}" target="_blank" rel="noopener noreferrer"
+                   class="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all text-center">
+                    <span class="material-symbols-outlined text-base">open_in_new</span>
+                    <span>1. เปิดลิงก์ใน Google Maps</span>
+                </a>
+                <button type="button" onclick="pasteFromClipboardToSearch()"
+                   class="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all cursor-pointer text-center">
+                    <span class="material-symbols-outlined text-base">content_paste</span>
+                    <span>2. วาง Plus Code / พิกัด</span>
+                </button>
+            </div>
+
+            <div class="p-2.5 bg-amber-50/90 rounded-xl border border-amber-200 text-[11px] text-amber-950 space-y-1">
+                <div class="font-bold text-amber-900 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm text-amber-600">lightbulb</span>
+                    <span>วิธีนำพิกัดมาปักหมุด 100%:</span>
+                </div>
+                <div class="text-slate-600 leading-normal">
+                    กดปุ่มสีฟ้าด้านบนเพื่อเปิดดูใน Google Maps จะมีรหัส <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1 py-0.5 rounded border border-amber-300">75X4+MW2</span>) แตะคัดลอก แล้วกลับมากดปุ่มสีเขียว <strong>"2. วาง Plus Code"</strong> ได้ทันทีครับ
                 </div>
             </div>
         </div>
@@ -1869,7 +1894,6 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
     }
 
     const badge = document.getElementById("shortlink-loading-badge");
-    const actionArea = document.getElementById("shortlink-action-area");
 
     if (resolvedCoords) {
         if (badge) {
@@ -1893,35 +1917,10 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
         renderLocationSearchResults([item]);
         selectLocationSearchResult(item);
     } else {
-        // Unshortening failed or hit rate limit: show instant 1-tap action buttons
+        // Unshortening failed or hit rate limit: stop pulsing loader
         if (badge) {
             badge.textContent = "⚠️ แนะนำเปิดดู Plus Code";
             badge.className = "text-[10px] text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full font-bold";
-        }
-        if (actionArea) {
-            actionArea.innerHTML = `
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                    <a href="${escapeHtml(cleanUrl)}" target="_blank" rel="noopener noreferrer"
-                       class="flex items-center justify-center gap-1.5 py-2 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl font-bold text-xs shadow-xs transition-all text-center">
-                        <span class="material-symbols-outlined text-base">open_in_new</span>
-                        <span>1. เปิดลิงก์ใน Google Maps</span>
-                    </a>
-                    <button type="button" onclick="pasteFromClipboardToSearch()"
-                       class="flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer text-center">
-                        <span class="material-symbols-outlined text-base">content_paste</span>
-                        <span>2. วาง Plus Code / พิกัด</span>
-                    </button>
-                </div>
-                <div class="p-2.5 bg-amber-50/90 rounded-xl border border-amber-200 text-[11px] text-amber-950 space-y-1">
-                    <div class="font-bold text-amber-900 flex items-center gap-1">
-                        <span class="material-symbols-outlined text-sm text-amber-600">lightbulb</span>
-                        <span>วิธีนำพิกัดมาปักหมุด 100%:</span>
-                    </div>
-                    <div class="text-slate-600 leading-normal">
-                        กดปุ่มสีฟ้าด้านบนเพื่อเปิดดูใน Google Maps จะมีรหัส <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1 py-0.5 rounded border border-amber-300">75X4+MW2</span>) แตะคัดลอก แล้วกลับมากดปุ่มสีเขียว <strong>"วาง Plus Code"</strong> ได้ทันทีครับ
-                    </div>
-                </div>
-            `;
         }
     }
 }
