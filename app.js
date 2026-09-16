@@ -132,19 +132,43 @@ function toFirebaseKey(str) {
 
 // ── ตรวจสอบและกรอง Mock / Sample Orders ไม่ให้ปะปนในระบบจริง
 const MOCK_ORDER_IDS = new Set([
-    "#TH-6114", "#TH-8101", "#TH-8102", "#TH-8103", "#TH-5324", "#TH-9568", "#TH-4692",
-    "TH-6114", "TH-8101", "TH-8102", "TH-8103", "TH-5324", "TH-9568", "TH-4692",
-    "#TH-9999", "TH-9999"
+    "#TH-6114", "#TH-8101", "#TH-8102", "#TH-8103", "#TH-5324", "#TH-9568", "#TH-4692", "#TH-7564", "#TH-9999", "#TH-8801",
+    "TH-6114", "TH-8101", "TH-8102", "TH-8103", "TH-5324", "TH-9568", "TH-4692", "TH-7564", "TH-9999", "TH-8801"
 ]);
 
 function isMockOrder(o) {
     if (!o) return false;
     const id = (typeof o === "string" ? o : o.orderId) || "";
     if (MOCK_ORDER_IDS.has(id)) return true;
+    if (typeof id === "string" && (id.startsWith("#TH-810") || id.startsWith("TH-810") || id.includes("7564") || id.includes("9999") || id.includes("8801"))) return true;
     if (typeof o === "object") {
-        if (o.customerName === "คุณสมชาย (ลูกค้าประจำ)" || o.customerName === "โนอาห์ (นำพุ)") return true;
-        if (Array.isArray(o.stalls) && o.stalls.some(s => s && (s.stallId === "stall_a01" || s.stallId === "stall_b01" || s.stallId === "stall_c01"))) {
-            return true;
+        if (o.customerName === "คุณสมชาย (ลูกค้าประจำ)" || o.customerName === "โนอาห์ (นำพุ)" || o.customerName === "คุณสมชาย") return true;
+        if (o.customerPhone === "081-234-5678" || o.customerPhone === "081-999-8888") return true;
+        if (o.riderName === "โนอาห์ (นำพุ)") return true;
+        if (typeof o.deliveryNote === "string" && o.deliveryNote.includes("แขวนไว้ที่รั้วบ้าน")) return true;
+
+        if (Array.isArray(o.stalls) && o.stalls.length > 0) {
+            const hasMockStall = o.stalls.some(s => {
+                if (!s) return false;
+                const sid = String(s.stallId || s.id || "").toLowerCase();
+                const sname = String(s.name || s.stallName || "");
+                if (["stall_a01", "stall_b01", "stall_c01", "veggie_01", "curry_01", "seafood_01", "chicken_01"].includes(sid)) return true;
+                if (sname.includes("ร้านไก่สดของเรา") || sname.includes("ผักสวนครัวลุงสนั่น") || sname.includes("กะทิสดชาวเกาะ") || sname.includes("อาหารทะเลสดลุงหวัง") || sname.includes("แผง A01") || sname.includes("แผง B01") || sname.includes("แผง C01")) return true;
+                if (Array.isArray(s.items)) {
+                    return s.items.some(item => {
+                        const iname = String((item && item.name) || "");
+                        return iname.includes("อกไก่ลอกหนัง") || iname.includes("น่องติดสะโพก") || iname.includes("ผักกาดขาว 1 หัว") || iname.includes("มะเขือเปราะกรอบหวาน") || iname.includes("ข่าอ่อน + ตะไคร้สด") || iname.includes("หัวกะทิสดคั้นแท้") || iname.includes("ปลาหมึกกล้วยสดไซส์กลาง");
+                    });
+                }
+                return false;
+            });
+            if (hasMockStall) return true;
+        }
+
+        // ตรวจสอบยอดรวมที่ตรงกับ mock data 197 หรือ 185 ที่ผูกกับแผงตัวอย่าง
+        if ((o.grandTotal === 197 || o.total === 197 || o.grandTotal === 185 || o.total === 185) && Array.isArray(o.stalls) && o.stalls.length > 0) {
+            const names = o.stalls.map(s => String((s && (s.name || s.stallName)) || "")).join(" ");
+            if (names.includes("ลุงสนั่น") || names.includes("ลุงสมหมาย") || names.includes("ลุงหวัง") || names.includes("ไก่สด")) return true;
         }
     }
     return false;
@@ -194,6 +218,10 @@ function loadSavedActiveOrder() {
             const saved = localStorage.getItem(key);
             if (saved) {
                 const parsed = JSON.parse(saved);
+                if (parsed && (isMockOrder(parsed) || !parsed.orderId)) {
+                    localStorage.removeItem(key);
+                    continue;
+                }
                 if (parsed && parsed.orderId && !isMockOrder(parsed)) {
                     if (parsed.status !== "delivered") {
                         return parsed;
@@ -209,7 +237,7 @@ function loadSavedActiveOrder() {
         if (expSaved) {
             const expList = JSON.parse(expSaved);
             if (Array.isArray(expList) && expList.length > 0) {
-                const activeExp = expList.find(o => o && o.orderId && o.status !== "delivered");
+                const activeExp = expList.find(o => o && o.orderId && o.status !== "delivered" && !isMockOrder(o));
                 if (activeExp) return activeExp;
             }
         }
@@ -223,7 +251,7 @@ function loadSavedMerchantExpressOrders() {
         const expSaved = localStorage.getItem("hsong_merchant_express_orders");
         if (expSaved) {
             const expList = JSON.parse(expSaved);
-            if (Array.isArray(expList)) return expList;
+            if (Array.isArray(expList)) return expList.filter(o => o && o.orderId && !isMockOrder(o));
         }
     } catch (e) { }
     return [];
@@ -356,8 +384,8 @@ async function syncLatestOrderFromCloud() {
             const snapshot = await db.ref("orders").limitToLast(10).once("value");
             const data = snapshot.val();
             if (data) {
-                // หา order ล่าสุดที่ยังไม่ delivered และมี savedAt
-                const ordersList = Object.values(data).filter(o => o && o.orderId && o.status !== "delivered");
+                // หา order ล่าสุดที่ยังไม่ delivered และมี savedAt และไม่ใช่ mock order
+                const ordersList = Object.values(data).filter(o => o && o.orderId && o.status !== "delivered" && !isMockOrder(o));
                 if (ordersList.length > 0) {
                     ordersList.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
                     syncedOrder = ordersList[0];
@@ -374,14 +402,19 @@ async function syncLatestOrderFromCloud() {
         try {
             const expRaw = localStorage.getItem("hsong_merchant_express_orders");
             if (expRaw) {
-                state.merchantExpressOrders = JSON.parse(expRaw);
+                const parsedExp = JSON.parse(expRaw);
+                if (Array.isArray(parsedExp)) {
+                    state.merchantExpressOrders = parsedExp.filter(o => o && o.orderId && !isMockOrder(o));
+                }
             }
         } catch(e) {}
 
         // 3. นำข้อมูลมาอัปเดตลง State และอัปเดตหน้าจอ Hub
-        if (syncedOrder && syncedOrder.orderId) {
+        if (syncedOrder && syncedOrder.orderId && !isMockOrder(syncedOrder)) {
             state.activeOrder = syncedOrder;
             try { localStorage.setItem("talathub_active_order", JSON.stringify(syncedOrder)); } catch (e) {}
+        } else {
+            state.activeOrder = null;
         }
 
         // อัปเดตหน้าจอ Hub ทันที
@@ -9374,17 +9407,13 @@ function reorderCurrentItems() {
         }
     }
 
-    // กรณีไม่มีรายการเดิม ให้โหลดรายการแนะนำพื้นฐาน
-    state.cart = [
-        { stallId: "veggie_01", stallName: "ผักสวนครัวลุงสนั่น (B01)", productId: 1, name: "มะเขือเปราะกรอบหวาน", price: 15, qty: 1, unit: "กก." },
-        { stallId: "veggie_01", stallName: "ผักสวนครัวลุงสนั่น (B01)", productId: 2, name: "ข่าอ่อน + ตะไคร้สด + ใบมะกรูด", price: 15, qty: 1, unit: "ชุด" },
-        { stallId: "curry_01", stallName: "กะทิสดชาวเกาะ ลุงสมหมาย (C01)", productId: 3, name: "หัวกะทิสดคั้นแท้ 100%", price: 40, qty: 1, unit: "ถุง" },
-        { stallId: "seafood_01", stallName: "อาหารทะเลสดลุงหวัง (E11)", productId: 4, name: "ปลาหมึกกล้วยสดไซส์กลาง", price: 110, qty: 1, unit: "กก." }
-    ];
-    saveCartToStorage(state.cart);
-    updateCartUI();
-    showToast("🔁 โหลดรายการของสดเดิม 4 รายการลงตะกร้าเรียบร้อยแล้ว!");
-    goToCheckoutScreen();
+    // กรณีไม่มีรายการเดิม ให้แจ้งเตือนและนำลูกค้าไปเลือกซื้อของสดใหม่จากหน้าร้านค้าในตลาด
+    showToast("⚠️ ไม่พบประวัติรายการสินค้าเดิม กรุณาเลือกซื้อของสดจากแผงค้าในตลาด");
+    if (typeof goToMarketScreen === "function") {
+        goToMarketScreen();
+    } else if (typeof showScreen === "function") {
+        showScreen("screen-customer");
+    }
 }
 
 // ==========================================
@@ -17318,19 +17347,19 @@ function renderHubPickingList() {
     if (!container) return;
 
     // 1. รวบรวมงานด่วนจากแผงค้า (MERCHANT EXPRESS) ทั้งหมดที่ยังไม่ส่งมอบ
-    let expressOrders = (state.merchantExpressOrders || []).filter(o => o && o.orderId && o.status !== "delivered");
+    let expressOrders = (state.merchantExpressOrders || []).filter(o => o && o.orderId && o.status !== "delivered" && !isMockOrder(o));
     if (expressOrders.length === 0) {
         const savedExp = loadSavedMerchantExpressOrders();
-        expressOrders = savedExp.filter(o => o && o.orderId && o.status !== "delivered");
+        expressOrders = savedExp.filter(o => o && o.orderId && o.status !== "delivered" && !isMockOrder(o));
     }
-    if (state.activeOrder && state.activeOrder.orderType === "MERCHANT_EXPRESS" && state.activeOrder.status !== "delivered") {
+    if (state.activeOrder && state.activeOrder.orderType === "MERCHANT_EXPRESS" && state.activeOrder.status !== "delivered" && !isMockOrder(state.activeOrder)) {
         if (!expressOrders.some(o => o.orderId === state.activeOrder.orderId)) {
             expressOrders.unshift(state.activeOrder);
         }
     }
 
     // 2. รวบรวมงานจัดของสดจากลูกค้าทั่วไป (GROCERY ORDER)
-    const groceryOrder = (state.activeOrder && state.activeOrder.orderType !== "MERCHANT_EXPRESS" && state.activeOrder.status !== "delivered" && state.activeOrder.stalls && state.activeOrder.stalls.length > 0) ? state.activeOrder : null;
+    const groceryOrder = (state.activeOrder && state.activeOrder.orderType !== "MERCHANT_EXPRESS" && state.activeOrder.status !== "delivered" && !isMockOrder(state.activeOrder) && state.activeOrder.stalls && state.activeOrder.stalls.length > 0) ? state.activeOrder : null;
 
     const totalActiveCount = expressOrders.length + (groceryOrder ? 1 : 0);
 
@@ -17963,15 +17992,27 @@ function renderHubSettlement() {
     const container = document.getElementById("hub-content-settlement");
     if (!container) return;
 
-    const order = state.activeOrder;
-    let expressOrders = (state.merchantExpressOrders || []).slice();
+    let order = state.activeOrder;
+    if (order && isMockOrder(order)) {
+        state.activeOrder = null;
+        try {
+            localStorage.removeItem("talathub_active_order");
+            localStorage.removeItem("hsong_active_order");
+        } catch(e) {}
+        order = null;
+    }
+
+    let expressOrders = (state.merchantExpressOrders || []).filter(o => o && o.orderId && !isMockOrder(o));
     if (expressOrders.length === 0) {
         try {
-            expressOrders = JSON.parse(localStorage.getItem("hsong_merchant_express_orders") || "[]");
+            const rawExp = JSON.parse(localStorage.getItem("hsong_merchant_express_orders") || "[]");
+            if (Array.isArray(rawExp)) {
+                expressOrders = rawExp.filter(o => o && o.orderId && !isMockOrder(o));
+            }
         } catch(e) {}
     }
 
-    const hasGrocery = !!(order && order.stalls && order.stalls.length > 0);
+    const hasGrocery = !!(order && !isMockOrder(order) && order.stalls && order.stalls.length > 0);
     const hasExpress = expressOrders.length > 0;
 
     if (!hasGrocery && !hasExpress) {
@@ -18013,6 +18054,8 @@ function renderHubSettlement() {
             `;
         });
 
+        const orderGrandTotal = Number(order.grandTotal || order.total || vendorTotal);
+
         html += `
             <div class="bg-white rounded-3xl p-4 shadow-card border border-slate-200 space-y-3 mb-4 text-left">
                 <div class="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -18029,10 +18072,10 @@ function renderHubSettlement() {
 
             <div class="bg-gradient-to-r from-emerald-800 to-slate-900 text-white rounded-3xl p-4 shadow-card space-y-2 mb-4 text-left">
                 <div class="text-xs text-emerald-300 font-bold">รายรับรวมระบบจัดส่ง (ค่าสินค้า + ค่าบริการรวมบิล + ค่าส่ง)</div>
-                <div class="text-2xl font-black">฿${order.grandTotal || order.total || 185} <span class="text-xs font-normal text-slate-300">บาท</span></div>
+                <div class="text-2xl font-black">฿${orderGrandTotal} <span class="text-xs font-normal text-slate-300">บาท</span></div>
                 <div class="text-[11px] text-slate-300 flex justify-between pt-2 border-t border-slate-700">
                     <span>ยอดรวมร้านค้า: ฿${vendorTotal}</span>
-                    <span>ค่าส่ง+บริการรวมแผง: ฿${Math.max(20, (order.grandTotal || order.total || 185) - vendorTotal)}</span>
+                    <span>ค่าส่ง+บริการรวมแผง: ฿${Math.max(0, orderGrandTotal - vendorTotal)}</span>
                 </div>
             </div>
         `;
@@ -18096,7 +18139,15 @@ function clearHubSettlementVendor(vendorName, btn = null) {
 }
 
 function renderRiderScreen() {
-    const order = state.activeOrder;
+    let order = state.activeOrder;
+    if (order && isMockOrder(order)) {
+        state.activeOrder = null;
+        try {
+            localStorage.removeItem("talathub_active_order");
+            localStorage.removeItem("hsong_active_order");
+        } catch(e) {}
+        order = null;
+    }
     const badge = document.getElementById("rider-order-id-badge");
     const totalBadge = document.getElementById("rider-order-total-badge");
     const destName = document.getElementById("rider-dest-name");
@@ -18638,8 +18689,8 @@ function openRiderDeliveryCompleteModal() {
     const o = state.activeOrder;
     if (o) {
         const setVal = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-        setVal("rdc-order-id", o.orderId || "#TH-9999");
-        setVal("rider-complete-order-id", `ออเดอร์ ${o.orderId || '#TH-9999'}`);
+        setVal("rdc-order-id", o.orderId || "-");
+        setVal("rider-complete-order-id", `ออเดอร์ ${o.orderId || '-'}`);
         setVal("rdc-customer-name", o.customerName || "ลูกค้าทั่วไป");
         setVal("rider-complete-customer-name", o.customerName || o.customerPhone || "ลูกค้าทั่วไป");
         setVal("rdc-customer-phone", o.customerPhone || "-");
@@ -21518,30 +21569,63 @@ window.prevPreviewBannerSlide = prevPreviewBannerSlide;
 
 // Auto-sanitize test & mock data on application launch
 function autoSanitizeProductionData() {
-    const mockOrderIds = ["#TH-6114", "#TH-8101", "#TH-8102", "#TH-8103", "#TH-5324", "#TH-9568", "#TH-4692", "TH-6114", "TH-8101", "TH-8102", "TH-8103", "TH-5324", "TH-9568", "TH-4692"];
+    const mockOrderIds = [
+        "#TH-6114", "#TH-8101", "#TH-8102", "#TH-8103", "#TH-5324", "#TH-9568", "#TH-4692", "#TH-7564", "#TH-9999", "#TH-8801",
+        "TH-6114", "TH-8101", "TH-8102", "TH-8103", "TH-5324", "TH-9568", "TH-4692", "TH-7564", "TH-9999", "TH-8801"
+    ];
     
-    // 1. Active order
+    // 1. Active order: purge from both talathub_active_order and hsong_active_order
     try {
-        const savedOrder = localStorage.getItem("talathub_active_order");
-        if (savedOrder) {
-            const parsed = JSON.parse(savedOrder);
-            if (!parsed || !parsed.orderId || mockOrderIds.includes(parsed.orderId) || (typeof parsed.orderId === "string" && parsed.orderId.startsWith("#TH-810"))) {
-                localStorage.removeItem("talathub_active_order");
+        const orderKeys = ["talathub_active_order", "hsong_active_order"];
+        for (const k of orderKeys) {
+            const savedOrder = localStorage.getItem(k);
+            if (savedOrder) {
+                const parsed = JSON.parse(savedOrder);
+                if (!parsed || !parsed.orderId || isMockOrder(parsed) || mockOrderIds.includes(parsed.orderId) || (typeof parsed.orderId === "string" && (parsed.orderId.startsWith("#TH-810") || parsed.orderId.includes("7564") || parsed.orderId.includes("9999")))) {
+                    localStorage.removeItem(k);
+                }
             }
         }
     } catch (e) {}
 
-    // 2. Order history
+    // 2. In-memory activeOrder in state
+    if (state.activeOrder && isMockOrder(state.activeOrder)) {
+        state.activeOrder = null;
+    }
+
+    // 3. Order history
     try {
         const rawHist = localStorage.getItem("talathub_order_history");
         if (rawHist) {
             let hist = JSON.parse(rawHist);
             if (Array.isArray(hist)) {
-                hist = hist.filter(o => o && o.orderId && !mockOrderIds.includes(o.orderId) && !o.orderId.startsWith("#TH-810"));
+                hist = hist.filter(o => o && o.orderId && !isMockOrder(o) && !mockOrderIds.includes(o.orderId) && !o.orderId.startsWith("#TH-810") && !o.orderId.includes("7564"));
                 localStorage.setItem("talathub_order_history", JSON.stringify(hist));
             }
         }
     } catch (e) {}
+
+    // 4. Merchant Express Orders
+    try {
+        const expRaw = localStorage.getItem("hsong_merchant_express_orders");
+        if (expRaw) {
+            let expList = JSON.parse(expRaw);
+            if (Array.isArray(expList)) {
+                expList = expList.filter(o => o && o.orderId && !isMockOrder(o) && !mockOrderIds.includes(o.orderId));
+                localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(expList));
+            }
+        }
+    } catch (e) {}
+
+    // 5. Purge mock order nodes from Firebase Realtime Database
+    if (isFirebaseReady()) {
+        try {
+            const firebaseMockKeys = ["TH-7564", "TH-6114", "TH-8101", "TH-8102", "TH-8103", "TH-5324", "TH-9568", "TH-4692", "TH-9999", "TH-8801"];
+            firebaseMockKeys.forEach(k => {
+                db.ref(`orders/${k}`).remove().catch(() => {});
+            });
+        } catch(e) {}
+    }
 
     // 3. Community riders & Rider applications: Complete purge of mock & sample riders
     try {
