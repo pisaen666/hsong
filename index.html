@@ -3820,20 +3820,17 @@
 
             <!-- Login via 6-digit Merchant Code or Phone -->
             <div class="space-y-2 p-3.5 bg-emerald-50/70 border border-emerald-200/90 rounded-2xl">
-                <label class="block text-xs font-bold text-slate-800 flex items-center justify-between">
+                <label class="block text-xs font-bold text-slate-800">
                     <span class="flex items-center gap-1.5 text-emerald-900">
                         <span class="material-symbols-outlined text-base text-emerald-600 font-bold">key</span>
-                        <span>กรอกรหัสแผงค้า 6 หลัก หรือเบอร์โทร:</span>
+                        <span>กรอกรหัสผ่านร้านค้า หรือเบอร์โทรศัพท์:</span>
                     </span>
-                    <span
-                        class="text-[10px] text-emerald-600 font-mono bg-emerald-100/80 px-1.5 py-0.5 rounded font-bold">เช่น
-                        ct4578</span>
                 </label>
                 <div class="relative">
                     <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">pin</span>
-                    <input type="text" id="merchant-code-login-input"
-                        placeholder="กรอกรหัส 6 หลัก (เช่น CT4578) หรือเบอร์โทรศัพท์"
-                        class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-emerald-300 font-bold font-mono text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 uppercase outline-none bg-white shadow-xs"
+                    <input type="password" id="merchant-code-login-input"
+                        placeholder="กรอกรหัสผ่าน หรือเบอร์โทรศัพท์ร้านค้า"
+                        class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-emerald-300 font-bold font-mono text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none bg-white shadow-xs"
                         onkeydown="if(event.key === 'Enter') handleMerchantCodeLoginSubmit()">
                 </div>
                 <button type="button" onclick="handleMerchantCodeLoginSubmit()"
@@ -4661,14 +4658,11 @@
             </div>
 
             <div class="space-y-1.5">
-                <label class="font-bold text-slate-700 block text-xs flex items-center justify-between">
+                <label class="font-bold text-slate-700 block text-xs">
                     <span>รหัส PIN หรือ Password ประจำฮับ:</span>
-                    <span
-                        class="text-[10px] text-emerald-700 font-mono font-bold bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-full">รหัส:
-                        6666</span>
                 </label>
-                <input type="password" id="hub-pin-input" maxlength="10" placeholder="กรอกรหัส PIN (6666)"
-                    class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-center text-xl tracking-widest text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none bg-slate-50"
+                <input type="password" id="hub-pin-input" maxlength="20" placeholder="กรอกรหัสผ่านประจำฮับ"
+                    class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-center text-lg tracking-widest text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none bg-slate-50"
                     onkeydown="if(event.key === 'Enter') handleHubLoginSubmit()">
             </div>
 
@@ -4676,11 +4670,11 @@
                 <button type="button" onclick="handleHubLoginSubmit()"
                     class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer">
                     <span class="material-symbols-outlined text-base">login</span>
-                    <span>เข้าสู่ระบบศูนย์จัดของฮับ (6666)</span>
+                    <span>เข้าสู่ระบบศูนย์จัดของฮับ</span>
                 </button>
                 <button type="button" onclick="quickLoginHub()"
                     class="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold rounded-xl active:scale-95 transition-all text-[11px] flex items-center justify-center gap-1 cursor-pointer">
-                    <span>⚡ เข้าสู่ระบบทันที (โหมดทดสอบ รหัส 6666)</span>
+                    <span>⚡ เข้าสู่ระบบฮับทันที (โหมดทดสอบ)</span>
                 </button>
             </div>
         </div>
@@ -5120,22 +5114,21 @@
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="font-bold text-slate-700 block text-xs">รหัส PIN หรือ Password แอดมิน (ค่าเริ่มต้น
-                        8888):</label>
-                    <input type="password" id="admin-pin-input" placeholder="กรอก PIN 4 หลัก (8888)" maxlength="10"
+                    <label class="font-bold text-slate-700 block text-xs">รหัส PIN หรือ Password ผู้ดูแลระบบ (Admin):</label>
+                    <input type="password" id="admin-pin-input" placeholder="กรอกรหัสผ่านผู้ดูแลระบบ" maxlength="20"
                         class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-center text-lg tracking-widest text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none bg-slate-50">
                 </div>
 
                 <button type="button" onclick="handleAdminLoginSubmit()"
-                    class="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5">
+                    class="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer">
                     <span class="material-symbols-outlined text-base">login</span>
                     <span>เข้าสู่ระบบ Admin</span>
                 </button>
 
                 <!-- Fast 1-click test button -->
                 <button type="button" onclick="handleAdminQuickLogin()"
-                    class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-purple-900 font-bold rounded-xl active:scale-95 transition-all text-[11px] flex items-center justify-center gap-1">
-                    <span>⚡ เข้าสู่ระบบทันที (โหมดทดสอบ เฮียส่ง)</span>
+                    class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-purple-900 font-bold rounded-xl active:scale-95 transition-all text-[11px] flex items-center justify-center gap-1 cursor-pointer">
+                    <span>⚡ เข้าสู่ระบบทันที (โหมดทดสอบ)</span>
                 </button>
             </div>
         </div>

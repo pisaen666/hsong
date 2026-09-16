@@ -12441,9 +12441,9 @@ function closeAdminLoginModal() {
 }
 
 function handleAdminLoginSubmit() {
-    const pin = document.getElementById("admin-pin-input")?.value.trim();
-    if (!pin || (pin !== "8888" && pin !== "1234" && pin.length < 4)) {
-        showToast("⚠️ รหัส PIN ไม่ถูกต้อง (ค่าเริ่มต้น: 8888)");
+    const pin = document.getElementById("admin-pin-input")?.value.trim().toLowerCase();
+    if (!pin || pin !== "admin6305") {
+        showToast("⚠️ รหัสผ่านผู้ดูแลระบบไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
         return;
     }
     state.activeAdmin = {
@@ -12470,7 +12470,7 @@ function handleAdminQuickLogin() {
     closeAdminLoginModal();
     renderAuthHeaderButtons();
     switchRole("admin");
-    showToast("⚡ เข้าสู่ระบบแอดมิน (โหมดทดสอบ เฮียส่ง) สำเร็จ!");
+    showToast("⚡ เข้าสู่ระบบผู้ดูแลระบบ (Admin) สำเร็จ!");
 }
 
 function logoutAdmin() {
@@ -16743,7 +16743,7 @@ function loadSavedHubSettings() {
         hubPhone: "089-123-4567",
         hubLocation: "ล็อคกลาง อาคาร 1 หน้าตลาดวิศิษฐ์ชัย",
         targetPickingTime: 12,
-        staffPin: "8888",
+        staffPin: "hb6305",
         merchantGP: 0,
         merchantOpen: "04:30",
         merchantClose: "17:30",
@@ -16772,7 +16772,7 @@ function saveAdminSettingsConfig(roleKey) {
         s.hubPhone = document.getElementById("cfg-hub-phone")?.value || s.hubPhone;
         s.hubLocation = document.getElementById("cfg-hub-location")?.value || s.hubLocation;
         s.targetPickingTime = Number(document.getElementById("cfg-picking-time")?.value || 12);
-        s.staffPin = document.getElementById("cfg-staff-pin")?.value || "8888";
+        s.staffPin = document.getElementById("cfg-staff-pin")?.value || "hb6305";
     } else if (roleKey === "merchant") {
         s.merchantGP = Number(document.getElementById("cfg-merchant-gp")?.value || 0);
         s.merchantOpen = document.getElementById("cfg-merchant-open")?.value || "04:30";
@@ -17005,7 +17005,6 @@ function renderAdminSettings() {
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">รหัส PIN สำหรับเจ้าหน้าที่จัดของเข้าสู่ระบบ:</label>
                             <input type="password" id="cfg-staff-pin" value="${s.staffPin}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
-                            <span class="text-[11px] text-slate-400">ค่าเริ่มต้น: 8888</span>
                         </div>
                         <div class="p-3 bg-sky-50 border border-sky-200 rounded-xl flex items-center justify-between">
                             <div>
@@ -17193,7 +17192,7 @@ function renderAdminSettings() {
     `;
 }
 
-// Hub Login & Logout (Role 2: ศูนย์จัดของฮับ PIN: 6666)
+// Hub Login & Logout (Role 2: ศูนย์จัดของฮับ PIN: hb6305)
 function openHubLoginModal() {
     const modal = document.getElementById("hub-login-modal");
     if (modal) {
@@ -17212,9 +17211,9 @@ function closeHubLoginModal() {
 }
 
 function handleHubLoginSubmit() {
-    const pin = document.getElementById("hub-pin-input")?.value.trim();
-    if (!pin || (pin !== "6666" && pin !== "8888")) {
-        showToast("⚠️ รหัส PIN ไม่ถูกต้อง (รหัสผ่านคือ 6666)");
+    const pin = document.getElementById("hub-pin-input")?.value.trim().toLowerCase();
+    if (!pin || pin !== "hb6305") {
+        showToast("⚠️ รหัสผ่านประจำฮับไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
         return;
     }
     state.activeHub = {
@@ -17245,7 +17244,7 @@ function quickLoginHub() {
     renderAuthHeaderButtons();
     renderHubPickingList();
     renderHubSettlement();
-    showToast("⚡ เข้าสู่ระบบฮับด่วน (รหัส 6666) สำเร็จ!");
+    showToast("⚡ เข้าสู่ระบบศูนย์จัดของฮับ (Role 2) สำเร็จ!");
 }
 
 function logoutHub() {
@@ -22742,8 +22741,26 @@ async function handleMerchantCodeLoginSubmit() {
     if (!inputEl) return;
     const query = inputEl.value.trim().toUpperCase();
     if (!query) {
-        showToast("⚠️ กรุณากรอกรหัสแผงค้า 6 หลัก หรือเบอร์โทรศัพท์");
+        showToast("⚠️ กรุณากรอกรหัสผ่าน หรือเบอร์โทรศัพท์");
         inputEl.focus();
+        return;
+    }
+
+    // Role 3 admin password support
+    if (query === "ADMIN6305") {
+        let defaultStall = (Array.isArray(MARKET_DATA) && MARKET_DATA[0]) || { stallId: "stall_chicken", name: "แผงป้าพร ไก่สดตลาดบ้านบึง" };
+        state.activeMerchant = {
+            isLoggedIn: true,
+            stallId: defaultStall.stallId || "stall_chicken",
+            name: defaultStall.name || "แผงค้าหลัก (Master Merchant)",
+            role: "merchant_admin",
+            loggedInAt: Date.now()
+        };
+        saveMerchantToStorage(state.activeMerchant);
+        closeMerchantLoginModal();
+        setActiveRoleView("merchant");
+        if (typeof renderMerchantView === "function") renderMerchantView();
+        showToast("🎉 เข้าสู่ระบบแผงค้า (Role 3) สำเร็จ!");
         return;
     }
 
