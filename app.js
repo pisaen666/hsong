@@ -22556,38 +22556,28 @@ function renderRiderJobPool() {
         poolOrders.push(...state.orders.filter(o => o && (o.status === "waiting_rider" || o.status === "picking_completed" || (!o.riderName && o.status !== "delivered"))));
     }
 
-    if (poolOrders.length === 0) {
-        poolOrders = [
-            {
-                orderId: "EXPRESS-8801",
-                orderType: "MERCHANT_EXPRESS",
-                customerName: "คุณวิภา (ด่วนชุมชน)",
-                customerPhone: "089-111-2222",
-                address: "หมู่บ้านพฤกษา 12/1 บ้านบึง",
-                deliveryFee: 30,
-                originStall: { stallName: "เจ๊ไหม หมูสดเกรด A", stallNumber: "แผง A-04", ownerPhone: "081-444-5555" },
-                note: "หมูบด 3 กก. + ซี่โครง 2 กก. - โอนค่าส่งล่วงหน้าแล้ว",
-                status: "waiting_rider",
-                createdAt: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น."
-            },
-            {
-                orderId: "HUB-9902",
-                orderType: "HUB_CONSOLIDATED",
-                customerName: "สมศักดิ์ วงศ์สว่าง",
-                customerPhone: "086-777-8888",
-                address: "ร้านขายของชำ ถ.สุรชัย บ้านบึง",
-                grandTotal: 540,
-                paymentType: "cod",
-                paymentDesc: "ชำระเงินปลายทาง COD ฿540",
-                riderFee: 40,
-                itemsCount: 4,
-                status: "waiting_rider",
-                createdAt: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + " น."
-            }
-        ];
-    }
-
     if (countBadge) countBadge.textContent = poolOrders.length;
+
+    if (poolOrders.length === 0) {
+        container.innerHTML = `
+            <div class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center space-y-3">
+                <div class="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                    <span class="material-symbols-outlined text-3xl">moped</span>
+                </div>
+                <div>
+                    <h4 class="font-extrabold text-slate-700 text-sm">ยังไม่มีงานรอรับในขณะนี้</h4>
+                    <p class="text-xs text-slate-400 mt-1 max-w-xs mx-auto">ระบบจะแสดงงานทันทีเมื่อมีร้านค้าเรียกไรเดอร์ส่งด่วน หรือฮับรวมรอบสินค้าเสร็จสิ้น</p>
+                </div>
+                <div class="pt-1">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        ระบบเปิดรับงานอัตโนมัติแบบเรียลไทม์
+                    </span>
+                </div>
+            </div>
+        `;
+        return;
+    }
 
     let html = poolOrders.map(job => {
         const isExpress = job.orderType === "MERCHANT_EXPRESS";
