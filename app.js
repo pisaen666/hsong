@@ -1725,13 +1725,106 @@ function decodePlusCode(input, defaultPrefix = "7P53") {
     };
 }
 
-async function renderGoogleMapsShortlinkHelper(shortUrl) {
+// Parse DMS (Degrees Minutes Seconds, e.g. 13°17'40.7"N 101°09'53.8"E)
+function parseDMSCoordinates(str) {
+    if (!str || typeof str !== "string") return null;
+    const dmsRegex = /(\d{1,2})[°\s]+(\d{1,2})['\s]+(\d{1,2}(?:\.\d+)?)["]?\s*([NSns])[\s,\+]+(\d{2,3})[°\s]+(\d{1,2})['\s]+(\d{1,2}(?:\.\d+)?)["]?\s*([EWew])/;
+    const m = str.match(dmsRegex);
+    if (!m) return null;
+    let lat = parseInt(m[1], 10) + parseInt(m[2], 10) / 60 + parseFloat(m[3]) / 3600;
+    if (m[4].toUpperCase() === 'S') lat = -lat;
+    let lng = parseInt(m[5], 10) + parseInt(m[6], 10) / 60 + parseFloat(m[7]) / 3600;
+    if (m[8].toUpperCase() === 'W') lng = -lng;
+    return { lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) };
+}
+
+// Universal GPS coordinates extractor from URLs, query strings, or pasted text
+function extractCoordinatesFromUrlOrText(input) {
+    if (!input || typeof input !== "string") return null;
+
+    // 1. Check DMS format (e.g. 13°17'40.7"N 101°09'53.8"E)
+    const dms = parseDMSCoordinates(input);
+    if (dms && dms.lat >= -90 && dms.lat <= 90 && dms.lng >= -180 && dms.lng <= 180) {
+        return { lat: dms.lat, lng: dms.lng, source: "dms" };
+    }
+
+    // Try decoding up to 2 times for nested/encoded URLs (e.g. q%3D13.3188%2C101.1118 or continue=https%3A...)
+    let decoded = input;
+    try { decoded = decodeURIComponent(decodeURIComponent(input)); } catch (_) {
+        try { decoded = decodeURIComponent(input); } catch (__) {}
+    }
+
+    // 2. Check !3d and !4d (Google Maps exact pinpoint)
+    let m = decoded.match(/!3d(-?\d{1,2}\.\d+)!4d(-?\d{2,3}\.\d+)/);
+    if (m) {
+        const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng, source: "!3d!4d" };
+    }
+
+    // 3. Check ?q=lat,lng or &q=lat,lng (Google Maps search/pin parameter)
+    m = decoded.match(/[?&]q=(-?\d{1,2}\.\d+)[,\s]+(-?\d{2,3}\.\d+)/);
+    if (m) {
+        const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng, source: "q=" };
+    }
+
+    // 4. Check @lat,lng (Google Maps camera/viewport position)
+    m = decoded.match(/@(-?\d{1,2}\.\d+),(-?\d{2,3}\.\d+)/);
+    if (m) {
+        const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng, source: "@lat,lng" };
+    }
+
+    // 5. Check other common URL parameters: ll, query, destination, center, saddr, daddr
+    m = decoded.match(/[?&](?:ll|query|destination|center|saddr|daddr)=(-?\d{1,2}\.\d+)[,\s]+(-?\d{2,3}\.\d+)/);
+    if (m) {
+        const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng, source: "url_param" };
+    }
+
+    // 6. Generic coordinates in text (e.g. 13.3188, 101.1118)
+    m = decoded.match(/(-?\d{1,2}\.\d{3,})[,\s]+(-?\d{2,3}\.\d{3,})/);
+    if (m) {
+        const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng, source: "generic_coords" };
+    }
+
+    return null;
+}
+
+async function renderGoogleMapsShortlinkHelper(rawInput) {
     const dropdown = document.getElementById("location-search-dropdown");
     const list = document.getElementById("location-search-results-list");
     if (!dropdown || !list) return;
 
+    // 1. Check if the input already contains coordinates directly
+    const directCoords = extractCoordinatesFromUrlOrText(rawInput);
+    if (directCoords) {
+        const lat = directCoords.lat;
+        const lng = directCoords.lng;
+        const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+        const fee = calculateDeliveryFee(distKm);
+        const item = {
+            title: `📍 พิกัด GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+            shortTitle: `พิกัด Google Maps (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+            subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+            landmark: `พิกัดจากลิงก์ Google Maps (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
+            soiRoad: "",
+            lat: lat,
+            lng: lng,
+            icon: "pin_drop"
+        };
+        renderLocationSearchResults([item]);
+        selectLocationSearchResult(item);
+        return;
+    }
+
+    // Extract clean short URL (strips leading Thai text, trailing parameters, etc.)
+    const cleanMatch = (rawInput || "").match(/https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps)\/[A-Za-z0-9_-]+/i);
+    const cleanUrl = cleanMatch ? cleanMatch[0] : (rawInput || "").trim();
+
     list.innerHTML = `
-        <div class="p-3.5 space-y-2.5 bg-gradient-to-b from-blue-50/90 via-sky-50/50 to-white rounded-2xl border border-blue-200 text-left">
+        <div id="shortlink-helper-container" class="p-3.5 space-y-2.5 bg-gradient-to-b from-blue-50/90 via-sky-50/50 to-white rounded-2xl border border-blue-200 text-left shadow-xs">
             <div class="font-extrabold text-blue-950 text-xs flex items-center justify-between">
                 <span class="flex items-center gap-1.5">
                     <span class="material-symbols-outlined text-blue-600 text-base">link</span>
@@ -1739,52 +1832,97 @@ async function renderGoogleMapsShortlinkHelper(shortUrl) {
                 </span>
                 <span id="shortlink-loading-badge" class="text-[10px] text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full font-bold animate-pulse">กำลังอ่านพิกัด...</span>
             </div>
-            <p class="text-[11px] text-slate-600 leading-relaxed">
-                ลิงก์สั้น <code class="font-mono text-blue-800 bg-blue-100/80 px-1 py-0.5 rounded font-bold">maps.app.goo.gl</code> ถูกสร้างเป็นรหัสย่อของ Google Maps
+            <p class="text-[11px] text-slate-600 leading-relaxed truncate" title="${escapeHtml(cleanUrl)}">
+                ลิงก์สั้น <code class="font-mono text-blue-800 bg-blue-100/80 px-1 py-0.5 rounded font-bold">${escapeHtml(cleanUrl)}</code>
             </p>
-            <div class="p-3 bg-amber-50/90 rounded-2xl border border-amber-200 text-xs text-amber-950 space-y-1.5">
-                <div class="font-bold flex items-center gap-1 text-amber-900">
-                    <span class="material-symbols-outlined text-base text-amber-600">tips_and_updates</span>
-                    <span>วิธีปักหมุดจุดนี้ให้ตรงเป๊ะ 100%:</span>
-                </div>
-                <div class="space-y-1.5 text-[11px] leading-normal">
-                    <div>1. <strong>ใช้รหัส Plus Code (ง่ายที่สุด):</strong> ดูใต้ชื่อสถานที่ในหน้า Google Maps จะมีรหัส <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-amber-300">75X4+MW2</span>) แตะคัดลอกมาวางในช่องนี้ได้เลย หมุดจะปักทันที!</div>
-                    <div>2. <strong>ใช้ตัวเลขพิกัด:</strong> แตะค้างที่จุดบนแผนที่ Google Maps แล้วก็อปปี้ตัวเลข (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-amber-300">13.2991, 101.1573</span>) มาวาง</div>
-                    <div>3. <strong>พิมพ์ชื่อสถานที่:</strong> ลองพิมพ์ชื่อร้าน เช่น <span class="font-bold text-slate-900">"น้ำใส คาร์แคร์"</span> หรือ <span class="font-bold text-slate-900">"หนองชาก"</span></div>
+            <div id="shortlink-action-area" class="space-y-2">
+                <div class="p-3 bg-amber-50/90 rounded-2xl border border-amber-200 text-xs text-amber-950 space-y-1.5">
+                    <div class="font-bold flex items-center gap-1 text-amber-900">
+                        <span class="material-symbols-outlined text-base text-amber-600">tips_and_updates</span>
+                        <span>วิธีปักหมุดจุดนี้ให้ตรงเป๊ะ 100%:</span>
+                    </div>
+                    <div class="space-y-1.5 text-[11px] leading-normal">
+                        <div>1. <strong>ใช้รหัส Plus Code (ง่ายที่สุด):</strong> ดูใต้ชื่อสถานที่ในหน้า Google Maps จะมีรหัส <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-amber-300">75X4+MW2</span>) แตะคัดลอกมาวางในช่องนี้ได้เลย หมุดจะปักทันที!</div>
+                        <div>2. <strong>ใช้ตัวเลขพิกัด:</strong> แตะค้างที่จุดบนแผนที่ Google Maps แล้วก็อปปี้ตัวเลข (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-amber-300">13.2991, 101.1573</span>) มาวาง</div>
+                    </div>
                 </div>
             </div>
         </div>
     `;
     dropdown.classList.remove("hidden");
 
-    // Try unshortening via JSON proxy
+    // Try unshortening via JSON proxy with 4.5s timeout
+    let resolvedCoords = null;
     try {
-        const res = await fetch("https://unshorten.me/json/" + encodeURIComponent(shortUrl));
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 4500);
+        const res = await fetch("https://unshorten.me/json/" + encodeURIComponent(cleanUrl), { signal: controller.signal });
+        clearTimeout(tid);
         if (res.ok) {
             const data = await res.json();
-            const resolved = data.resolved_url || "";
-            const m = resolved.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || resolved.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
-            if (m) {
-                const lat = parseFloat(m[1]);
-                const lng = parseFloat(m[2]);
-                const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
-                const fee = calculateDeliveryFee(distKm);
-                const item = {
-                    title: `📍 พิกัดจาก Google Maps: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-                    shortTitle: `พิกัด Google Maps (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-                    subdistrict: "ต.หนองชาก อ.บ้านบึง จ.ชลบุรี",
-                    landmark: `พิกัดจากลิงก์ Google Maps (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
-                    soiRoad: "",
-                    lat: lat,
-                    lng: lng,
-                    icon: "pin_drop"
-                };
-                renderLocationSearchResults([item]);
-                selectLocationSearchResult(item);
+            if (data && data.resolved_url) {
+                resolvedCoords = extractCoordinatesFromUrlOrText(data.resolved_url);
             }
         }
     } catch (e) {
-        // Fallback card is already displayed
+        console.warn("Google Maps unshorten attempt failed:", e);
+    }
+
+    const badge = document.getElementById("shortlink-loading-badge");
+    const actionArea = document.getElementById("shortlink-action-area");
+
+    if (resolvedCoords) {
+        if (badge) {
+            badge.textContent = "✅ พบพิกัดแล้ว!";
+            badge.className = "text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold";
+        }
+        const lat = resolvedCoords.lat;
+        const lng = resolvedCoords.lng;
+        const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+        const fee = calculateDeliveryFee(distKm);
+        const item = {
+            title: `📍 พิกัดจาก Google Maps: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+            shortTitle: `พิกัด Google Maps (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+            subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+            landmark: `พิกัดจากลิงก์ Google Maps (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
+            soiRoad: "",
+            lat: lat,
+            lng: lng,
+            icon: "pin_drop"
+        };
+        renderLocationSearchResults([item]);
+        selectLocationSearchResult(item);
+    } else {
+        // Unshortening failed or hit rate limit: show instant 1-tap action buttons
+        if (badge) {
+            badge.textContent = "⚠️ แนะนำเปิดดู Plus Code";
+            badge.className = "text-[10px] text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full font-bold";
+        }
+        if (actionArea) {
+            actionArea.innerHTML = `
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    <a href="${escapeHtml(cleanUrl)}" target="_blank" rel="noopener noreferrer"
+                       class="flex items-center justify-center gap-1.5 py-2 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl font-bold text-xs shadow-xs transition-all text-center">
+                        <span class="material-symbols-outlined text-base">open_in_new</span>
+                        <span>1. เปิดลิงก์ใน Google Maps</span>
+                    </a>
+                    <button type="button" onclick="pasteFromClipboardToSearch()"
+                       class="flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer text-center">
+                        <span class="material-symbols-outlined text-base">content_paste</span>
+                        <span>2. วาง Plus Code / พิกัด</span>
+                    </button>
+                </div>
+                <div class="p-2.5 bg-amber-50/90 rounded-xl border border-amber-200 text-[11px] text-amber-950 space-y-1">
+                    <div class="font-bold text-amber-900 flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm text-amber-600">lightbulb</span>
+                        <span>วิธีนำพิกัดมาปักหมุด 100%:</span>
+                    </div>
+                    <div class="text-slate-600 leading-normal">
+                        กดปุ่มสีฟ้าด้านบนเพื่อเปิดดูใน Google Maps จะมีรหัส <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1 py-0.5 rounded border border-amber-300">75X4+MW2</span>) แตะคัดลอก แล้วกลับมากดปุ่มสีเขียว <strong>"วาง Plus Code"</strong> ได้ทันทีครับ
+                    </div>
+                </div>
+            `;
+        }
     }
 }
 
@@ -1804,27 +1942,25 @@ function handleLocationSearchInput(event) {
         return;
     }
 
-    // 1. Check if user pasted coordinates or Google Maps URL containing coordinates (e.g. 13.3188, 101.1118 or maps.google.com/?q=...)
-    const coordMatch = q.match(/(-?\d{1,2}\.\d{3,})[,\s]+(-?\d{2,3}\.\d{3,})/);
-    if (coordMatch) {
-        const lat = parseFloat(coordMatch[1]);
-        const lng = parseFloat(coordMatch[2]);
-        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-            const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
-            const fee = calculateDeliveryFee(distKm);
-            const coordItem = {
-                title: `📍 พิกัด GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-                shortTitle: `พิกัด GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-                subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
-                landmark: `พิกัดระบุเอง (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
-                soiRoad: "",
-                lat: lat,
-                lng: lng,
-                icon: "my_location"
-            };
-            renderLocationSearchResults([coordItem]);
-            return;
-        }
+    // 1. Check if user pasted coordinates or Google Maps URL containing coordinates (e.g. 13.3188, 101.1118 or maps.google.com/?q=... or DMS 13°17'40.7"N...)
+    const extractedCoords = extractCoordinatesFromUrlOrText(q);
+    if (extractedCoords) {
+        const lat = extractedCoords.lat;
+        const lng = extractedCoords.lng;
+        const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+        const fee = calculateDeliveryFee(distKm);
+        const coordItem = {
+            title: `📍 พิกัด GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+            shortTitle: `พิกัด GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+            subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+            landmark: `พิกัดระบุเอง (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
+            soiRoad: "",
+            lat: lat,
+            lng: lng,
+            icon: "my_location"
+        };
+        renderLocationSearchResults([coordItem]);
+        return;
     }
 
     // 2. Check if user pasted a Google Plus Code (e.g. 75X4+MW2 or 75X4+MW2 หนองชาก)
@@ -2126,6 +2262,9 @@ window.selectQuickLandmark = selectQuickLandmark;
 window.clearLocationSearch = clearLocationSearch;
 window.hideLocationSearchDropdown = hideLocationSearchDropdown;
 window.pasteFromClipboardToSearch = pasteFromClipboardToSearch;
+window.parseDMSCoordinates = parseDMSCoordinates;
+window.extractCoordinatesFromUrlOrText = extractCoordinatesFromUrlOrText;
+window.renderGoogleMapsShortlinkHelper = renderGoogleMapsShortlinkHelper;
 
 // Close search dropdown on click/pointerdown outside
 document.addEventListener("pointerdown", function (e) {
