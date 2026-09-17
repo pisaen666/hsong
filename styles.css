@@ -136,9 +136,13 @@ button, input, select, span, div {
     text-overflow: ellipsis;
 }
 
-/* Leaflet Map in Modal */
+/* Leaflet Map in In-Page Location Section */
 #location-leaflet-map {
     z-index: 10 !important;
+    min-height: 224px !important;
+    height: 100% !important;
+    width: 100% !important;
+    display: block !important;
 }
 .leaflet-pane {
     z-index: 10 !important;

@@ -1053,6 +1053,11 @@ function initLocationPickerMap(lat, lng) {
                 onMapCoordinatesChanged(e.latlng.lat, e.latlng.lng, true);
                 hideLocationSearchDropdown();
             });
+
+            // Invalidate size after DOM layout and CSS styles settle on all screen sizes
+            setTimeout(() => { if (locationPickerMap) locationPickerMap.invalidateSize(); }, 150);
+            setTimeout(() => { if (locationPickerMap) locationPickerMap.invalidateSize(); }, 500);
+            setTimeout(() => { if (locationPickerMap) locationPickerMap.invalidateSize(); }, 1000);
         } catch (e) {
             console.error("Leaflet init error:", e);
         }
@@ -1062,8 +1067,20 @@ function initLocationPickerMap(lat, lng) {
             if (locationPickerMarker) locationPickerMarker.setLatLng([lat, lng]);
             setTimeout(() => {
                 if (locationPickerMap) locationPickerMap.invalidateSize();
-            }, 200);
+            }, 100);
+            setTimeout(() => {
+                if (locationPickerMap) locationPickerMap.invalidateSize();
+            }, 500);
         } catch (e) { }
+    }
+
+    if (typeof window !== "undefined" && !window._hasLocationMapResizeListener) {
+        window._hasLocationMapResizeListener = true;
+        window.addEventListener("resize", function () {
+            if (locationPickerMap) {
+                locationPickerMap.invalidateSize();
+            }
+        });
     }
 
     updateMapLayerButtons();
@@ -2600,63 +2617,62 @@ document.addEventListener("pointerdown", function (e) {
 });
 
 // =========================================================================
-// OPTION A: SMART IN-PAGE LOCATION PICKER CONTROLLER
+// PERMANENT IN-PAGE LOCATION PICKER CONTROLLER (ถาวรบนหน้าแรกสำหรับทุกอุปกรณ์)
 // =========================================================================
-function showInPageLocationPicker(shouldShow) {
+function showInPageLocationPicker(shouldShow = true) {
     const pickerView = document.getElementById("inpage-location-picker-view");
     const summaryView = document.getElementById("inpage-location-summary-view");
-    const collapseBtn = document.getElementById("btn-inpage-collapse");
 
-    if (!pickerView && !summaryView) return;
-
-    if (shouldShow) {
-        if (pickerView) pickerView.classList.remove("hidden");
-        if (summaryView) summaryView.classList.add("hidden");
-
-        const hasValidLoc = state.deliveryLocation && state.deliveryLocation.isSet;
-        if (collapseBtn) {
-            if (hasValidLoc) collapseBtn.classList.remove("hidden");
-            else collapseBtn.classList.add("hidden");
-        }
-
-        const loc = state.deliveryLocation;
-        const initialLat = (loc && loc.lat) ? Number(loc.lat) : MARKET_ORIGIN.lat;
-        const initialLng = (loc && loc.lng) ? Number(loc.lng) : MARKET_ORIGIN.lng;
-
-        // Populate existing values into form fields
-        const houseInput = document.getElementById("input-addr-house");
-        const soiInput = document.getElementById("input-addr-soi");
-        const subInput = document.getElementById("input-addr-subdistrict");
-        const landInput = document.getElementById("input-addr-landmark");
-
-        if (loc && loc.isSet && !state.isSearchingGPS) {
-            if (houseInput && !houseInput.value) houseInput.value = loc.fullAddress || loc.houseNumber || loc.title || "";
-            if (soiInput && !soiInput.value) soiInput.value = loc.soiRoad || "";
-            if (subInput && !subInput.value) subInput.value = loc.subdistrict || "";
-            if (landInput && !landInput.value) landInput.value = loc.landmark || "";
-        }
-
-        setTimeout(() => {
-            initLocationPickerMap(initialLat, initialLng);
-            if (locationPickerMap) {
-                locationPickerMap.invalidateSize();
-            }
-            if (state.isSearchingGPS) {
-                clearOldLocationAndDistanceData();
-            }
-        }, 120);
-
-        updateModalAddressPreview();
-    } else {
-        if (pickerView) pickerView.classList.add("hidden");
-        if (summaryView) summaryView.classList.remove("hidden");
-        updateDeliveryLocationUI();
+    // Always ensure the in-page map picker view is visible
+    if (pickerView) {
+        pickerView.classList.remove("hidden");
     }
+    if (summaryView) {
+        summaryView.classList.add("hidden");
+    }
+
+    const loc = state.deliveryLocation;
+    const initialLat = (loc && loc.lat) ? Number(loc.lat) : MARKET_ORIGIN.lat;
+    const initialLng = (loc && loc.lng) ? Number(loc.lng) : MARKET_ORIGIN.lng;
+
+    // Populate existing values into form fields
+    const houseInput = document.getElementById("input-addr-house");
+    const soiInput = document.getElementById("input-addr-soi");
+    const subInput = document.getElementById("input-addr-subdistrict");
+    const landInput = document.getElementById("input-addr-landmark");
+
+    if (loc && loc.isSet && !state.isSearchingGPS) {
+        if (houseInput && !houseInput.value) houseInput.value = loc.fullAddress || loc.houseNumber || loc.title || "";
+        if (soiInput && !soiInput.value) soiInput.value = loc.soiRoad || "";
+        if (subInput && !subInput.value) subInput.value = loc.subdistrict || "";
+        if (landInput && !landInput.value) landInput.value = loc.landmark || "";
+    }
+
+    // Always initialize map and force multiple invalidates for desktop / mobile rendering
+    initLocationPickerMap(initialLat, initialLng);
+    setTimeout(() => {
+        if (locationPickerMap) {
+            locationPickerMap.invalidateSize();
+        }
+        if (state.isSearchingGPS) {
+            clearOldLocationAndDistanceData();
+        }
+    }, 100);
+
+    setTimeout(() => {
+        if (locationPickerMap) {
+            locationPickerMap.invalidateSize();
+        }
+    }, 400);
+
+    updateModalAddressPreview();
+    updateDeliveryLocationUI();
 }
 window.showInPageLocationPicker = showInPageLocationPicker;
 
 function collapseInPageLocationPicker() {
-    showInPageLocationPicker(false);
+    // Keep in-page map visible - no collapsing
+    showInPageLocationPicker(true);
 }
 window.collapseInPageLocationPicker = collapseInPageLocationPicker;
 
@@ -2669,26 +2685,16 @@ function openLocationModal() {
 }
 
 function closeLocationModal() {
-    if (state.deliveryLocation && state.deliveryLocation.isSet) {
-        collapseInPageLocationPicker();
-    }
+    // Keep in-page map visible
+    showInPageLocationPicker(true);
 }
 
 function checkAndPromptFirstTimeLocation() {
     // แสดงเฉพาะมุมมองลูกค้า (Customer role)
-    if (state.activeRole && state.activeRole !== "customer") return;
+    if (state.currentRole && state.currentRole !== "customer") return;
 
-    // ตรวจสอบว่ามีพิกัดจริงที่เคยบันทึกไว้ในเครื่องแล้วหรือไม่
-    const loc = state.deliveryLocation;
-    const hasValidLocation = loc && loc.isSet && typeof loc.lat === "number" && typeof loc.lng === "number";
-
-    if (hasValidLocation) {
-        // ลูกค้าเดิมที่มีพิกัดแล้ว: แสดงการ์ดสรุปย่อ และเปิดหน้าแรกให้เลือกดูสินค้าได้ทันที
-        showInPageLocationPicker(false);
-    } else {
-        // ลูกค้าใหม่: กางแผนที่และปุ่ม GPS ในหน้าแรกใต้แบนเนอร์ทันที (ไม่มี Modal เด้งบัง)
-        showInPageLocationPicker(true);
-    }
+    // กางแผนที่และระบบระบุพิกัดอย่างถาวรและสมบูรณ์แบบบนหน้าแรก (ทั้งบน PC และ Mobile)
+    showInPageLocationPicker(true);
 }
 window.checkAndPromptFirstTimeLocation = checkAndPromptFirstTimeLocation;
 window.openLocationModal = openLocationModal;
