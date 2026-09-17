@@ -1060,6 +1060,7 @@ function initLocationPickerMap(lat, lng) {
             locationPickerMap.on("click", function (e) {
                 locationPickerMarker.setLatLng(e.latlng);
                 onMapCoordinatesChanged(e.latlng.lat, e.latlng.lng, true);
+                hideLocationSearchDropdown();
             });
         } catch (e) {
             console.error("Leaflet init error:", e);
@@ -1989,6 +1990,7 @@ function pinCoordinatesResult(lat, lng, label = "พิกัดระบุเ�
     };
     renderLocationSearchResults([item]);
     selectLocationSearchResult(item);
+    hideLocationSearchDropdown();
 }
 window.pinCoordinatesResult = pinCoordinatesResult;
 
@@ -2062,7 +2064,12 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
                     <span class="material-symbols-outlined text-blue-600 text-base">link</span>
                     <span>ตรวจพบคลิปลิงก์จาก Google Maps</span>
                 </span>
-                <span id="shortlink-loading-badge" class="text-[10px] text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full font-bold animate-pulse">กำลังอ่านพิกัดอัตโนมัติ...</span>
+                <div class="flex items-center gap-1.5">
+                    <span id="shortlink-loading-badge" class="text-[10px] text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full font-bold animate-pulse">กำลังอ่านพิกัดอัตโนมัติ...</span>
+                    <button type="button" onclick="hideLocationSearchDropdown()" class="w-6 h-6 rounded-full hover:bg-blue-100 active:bg-blue-200 text-slate-400 hover:text-slate-700 flex items-center justify-center cursor-pointer transition-colors" title="ปิดหน้าต่างนี้">
+                        <span class="material-symbols-outlined text-base">close</span>
+                    </button>
+                </div>
             </div>
             <p class="text-[11px] text-slate-600 leading-relaxed truncate" title="${safeDisplayUrl}">
                 ลิงก์: <code class="font-mono text-blue-800 bg-blue-100/80 px-1 py-0.5 rounded font-bold">${safeDisplayUrl}</code>
