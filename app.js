@@ -697,29 +697,19 @@ const MARKET_ORIGIN = {
 
 function loadSavedLocation() {
     try {
-        const cust = loadSavedCustomer();
-        // ถ้าผู้ใช้ยังไม่ได้ล็อกอินเป็นสมาชิก ให้เริ่มที่สถานะ "ยังไม่ได้ระบุตำแหน่งจัดส่ง" เสมอ และล้างข้อมูลพิกัดตัวอย่างเก่าออก
-        if (!cust || !cust.isLoggedIn) {
-            localStorage.removeItem("talathub_delivery_location");
-            return null;
-        }
-
         const saved = localStorage.getItem("talathub_delivery_location");
         if (saved) {
             const parsed = JSON.parse(saved);
-            // ล้างข้อมูลตัวอย่าง/ทดสอบเดิม เช่น เทศบาลเมืองบ้านบึง หรือ คุณสุรีย์ หรือ 0.0 กม. หรือ 0.8 กม.
+            // ล้างเฉพาะข้อมูลตัวอย่างเก่าที่เป็น mock (เช่น ชื่อ "คุณสุรีย์")
             if (parsed && (
                 !parsed.isSet ||
                 !parsed.title ||
-                parsed.title.includes("เทศบาลเมืองบ้านบึง") ||
-                parsed.title.includes("สุรีย์") ||
-                parsed.distance === "0.0 กม." ||
-                parsed.distance === "0.8 กม."
+                parsed.title.includes("สุรีย์")
             )) {
                 localStorage.removeItem("talathub_delivery_location");
                 return null;
             }
-            if (parsed && parsed.isSet && parsed.title) {
+            if (parsed && parsed.isSet && typeof parsed.lat === "number" && typeof parsed.lng === "number" && !isNaN(parsed.lat) && !isNaN(parsed.lng)) {
                 return parsed;
             }
         }
@@ -2632,7 +2622,46 @@ function openLocationModal() {
 
 function closeLocationModal() {
     document.getElementById("location-modal").classList.add("hidden");
+    try {
+        sessionStorage.setItem("talathub_loc_prompt_dismissed", "1");
+    } catch (e) {}
 }
+
+// =========================================================================
+// OPTION 1: AUTO-WELCOME LOCATION PROMPT (สำหรับผู้ใช้ใหม่/ยังไม่เคยระบุพิกัด)
+// =========================================================================
+function checkAndPromptFirstTimeLocation() {
+    // แสดงเฉพาะมุมมองลูกค้า (Customer role)
+    if (state.activeRole && state.activeRole !== "customer") return;
+
+    // ตรวจสอบว่ามีพิกัดจริงที่เคยบันทึกไว้ในเครื่องแล้วหรือไม่
+    const loc = state.deliveryLocation;
+    const hasValidLocation = loc && loc.isSet && typeof loc.lat === "number" && typeof loc.lng === "number";
+
+    // ถ้ามีพิกัดบันทึกไว้แล้ว ไม่ต้องเด้งซ้ำ เปิดหน้าแรกให้ช้อปได้ทันที
+    if (hasValidLocation) return;
+
+    // ถ้าเคยกดปิดในเซสชันนี้แล้ว ไม่ต้องเด้งกวนใจขณะเลือกดูสินค้า
+    try {
+        if (sessionStorage.getItem("talathub_loc_prompt_dismissed") === "1") return;
+    } catch (e) {}
+
+    // หน่วงเวลาเล็กน้อย (450ms) เพื่อให้แผนที่และทรัพยากรหน้าเว็บพร้อมสมบูรณ์
+    setTimeout(() => {
+        const modal = document.getElementById("location-modal");
+        const isModalOpen = modal && !modal.classList.contains("hidden");
+        if (!isModalOpen) {
+            openLocationModal();
+            showToast("👋 ยินดีต้อนรับครับ! แตะปุ่ม 'เลื่อนหมุดมาที่ GPS จริง' หรือค้นหาบ้านของคุณเพื่อคำนวณค่าส่งที่ถูกต้อง");
+        }
+    }, 450);
+}
+window.checkAndPromptFirstTimeLocation = checkAndPromptFirstTimeLocation;
+window.openLocationModal = openLocationModal;
+window.closeLocationModal = closeLocationModal;
+window.detectCurrentLocationGPS = detectCurrentLocationGPS;
+window.saveGranularDeliveryAddress = saveGranularDeliveryAddress;
+
 
 function detectCurrentLocationGPS(forceOpenModal = true) {
     const isModalOpen = !document.getElementById("location-modal")?.classList.contains("hidden");
@@ -23333,6 +23362,9 @@ function initTalatHubApp() {
     initCatalogDbRealtimeSync();
     syncAdminOrdersFromCloud();
     listenToFirebaseOrdersForAdmin();
+
+    // Auto-prompt location picker modal for first-time customers who have no saved location
+    checkAndPromptFirstTimeLocation();
 
     // Immediate startup fetch from online Firebase RTDB to guarantee freshest data on every page load
     fetchOnlineStallsStartup();
