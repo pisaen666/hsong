@@ -1909,7 +1909,7 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
                 </button>
             </div>
 
-            <div class="p-2.5 bg-amber-50/90 rounded-xl border border-amber-200 text-[11px] text-amber-950 space-y-1">
+            <div id="shortlink-instruction-box" class="p-2.5 bg-amber-50/90 rounded-xl border border-amber-200 text-[11px] text-amber-950 space-y-1">
                 <div class="font-bold text-amber-900 flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm text-amber-600">lightbulb</span>
                     <span>คำแนะนำการปักหมุด:</span>
@@ -1924,16 +1924,20 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
 
     let resolvedCoords = null;
     let resolvedPlaceName = "";
+    let resolvedAddress = "";
 
     // Provider 1: microlink.io (Extracts full Google Maps page metadata, redirects & DMS/Plus Code title)
     try {
         const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), 4500);
+        const tid = setTimeout(() => controller.abort(), 5000);
         const res = await fetch("https://api.microlink.io/?url=" + encodeURIComponent(cleanUrl), { signal: controller.signal });
         clearTimeout(tid);
         if (res.ok) {
             const json = await res.json();
             const d = json.data || {};
+            resolvedPlaceName = d.title || d.publisher || "";
+            resolvedAddress = d.description || "";
+
             const candidates = [
                 d.title,
                 d.description,
@@ -1949,7 +1953,6 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
                     const coords = extractCoordinatesFromUrlOrText(cand);
                     if (coords) {
                         resolvedCoords = coords;
-                        resolvedPlaceName = d.title || "";
                         break;
                     }
                 }
@@ -1959,7 +1962,7 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
         console.warn("microlink attempt failed:", e);
     }
 
-    // Provider 2: unshorten.me (Fallback)
+    // Provider 2: unshorten.me (Fallback for URL redirect)
     if (!resolvedCoords) {
         try {
             const controller = new AbortController();
@@ -1969,7 +1972,10 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
             if (res.ok) {
                 const data = await res.json();
                 if (data && data.resolved_url) {
-                    resolvedCoords = extractCoordinatesFromUrlOrText(data.resolved_url);
+                    const coords = extractCoordinatesFromUrlOrText(data.resolved_url);
+                    if (coords) {
+                        resolvedCoords = coords;
+                    }
                 }
             }
         } catch (e) {
@@ -1977,11 +1983,90 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
         }
     }
 
+    // Provider 3: Smart Place Name & Address Geocoder
+    // If the short link is for a place/business (e.g. Gangnam Grill), Google Maps returns place name & address in title or query without raw coordinates.
+    let extractedSoi = "";
+    let extractedRoad = "";
+    if (!resolvedCoords && (resolvedPlaceName || cleanUrl)) {
+        const badgeEl = document.getElementById("shortlink-loading-badge");
+        if (badgeEl) badgeEl.textContent = "🔍 กำลังระบุพิกัดจากชื่อสถานที่...";
+
+        const parts = (resolvedPlaceName || "").split("·").map(s => s.trim());
+        const rawPlace = parts[0] || "";
+        const rawAddr = parts[1] || "";
+        const fullSearchText = (resolvedPlaceName + " " + cleanUrl).toLowerCase();
+
+        // 3a. Check if any local Ban Bueng landmark matches
+        const localMatch = BANBUENG_LANDMARKS.find(item => {
+            const keys = (item.title + " " + item.shortTitle + " " + (item.keywords || "")).toLowerCase();
+            return (rawPlace && keys.includes(rawPlace.toLowerCase())) ||
+                   (item.landmark && fullSearchText.includes(item.landmark.toLowerCase())) ||
+                   (item.soiRoad && fullSearchText.includes(item.soiRoad.toLowerCase()));
+        });
+
+        if (localMatch) {
+            resolvedCoords = {
+                lat: localMatch.lat,
+                lng: localMatch.lng,
+                source: "local_landmark"
+            };
+            if (!resolvedPlaceName) resolvedPlaceName = localMatch.shortTitle || localMatch.title;
+            extractedSoi = localMatch.soiRoad || "";
+        } else {
+            // 3b. Smart Nominatim Geocoding
+            const soiMatch = rawAddr.match(/(?:ซ\.|ซอย)\s*([^\s,]+)/);
+            const roadMatch = rawAddr.match(/(?:ถ\.|ถนน)\s*([^\s,]+)/);
+            const villageMatch = rawAddr.match(/(?:ม\.|หมู่บ้าน)\s*([^\s,]+)/);
+            const marketMatch = rawAddr.match(/(?:ตลาด)\s*([^\s,]+)/);
+            const disMatch = rawAddr.match(/(?:อ\.|อำเภอ)?\s*(บ้านบึง|Ban Bueng)/i);
+            const district = disMatch ? "บ้านบึง" : "บ้านบึง ชลบุรี";
+
+            const soi = soiMatch ? soiMatch[1] : "";
+            const road = roadMatch ? roadMatch[1] : "";
+            const village = villageMatch ? villageMatch[1] : "";
+            const market = marketMatch ? marketMatch[1] : "";
+            if (soi) extractedSoi = `ซอย${soi}`;
+            if (road) extractedRoad = `ถนน${road}`;
+
+            const queriesToTry = [];
+            if (soi) queriesToTry.push(`ซอย${soi} ${district}`);
+            if (village) queriesToTry.push(`หมู่บ้าน${village} ${district}`);
+            if (market) queriesToTry.push(`ตลาด${market} ${district}`);
+            if (road) queriesToTry.push(`ถนน${road} ${district}`);
+            if (rawPlace && !rawPlace.includes("Google Maps")) queriesToTry.push(`${rawPlace} ${district}`);
+            if (rawPlace && !rawPlace.includes("Google Maps")) queriesToTry.push(rawPlace);
+
+            for (const q of queriesToTry) {
+                try {
+                    const nomUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=th&limit=1`;
+                    const nomRes = await fetch(nomUrl, { headers: { "User-Agent": "HsongApp/1.0" } });
+                    if (nomRes.ok) {
+                        const nomData = await nomRes.json();
+                        if (Array.isArray(nomData) && nomData[0]) {
+                            const lat = parseFloat(nomData[0].lat);
+                            const lng = parseFloat(nomData[0].lon);
+                            if (!isNaN(lat) && !isNaN(lng)) {
+                                resolvedCoords = {
+                                    lat,
+                                    lng,
+                                    source: "nominatim_geocoded"
+                                };
+                                break;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Geocoding candidate failed:", q, err);
+                }
+            }
+        }
+    }
+
     const badge = document.getElementById("shortlink-loading-badge");
 
     if (resolvedCoords) {
         if (badge) {
-            badge.textContent = "✅ พบพิกัดแล้ว!";
+            badge.textContent = "✅ ปักหมุดพิกัดสำเร็จ!";
             badge.className = "text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold";
         }
         const lat = resolvedCoords.lat;
@@ -1997,9 +2082,9 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
         const item = {
             title: `📍 ${displayTitle}`,
             shortTitle: displayTitle,
-            subdistrict: "อ.บ้านบึง จ.ชลบุรี",
-            landmark: `พิกัดจากลิงก์ Google Maps (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
-            soiRoad: "",
+            subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+            landmark: displayTitle,
+            soiRoad: extractedSoi || extractedRoad || "",
             lat: lat,
             lng: lng,
             icon: "pin_drop"
@@ -2007,8 +2092,22 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
         selectLocationSearchResult(item);
     } else {
         if (badge) {
-            badge.textContent = "⚠️ ไม่พบพิกัดในลิงก์อัตโนมัติ";
+            badge.textContent = "⚠️ แนะนำเปิดดู Plus Code";
             badge.className = "text-[10px] text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full font-bold";
+        }
+        const box = document.getElementById("shortlink-instruction-box");
+        if (box) {
+            box.innerHTML = `
+                <div class="font-bold text-amber-900 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm text-amber-600">help</span>
+                    <span>วิธีปักหมุดจุดนี้ให้ตรงเป๊ะ 100%:</span>
+                </div>
+                <div class="text-slate-700 leading-relaxed space-y-1 pt-0.5">
+                    <div>1️⃣ กดปุ่มสีฟ้า <strong>"1. เปิดใน Google Maps"</strong> ด้านบน</div>
+                    <div>2️⃣ ใน Google Maps ให้แตะคัดลอก <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold bg-white px-1 py-0.5 rounded border border-amber-300">8WGQ+JQ8</span>) หรือ <strong>แตะค้างที่แผนที่</strong> เพื่อคัดลอกตัวเลขพิกัด</div>
+                    <div>3️⃣ กลับมากดปุ่มสีเขียว <strong>"2. วาง Plus Code / พิกัด"</strong> หมุดจะเลื่อนมาทันทีครับ</div>
+                </div>
+            `;
         }
     }
 }
