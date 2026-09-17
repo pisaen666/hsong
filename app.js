@@ -13443,17 +13443,17 @@ function updateCustomerRoleButtonUI() {
     if (isCustLoggedIn) {
         btn.classList.add("logged-in");
         if (isCustomerView) {
-            btn.className = "role-btn active logged-in py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+            btn.className = "role-btn active logged-in py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
         } else {
-            btn.className = "role-btn logged-in py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-emerald-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+            btn.className = "role-btn logged-in py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-emerald-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
         }
     } else {
         btn.classList.remove("logged-in");
         // ลูกค้ายังไม่ได้ล็อกอิน: ไม่เป็นสีเขียว
         if (isCustomerView) {
-            btn.className = "role-btn active py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-200 bg-slate-700/80 border border-slate-600/60 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+            btn.className = "role-btn active py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-white bg-slate-800/90 border border-white/20 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
         } else {
-            btn.className = "role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+            btn.className = "role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
         }
     }
 }
@@ -13538,19 +13538,19 @@ function setActiveRoleView(role) {
         if (btn) {
             if (r === role) {
                 if (r === "admin") {
-                    btn.className = "role-btn active py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+                    btn.className = "role-btn active py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
                 } else if (r === "customer") {
                     // Update via updateCustomerRoleButtonUI
                 } else {
-                    btn.className = "role-btn active py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+                    btn.className = "role-btn active py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
                 }
             } else {
                 if (r === "admin") {
-                    btn.className = "role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-purple-300 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+                    btn.className = "role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-purple-200 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
                 } else if (r === "customer") {
                     // Update via updateCustomerRoleButtonUI
                 } else {
-                    btn.className = "role-btn py-1.5 px-1 md:px-4 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-700/60 flex items-center justify-center gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm transition-all duration-200 text-center";
+                    btn.className = "role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
                 }
             }
         }
