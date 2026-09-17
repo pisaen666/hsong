@@ -496,22 +496,27 @@
                                 <div id="location-search-results-list" class="p-1 space-y-0.5"></div>
                             </div>
 
-                            <!-- Quick Ban Bueng Landmark Tags -->
-                            <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] no-scrollbar">
-                                <span class="text-[10px] text-slate-400 font-bold shrink-0">จุดด่วน:</span>
-                                <button type="button" onclick="selectQuickLandmark('market_hub')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏪 ตลาดวิศิษฐ์ชัย</button>
-                                <button type="button" onclick="selectQuickLandmark('gangnam_grill')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🥩 กังนัมกริล</button>
-                                <button type="button" onclick="selectQuickLandmark('somtum_dekwat')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🌶️ ส้มตำเด็กวัด</button>
-                                <button type="button" onclick="selectQuickLandmark('hosp')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏥 รพ.บ้านบึง</button>
-                                <button type="button" onclick="selectQuickLandmark('district')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏢 ที่ว่าการอำเภอ</button>
-                                <button type="button" onclick="selectQuickLandmark('sensiri')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">🏡 ม.เซนสิริ</button>
-                                <button type="button" onclick="selectQuickLandmark('nongchak')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">📍 แยกหนองชาก</button>
-                                <button type="button" onclick="selectQuickLandmark('mabphai')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">📍 มาบไผ่</button>
-                                <button type="button" onclick="selectQuickLandmark('nongsamsak')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer">📍 หนองซ้ำซาก</button>
-                                <button type="button" onclick="openGoogleMapsSearchHelper()" class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl font-bold shrink-0 whitespace-nowrap active:scale-95 transition-all cursor-pointer flex items-center gap-1">
-                                    <span class="material-symbols-outlined text-xs text-blue-600">open_in_new</span>
-                                    <span>🗺️ หาใน Google Maps</span>
-                                </button>
+                            <!-- 🗺️ GOOGLE MAPS SEARCH HELPER BANNER CARD -->
+                            <div onclick="openGoogleMapsSearchHelper()"
+                                class="p-2.5 sm:p-3 bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50 hover:from-sky-100 hover:to-blue-100 border border-sky-200/90 rounded-2xl flex items-center justify-between gap-2.5 cursor-pointer shadow-xs active:scale-98 transition-all group">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                                        <span class="material-symbols-outlined text-lg">explore</span>
+                                    </div>
+                                    <div class="text-left min-w-0">
+                                        <div class="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
+                                            <span>ค้นหาสถานที่เฉพาะ / ชื่อร้าน ผ่าน Google Maps</span>
+                                            <span class="text-[9px] bg-blue-600 text-white font-bold px-1.5 py-0.2 rounded-full">แนะนำ</span>
+                                        </div>
+                                        <p class="text-[10px] text-slate-500 mt-0.5 leading-tight truncate sm:whitespace-normal">
+                                            หากค้นหาชื่อร้านหรือสถานที่ในแอปไม่พบ แตะที่นี่เพื่อเปิด Google Maps แล้วคัดลอกลิงก์มาวางได้ทันที
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-1 text-blue-700 font-extrabold text-[11px] shrink-0 bg-white/90 px-2.5 py-1.5 rounded-xl border border-sky-200 shadow-2xs group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                    <span>เปิดหา</span>
+                                    <span class="material-symbols-outlined text-xs">open_in_new</span>
+                                </div>
                             </div>
                         </div>
 
@@ -559,42 +564,28 @@
                             </div>
                         </div>
 
-                        <!-- Granular Address Form -->
-                        <div class="space-y-2 pt-1 border-t border-slate-100">
+                        <!-- Consolidated Single Delivery Address Box -->
+                        <div class="space-y-1.5 pt-1 border-t border-slate-100">
                             <div class="flex items-center justify-between">
-                                <label class="block text-xs font-black text-slate-800 flex items-center gap-1">
+                                <label for="input-addr-house" class="block text-xs font-black text-slate-800 flex items-center gap-1.5 cursor-pointer">
                                     <span class="material-symbols-outlined text-emerald-600 text-base">home_pin</span>
                                     <span>ระบุรายละเอียดที่อยู่จัดส่ง (เพื่อให้ไรเดอร์หาเจอ 100%)</span>
                                 </label>
                                 <span class="text-[9px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded">สำคัญมาก</span>
                             </div>
 
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <div>
-                                    <label class="text-[10px] font-bold text-slate-600 block mb-0.5">1. บ้านเลขที่ / อาคาร / ชั้น / ห้อง / ร้านค้า <span class="text-red-500">*</span></label>
-                                    <input type="text" id="input-addr-house" placeholder="เช่น 123/4 หมู่ 2 หรือห้อง 304"
-                                        class="w-full text-xs p-2 rounded-xl border border-slate-300 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white">
-                                </div>
-                                <div>
-                                    <label class="text-[10px] font-bold text-slate-600 block mb-0.5">2. ซอย / ถนน / หมู่บ้าน / ชุมชน</label>
-                                    <input type="text" id="input-addr-soi" placeholder="เช่น ซอยวิศิษฐ์ชัย, ถ.ชลบุรี-บ้านบึง"
-                                        class="w-full text-xs p-2 rounded-xl border border-slate-300 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white">
-                                </div>
+                            <div class="relative">
+                                <textarea id="input-addr-house" rows="3"
+                                    placeholder="ระบุบ้านเลขที่, ซอย, ชุมชน, ชื่ออาคาร/ร้าน หรือจุดสังเกตหน้าบ้าน (เช่น 123/45 ซ.วิศิษฐ์ชัย ชุมชนบ้านบึงสันติ ประตูรั้วสีฟ้า)"
+                                    class="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:outline-none bg-white min-h-[76px] leading-relaxed shadow-2xs resize-none"></textarea>
+                                <!-- Hidden inputs to preserve JS compatibility -->
+                                <input type="hidden" id="input-addr-soi" value="">
+                                <input type="hidden" id="input-addr-subdistrict" value="ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี">
+                                <input type="hidden" id="input-addr-landmark" value="">
                             </div>
-
-                            <div>
-                                <label class="text-[10px] font-bold text-slate-600 block mb-0.5">3. ตำบล / อำเภอ / จังหวัด</label>
-                                <input type="text" id="input-addr-subdistrict" placeholder="เช่น ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี"
-                                    class="w-full text-xs p-2 rounded-xl border border-slate-300 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white">
-                            </div>
-
-                            <div>
-                                <label class="text-[10px] font-bold text-amber-800 block mb-0.5 flex items-center gap-1">
-                                    <span class="material-symbols-outlined text-xs text-amber-600">flag</span>
-                                    <span>4. จุดสังเกตชัดเจนสำหรับไรเดอร์ (ช่วยให้ส่งถึงหน้าบ้านแม่นยำ)</span>
-                                </label>
-                                <input type="text" id="input-addr-landmark" placeholder="เช่น ประตูรั้วสีฟ้า ตรงข้ามเสาไฟต้นใหญ่ ติดร้านขายของชำ"
-                                    class="w-full text-xs p-2 rounded-xl border border-amber-300 bg-amber-50/40 font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                            <div class="text-[10px] text-slate-500 flex items-center gap-1">
+                                <span class="text-emerald-600 font-bold">💡 ทิป:</span>
+                                <span>ระบุบ้านเลขที่ ซอย หรือจุดสังเกตเด่นๆ ในกล่องนี้ได้เลย เพื่อให้ไรเดอร์นำส่งถึงที่ได้ทันที</span>
                             </div>
                         </div>
 
@@ -6438,7 +6429,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=9.98_smart_inpage_map"></script>
+    <script src="app.js?v=9.99_consolidated_address_and_gmaps_banner"></script>
 </body>
 
 </html>

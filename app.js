@@ -1192,12 +1192,16 @@ async function reverseGeocodeCoordinates(lat, lng) {
         }
     }
 
+    const houseEl = document.getElementById("input-addr-house");
     const soiEl = document.getElementById("input-addr-soi");
     const subEl = document.getElementById("input-addr-subdistrict");
     const landEl = document.getElementById("input-addr-landmark");
-    if (soiEl && !soiEl.value && roadStr) soiEl.value = roadStr;
-    if (subEl && !subEl.value && subdistrictStr) subEl.value = subdistrictStr;
-    if (landEl && !landEl.value && landmarkStr) landEl.value = landmarkStr;
+    if (soiEl && roadStr) soiEl.value = roadStr;
+    if (subEl && subdistrictStr) subEl.value = subdistrictStr;
+    if (landEl && landmarkStr) landEl.value = landmarkStr;
+    if (houseEl && !houseEl.value.trim() && roadStr) {
+        houseEl.value = roadStr;
+    }
 
     updateModalAddressPreview();
 
@@ -1217,8 +1221,8 @@ function updateModalAddressPreview() {
 
     const parts = [];
     if (houseVal) parts.push(houseVal);
-    if (soiVal) parts.push(soiVal);
-    if (subVal) parts.push(subVal);
+    if (soiVal && !houseVal.includes(soiVal)) parts.push(soiVal);
+    if (subVal && !houseVal.includes(subVal)) parts.push(subVal);
 
     const addrText = document.getElementById("modal-gps-address-text");
     const readyBadge = document.getElementById("modal-gps-ready-badge");
@@ -1254,8 +1258,13 @@ function updateModalAddressPreview() {
 
     const landPreview = document.getElementById("modal-gps-landmark-preview");
     if (landPreview) {
-        landPreview.textContent = landVal ? `จุดสังเกต: ${landVal}` : "จุดสังเกต: -";
-        landPreview.className = landVal ? "text-[10px] text-amber-800 font-bold" : "text-[10px] text-slate-400 font-bold";
+        if (landVal) {
+            landPreview.textContent = `จุดสังเกต: ${landVal}`;
+            landPreview.className = "text-[10px] text-amber-800 font-bold";
+            landPreview.classList.remove("hidden");
+        } else {
+            landPreview.classList.add("hidden");
+        }
     }
 }
 
@@ -2499,13 +2508,20 @@ function selectLocationSearchResult(item) {
     onMapCoordinatesChanged(lat, lng, false);
 
     // 3. Auto-fill address fields if available
+    const houseInput = document.getElementById("input-addr-house");
     const soiInput = document.getElementById("input-addr-soi");
     const subInput = document.getElementById("input-addr-subdistrict");
     const landInput = document.getElementById("input-addr-landmark");
-    if (soiInput && item.soiRoad && !soiInput.value) soiInput.value = item.soiRoad;
+    if (soiInput && item.soiRoad) soiInput.value = item.soiRoad;
     if (subInput && item.subdistrict) subInput.value = item.subdistrict;
     if (landInput && (item.landmark || item.shortTitle || item.title)) {
         landInput.value = item.landmark || item.shortTitle || item.title;
+    }
+    if (houseInput && !houseInput.value.trim()) {
+        const placeName = item.shortTitle || item.title || "";
+        const road = item.soiRoad || "";
+        const parts = [placeName, road].filter(Boolean);
+        if (parts.length > 0) houseInput.value = parts.join(" ");
     }
     updateModalAddressPreview();
 
@@ -2614,7 +2630,7 @@ function showInPageLocationPicker(shouldShow) {
         const landInput = document.getElementById("input-addr-landmark");
 
         if (loc && loc.isSet && !state.isSearchingGPS) {
-            if (houseInput && !houseInput.value) houseInput.value = loc.houseNumber || "";
+            if (houseInput && !houseInput.value) houseInput.value = loc.fullAddress || loc.houseNumber || loc.title || "";
             if (soiInput && !soiInput.value) soiInput.value = loc.soiRoad || "";
             if (subInput && !subInput.value) subInput.value = loc.subdistrict || "";
             if (landInput && !landInput.value) landInput.value = loc.landmark || "";
@@ -2805,8 +2821,8 @@ function saveGranularDeliveryAddress() {
     // Build comprehensive deliverable address string
     const parts = [];
     if (house) parts.push(house);
-    if (soi) parts.push(soi);
-    if (subdistrict) parts.push(subdistrict);
+    if (soi && !house.includes(soi)) parts.push(soi);
+    if (subdistrict && !house.includes(subdistrict)) parts.push(subdistrict);
 
     let fullTitle = parts.join(", ");
     if (!fullTitle) {
@@ -2871,6 +2887,9 @@ function selectQuickLocation(name, soi, subdistrict, lat, lng) {
     if (soiInput) soiInput.value = soi || "";
     if (subInput) subInput.value = subdistrict || "";
     if (landInput) landInput.value = `ใกล้${name}`;
+    if (houseInput && !houseInput.value.trim()) {
+        houseInput.value = name || "";
+    }
 
     if (locationPickerMap && locationPickerMarker) {
         locationPickerMap.setView([lat, lng], 16);
@@ -2880,7 +2899,7 @@ function selectQuickLocation(name, soi, subdistrict, lat, lng) {
     onMapCoordinatesChanged(lat, lng, false);
     showToast(`📍 ปักหมุดย่าน "${name}" แล้ว - โปรดระบุบ้านเลขที่เพื่อความแม่นยำ`);
 
-    if (houseInput && !houseInput.value) {
+    if (houseInput) {
         houseInput.focus();
     }
 }
