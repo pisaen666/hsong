@@ -5072,6 +5072,61 @@
     </div>
 
     <!-- ========================================== -->
+    <!-- ADMIN AUTH CONFIRM MODAL (ยืนยันรหัสผ่านแอดมินสำหรับคำสั่งสำคัญ) -->
+    <!-- ========================================== -->
+    <div id="admin-auth-confirm-modal"
+        class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 hidden animate-fade-in"
+        onclick="if (event.target === this) closeAdminAuthConfirmModal();">
+        <div class="bg-white rounded-3xl max-w-sm w-full shadow-2xl p-5 sm:p-6 space-y-4 text-left border border-slate-200 animate-scale-up">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div class="font-extrabold text-sm text-slate-900 flex items-center gap-2" id="admin-auth-confirm-title-wrapper">
+                    <span id="admin-auth-confirm-icon-badge" class="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center text-sm shadow-xs shrink-0">
+                        <span class="material-symbols-outlined text-base">lock</span>
+                    </span>
+                    <div>
+                        <span id="admin-auth-confirm-title" class="font-black text-slate-900 text-sm sm:text-base leading-tight block">ยืนยันสิทธิ์ผู้ดูแลระบบ</span>
+                        <span class="text-[10px] text-slate-400 font-bold block">Security Authorization</span>
+                    </div>
+                </div>
+                <button type="button" onclick="closeAdminAuthConfirmModal()" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div id="admin-auth-confirm-banner" class="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-rose-900 space-y-1">
+                    <div class="font-extrabold flex items-center gap-1.5" id="admin-auth-confirm-warning-head">
+                        <span class="material-symbols-outlined text-base text-rose-600 shrink-0">warning</span>
+                        <span id="admin-auth-confirm-headline">การกระทำนี้ต้องการการยืนยันตัวตน</span>
+                    </div>
+                    <p class="text-[11.5px] text-rose-800 leading-snug" id="admin-auth-confirm-desc">กรุณากรอกรหัสผ่าน Admin เพื่อดำเนินการ</p>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="font-bold text-slate-700 block text-xs">รหัสผ่านผู้ดูแลระบบ (Admin Password):</label>
+                    <div class="relative">
+                        <input type="password" id="admin-auth-confirm-pin-input" placeholder="กรอกรหัสผ่าน Admin" maxlength="20"
+                            class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-center text-lg tracking-widest text-slate-900 focus:ring-2 focus:ring-rose-500 outline-none bg-slate-50 transition-all">
+                    </div>
+                    <div id="admin-auth-confirm-error" class="text-[11px] text-rose-600 font-bold hidden text-center pt-1"></div>
+                </div>
+
+                <div class="flex gap-2 pt-1">
+                    <button type="button" onclick="closeAdminAuthConfirmModal()"
+                        class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl transition-all text-xs cursor-pointer">
+                        ยกเลิก
+                    </button>
+                    <button type="button" id="admin-auth-confirm-submit-btn" onclick="handleAdminAuthConfirmSubmit()"
+                        class="flex-1 py-2.5 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">verified_user</span>
+                        <span>ยืนยันรหัส</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
     <!-- RIDER FORM MODAL (เพิ่ม/แก้ไขข้อมูลไรเดอร์)    -->
     <!-- ========================================== -->
     <div id="rider-form-modal"
@@ -6363,7 +6418,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.02_orange_header"></script>
+    <script src="app.js?v=10.03_admin_clear_and_delete_auth"></script>
 </body>
 
 </html>

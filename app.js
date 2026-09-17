@@ -4510,9 +4510,13 @@ function renderHubDailyReport(targetDateKey) {
                     <span class="material-symbols-outlined text-sm">print</span>
                     <span>พิมพ์รายงาน A4</span>
                 </button>
-                <button onclick="clearAdminOrdersAndReports()" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs" title="เคลียร์ตัวเลขและประวัติออเดอร์ทั้งหมดให้เป็น 0">
-                    <span class="material-symbols-outlined text-sm">delete_sweep</span>
-                    <span>เคลียร์ข้อมูล/รีเซ็ตเป็น 0</span>
+                <button onclick="clearDailyOrdersAndReport('${targetDateKey}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="เคลียร์เฉพาะข้อมูลออเดอร์และรายงานของวันที่เลือก (${thaiDateText}) โดยไม่กระทบวันอื่น">
+                    <span class="material-symbols-outlined text-sm text-amber-700">event_busy</span>
+                    <span>เคลียร์เฉพาะวันนี้</span>
+                </button>
+                <button onclick="clearAllSystemOrdersAndReports()" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="รีเซ็ตล้างข้อมูลออเดอร์ทุกวันทั้งระบบเป็น 0 (ต้องใช้รหัสผ่าน Admin)">
+                    <span class="material-symbols-outlined text-sm">delete_forever</span>
+                    <span>รีเซ็ตระบบทั้งหมด (ทุกวัน)</span>
                 </button>
             </div>
         </div>
@@ -4984,6 +4988,10 @@ function renderHubDailyReport(targetDateKey) {
                                         <span class="text-xs">💬</span>
                                         <span>LINE</span>
                                     </button>
+                                    <button onclick="deleteSingleOrder('${o.orderId}', '${targetDateKey}')" class="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ลบออเดอร์นี้ออกจากระบบ (ต้องใช้รหัสผ่าน Admin)">
+                                        <span class="material-symbols-outlined text-xs">delete</span>
+                                        <span>ลบ</span>
+                                    </button>
                                 </div>
                             </td>
                         </tr>`;
@@ -5125,53 +5133,310 @@ function settleAllVendors(dateKey) {
     renderHubDailyReport(dateKey);
 }
 
-// ── ล้างประวัติออเดอร์และรายงานสรุปทั้งหมดให้กลายเป็น 0
-function clearAdminOrdersAndReports() {
-    if (!confirm("⚠️ คุณต้องการเคลียร์ข้อมูลออเดอร์ ยอดขาย และประวัติการเคลียร์เงินทั้งหมดให้เป็น 0 ใช่หรือไม่? (สามารถเริ่มต้นบันทึกข้อมูลใหม่ได้ทันที)")) {
+// ── Admin Security Auth Prompt Modal for High-Risk Actions
+let _pendingAdminAuthCallback = null;
+
+function promptAdminAuthModal({ title, headline, description, onConfirm }) {
+    const modal = document.getElementById("admin-auth-confirm-modal");
+    if (!modal) {
+        // Fallback if modal HTML is not present
+        const entered = prompt(`${title || "ยืนยันสิทธิ์ผู้ดูแลระบบ"}\n${description || "กรุณากรอกรหัสผ่าน Admin เพื่อยืนยัน:"}`);
+        if (entered && entered.trim().toLowerCase() === "admin6305") {
+            if (typeof onConfirm === "function") onConfirm();
+        } else if (entered !== null) {
+            showToast("⚠️ รหัสผ่านผู้ดูแลระบบไม่ถูกต้อง");
+        }
         return;
     }
 
-    // 1. ล้าง localStorage ที่เกี่ยวข้องกับ Orders & Settlements
-    localStorage.removeItem("talathub_order_history");
-    localStorage.removeItem("talathub_active_order");
-    localStorage.removeItem("hsong_active_order");
-    localStorage.removeItem("hsong_merchant_express_orders");
-    localStorage.removeItem("hsong_orders");
-    localStorage.removeItem("talathub_mock_orders");
+    _pendingAdminAuthCallback = onConfirm;
 
-    // ล้าง daily reports และ settlement states ทั้งหมดใน localStorage
-    const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (key.startsWith("talathub_daily_report_") || key.startsWith("talathub_settled_riders_") || key.startsWith("talathub_settled_vendors_"))) {
-            keysToRemove.push(key);
+    const titleEl = document.getElementById("admin-auth-confirm-title");
+    const headlineEl = document.getElementById("admin-auth-confirm-headline");
+    const descEl = document.getElementById("admin-auth-confirm-desc");
+    const pinInput = document.getElementById("admin-auth-confirm-pin-input");
+    const errEl = document.getElementById("admin-auth-confirm-error");
+
+    if (titleEl) titleEl.textContent = title || "ยืนยันสิทธิ์ผู้ดูแลระบบ";
+    if (headlineEl) headlineEl.textContent = headline || "การกระทำนี้ต้องการการยืนยันตัวตน";
+    if (descEl) descEl.textContent = description || "กรุณากรอกรหัสผ่าน Admin เพื่อดำเนินการ";
+
+    if (errEl) {
+        errEl.textContent = "";
+        errEl.classList.add("hidden");
+    }
+
+    if (pinInput) {
+        pinInput.value = "";
+        pinInput.classList.remove("ring-2", "ring-rose-500");
+        pinInput.onkeydown = function (e) {
+            if (e.key === "Enter") {
+                handleAdminAuthConfirmSubmit();
+            } else if (e.key === "Escape") {
+                closeAdminAuthConfirmModal();
+            }
+        };
+    }
+
+    modal.classList.remove("hidden");
+    setTimeout(() => {
+        if (pinInput) pinInput.focus();
+    }, 120);
+}
+window.promptAdminAuthModal = promptAdminAuthModal;
+
+function closeAdminAuthConfirmModal() {
+    const modal = document.getElementById("admin-auth-confirm-modal");
+    if (modal) modal.classList.add("hidden");
+    _pendingAdminAuthCallback = null;
+}
+window.closeAdminAuthConfirmModal = closeAdminAuthConfirmModal;
+
+function handleAdminAuthConfirmSubmit() {
+    const pinInput = document.getElementById("admin-auth-confirm-pin-input");
+    const errEl = document.getElementById("admin-auth-confirm-error");
+    const pin = pinInput ? pinInput.value.trim().toLowerCase() : "";
+
+    if (!pin || pin !== "admin6305") {
+        if (errEl) {
+            errEl.textContent = "⚠️ รหัสผ่านแอดมินไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง";
+            errEl.classList.remove("hidden");
+        }
+        if (pinInput) {
+            pinInput.classList.add("ring-2", "ring-rose-500");
+            pinInput.focus();
+            pinInput.select();
+        }
+        showToast("⚠️ รหัสผ่านแอดมินไม่ถูกต้อง");
+        return;
+    }
+
+    const cb = _pendingAdminAuthCallback;
+    closeAdminAuthConfirmModal();
+    if (typeof cb === "function") {
+        cb();
+    }
+}
+window.handleAdminAuthConfirmSubmit = handleAdminAuthConfirmSubmit;
+
+// ── 1. ลบ/เคลียร์ข้อมูลเฉพาะวันที่เลือก (รายวัน)
+function clearDailyOrdersAndReport(targetDateKey) {
+    if (!targetDateKey) targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const thaiDateText = formatThaiDateDisplay(targetDateKey);
+
+    if (!confirm(`⚠️ คุณต้องการเคลียร์ข้อมูลออเดอร์และรายงานสรุปเฉพาะวันที่ ${thaiDateText} ใช่หรือไม่?\n\n✨ ข้อมูลของวันอื่น ๆ ทั้งในอดีตและอนาคตจะไม่ได้รับผลกระทบ`)) {
+        return;
+    }
+
+    // 1. หาออเดอร์ของวันที่เลือก
+    const allOrders = _collectAllOrders();
+    const targetOrders = allOrders.filter(o => {
+        const orderDate = getReportDateKey(o.savedAt || o.createdAt || o.orderTime || Date.now());
+        return orderDate === targetDateKey;
+    });
+    const targetIds = new Set(targetOrders.map(o => o.orderId).filter(Boolean));
+
+    // 2. ลบออกจาก Firebase Realtime Database
+    if (isFirebaseReady()) {
+        targetIds.forEach(id => {
+            db.ref("orders/" + id).remove().catch(e => console.warn("Firebase remove order failed:", id, e));
+        });
+        db.ref("daily_reports/" + targetDateKey).remove().catch(e => console.warn("Firebase remove daily_report failed:", e));
+    }
+
+    // 3. ลบออกจาก LocalStorage
+    try {
+        const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+        const filteredHist = hist.filter(o => {
+            if (!o || !o.orderId) return false;
+            if (targetIds.has(o.orderId)) return false;
+            const dKey = getReportDateKey(o.savedAt || o.createdAt || o.orderTime);
+            return dKey !== targetDateKey;
+        });
+        localStorage.setItem("talathub_order_history", JSON.stringify(filteredHist));
+    } catch (e) {}
+
+    try {
+        const hOrders = JSON.parse(localStorage.getItem("hsong_orders") || "[]");
+        const filteredH = hOrders.filter(o => {
+            if (!o || !o.orderId) return false;
+            if (targetIds.has(o.orderId)) return false;
+            const dKey = getReportDateKey(o.savedAt || o.createdAt || o.orderTime);
+            return dKey !== targetDateKey;
+        });
+        localStorage.setItem("hsong_orders", JSON.stringify(filteredH));
+    } catch (e) {}
+
+    try {
+        const exp = JSON.parse(localStorage.getItem("hsong_merchant_express_orders") || "[]");
+        const filteredExp = exp.filter(o => {
+            if (!o || !o.orderId) return false;
+            if (targetIds.has(o.orderId)) return false;
+            const dKey = getReportDateKey(o.savedAt || o.createdAt || o.orderTime);
+            return dKey !== targetDateKey;
+        });
+        localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(filteredExp));
+    } catch (e) {}
+
+    // ถ้า activeOrder เป็นของวันนี้ ให้เคลียร์ออก
+    if (state.activeOrder) {
+        const activeDate = getReportDateKey(state.activeOrder.savedAt || state.activeOrder.createdAt || state.activeOrder.orderTime);
+        if (targetIds.has(state.activeOrder.orderId) || activeDate === targetDateKey) {
+            state.activeOrder = null;
+            localStorage.removeItem("talathub_active_order");
+            localStorage.removeItem("hsong_active_order");
         }
     }
-    keysToRemove.forEach(k => localStorage.removeItem(k));
 
-    // 2. เคลียร์ memory state
-    state.activeOrder = null;
-    state.orders = [];
-    state.merchantExpressOrders = [];
-    if (window._cachedFirebaseOrders) window._cachedFirebaseOrders = [];
+    // ลบ Daily Report และ Settlement states ประจำวันนี้
+    localStorage.removeItem("talathub_daily_report_" + targetDateKey);
+    localStorage.removeItem("talathub_settled_riders_" + targetDateKey);
+    localStorage.removeItem("talathub_settled_vendors_" + targetDateKey);
 
-    // 3. เคลียร์ Firebase Realtime Database
-    if (isFirebaseReady()) {
-        db.ref("orders").remove().catch(e => console.warn("Firebase orders clear failed:", e));
-        db.ref("daily_reports").remove().catch(e => console.warn("Firebase daily_reports clear failed:", e));
+    // 4. ลบออกจาก Memory state
+    state.orders = (state.orders || []).filter(o => {
+        if (!o || !o.orderId) return false;
+        if (targetIds.has(o.orderId)) return false;
+        return getReportDateKey(o.savedAt || o.createdAt || o.orderTime) !== targetDateKey;
+    });
+    state.merchantExpressOrders = (state.merchantExpressOrders || []).filter(o => {
+        if (!o || !o.orderId) return false;
+        if (targetIds.has(o.orderId)) return false;
+        return getReportDateKey(o.savedAt || o.createdAt || o.orderTime) !== targetDateKey;
+    });
+    if (window._cachedFirebaseOrders && Array.isArray(window._cachedFirebaseOrders)) {
+        window._cachedFirebaseOrders = window._cachedFirebaseOrders.filter(o => {
+            if (!o || !o.orderId) return false;
+            if (targetIds.has(o.orderId)) return false;
+            return getReportDateKey(o.savedAt || o.createdAt || o.orderTime) !== targetDateKey;
+        });
     }
 
-    // 4. รีเฟรชหน้าจอรายงานและสถิติ
-    const curDate = _activeReportDateKey || getReportDateKey(Date.now());
-    renderHubDailyReport(curDate);
-    renderAdminAnalytics();
+    // 5. รีเฟรชหน้าจอ
+    renderHubDailyReport(targetDateKey);
+    if (typeof renderAdminAnalytics === "function") renderAdminAnalytics();
     if (typeof renderHubPickingList === "function") renderHubPickingList();
     if (typeof renderHubMonitorBoard === "function") renderHubMonitorBoard();
     if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
 
-    showToast("✨ เคลียร์ข้อมูลและรีเซ็ตตัวเลขทุกแท็บเป็น 0 เรียบร้อยแล้ว!");
+    showToast(`✨ เคลียร์ข้อมูลเฉพาะวันที่ ${thaiDateText} เรียบร้อยแล้ว!`);
 }
-window.clearAdminOrdersAndReports = clearAdminOrdersAndReports;
+window.clearDailyOrdersAndReport = clearDailyOrdersAndReport;
+
+// ── 2. ลบออเดอร์แต่ละรายการ (รายตัว) — ต้องใช้รหัสผ่าน Admin
+function deleteSingleOrder(orderId, targetDateKey) {
+    if (!orderId) return;
+    if (!targetDateKey) targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+
+    promptAdminAuthModal({
+        title: `🗑️ ยืนยันการลบออเดอร์`,
+        headline: `กำลังจะลบคำสั่งซื้อ #${orderId}`,
+        description: `คุณต้องการลบออเดอร์ #${orderId} ออกจากระบบถาวรใช่หรือไม่? ยอดสรุปรายวันจะถูกคำนวณใหม่โดยอัตโนมัติ`,
+        onConfirm: () => {
+            // 1. ลบจาก Firebase
+            if (isFirebaseReady()) {
+                db.ref("orders/" + orderId).remove().catch(e => console.warn("Firebase delete order failed:", orderId, e));
+            }
+
+            // 2. ลบจาก LocalStorage
+            try {
+                const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+                const filteredHist = hist.filter(o => o && o.orderId !== orderId);
+                localStorage.setItem("talathub_order_history", JSON.stringify(filteredHist));
+            } catch (e) {}
+
+            try {
+                const hOrders = JSON.parse(localStorage.getItem("hsong_orders") || "[]");
+                const filteredH = hOrders.filter(o => o && o.orderId !== orderId);
+                localStorage.setItem("hsong_orders", JSON.stringify(filteredH));
+            } catch (e) {}
+
+            try {
+                const exp = JSON.parse(localStorage.getItem("hsong_merchant_express_orders") || "[]");
+                const filteredExp = exp.filter(o => o && o.orderId !== orderId);
+                localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(filteredExp));
+            } catch (e) {}
+
+            if (state.activeOrder && state.activeOrder.orderId === orderId) {
+                state.activeOrder = null;
+                localStorage.removeItem("talathub_active_order");
+                localStorage.removeItem("hsong_active_order");
+            }
+
+            // 3. ลบจาก Memory
+            state.orders = (state.orders || []).filter(o => o && o.orderId !== orderId);
+            state.merchantExpressOrders = (state.merchantExpressOrders || []).filter(o => o && o.orderId !== orderId);
+            if (window._cachedFirebaseOrders && Array.isArray(window._cachedFirebaseOrders)) {
+                window._cachedFirebaseOrders = window._cachedFirebaseOrders.filter(o => o && o.orderId !== orderId);
+            }
+
+            // 4. ลบแคช Daily Report เก่าของวันนี้เพื่อให้ระบบคำนวณใหม่
+            localStorage.removeItem("talathub_daily_report_" + targetDateKey);
+
+            // 5. รีเฟรชหน้าจอ
+            renderHubDailyReport(targetDateKey);
+            if (typeof renderAdminAnalytics === "function") renderAdminAnalytics();
+            if (typeof renderHubPickingList === "function") renderHubPickingList();
+            if (typeof renderHubMonitorBoard === "function") renderHubMonitorBoard();
+            if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
+
+            showToast(`🗑️ ลบออเดอร์ #${orderId} เรียบร้อยแล้ว!`);
+        }
+    });
+}
+window.deleteSingleOrder = deleteSingleOrder;
+
+// ── 3. รีเซ็ตระบบทั้งหมด (ล้างทุกวัน) — ต้องใช้รหัสผ่าน Admin
+function clearAllSystemOrdersAndReports() {
+    promptAdminAuthModal({
+        title: `🚨 รีเซ็ตระบบทั้งหมด (ทุกวัน)`,
+        headline: `คำเตือนระดับสูงสุด: ล้างฐานข้อมูลทุกวันเป็น 0`,
+        description: `คุณต้องการเคลียร์ข้อมูลออเดอร์ ยอดขาย สถิติ และประวัติการเคลียร์เงินของ "ทุกวันทั้งหมด" ให้เป็น 0 ใช่หรือไม่? (ข้อมูลจะไม่สามารถกู้คืนได้)`,
+        onConfirm: () => {
+            // 1. ล้าง localStorage ที่เกี่ยวข้องกับ Orders & Settlements ทั้งหมด
+            localStorage.removeItem("talathub_order_history");
+            localStorage.removeItem("talathub_active_order");
+            localStorage.removeItem("hsong_active_order");
+            localStorage.removeItem("hsong_merchant_express_orders");
+            localStorage.removeItem("hsong_orders");
+            localStorage.removeItem("talathub_mock_orders");
+
+            // ล้าง daily reports และ settlement states ทุกวันใน localStorage
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.startsWith("talathub_daily_report_") || key.startsWith("talathub_settled_riders_") || key.startsWith("talathub_settled_vendors_"))) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+
+            // 2. เคลียร์ memory state
+            state.activeOrder = null;
+            state.orders = [];
+            state.merchantExpressOrders = [];
+            if (window._cachedFirebaseOrders) window._cachedFirebaseOrders = [];
+
+            // 3. เคลียร์ Firebase Realtime Database ทั้งหมด
+            if (isFirebaseReady()) {
+                db.ref("orders").remove().catch(e => console.warn("Firebase orders clear failed:", e));
+                db.ref("daily_reports").remove().catch(e => console.warn("Firebase daily_reports clear failed:", e));
+            }
+
+            // 4. รีเฟรชหน้าจอรายงานและสถิติ
+            const curDate = _activeReportDateKey || getReportDateKey(Date.now());
+            renderHubDailyReport(curDate);
+            if (typeof renderAdminAnalytics === "function") renderAdminAnalytics();
+            if (typeof renderHubPickingList === "function") renderHubPickingList();
+            if (typeof renderHubMonitorBoard === "function") renderHubMonitorBoard();
+            if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
+
+            showToast("✨ รีเซ็ตระบบและล้างข้อมูลทุกวันให้เป็น 0 เรียบร้อยแล้ว!");
+        }
+    });
+}
+window.clearAllSystemOrdersAndReports = clearAllSystemOrdersAndReports;
+window.clearAdminOrdersAndReports = clearAllSystemOrdersAndReports;
 
 // ── CSV Export Function
 function exportDailyReportCSV(dateKey) {
