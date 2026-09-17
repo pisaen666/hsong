@@ -1461,7 +1461,43 @@ function applyResolvedGPSLocation(lat, lng, accuracy, sourceName) {
 // BAN BUENG LOCAL LANDMARKS & SMART SEARCH
 // ==========================================
 const BANBUENG_LANDMARKS = [
-    // ร้านอาหารและสตรีทฟู้ดยอดนิยมในบ้านบึง
+    // ร้านอาหารและสถานที่ยอดนิยมในบ้านบึง
+    {
+        id: "gangnam_grill",
+        title: "Gangnam Grill กังนัมกริล ปิ้งย่างเกาหลี (ซอยวิศิษฐ์ชัย)",
+        shortTitle: "กังนัมกริล ปิ้งย่างเกาหลี",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ซอยวิศิษฐ์ชัย ถ.บ้านบึง-บ้านค่าย (42,44 ซ.วิศิษฐ์ชัย)",
+        soiRoad: "ซอยวิศิษฐ์ชัย",
+        keywords: "กังนัม กังนัมกริล gangnam grill ปิ้งย่าง เกาหลี ซอยวิศิษฐ์ชัย วิศิษฐ์ชัย บุฟเฟต์เกาหลี 845c+2h 845c+5h",
+        lat: 13.307596,
+        lng: 101.121416,
+        icon: "restaurant"
+    },
+    {
+        id: "market_hub",
+        title: "ศูนย์กระจายตลาดสดวิศิษฐ์ชัย (Hub)",
+        shortTitle: "ตลาดสดวิศิษฐ์ชัย (ฮับ)",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ตลาดสดวิศิษฐ์ชัย ล็อคกลาง",
+        soiRoad: "ถนนวิศิษฐ์ชัย",
+        keywords: "ตลาดสดวิศิษฐ์ชัย วิศิษฐ์ชัย ตลาดสด ฮับ ตลาดวิศิษฐ์ชัย ซอยวิศิษฐ์ชัย ถนนวิศิษฐ์ชัย wisitchai",
+        lat: 13.3080,
+        lng: 101.1214,
+        icon: "storefront"
+    },
+    {
+        id: "soi_wisitchai",
+        title: "ซอยวิศิษฐ์ชัย บ้านบึง (Soi Wisitchai)",
+        shortTitle: "ซอยวิศิษฐ์ชัย",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ย่านการค้าตลาดสดวิศิษฐ์ชัย",
+        soiRoad: "ซอยวิศิษฐ์ชัย",
+        keywords: "วิศิษฐ์ชัย ซอยวิศิษฐ์ชัย ถนนวิศิษฐ์ชัย wisitchai",
+        lat: 13.3078,
+        lng: 101.1212,
+        icon: "signpost"
+    },
     {
         id: "somtum_dekwat",
         title: "ร้านส้มตำเด็ก วัดบ้านบึง (ส้มตำเด็กวัด by แอน)",
@@ -1559,16 +1595,16 @@ const BANBUENG_LANDMARKS = [
         icon: "local_police"
     },
     {
-        id: "market_hub",
-        title: "ศูนย์กระจายตลาดสดวิศิษฐ์ชัย (Hub)",
-        shortTitle: "ตลาดสดวิศิษฐ์ชัย (ฮับ)",
+        id: "tesaban_bb",
+        title: "เทศบาลเมืองบ้านบึง (Ban Bueng Town Hall)",
+        shortTitle: "เทศบาลเมืองบ้านบึง",
         subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
-        landmark: "ตลาดสดวิศิษฐ์ชัย ล็อคกลาง",
-        soiRoad: "ถนนวิศิษฐ์ชัย",
-        keywords: "ตลาดสดวิศิษฐ์ชัย วิศิษฐ์ชัย ตลาดสด ฮับ ตลาดวิศิษฐ์ชัย",
-        lat: 13.3080,
-        lng: 101.1214,
-        icon: "storefront"
+        landmark: "สำนักงานเทศบาลเมืองบ้านบึง",
+        soiRoad: "ถนนเทศบาล 1",
+        keywords: "เทศบาลเมืองบ้านบึง เทศบาลบ้านบึง เทศบาล",
+        lat: 13.3105,
+        lng: 101.1118,
+        icon: "apartment"
     },
     {
         id: "market",
@@ -1593,6 +1629,54 @@ const BANBUENG_LANDMARKS = [
         lat: 13.3032,
         lng: 101.1172,
         icon: "school"
+    },
+    {
+        id: "noodle_ok",
+        title: "ร้านก๋วยเตี๋ยวบ้านบึง โอเค (ต้นตำรับ)",
+        shortTitle: "ก๋วยเตี๋ยวบ้านบึง โอเค",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ย่านตลาดเก่าบ้านบึง",
+        soiRoad: "ถนนสถาวร",
+        keywords: "ก๋วยเตี๋ยวบ้านบึง ก๋วยเตี๋ยวโอเค บะหมี่บ้านบึง ก๋วยเตี๋ยวหมู",
+        lat: 13.3100,
+        lng: 101.1150,
+        icon: "restaurant"
+    },
+    {
+        id: "noodle_soi12",
+        title: "ร้านก๋วยเตี๋ยวบ้านบึง ซอย 12",
+        shortTitle: "ก๋วยเตี๋ยวบ้านบึง ซอย 12",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "ซอย 12 บ้านบึง",
+        soiRoad: "ซอย 12",
+        keywords: "ก๋วยเตี๋ยวซอย12 ก๋วยเตี๋ยวบ้านบึง ซอย12",
+        lat: 13.3085,
+        lng: 101.1185,
+        icon: "restaurant"
+    },
+    {
+        id: "wat_bueng_lang",
+        title: "วัดบึงบวรสถิตย์ (วัดบึงล่าง บ้านบึง)",
+        shortTitle: "วัดบึงล่าง",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "วัดบึงบวรสถิตย์",
+        soiRoad: "ถนนเทศบาล 1",
+        keywords: "วัดบึงบวรสถิตย์ วัดบึงล่าง วัดบึง",
+        lat: 13.3105,
+        lng: 101.1130,
+        icon: "temple_buddhist"
+    },
+    {
+        id: "wat_bueng_bon",
+        title: "วัดบุญญฤทธาราม (วัดบึงบน บ้านบึง)",
+        shortTitle: "วัดบึงบน",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: "วัดบุญญฤทธาราม",
+        soiRoad: "ถนนบ้านบึง-พัฒนา",
+        keywords: "วัดบุญญฤทธาราม วัดบึงบน วัดบน",
+        lat: 13.3160,
+        lng: 101.1170,
+        icon: "temple_buddhist"
     },
     {
         id: "sensiri",
@@ -1641,6 +1725,18 @@ const BANBUENG_LANDMARKS = [
         lat: 13.3020,
         lng: 101.1820,
         icon: "location_on"
+    },
+    {
+        id: "tech_chon",
+        title: "วิทยาลัยเทคนิคชลบุรี (หนองชาก บ้านบึง)",
+        shortTitle: "วิทยาลัยเทคนิคชลบุรี",
+        subdistrict: "ต.หนองชาก อ.บ้านบึง จ.ชลบุรี",
+        landmark: "วิทยาลัยเทคนิคชลบุรี หนองชาก",
+        soiRoad: "ถนนสาย 344",
+        keywords: "เทคนิคชลบุรี วท ชลบุรี เทคนิคหนองชาก หนองชาก",
+        lat: 13.2950,
+        lng: 101.1780,
+        icon: "school"
     },
     {
         id: "mabphai",
@@ -1850,34 +1946,111 @@ function extractCoordinatesFromUrlOrText(input) {
     return null;
 }
 
+function matchLocalLandmark(text) {
+    if (!text || typeof text !== "string") return null;
+    const cleanQ = text.replace(/[\+\s_,-]+/g, "").toLowerCase();
+    if (cleanQ.length < 2) return null;
+    return BANBUENG_LANDMARKS.find(item => {
+        const full = (item.title + " " + item.shortTitle + " " + (item.keywords || "") + " " + (item.landmark || "") + " " + (item.soiRoad || "")).replace(/[\+\s_,-]+/g, "").toLowerCase();
+        const shortClean = (item.shortTitle || item.title).replace(/[\+\s_,-]+/g, "").toLowerCase();
+        return full.includes(cleanQ) || (cleanQ.length >= 3 && shortClean.includes(cleanQ)) || (cleanQ.length >= 5 && cleanQ.includes(shortClean));
+    });
+}
+window.matchLocalLandmark = matchLocalLandmark;
+
+function extractPlaceQueryFromGoogleUrl(urlStr) {
+    if (!urlStr || typeof urlStr !== "string") return null;
+    let decoded = urlStr;
+    try { decoded = decodeURIComponent(decodeURIComponent(urlStr.replace(/\+/g, " "))); } catch(_) {
+        try { decoded = decodeURIComponent(urlStr.replace(/\+/g, " ")); } catch(__) {}
+    }
+    const qMatch = decoded.match(/[?&]q=([^&]+)/);
+    if (qMatch) {
+        const val = qMatch[1].trim();
+        if (!/^-?\d{1,2}\.\d+/.test(val)) return val;
+    }
+    return null;
+}
+window.extractPlaceQueryFromGoogleUrl = extractPlaceQueryFromGoogleUrl;
+
+function pinCoordinatesResult(lat, lng, label = "พิกัดระบุเอง") {
+    if (typeof lat !== "number" || typeof lng !== "number" || isNaN(lat) || isNaN(lng)) return;
+    const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+    const fee = calculateDeliveryFee(distKm);
+    const item = {
+        title: `📍 ${label}: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+        shortTitle: `${label} (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        landmark: `${label} (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
+        soiRoad: "",
+        lat: lat,
+        lng: lng,
+        icon: "pin_drop"
+    };
+    renderLocationSearchResults([item]);
+    selectLocationSearchResult(item);
+}
+window.pinCoordinatesResult = pinCoordinatesResult;
+
+let _clipboardWatcherActive = false;
+function armClipboardWatcher() {
+    _clipboardWatcherActive = true;
+}
+window.armClipboardWatcher = armClipboardWatcher;
+
+document.addEventListener("visibilitychange", async function () {
+    if (document.visibilityState === "visible" && _clipboardWatcherActive) {
+        try {
+            if (navigator.clipboard && navigator.clipboard.readText) {
+                const text = (await navigator.clipboard.readText() || "").trim();
+                if (text) {
+                    const coords = extractCoordinatesFromUrlOrText(text);
+                    const pc = decodePlusCode(text);
+                    if (coords || pc) {
+                        _clipboardWatcherActive = false;
+                        const input = document.getElementById("location-search-input");
+                        if (input) input.value = text;
+                        handleLocationSearchInput(text);
+                        showToast("🎉 ตรวจพบพิกัดจากคลิปบอร์ดและปักหมุดให้อัตโนมัติแล้วครับ!");
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("Clipboard auto-read skipped:", e);
+        }
+    }
+});
+
 async function renderGoogleMapsShortlinkHelper(rawInput) {
     const dropdown = document.getElementById("location-search-dropdown");
     const list = document.getElementById("location-search-results-list");
     if (!dropdown || !list) return;
 
-    // 1. Check if the input already contains coordinates directly
+    // 1. Direct coordinates
     const directCoords = extractCoordinatesFromUrlOrText(rawInput);
     if (directCoords) {
-        const lat = directCoords.lat;
-        const lng = directCoords.lng;
-        const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
-        const fee = calculateDeliveryFee(distKm);
-        const item = {
-            title: `📍 พิกัด GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-            shortTitle: `พิกัด Google Maps (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-            subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
-            landmark: `พิกัดจากลิงก์ Google Maps (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
-            soiRoad: "",
-            lat: lat,
-            lng: lng,
-            icon: "pin_drop"
-        };
-        renderLocationSearchResults([item]);
-        selectLocationSearchResult(item);
+        pinCoordinatesResult(directCoords.lat, directCoords.lng, "พิกัดระบุจากข้อความ/ลิงก์");
         return;
     }
 
-    // Extract clean short URL (strips leading Thai text, trailing parameters, etc.)
+    // 2. Direct Plus Code
+    const directPc = decodePlusCode(rawInput);
+    if (directPc) {
+        pinCoordinatesResult(directPc.lat, directPc.lng, `Google Plus Code (${directPc.code})`);
+        return;
+    }
+
+    // 3. Extract non-URL text (e.g. "Gangnam Grill กังนัมกริล https://maps.app.goo.gl/...")
+    const nonUrlText = (rawInput || "").replace(/https?:\/\/[^\s]+/gi, "").trim();
+    if (nonUrlText) {
+        const localMatch = matchLocalLandmark(nonUrlText);
+        if (localMatch) {
+            selectLocationSearchResult(localMatch);
+            return;
+        }
+    }
+
+    // 4. Extract clean short URL
     const cleanMatch = (rawInput || "").match(/https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps)\/[A-Za-z0-9_-]+/i);
     const cleanUrl = cleanMatch ? cleanMatch[0] : (rawInput || "").trim();
     const safeDisplayUrl = escapeHtml(cleanUrl);
@@ -1897,8 +2070,8 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
 
             <!-- 2 Action Buttons -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                <a href="${safeDisplayUrl}" target="_blank" rel="noopener noreferrer"
-                   class="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all text-center">
+                <a href="${safeDisplayUrl}" target="_blank" rel="noopener noreferrer" onclick="armClipboardWatcher()"
+                   class="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all text-center cursor-pointer">
                     <span class="material-symbols-outlined text-base">open_in_new</span>
                     <span>1. เปิดใน Google Maps</span>
                 </a>
@@ -1915,7 +2088,23 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
                     <span>คำแนะนำการปักหมุด:</span>
                 </div>
                 <div class="text-slate-600 leading-normal">
-                    ระบบกำลังถอดรหัสพิกัดจากลิงก์ให้อัตโนมัติ (1-2 วินาที) หากไม่พบ ให้กดปุ่มสีฟ้าเปิด Google Maps แล้วแตะคัดลอก <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1 py-0.5 rounded border border-amber-300">8WGQ+JQ8</span>) หรือตัวเลขพิกัด แล้วกลับมากดปุ่มสีเขียว <strong>"2. วาง Plus Code"</strong> ได้ทันทีครับ
+                    ระบบกำลังถอดรหัสพิกัดจากลิงก์ให้อัตโนมัติ (1-2 วินาที) หรือแตะปุ่มสีฟ้าเปิด Google Maps แล้วคัดลอก <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold text-slate-900 bg-white px-1 py-0.5 rounded border border-amber-300">845C+2H</span>) แล้วสลับกลับมา ระบบจะปักหมุดให้อัตโนมัติทันทีครับ
+                </div>
+            </div>
+
+            <!-- Fallback Quick Landmarks in Ban Bueng -->
+            <div class="pt-1 border-t border-blue-100 space-y-1.5">
+                <div class="text-[10px] text-slate-500 font-bold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs text-slate-400">near_me</span>
+                    <span>หรือแตะเลือกจุดสำคัญใกล้เคียงในบ้านบึงทันที:</span>
+                </div>
+                <div class="flex flex-wrap gap-1 text-[10px]">
+                    <button type="button" onclick="selectQuickLandmark('market_hub')" class="px-2 py-1 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 rounded-lg font-bold active:scale-95 transition-all cursor-pointer">🏪 ตลาดสดวิศิษฐ์ชัย</button>
+                    <button type="button" onclick="selectQuickLandmark('gangnam_grill')" class="px-2 py-1 bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-800 border border-slate-200 rounded-lg font-bold active:scale-95 transition-all cursor-pointer">🥩 กังนัมกริล (วิศิษฐ์ชัย)</button>
+                    <button type="button" onclick="selectQuickLandmark('somtum_dekwat')" class="px-2 py-1 bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-800 border border-slate-200 rounded-lg font-bold active:scale-95 transition-all cursor-pointer">🌶️ ส้มตำเด็กวัด</button>
+                    <button type="button" onclick="selectQuickLandmark('hosp')" class="px-2 py-1 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 rounded-lg font-bold active:scale-95 transition-all cursor-pointer">🏥 รพ.บ้านบึง</button>
+                    <button type="button" onclick="selectQuickLandmark('nongchak')" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg font-bold active:scale-95 transition-all cursor-pointer">📍 แยกหนองชาก</button>
+                    <button type="button" onclick="selectQuickLandmark('sensiri')" class="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg font-bold active:scale-95 transition-all cursor-pointer">🏡 ม.เซนสิริ</button>
                 </div>
             </div>
         </div>
@@ -1926,173 +2115,129 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
     let resolvedPlaceName = "";
     let resolvedAddress = "";
 
-    // Provider 1: microlink.io (Extracts full Google Maps page metadata, redirects & DMS/Plus Code title)
-    try {
-        const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch("https://api.microlink.io/?url=" + encodeURIComponent(cleanUrl), { signal: controller.signal });
-        clearTimeout(tid);
-        if (res.ok) {
-            const json = await res.json();
-            const d = json.data || {};
-            resolvedPlaceName = d.title || d.publisher || "";
-            resolvedAddress = d.description || "";
-
-            const candidates = [
-                d.title,
-                d.description,
-                d.publisher,
-                d.url,
-                d.image && d.image.url
-            ];
-            if (Array.isArray(json.redirects)) {
-                json.redirects.forEach(r => { if (r && r.url) candidates.push(r.url); });
-            }
-            for (const cand of candidates) {
-                if (cand) {
-                    const coords = extractCoordinatesFromUrlOrText(cand);
-                    if (coords) {
-                        resolvedCoords = coords;
-                        break;
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.warn("microlink attempt failed:", e);
-    }
-
-    // Provider 2: unshorten.me (Fallback for URL redirect)
-    if (!resolvedCoords) {
+    // Parallel fetch: microlink.io and unshorten.me
+    const fetchMicro = async () => {
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 3800);
         try {
-            const controller = new AbortController();
-            const tid = setTimeout(() => controller.abort(), 4500);
-            const res = await fetch("https://unshorten.me/json/" + encodeURIComponent(cleanUrl), { signal: controller.signal });
-            clearTimeout(tid);
-            if (res.ok) {
-                const data = await res.json();
-                if (data && data.resolved_url) {
-                    const coords = extractCoordinatesFromUrlOrText(data.resolved_url);
-                    if (coords) {
-                        resolvedCoords = coords;
-                    }
-                }
+            const r = await fetch("https://api.microlink.io/?url=" + encodeURIComponent(cleanUrl), { signal: c.signal });
+            clearTimeout(t);
+            if (r.ok) return await r.json();
+        } catch(e) { clearTimeout(t); }
+        return null;
+    };
+
+    const fetchUnshort = async () => {
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 3500);
+        try {
+            const r = await fetch("https://unshorten.me/json/" + encodeURIComponent(cleanUrl), { signal: c.signal });
+            clearTimeout(t);
+            if (r.ok) return await r.json();
+        } catch(e) { clearTimeout(t); }
+        return null;
+    };
+
+    const [microRes, unshortRes] = await Promise.allSettled([fetchMicro(), fetchUnshort()]);
+
+    const microData = microRes.status === "fulfilled" ? microRes.value : null;
+    const unshortData = unshortRes.status === "fulfilled" ? unshortRes.value : null;
+
+    // Check Unshorten.me
+    if (unshortData && unshortData.resolved_url) {
+        const c = extractCoordinatesFromUrlOrText(unshortData.resolved_url);
+        if (c) resolvedCoords = c;
+        const pq = extractPlaceQueryFromGoogleUrl(unshortData.resolved_url);
+        if (pq && !resolvedPlaceName) resolvedPlaceName = pq;
+    }
+
+    // Check Microlink.io
+    if (microData && microData.data) {
+        const d = microData.data;
+        if (!resolvedPlaceName) resolvedPlaceName = d.title || d.publisher || "";
+        if (!resolvedAddress) resolvedAddress = d.description || "";
+        const cands = [d.title, d.description, d.publisher, d.url, d.image?.url];
+        if (Array.isArray(microData.redirects)) {
+            microData.redirects.forEach(r => { if (r && r.url) cands.push(r.url); });
+        }
+        for (const cand of cands) {
+            if (cand && !resolvedCoords) {
+                const c = extractCoordinatesFromUrlOrText(cand);
+                if (c) { resolvedCoords = c; break; }
             }
-        } catch (e) {
-            console.warn("unshorten.me fallback attempt failed:", e);
         }
     }
 
-    // Provider 3: Smart Place Name & Address Geocoder
-    // If the short link is for a place/business (e.g. Gangnam Grill), Google Maps returns place name & address in title or query without raw coordinates.
+    // Match local landmark with resolvedPlaceName or nonUrlText
+    const placeNameToTest = resolvedPlaceName || nonUrlText;
+    if (!resolvedCoords && placeNameToTest) {
+        const localMatch = matchLocalLandmark(placeNameToTest);
+        if (localMatch) {
+            selectLocationSearchResult(localMatch);
+            return;
+        }
+    }
+
+    // If still no coords but we have place name, try Nominatim geocode
     let extractedSoi = "";
     let extractedRoad = "";
-    if (!resolvedCoords && (resolvedPlaceName || cleanUrl)) {
-        const badgeEl = document.getElementById("shortlink-loading-badge");
-        if (badgeEl) badgeEl.textContent = "🔍 กำลังระบุพิกัดจากชื่อสถานที่...";
+    if (!resolvedCoords && (resolvedPlaceName || nonUrlText)) {
+        const rawPlace = (resolvedPlaceName || nonUrlText).split("·")[0].replace(/\+/g, " ").trim();
+        const rawAddr = resolvedAddress || "";
 
-        const parts = (resolvedPlaceName || "").split("·").map(s => s.trim());
-        const rawPlace = parts[0] || "";
-        const rawAddr = parts[1] || "";
-        const fullSearchText = (resolvedPlaceName + " " + cleanUrl).toLowerCase();
+        const soiMatch = (rawPlace + " " + rawAddr).match(/(?:ซ\.|ซอย)\s*([^\s,]+)/);
+        const roadMatch = (rawPlace + " " + rawAddr).match(/(?:ถ\.|ถนน)\s*([^\s,]+)/);
+        if (soiMatch) extractedSoi = `ซอย${soiMatch[1]}`;
+        if (roadMatch) extractedRoad = `ถนน${roadMatch[1]}`;
 
-        // 3a. Check if any local Ban Bueng landmark matches
-        const localMatch = BANBUENG_LANDMARKS.find(item => {
-            const keys = (item.title + " " + item.shortTitle + " " + (item.keywords || "")).toLowerCase();
-            return (rawPlace && keys.includes(rawPlace.toLowerCase())) ||
-                   (item.landmark && fullSearchText.includes(item.landmark.toLowerCase())) ||
-                   (item.soiRoad && fullSearchText.includes(item.soiRoad.toLowerCase()));
-        });
+        const queries = [];
+        if (rawPlace && !rawPlace.includes("Google Maps")) queries.push(`${rawPlace} บ้านบึง ชลบุรี`);
+        if (soiMatch) queries.push(`ซอย${soiMatch[1]} บ้านบึง ชลบุรี`);
+        if (rawPlace && !rawPlace.includes("Google Maps")) queries.push(`${rawPlace} บ้านบึง`);
 
-        if (localMatch) {
-            resolvedCoords = {
-                lat: localMatch.lat,
-                lng: localMatch.lng,
-                source: "local_landmark"
-            };
-            if (!resolvedPlaceName) resolvedPlaceName = localMatch.shortTitle || localMatch.title;
-            extractedSoi = localMatch.soiRoad || "";
-        } else {
-            // 3b. Smart Nominatim Geocoding
-            const soiMatch = rawAddr.match(/(?:ซ\.|ซอย)\s*([^\s,]+)/);
-            const roadMatch = rawAddr.match(/(?:ถ\.|ถนน)\s*([^\s,]+)/);
-            const villageMatch = rawAddr.match(/(?:ม\.|หมู่บ้าน)\s*([^\s,]+)/);
-            const marketMatch = rawAddr.match(/(?:ตลาด)\s*([^\s,]+)/);
-            const disMatch = rawAddr.match(/(?:อ\.|อำเภอ)?\s*(บ้านบึง|Ban Bueng)/i);
-            const district = disMatch ? "บ้านบึง" : "บ้านบึง ชลบุรี";
-
-            const soi = soiMatch ? soiMatch[1] : "";
-            const road = roadMatch ? roadMatch[1] : "";
-            const village = villageMatch ? villageMatch[1] : "";
-            const market = marketMatch ? marketMatch[1] : "";
-            if (soi) extractedSoi = `ซอย${soi}`;
-            if (road) extractedRoad = `ถนน${road}`;
-
-            const queriesToTry = [];
-            if (soi) queriesToTry.push(`ซอย${soi} ${district}`);
-            if (village) queriesToTry.push(`หมู่บ้าน${village} ${district}`);
-            if (market) queriesToTry.push(`ตลาด${market} ${district}`);
-            if (road) queriesToTry.push(`ถนน${road} ${district}`);
-            if (rawPlace && !rawPlace.includes("Google Maps")) queriesToTry.push(`${rawPlace} ${district}`);
-            if (rawPlace && !rawPlace.includes("Google Maps")) queriesToTry.push(rawPlace);
-
-            for (const q of queriesToTry) {
-                try {
-                    const nomUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=th&limit=1`;
-                    const nomRes = await fetch(nomUrl, { headers: { "User-Agent": "HsongApp/1.0" } });
-                    if (nomRes.ok) {
-                        const nomData = await nomRes.json();
-                        if (Array.isArray(nomData) && nomData[0]) {
-                            const lat = parseFloat(nomData[0].lat);
-                            const lng = parseFloat(nomData[0].lon);
-                            if (!isNaN(lat) && !isNaN(lng)) {
-                                resolvedCoords = {
-                                    lat,
-                                    lng,
-                                    source: "nominatim_geocoded"
-                                };
-                                break;
-                            }
+        for (const q of queries) {
+            try {
+                const nomUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=th&limit=1`;
+                const nomRes = await fetch(nomUrl, { headers: { "User-Agent": "HsongApp/1.0" } });
+                if (nomRes.ok) {
+                    const nomData = await nomRes.json();
+                    if (Array.isArray(nomData) && nomData[0]) {
+                        const lat = parseFloat(nomData[0].lat);
+                        const lng = parseFloat(nomData[0].lon);
+                        if (!isNaN(lat) && !isNaN(lng)) {
+                            resolvedCoords = { lat, lng, source: "nominatim" };
+                            break;
                         }
                     }
-                } catch (err) {
-                    console.warn("Geocoding candidate failed:", q, err);
                 }
-            }
+            } catch(e) {}
         }
     }
 
     const badge = document.getElementById("shortlink-loading-badge");
-
     if (resolvedCoords) {
         if (badge) {
             badge.textContent = "✅ ปักหมุดพิกัดสำเร็จ!";
             badge.className = "text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold";
         }
-        const lat = resolvedCoords.lat;
-        const lng = resolvedCoords.lng;
-        const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
-        const fee = calculateDeliveryFee(distKm);
-
-        let displayTitle = resolvedPlaceName ? resolvedPlaceName.split("·")[0].trim() : "";
+        let displayTitle = (resolvedPlaceName || nonUrlText).split("·")[0].replace(/\+/g, " ").trim();
         if (!displayTitle || displayTitle.includes("Google Maps")) {
-            displayTitle = `พิกัด Google Maps (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+            displayTitle = `พิกัด Google Maps (${resolvedCoords.lat.toFixed(4)}, ${resolvedCoords.lng.toFixed(4)})`;
         }
-
         const item = {
             title: `📍 ${displayTitle}`,
             shortTitle: displayTitle,
             subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
             landmark: displayTitle,
             soiRoad: extractedSoi || extractedRoad || "",
-            lat: lat,
-            lng: lng,
+            lat: resolvedCoords.lat,
+            lng: resolvedCoords.lng,
             icon: "pin_drop"
         };
         selectLocationSearchResult(item);
     } else {
         if (badge) {
-            badge.textContent = "⚠️ แนะนำเปิดดู Plus Code";
+            badge.textContent = "⚠️ เลือกวิธีระบุพิกัดด้านล่าง";
             badge.className = "text-[10px] text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full font-bold";
         }
         const box = document.getElementById("shortlink-instruction-box");
@@ -2103,9 +2248,9 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
                     <span>วิธีปักหมุดจุดนี้ให้ตรงเป๊ะ 100%:</span>
                 </div>
                 <div class="text-slate-700 leading-relaxed space-y-1 pt-0.5">
-                    <div>1️⃣ กดปุ่มสีฟ้า <strong>"1. เปิดใน Google Maps"</strong> ด้านบน</div>
-                    <div>2️⃣ ใน Google Maps ให้แตะคัดลอก <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold bg-white px-1 py-0.5 rounded border border-amber-300">8WGQ+JQ8</span>) หรือ <strong>แตะค้างที่แผนที่</strong> เพื่อคัดลอกตัวเลขพิกัด</div>
-                    <div>3️⃣ กลับมากดปุ่มสีเขียว <strong>"2. วาง Plus Code / พิกัด"</strong> หมุดจะเลื่อนมาทันทีครับ</div>
+                    <div>1️⃣ กดปุ่มสีฟ้า <strong>"1. เปิดใน Google Maps"</strong></div>
+                    <div>2️⃣ ใน Google Maps ให้แตะคัดลอก <strong>Plus Code</strong> (เช่น <span class="font-mono font-bold bg-white px-1 py-0.5 rounded border border-amber-300">845C+2H</span>) หรือ <strong>แตะค้างที่แผนที่</strong> เพื่อคัดลอกตัวเลขพิกัด</div>
+                    <div>3️⃣ สลับกลับมาที่นี่ ระบบจะปักหมุดให้อัตโนมัติ หรือกดปุ่มสีเขียว <strong>"2. วาง Plus Code / พิกัด"</strong> ได้ทันทีครับ</div>
                 </div>
             `;
         }
@@ -2115,8 +2260,17 @@ async function renderGoogleMapsShortlinkHelper(rawInput) {
 let _locSearchTimer = null;
 let _locSearchController = null;
 
-function handleLocationSearchInput(event) {
-    const q = (event.target.value || "").trim();
+function handleLocationSearchInput(queryOrEvent) {
+    let q = "";
+    if (typeof queryOrEvent === "string") {
+        q = queryOrEvent.trim();
+    } else if (queryOrEvent && queryOrEvent.target && typeof queryOrEvent.target.value === "string") {
+        q = queryOrEvent.target.value.trim();
+    } else {
+        const input = document.getElementById("location-search-input");
+        q = (input?.value || "").trim();
+    }
+
     const clearBtn = document.getElementById("btn-clear-location-search");
     if (clearBtn) {
         if (q.length > 0) clearBtn.classList.remove("hidden");
@@ -2128,61 +2282,33 @@ function handleLocationSearchInput(event) {
         return;
     }
 
-    // 1. Check if user pasted coordinates or Google Maps URL containing coordinates (e.g. 13.3188, 101.1118 or maps.google.com/?q=... or DMS 13°17'40.7"N...)
+    // 1. Direct coordinates (lat,lng or DMS or maps url with coords)
     const extractedCoords = extractCoordinatesFromUrlOrText(q);
     if (extractedCoords) {
-        const lat = extractedCoords.lat;
-        const lng = extractedCoords.lng;
-        const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
-        const fee = calculateDeliveryFee(distKm);
-        const coordItem = {
-            title: `📍 พิกัด GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-            shortTitle: `พิกัด GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-            subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
-            landmark: `พิกัดระบุเอง (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
-            soiRoad: "",
-            lat: lat,
-            lng: lng,
-            icon: "my_location"
-        };
-        renderLocationSearchResults([coordItem]);
-        selectLocationSearchResult(coordItem);
+        pinCoordinatesResult(extractedCoords.lat, extractedCoords.lng, "พิกัด GPS");
         return;
     }
 
-    // 2. Check if user pasted a Google Plus Code (e.g. 75X4+MW2 or 8WGQ+JQ8)
+    // 2. Direct Plus Code (e.g. 845C+2H or 75X4+MW2)
     const plusCodeRes = decodePlusCode(q);
     if (plusCodeRes) {
-        const lat = plusCodeRes.lat;
-        const lng = plusCodeRes.lng;
-        const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
-        const fee = calculateDeliveryFee(distKm);
-        const plusItem = {
-            title: `📍 Google Plus Code: ${plusCodeRes.code}`,
-            shortTitle: `Plus Code (${plusCodeRes.code})`,
-            subdistrict: "อ.บ้านบึง จ.ชลบุรี",
-            landmark: `พิกัดระบุจาก Google Plus Code (${plusCodeRes.code})`,
-            soiRoad: "",
-            lat: lat,
-            lng: lng,
-            icon: "pin_drop"
-        };
-        renderLocationSearchResults([plusItem]);
-        selectLocationSearchResult(plusItem);
+        pinCoordinatesResult(plusCodeRes.lat, plusCodeRes.lng, `Google Plus Code (${plusCodeRes.code})`);
         return;
     }
 
-    // 3. Check if user pasted a Google Maps short link (maps.app.goo.gl or goo.gl/maps)
+    // 3. Google Maps Shortlink
     if (q.includes("maps.app.goo.gl") || q.includes("goo.gl/maps")) {
         renderGoogleMapsShortlinkHelper(q);
         return;
     }
 
     // 4. Normalized local fuzzy matching
-    const cleanQ = q.replace(/\s+/g, "").toLowerCase();
+    const localMatch = matchLocalLandmark(q);
+    const cleanQ = q.replace(/[\+\s_,-]+/g, "").toLowerCase();
     const localMatches = BANBUENG_LANDMARKS.filter(item => {
-        const full = (item.title + " " + item.shortTitle + " " + (item.keywords || "") + " " + (item.landmark || "") + " " + (item.soiRoad || "")).replace(/\s+/g, "").toLowerCase();
-        return full.includes(cleanQ);
+        const full = (item.title + " " + item.shortTitle + " " + (item.keywords || "") + " " + (item.landmark || "") + " " + (item.soiRoad || "")).replace(/[\+\s_,-]+/g, "").toLowerCase();
+        const shortClean = (item.shortTitle || item.title).replace(/[\+\s_,-]+/g, "").toLowerCase();
+        return full.includes(cleanQ) || (cleanQ.length >= 3 && shortClean.includes(cleanQ));
     });
 
     if (localMatches.length > 0) {
@@ -2278,12 +2404,7 @@ function executeLocationSearchNow() {
     if (!input) return;
     const q = input.value.trim();
     if (q.length >= 1) {
-        const cleanQ = q.replace(/\s+/g, "").toLowerCase();
-        const localMatches = BANBUENG_LANDMARKS.filter(item => {
-            const full = (item.title + " " + item.shortTitle + " " + (item.keywords || "")).replace(/\s+/g, "").toLowerCase();
-            return full.includes(cleanQ);
-        });
-        fetchOnlineLocationSearch(q, localMatches);
+        handleLocationSearchInput(q);
     }
 }
 
@@ -2431,33 +2552,8 @@ async function pasteFromClipboardToSearch() {
             const text = (rawText || "").trim();
             if (text) {
                 input.value = text;
-
-                // 1. If text is a Google Maps short link
-                if (text.includes("maps.app.goo.gl") || text.includes("goo.gl/maps")) {
-                    showToast("🔍 กำลังดึงพิกัดจากลิงก์ Google Maps...");
-                    renderGoogleMapsShortlinkHelper(text);
-                    return;
-                }
-
-                // 2. If text is a Plus Code
-                const pc = decodePlusCode(text);
-                if (pc) {
-                    showToast(`📍 ปักหมุดจาก Plus Code: ${pc.code}`);
-                    handleLocationSearchInput({ target: { value: text } });
-                    return;
-                }
-
-                // 3. If text contains coordinates (DMS, lat/lng, url query)
-                const coords = extractCoordinatesFromUrlOrText(text);
-                if (coords) {
-                    showToast("📍 ปักหมุดจากพิกัด GPS สำเร็จ");
-                    handleLocationSearchInput({ target: { value: text } });
-                    return;
-                }
-
-                // 4. Default: regular search
-                handleLocationSearchInput({ target: { value: text } });
-                showToast("📋 วางข้อความจากคลิปบอร์ดแล้ว");
+                showToast("📋 ตรวจพบข้อมูลจากคลิปบอร์ดแล้ว");
+                handleLocationSearchInput(text);
                 return;
             }
         }
