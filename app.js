@@ -1001,7 +1001,8 @@ function initLocationPickerMap(lat, lng) {
         try {
             locationPickerMap = L.map("location-leaflet-map", {
                 zoomControl: true,
-                attributionControl: false
+                attributionControl: false,
+                scrollWheelZoom: false
             }).setView([lat, lng], 17);
 
             // 1. Google Satellite Hybrid: ภาพถ่ายดาวเทียมจริงความคมชัดสูง พร้อมชื่อถนน/ซอยภาษาไทย
@@ -2582,54 +2583,81 @@ document.addEventListener("pointerdown", function (e) {
     }
 });
 
-function openLocationModal() {
-    updateDeliveryLocationUI();
-    clearLocationSearch();
-    document.getElementById("location-modal").classList.remove("hidden");
+// =========================================================================
+// OPTION A: SMART IN-PAGE LOCATION PICKER CONTROLLER
+// =========================================================================
+function showInPageLocationPicker(shouldShow) {
+    const pickerView = document.getElementById("inpage-location-picker-view");
+    const summaryView = document.getElementById("inpage-location-summary-view");
+    const collapseBtn = document.getElementById("btn-inpage-collapse");
 
-    const loc = state.deliveryLocation;
-    const initialLat = (loc && loc.lat) ? Number(loc.lat) : MARKET_ORIGIN.lat;
-    const initialLng = (loc && loc.lng) ? Number(loc.lng) : MARKET_ORIGIN.lng;
+    if (!pickerView && !summaryView) return;
 
-    // Populate existing values into form fields (if previously set by user)
-    const houseInput = document.getElementById("input-addr-house");
-    const soiInput = document.getElementById("input-addr-soi");
-    const subInput = document.getElementById("input-addr-subdistrict");
-    const landInput = document.getElementById("input-addr-landmark");
+    if (shouldShow) {
+        if (pickerView) pickerView.classList.remove("hidden");
+        if (summaryView) summaryView.classList.add("hidden");
 
-    if (loc && loc.isSet && !state.isSearchingGPS) {
-        if (houseInput) houseInput.value = loc.houseNumber || "";
-        if (soiInput) soiInput.value = loc.soiRoad || "";
-        if (subInput) subInput.value = loc.subdistrict || "";
-        if (landInput) landInput.value = loc.landmark || "";
-    } else {
-        if (houseInput) houseInput.value = "";
-        if (soiInput) soiInput.value = "";
-        if (subInput) subInput.value = "";
-        if (landInput) landInput.value = "";
-    }
-
-    // Initialize or resize Leaflet Map
-    setTimeout(() => {
-        initLocationPickerMap(initialLat, initialLng);
-        if (state.isSearchingGPS) {
-            clearOldLocationAndDistanceData();
+        const hasValidLoc = state.deliveryLocation && state.deliveryLocation.isSet;
+        if (collapseBtn) {
+            if (hasValidLoc) collapseBtn.classList.remove("hidden");
+            else collapseBtn.classList.add("hidden");
         }
-    }, 150);
 
-    updateModalAddressPreview();
+        const loc = state.deliveryLocation;
+        const initialLat = (loc && loc.lat) ? Number(loc.lat) : MARKET_ORIGIN.lat;
+        const initialLng = (loc && loc.lng) ? Number(loc.lng) : MARKET_ORIGIN.lng;
+
+        // Populate existing values into form fields
+        const houseInput = document.getElementById("input-addr-house");
+        const soiInput = document.getElementById("input-addr-soi");
+        const subInput = document.getElementById("input-addr-subdistrict");
+        const landInput = document.getElementById("input-addr-landmark");
+
+        if (loc && loc.isSet && !state.isSearchingGPS) {
+            if (houseInput && !houseInput.value) houseInput.value = loc.houseNumber || "";
+            if (soiInput && !soiInput.value) soiInput.value = loc.soiRoad || "";
+            if (subInput && !subInput.value) subInput.value = loc.subdistrict || "";
+            if (landInput && !landInput.value) landInput.value = loc.landmark || "";
+        }
+
+        setTimeout(() => {
+            initLocationPickerMap(initialLat, initialLng);
+            if (locationPickerMap) {
+                locationPickerMap.invalidateSize();
+            }
+            if (state.isSearchingGPS) {
+                clearOldLocationAndDistanceData();
+            }
+        }, 120);
+
+        updateModalAddressPreview();
+    } else {
+        if (pickerView) pickerView.classList.add("hidden");
+        if (summaryView) summaryView.classList.remove("hidden");
+        updateDeliveryLocationUI();
+    }
+}
+window.showInPageLocationPicker = showInPageLocationPicker;
+
+function collapseInPageLocationPicker() {
+    showInPageLocationPicker(false);
+}
+window.collapseInPageLocationPicker = collapseInPageLocationPicker;
+
+function openLocationModal() {
+    showInPageLocationPicker(true);
+    const container = document.getElementById("inpage-location-container");
+    if (container) {
+        container.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
 }
 
 function closeLocationModal() {
-    document.getElementById("location-modal").classList.add("hidden");
-    try {
-        sessionStorage.setItem("talathub_loc_prompt_dismissed", "1");
-    } catch (e) {}
+    if (state.deliveryLocation && state.deliveryLocation.isSet) {
+        collapseInPageLocationPicker();
+    }
 }
 
-// =========================================================================
-// OPTION 1: AUTO-WELCOME LOCATION PROMPT (สำหรับผู้ใช้ใหม่/ยังไม่เคยระบุพิกัด)
-// =========================================================================
 function checkAndPromptFirstTimeLocation() {
     // แสดงเฉพาะมุมมองลูกค้า (Customer role)
     if (state.activeRole && state.activeRole !== "customer") return;
@@ -2638,23 +2666,13 @@ function checkAndPromptFirstTimeLocation() {
     const loc = state.deliveryLocation;
     const hasValidLocation = loc && loc.isSet && typeof loc.lat === "number" && typeof loc.lng === "number";
 
-    // ถ้ามีพิกัดบันทึกไว้แล้ว ไม่ต้องเด้งซ้ำ เปิดหน้าแรกให้ช้อปได้ทันที
-    if (hasValidLocation) return;
-
-    // ถ้าเคยกดปิดในเซสชันนี้แล้ว ไม่ต้องเด้งกวนใจขณะเลือกดูสินค้า
-    try {
-        if (sessionStorage.getItem("talathub_loc_prompt_dismissed") === "1") return;
-    } catch (e) {}
-
-    // หน่วงเวลาเล็กน้อย (450ms) เพื่อให้แผนที่และทรัพยากรหน้าเว็บพร้อมสมบูรณ์
-    setTimeout(() => {
-        const modal = document.getElementById("location-modal");
-        const isModalOpen = modal && !modal.classList.contains("hidden");
-        if (!isModalOpen) {
-            openLocationModal();
-            showToast("👋 ยินดีต้อนรับครับ! แตะปุ่ม 'เลื่อนหมุดมาที่ GPS จริง' หรือค้นหาบ้านของคุณเพื่อคำนวณค่าส่งที่ถูกต้อง");
-        }
-    }, 450);
+    if (hasValidLocation) {
+        // ลูกค้าเดิมที่มีพิกัดแล้ว: แสดงการ์ดสรุปย่อ และเปิดหน้าแรกให้เลือกดูสินค้าได้ทันที
+        showInPageLocationPicker(false);
+    } else {
+        // ลูกค้าใหม่: กางแผนที่และปุ่ม GPS ในหน้าแรกใต้แบนเนอร์ทันที (ไม่มี Modal เด้งบัง)
+        showInPageLocationPicker(true);
+    }
 }
 window.checkAndPromptFirstTimeLocation = checkAndPromptFirstTimeLocation;
 window.openLocationModal = openLocationModal;
@@ -2664,11 +2682,12 @@ window.saveGranularDeliveryAddress = saveGranularDeliveryAddress;
 
 
 function detectCurrentLocationGPS(forceOpenModal = true) {
-    const isModalOpen = !document.getElementById("location-modal")?.classList.contains("hidden");
-    const shouldKeepModalOpen = forceOpenModal || isModalOpen;
-
-    if (shouldKeepModalOpen) {
-        openLocationModal();
+    if (forceOpenModal) {
+        showInPageLocationPicker(true);
+        const container = document.getElementById("inpage-location-container");
+        if (container) {
+            container.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
     }
 
     // 1. Clear all old data immediately from page, state and modal
