@@ -5505,19 +5505,27 @@ function confirmVendorPayoutSettled() {
     const settledVendors = _loadVendorSettlementState(dateKey);
 
     const sKey = _currentPayoutStall.stallId || _currentPayoutStall.stallName;
-    settledVendors[sKey] = {
+    const payoutRecord = {
         isSettled: true,
         settledAt: Date.now(),
         amount: _currentPayoutStall.amount,
         stallName: _currentPayoutStall.stallName,
+        stallId: _currentPayoutStall.stallId,
         phone: _currentPayoutStall.phone
     };
+
+    settledVendors[sKey] = payoutRecord;
+    if (_currentPayoutStall.stallId) settledVendors[_currentPayoutStall.stallId] = payoutRecord;
+    if (_currentPayoutStall.stallName) settledVendors[_currentPayoutStall.stallName] = payoutRecord;
 
     _saveVendorSettlementState(dateKey, settledVendors);
     closeVendorPayoutModal();
     showToast(`🎉 บันทึกการโอนเงินให้ ${_currentPayoutStall.stallName} (฿${_currentPayoutStall.amount.toLocaleString()}) สำเร็จ!`);
     if (typeof renderHubDailyReport === "function") renderHubDailyReport(dateKey);
     if (typeof renderHubSettlement === "function") renderHubSettlement();
+    if (typeof updateMerchantSettlementBadge === "function") updateMerchantSettlementBadge();
+    if (typeof renderMerchantSettlement === "function") renderMerchantSettlement();
+    if (typeof renderMerchantIncomingOrders === "function") renderMerchantIncomingOrders();
 }
 
 function copyPayoutPromptPayNumber() {
@@ -12769,6 +12777,77 @@ function updateMerchantStatusUI(stall) {
 }
 window.updateMerchantStatusUI = updateMerchantStatusUI;
 
+let _activeMerchantSettlementDateKey = getReportDateKey(Date.now());
+
+function changeMerchantSettlementDate(newDate) {
+    if (!newDate) return;
+    _activeMerchantSettlementDateKey = newDate;
+    renderMerchantSettlement();
+}
+window.changeMerchantSettlementDate = changeMerchantSettlementDate;
+
+function formatSettledDate(timestamp) {
+    if (!timestamp) return "วันนี้";
+    const d = new Date(timestamp);
+    const day = d.getDate();
+    const months = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear() > 2500 ? d.getFullYear() : d.getFullYear() + 543;
+    const hours = String(d.getHours()).padStart(2, "0");
+    const mins = String(d.getMinutes()).padStart(2, "0");
+    return `${day} ${month} ${year} เวลา ${hours}:${mins} น.`;
+}
+window.formatSettledDate = formatSettledDate;
+
+function updateMerchantSettlementBadge() {
+    const badgeEl = document.getElementById("merchant-settlement-tab-badge");
+    if (!badgeEl) return;
+
+    let stall = null;
+    if (activeMerchantStallId) {
+        stall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || ALL_100_STALLS.find(s => s.stallId === activeMerchantStallId);
+    }
+    if (!stall && state.activeMerchant) {
+        stall = MARKET_DATA.find(s => s.stallId === state.activeMerchant.stallId) || ALL_100_STALLS.find(s => s.stallId === state.activeMerchant.stallId);
+    }
+    if (!stall) {
+        badgeEl.classList.add("hidden");
+        return;
+    }
+
+    const todayKey = getReportDateKey(Date.now());
+    const settledVendors = _loadVendorSettlementState(todayKey);
+    const sKey = stall.stallId || stall.stallName;
+    let settledInfo = settledVendors[sKey] || settledVendors[stall.stallId] || settledVendors[stall.stallName];
+    if (!settledInfo) {
+        const foundKey = Object.keys(settledVendors).find(k => {
+            const item = settledVendors[k];
+            return (item && item.stallName && stall.stallName && (item.stallName.includes(stall.stallName) || stall.stallName.includes(item.stallName))) || k === stall.stallId;
+        });
+        if (foundKey) settledInfo = settledVendors[foundKey];
+    }
+
+    if (settledInfo && settledInfo.isSettled) {
+        badgeEl.textContent = "โอนแล้ว ✓";
+        badgeEl.className = "bg-emerald-500 text-white text-[9.5px] font-black px-1.5 py-0.5 rounded-full shadow-2xs animate-pulse";
+        badgeEl.classList.remove("hidden");
+    } else {
+        const allOrders = (typeof _collectAllOrders === "function") ? _collectAllOrders() : [];
+        const hasOrders = allOrders.some(o => {
+            const oDate = getReportDateKey(o.savedAt || o.createdAt || o.orderTime || Date.now());
+            return oDate === todayKey && o.stalls && o.stalls.some(st => st && (st.stallId === stall.stallId || (stall.stallName && st.name && (st.name.includes(stall.stallName) || stall.stallName.includes(st.name)))));
+        });
+        if (hasOrders) {
+            badgeEl.textContent = "รอโอน";
+            badgeEl.className = "bg-amber-500 text-white text-[9.5px] font-black px-1.5 py-0.5 rounded-full shadow-2xs";
+            badgeEl.classList.remove("hidden");
+        } else {
+            badgeEl.classList.add("hidden");
+        }
+    }
+}
+window.updateMerchantSettlementBadge = updateMerchantSettlementBadge;
+
 function renderMerchantSettlement() {
     const container = document.getElementById("merchant-settlement-container");
     if (!container) return;
@@ -12785,77 +12864,206 @@ function renderMerchantSettlement() {
     const currentStallId = stall.stallId;
     const currentStallName = stall.stallName;
 
-    const allOrders = [];
-    if (state.activeOrder) allOrders.push(state.activeOrder);
-    try {
-        const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
-        hist.forEach(h => {
-            if (h && !allOrders.some(o => o.orderId === h.orderId)) allOrders.push(h);
-        });
-    } catch(e) {}
+    const targetDateKey = _activeMerchantSettlementDateKey || getReportDateKey(Date.now());
+    const isToday = targetDateKey === getReportDateKey(Date.now());
+
+    // 1. Collect and filter orders by target date
+    const allOrders = (typeof _collectAllOrders === "function") ? _collectAllOrders() : [];
+    if (state.activeOrder && !allOrders.some(o => o.orderId === state.activeOrder.orderId)) {
+        allOrders.push(state.activeOrder);
+    }
+
+    const dateOrders = allOrders.filter(o => {
+        const orderDate = getReportDateKey(o.savedAt || o.createdAt || o.orderTime || Date.now());
+        return orderDate === targetDateKey;
+    });
 
     let grossSales = 0;
     let orderCount = 0;
     const itemBreakdown = [];
 
-    allOrders.forEach(order => {
+    dateOrders.forEach(order => {
         if (!order || !order.stalls) return;
         const matchingStall = order.stalls.find(s => s && (s.stallId === currentStallId || (currentStallName && s.name && (s.name.includes(currentStallName) || currentStallName.includes(s.name)))));
         if (matchingStall && matchingStall.items) {
             orderCount++;
-            const subtotal = matchingStall.items.reduce((sum, it) => sum + (it.outOfStock ? 0 : (it.price || 0)), 0);
+            const subtotal = matchingStall.items.reduce((sum, it) => sum + (it.outOfStock ? 0 : (Number(it.actualPrice !== undefined ? it.actualPrice : (it.price || 0)) * Number(it.qty || it.quantity || 1))), 0);
             grossSales += subtotal;
             itemBreakdown.push({
                 orderId: order.orderId,
-                time: order.time || "วันนี้",
+                time: order.time || (order.savedAt ? new Date(order.savedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "วันนี้"),
                 subtotal: subtotal,
-                status: order.status || "picking"
+                status: order.status || "picking",
+                items: matchingStall.items
             });
         }
     });
 
-    const hubFeeRate = 0.05;
-    const hubFee = Math.round(grossSales * hubFeeRate);
-    const netPayout = grossSales - hubFee;
+    // 2. Load Settlement State from Hub
+    const settledVendors = _loadVendorSettlementState(targetDateKey);
+    const sKey = currentStallId || currentStallName;
+    let settledInfo = settledVendors[sKey] || settledVendors[currentStallId] || settledVendors[currentStallName];
+    if (!settledInfo) {
+        const foundKey = Object.keys(settledVendors).find(k => {
+            const item = settledVendors[k];
+            return (item && item.stallName && currentStallName && (item.stallName.includes(currentStallName) || currentStallName.includes(item.stallName))) || k === currentStallId;
+        });
+        if (foundKey) settledInfo = settledVendors[foundKey];
+    }
+
+    const isSettled = Boolean(settledInfo && settledInfo.isSettled);
+
+    // GP Calculation
+    const hubSettings = (typeof loadSavedHubSettings === "function") ? loadSavedHubSettings() : {};
+    const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number") ? hubSettings.merchantGP : 10;
+    const hubFee = Math.round(grossSales * (gpRate / 100));
+    const calculatedNetPayout = Math.max(0, grossSales - hubFee);
+    const finalPayoutAmount = (settledInfo && settledInfo.amount !== undefined) ? settledInfo.amount : calculatedNetPayout;
 
     const bank = stall.bankInfo || {
         bankName: stall.bankName || "กสิกรไทย (KBank)",
-        accountNo: stall.accountNo || stall.bankAccountNo || "012-3-45678-9",
+        accountNo: stall.accountNo || stall.bankAccountNo || stall.phone || "012-3-45678-9",
         accountName: stall.accountName || stall.bankAccountName || (stall.ownerName || "เจ้าของร้าน")
     };
 
+    const thaiDateText = formatThaiDateDisplay(targetDateKey);
+
     let html = `
         <div class="space-y-4 text-left">
-            <!-- Header Summary Card -->
-            <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 rounded-3xl p-4 sm:p-5 text-white shadow-lg space-y-3 border border-slate-700/60">
+            <!-- Date Filter & Quick Switch Toolbar -->
+            <div class="flex items-center justify-between gap-2 flex-wrap bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-slate-500 text-base">calendar_today</span>
+                    <span class="text-xs font-bold text-slate-700">รอบวันที่:</span>
+                    <input type="date" value="${targetDateKey}" onchange="changeMerchantSettlementDate(this.value)" class="bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-800 focus:bg-white focus:border-orange-500 focus:outline-none cursor-pointer">
+                    <span class="text-[11px] font-semibold text-slate-500 hidden sm:inline">(${thaiDateText})</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <button onclick="changeMerchantSettlementDate('${getReportDateKey(Date.now())}')" class="px-2.5 py-1 rounded-xl text-xs font-bold ${isToday ? 'bg-orange-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} transition-all cursor-pointer">
+                        วันนี้
+                    </button>
+                    <button onclick="changeMerchantSettlementDate('${getReportDateKey(Date.now() - 86400000)}')" class="px-2.5 py-1 rounded-xl text-xs font-bold ${targetDateKey === getReportDateKey(Date.now() - 86400000) ? 'bg-orange-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} transition-all cursor-pointer">
+                        เมื่อวาน
+                    </button>
+                    <button onclick="renderMerchantSettlement(); showToast('🔄 อัปเดตข้อมูลการโอนเงินล่าสุดเรียบร้อย');" class="p-1 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-all cursor-pointer" title="รีเฟรชสถานะ">
+                        <span class="material-symbols-outlined text-sm">refresh</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- PROMINENT TRANSFER STATUS CARD -->
+            ${isSettled ? `
+            <div class="bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 rounded-3xl p-4 sm:p-5 text-white shadow-lg space-y-3 border-2 border-emerald-400/90 relative overflow-hidden">
+                <div class="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-emerald-500/10 pointer-events-none blur-xl"></div>
                 <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2.5">
-                        <div class="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-xl shrink-0">
-                            💰
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-2xl bg-emerald-500/30 border border-emerald-400/50 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                            ✅
                         </div>
                         <div>
-                            <div class="text-[10px] text-emerald-300 font-bold uppercase">รายงานเคลียร์เงินโอนค่างวด • ${stall.stallName} (${stall.stallNumber || 'แผงค้า'})</div>
-                            <h3 class="text-base font-black">สรุปยอดขายสุทธิที่ฮับต้องโอนเข้าบัญชี</h3>
+                            <div class="text-[10.5px] text-emerald-300 font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span>สถานะการโอนเงิน: ฮับโอนสำเร็จแล้ว</span>
+                            </div>
+                            <h3 class="text-base sm:text-lg font-black text-white">🟢 ได้รับยอดเงินโอนเข้าบัญชีเรียบร้อยแล้ว</h3>
                         </div>
                     </div>
-                    <span class="px-2.5 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 rounded-full font-bold text-[10px] flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                        <span>ตัดรอบโอนเงินประจำวัน</span>
+                    <span class="px-3 py-1 bg-emerald-400 text-slate-950 font-black rounded-full text-xs shadow-sm flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">check_circle</span>
+                        <span>โอนแล้ว</span>
                     </span>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs">
-                        <div class="text-[10px] text-slate-300">ยอดขายรวมของสด (${orderCount} ออเดอร์)</div>
-                        <div class="text-xl font-black text-white">฿${grossSales.toLocaleString()}</div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-emerald-800/60 text-xs">
+                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
+                        <div class="text-[10px] text-emerald-200">ยอดเงินสุทธิที่ฮับโอนเข้าบัญชี:</div>
+                        <div class="text-2xl font-black text-amber-300">฿${finalPayoutAmount.toLocaleString()}</div>
+                        <div class="text-[10px] text-emerald-300/80">โอนผ่าน PromptPay ไปยัง ${bank.accountNo}</div>
                     </div>
-                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs">
-                        <div class="text-[10px] text-slate-300">ค่าธรรมเนียมฮับ (GP 5%)</div>
-                        <div class="text-xl font-black text-rose-300">-฿${hubFee.toLocaleString()}</div>
+                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
+                        <div class="text-[10px] text-emerald-200">วัน-เวลาที่ฮับยืนยันการโอนเงิน:</div>
+                        <div class="text-sm font-black text-white pt-1">${formatSettledDate(settledInfo.settledAt)}</div>
+                        <div class="text-[10.5px] text-emerald-300/90 pt-0.5">กรุณาตรวจสอบยอดเงินเข้าในแอปธนาคารของคุณ</div>
                     </div>
-                    <div class="bg-emerald-600/30 border border-emerald-400/40 rounded-2xl p-3 backdrop-blur-xs">
-                        <div class="text-[10px] text-emerald-200">ยอดเงินโอนสุทธิคงเหลือ</div>
-                        <div class="text-2xl font-black text-amber-300">฿${netPayout.toLocaleString()}</div>
+                </div>
+
+                <div class="flex items-center justify-between pt-1 gap-2 flex-wrap">
+                    <div class="text-[11px] text-emerald-200/90 flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">verified</span>
+                        <span>ยืนยันโดยฝ่ายการเงินและบัญชีประจำฮับ</span>
+                    </div>
+                    <button onclick="printThermalVendorSlip('${currentStallId}', '${targetDateKey}')" class="px-3.5 py-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/20 rounded-xl font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">receipt</span>
+                        <span>📄 พิมพ์สลิปเคลียร์เงินแผงค้า (80mm)</span>
+                    </button>
+                </div>
+            </div>
+            ` : `
+            <div class="bg-gradient-to-br from-amber-950 via-slate-900 to-orange-950 rounded-3xl p-4 sm:p-5 text-white shadow-lg space-y-3 border border-amber-500/60 relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-2xl shrink-0">
+                            ⏳
+                        </div>
+                        <div>
+                            <div class="text-[10.5px] text-amber-300 font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                                <span>สถานะการโอนเงิน: อยู่ระหว่างรอบสรุปยอด</span>
+                            </div>
+                            <h3 class="text-base sm:text-lg font-black text-white">🟡 รอฮับตัดรอบและโอนเงินประจำวัน</h3>
+                        </div>
+                    </div>
+                    <span class="px-3 py-1 bg-amber-500/30 text-amber-300 border border-amber-400/50 font-black rounded-full text-xs flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">schedule</span>
+                        <span>รอโอนเงิน</span>
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-amber-800/60 text-xs">
+                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
+                        <div class="text-[10px] text-amber-200">ยอดเงินโอนสุทธิคงเหลือที่รอรับ:</div>
+                        <div class="text-2xl font-black text-amber-300">฿${finalPayoutAmount.toLocaleString()}</div>
+                        <div class="text-[10px] text-amber-300/80">คำนวณจากยอดขายหัก GP ${gpRate}%</div>
+                    </div>
+                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
+                        <div class="text-[10px] text-amber-200">ขั้นตอนการรับเงิน:</div>
+                        <div class="text-[11px] text-slate-200 pt-1 leading-snug">
+                            เมื่อแอดมินหรือฝ่ายบัญชีของฮับสแกนจ่ายผ่าน QR พร้อมเพย์และกดยืนยันแล้ว สถานะหน้านี้จะเปลี่ยนเป็น <strong>"โอนแล้ว"</strong> ทันทีแบบเรียลไทม์
+                        </div>
+                    </div>
+                </div>
+            </div>
+            `}
+
+            <!-- Calculation Breakdown Card -->
+            <div class="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div class="flex items-center gap-2">
+                        <span class="w-7 h-7 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-sm">📊</span>
+                        <h4 class="font-extrabold text-slate-800 text-xs sm:text-sm">รายละเอียดการคำนวณยอดเงิน (${thaiDateText})</h4>
+                    </div>
+                    <span class="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full">
+                        ${orderCount} ออเดอร์
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="bg-slate-50 rounded-2xl p-3 border border-slate-100">
+                        <div class="text-[10px] text-slate-500">1. ยอดจำหน่ายของสดรวม</div>
+                        <div class="text-xl font-black text-slate-800 pt-0.5">฿${grossSales.toLocaleString()}</div>
+                        <div class="text-[9.5px] text-slate-400">คำนวณจากสินค้าที่พร้อมส่งจริง</div>
+                    </div>
+                    <div class="bg-slate-50 rounded-2xl p-3 border border-slate-100">
+                        <div class="text-[10px] text-slate-500">2. หักค่าบริการฮับ (GP ${gpRate}%)</div>
+                        <div class="text-xl font-black text-rose-600 pt-0.5">-฿${hubFee.toLocaleString()}</div>
+                        <div class="text-[9.5px] text-slate-400">ค่าระบบ จัดหาไรเดอร์ และการตลาด</div>
+                    </div>
+                    <div class="bg-emerald-50 rounded-2xl p-3 border border-emerald-200">
+                        <div class="text-[10px] text-emerald-800 font-bold">3. ยอดเงินโอนสุทธิเข้าบัญชี</div>
+                        <div class="text-2xl font-black text-emerald-700 pt-0.5">฿${finalPayoutAmount.toLocaleString()}</div>
+                        <div class="text-[9.5px] font-bold ${isSettled ? 'text-emerald-600' : 'text-amber-600'}">
+                            ${isSettled ? '✓ โอนเข้าบัญชีเรียบร้อย' : '⏳ รอฮับโอนเงิน'}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -12889,20 +13097,34 @@ function renderMerchantSettlement() {
 
             <!-- Order Breakdown List -->
             <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-xs">
-                <h4 class="font-extrabold text-slate-800 text-xs sm:text-sm flex items-center justify-between">
-                    <span>รายการคำนวณยอดเงินแต่ละออเดอร์</span>
-                    <span class="text-slate-400 font-normal text-xs">รวม ${itemBreakdown.length} รายการ</span>
-                </h4>
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <h4 class="font-extrabold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-slate-600 text-base">receipt_long</span>
+                        <span>รายการออเดอร์ในรอบวันที่ ${thaiDateText}</span>
+                    </h4>
+                    <span class="text-slate-500 font-bold text-xs">รวม ${itemBreakdown.length} ออเดอร์</span>
+                </div>
                 <div class="divide-y divide-slate-100 space-y-1">
                     ${itemBreakdown.length === 0 ? `
-                        <div class="py-6 text-center text-slate-400 text-xs">ยังไม่มีรายการยอดขายของสดในระบบ</div>
+                        <div class="py-8 text-center text-slate-400 text-xs space-y-1">
+                            <span class="material-symbols-outlined text-3xl text-slate-300">receipt</span>
+                            <div>ไม่มีรายการยอดขายของสดในวันที่เลือก</div>
+                        </div>
                     ` : itemBreakdown.map(b => `
-                        <div class="flex items-center justify-between pt-2 text-xs">
-                            <div class="flex items-center gap-2">
-                                <span class="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-800">${b.orderId}</span>
-                                <span class="text-[10px] text-slate-400">${b.time}</span>
+                        <div class="flex items-center justify-between pt-2.5 text-xs">
+                            <div class="space-y-0.5">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-mono font-black bg-slate-100 px-2 py-0.5 rounded text-slate-800">${b.orderId}</span>
+                                    <span class="text-[10px] text-slate-400">${b.time}</span>
+                                </div>
+                                <div class="text-[10px] text-slate-500">
+                                    ${(b.items || []).map(it => `${it.name} (x${it.qty || it.quantity || 1})`).join(", ")}
+                                </div>
                             </div>
-                            <div class="font-mono font-bold text-emerald-700">฿${b.subtotal.toLocaleString()}</div>
+                            <div class="text-right">
+                                <div class="font-mono font-black text-emerald-700 text-sm">฿${b.subtotal.toLocaleString()}</div>
+                                <div class="text-[9px] text-slate-400 font-semibold">${b.status === 'delivered' ? '✓ จัดส่งสำเร็จ' : '⏳ กำลังดำเนินการ'}</div>
+                            </div>
                         </div>
                     `).join('')}
                 </div>
@@ -12911,8 +13133,57 @@ function renderMerchantSettlement() {
     `;
 
     container.innerHTML = html;
+    updateMerchantSettlementBadge();
 }
 window.renderMerchantSettlement = renderMerchantSettlement;
+
+function listenToFirebaseVendorSettlementForMerchant() {
+    if (!isFirebaseReady()) return;
+    if (window._hasFirebaseVendorSettlementListener) return;
+    window._hasFirebaseVendorSettlementListener = true;
+
+    try {
+        const todayKey = getReportDateKey(Date.now());
+        db.ref(`daily_reports/${todayKey}/vendorSettlement/settledVendors`).on("value", (snap) => {
+            const val = snap.val();
+            if (val && typeof val === "object") {
+                try {
+                    localStorage.setItem(`talathub_settled_vendors_${todayKey}`, JSON.stringify(val));
+                } catch(e) {}
+
+                let stallId = activeMerchantStallId || (state.activeMerchant && state.activeMerchant.stallId);
+                let stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
+                if (stall) {
+                    const sKey = stall.stallId || stall.stallName;
+                    const info = val[sKey] || val[stall.stallId] || val[stall.stallName];
+                    if (info && info.isSettled) {
+                        if (!window._notifiedSettlementTime || window._notifiedSettlementTime !== info.settledAt) {
+                            window._notifiedSettlementTime = info.settledAt;
+                            if (state.activeRole === "merchant" || state.currentRoleView === "merchant") {
+                                showToast(`🎉 ฮับได้โอนเงินยอดขายเข้าบัญชีของคุณแล้ว ฿${Number(info.amount || 0).toLocaleString()} เรียบร้อยแล้ว!`);
+                                try {
+                                    const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+                                    audio.play().catch(() => {});
+                                } catch(e) {}
+                            }
+                        }
+                    }
+                }
+
+                if (typeof updateMerchantSettlementBadge === "function") updateMerchantSettlementBadge();
+                if (typeof renderMerchantSettlement === "function" && _activeMerchantMainTab === "settlement") {
+                    renderMerchantSettlement();
+                }
+                if (typeof renderMerchantIncomingOrders === "function" && _activeMerchantMainTab === "orders") {
+                    renderMerchantIncomingOrders();
+                }
+            }
+        });
+    } catch(e) {
+        console.warn("listenToFirebaseVendorSettlementForMerchant error:", e);
+    }
+}
+window.listenToFirebaseVendorSettlementForMerchant = listenToFirebaseVendorSettlementForMerchant;
 
 function cancelMerchantExpressOrder(orderId) {
     if (!confirm("⚠️ คุณแน่ใจหรือไม่ว่าต้องการยกเลิกคำขอเรียกรถส่งด่วนรายการ " + orderId + " ?")) return;
@@ -13034,6 +13305,20 @@ function renderMerchantIncomingOrders() {
 
     const totalSales = stallOrders.reduce((sum, o) => sum + o.stallTotal, 0);
 
+    // Check Today's Settlement Status from Hub
+    const todayKey = getReportDateKey(Date.now());
+    const settledVendors = _loadVendorSettlementState(todayKey);
+    const sKey = currentStallId || currentStallName;
+    let settledInfo = settledVendors[sKey] || settledVendors[currentStallId] || settledVendors[currentStallName];
+    if (!settledInfo) {
+        const foundKey = Object.keys(settledVendors).find(k => {
+            const item = settledVendors[k];
+            return (item && item.stallName && currentStallName && (item.stallName.includes(currentStallName) || currentStallName.includes(item.stallName))) || k === currentStallId;
+        });
+        if (foundKey) settledInfo = settledVendors[foundKey];
+    }
+    const isTodaySettled = Boolean(settledInfo && settledInfo.isSettled);
+
     let html = `
         <!-- Merchant Stall Summary Banner -->
         <div class="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 rounded-3xl p-4 sm:p-5 text-white shadow-md space-y-3">
@@ -13081,6 +13366,41 @@ function renderMerchantIncomingOrders() {
                 </div>
             </div>
         </div>
+
+        <!-- Payout Status Notice Banner -->
+        ${isTodaySettled ? `
+        <div class="bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 rounded-2xl p-3 sm:p-3.5 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-emerald-300 animate-fade-in">
+            <div class="flex items-center gap-2.5">
+                <span class="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-lg shrink-0">
+                    💰
+                </span>
+                <div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="font-black text-xs sm:text-sm">ฮับโอนเงินยอดขายวันนี้เรียบร้อยแล้ว</span>
+                        <span class="bg-white text-emerald-900 text-[10px] font-black px-2 py-0.2 rounded-full">โอนแล้ว ✓</span>
+                    </div>
+                    <div class="text-[10.5px] text-emerald-100">
+                        ยอดเงินโอน <strong>฿${Number(settledInfo.amount || totalSales).toLocaleString()}</strong> (${formatSettledDate(settledInfo.settledAt)}) เข้าบัญชี ${stall ? (stall.accountNo || stall.bankAccountNo || stall.phone || '') : ''}
+                    </div>
+                </div>
+            </div>
+            <button onclick="switchMerchantMainTab('settlement')" class="px-3 py-1.5 bg-white text-emerald-950 font-black rounded-xl text-xs shadow-xs hover:bg-emerald-50 active:scale-95 transition-all shrink-0 cursor-pointer">
+                ดูสลิป & บัญชี →
+            </button>
+        </div>
+        ` : (totalSales > 0 ? `
+        <div class="bg-amber-50 rounded-2xl p-3 text-amber-900 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 border border-amber-200">
+            <div class="flex items-center gap-2">
+                <span class="text-base">⏳</span>
+                <div class="text-xs">
+                    <span class="font-bold">รอบโอนเงินประจำวัน:</span> ยอดขายสะสม <strong>฿${totalSales.toLocaleString()}</strong> (รอฮับตัดรอบและสแกนโอนเงิน)
+                </div>
+            </div>
+            <button onclick="switchMerchantMainTab('settlement')" class="text-amber-800 hover:text-amber-950 font-black text-[11px] underline shrink-0 cursor-pointer">
+                ตรวจสอบยอดเงินโอน →
+            </button>
+        </div>
+        ` : '')}
 
         <div class="flex items-center justify-between pt-1">
             <h4 class="font-extrabold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
@@ -15351,6 +15671,8 @@ function switchRole(targetRole) {
         }
         setActiveRoleView("merchant");
         if (typeof renderMerchantView === "function") renderMerchantView();
+        if (typeof listenToFirebaseVendorSettlementForMerchant === "function") listenToFirebaseVendorSettlementForMerchant();
+        if (typeof updateMerchantSettlementBadge === "function") updateMerchantSettlementBadge();
         return;
     }
 
@@ -25375,6 +25697,7 @@ function initTalatHubApp() {
     initCatalogDbRealtimeSync();
     syncAdminOrdersFromCloud();
     listenToFirebaseOrdersForAdmin();
+    listenToFirebaseVendorSettlementForMerchant();
 
     // Auto-prompt location picker modal for first-time customers who have no saved location
     checkAndPromptFirstTimeLocation();
@@ -25390,9 +25713,11 @@ function initTalatHubApp() {
             initCatalogDbRealtimeSync();
             syncAdminOrdersFromCloud();
             listenToFirebaseOrdersForAdmin();
+            listenToFirebaseVendorSettlementForMerchant();
             fetchOnlineStallsStartup();
             updateAdminRiderBadges();
             updateAdminStallsBadge();
+            updateMerchantSettlementBadge();
         }, 1500);
     }
 }
