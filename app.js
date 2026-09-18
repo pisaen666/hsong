@@ -4510,9 +4510,9 @@ function renderHubDailyReport(targetDateKey) {
                     <span class="material-symbols-outlined text-sm">print</span>
                     <span>พิมพ์รายงาน A4</span>
                 </button>
-                <button onclick="clearDailyOrdersAndReport('${targetDateKey}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="เคลียร์เฉพาะข้อมูลออเดอร์และรายงานของวันที่เลือก (${thaiDateText}) โดยไม่กระทบวันอื่น">
+                <button onclick="clearDailyOrdersAndReport('${targetDateKey}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="เคลียร์เฉพาะข้อมูลออเดอร์และรายงานของวันที่ ${thaiDateText} (ต้องใช้รหัสผ่าน Admin)">
                     <span class="material-symbols-outlined text-sm text-amber-700">event_busy</span>
-                    <span>เคลียร์เฉพาะวันนี้</span>
+                    <span>${isToday ? 'เคลียร์เฉพาะวันนี้' : 'เคลียร์เฉพาะวันที่เลือก (' + thaiDateText + ')'}</span>
                 </button>
                 <button onclick="clearAllSystemOrdersAndReports()" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="รีเซ็ตล้างข้อมูลออเดอร์ทุกวันทั้งระบบเป็น 0 (ต้องใช้รหัสผ่าน Admin)">
                     <span class="material-symbols-outlined text-sm">delete_forever</span>
@@ -5219,14 +5219,29 @@ function handleAdminAuthConfirmSubmit() {
 }
 window.handleAdminAuthConfirmSubmit = handleAdminAuthConfirmSubmit;
 
-// ── 1. ลบ/เคลียร์ข้อมูลเฉพาะวันที่เลือก (รายวัน)
+// ── 1. ลบ/เคลียร์ข้อมูลเฉพาะวันที่เลือก (รายวัน) — ต้องใช้รหัสผ่าน Admin
 function clearDailyOrdersAndReport(targetDateKey) {
+    const dateInput = document.getElementById("hub-report-date-input");
+    if (!targetDateKey && dateInput && dateInput.value) {
+        targetDateKey = dateInput.value;
+    }
     if (!targetDateKey) targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
     const thaiDateText = formatThaiDateDisplay(targetDateKey);
+    const isToday = targetDateKey === getReportDateKey(Date.now());
 
-    if (!confirm(`⚠️ คุณต้องการเคลียร์ข้อมูลออเดอร์และรายงานสรุปเฉพาะวันที่ ${thaiDateText} ใช่หรือไม่?\n\n✨ ข้อมูลของวันอื่น ๆ ทั้งในอดีตและอนาคตจะไม่ได้รับผลกระทบ`)) {
-        return;
-    }
+    promptAdminAuthModal({
+        title: `🗑️ เคลียร์ข้อมูลเฉพาะวันที่เลือก`,
+        headline: `กำลังจะเคลียร์ข้อมูลของวันที่ ${thaiDateText} ${isToday ? '(วันนี้)' : ''}`,
+        description: `คุณต้องการเคลียร์ข้อมูลออเดอร์ ยอดขาย และประวัติการเคลียร์เงินของวันที่ ${thaiDateText} ใช่หรือไม่? (วันอื่นจะไม่ได้รับผลกระทบ)`,
+        onConfirm: () => {
+            _executeClearDailyOrdersAndReport(targetDateKey);
+        }
+    });
+}
+window.clearDailyOrdersAndReport = clearDailyOrdersAndReport;
+
+function _executeClearDailyOrdersAndReport(targetDateKey) {
+    const thaiDateText = formatThaiDateDisplay(targetDateKey);
 
     // 1. หาออเดอร์ของวันที่เลือก
     const allOrders = _collectAllOrders();
@@ -5238,9 +5253,34 @@ function clearDailyOrdersAndReport(targetDateKey) {
 
     // 2. ลบออกจาก Firebase Realtime Database
     if (isFirebaseReady()) {
+        // ลบตาม targetIds ที่หาได้ (แปลง # เป็น _ ด้วย toFirebaseKey)
         targetIds.forEach(id => {
-            db.ref("orders/" + id).remove().catch(e => console.warn("Firebase remove order failed:", id, e));
+            const fbKey = toFirebaseKey(id);
+            db.ref("orders/" + fbKey).remove().catch(e => console.warn("Firebase remove order failed:", fbKey, e));
+            const rawId = id.replace(/^#/, '');
+            if (rawId !== fbKey) {
+                db.ref("orders/" + rawId).remove().catch(() => {});
+            }
         });
+
+        // ตรวจสอบและลบออเดอร์ใน Firebase ทั้งหมดที่มีวันที่ตรงกับ targetDateKey
+        try {
+            db.ref("orders").once("value", (snap) => {
+                const val = snap.val();
+                if (val && typeof val === "object") {
+                    Object.entries(val).forEach(([fbKey, o]) => {
+                        if (!o) return;
+                        const oDate = getReportDateKey(o.savedAt || o.createdAt || o.orderTime);
+                        const oId = o.orderId || "";
+                        if (oDate === targetDateKey || targetIds.has(oId) || targetIds.has("#" + oId) || targetIds.has(oId.replace(/^#/, ''))) {
+                            db.ref("orders/" + fbKey).remove().catch(e => console.warn("Firebase direct order remove failed:", fbKey, e));
+                        }
+                    });
+                }
+            });
+        } catch (e) {}
+
+        // ลบ Daily report โหนดของวันนี้
         db.ref("daily_reports/" + targetDateKey).remove().catch(e => console.warn("Firebase remove daily_report failed:", e));
     }
 
@@ -5249,7 +5289,7 @@ function clearDailyOrdersAndReport(targetDateKey) {
         const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
         const filteredHist = hist.filter(o => {
             if (!o || !o.orderId) return false;
-            if (targetIds.has(o.orderId)) return false;
+            if (targetIds.has(o.orderId) || targetIds.has("#" + o.orderId) || targetIds.has(o.orderId.replace(/^#/, ''))) return false;
             const dKey = getReportDateKey(o.savedAt || o.createdAt || o.orderTime);
             return dKey !== targetDateKey;
         });
@@ -5260,7 +5300,7 @@ function clearDailyOrdersAndReport(targetDateKey) {
         const hOrders = JSON.parse(localStorage.getItem("hsong_orders") || "[]");
         const filteredH = hOrders.filter(o => {
             if (!o || !o.orderId) return false;
-            if (targetIds.has(o.orderId)) return false;
+            if (targetIds.has(o.orderId) || targetIds.has("#" + o.orderId) || targetIds.has(o.orderId.replace(/^#/, ''))) return false;
             const dKey = getReportDateKey(o.savedAt || o.createdAt || o.orderTime);
             return dKey !== targetDateKey;
         });
@@ -5271,7 +5311,7 @@ function clearDailyOrdersAndReport(targetDateKey) {
         const exp = JSON.parse(localStorage.getItem("hsong_merchant_express_orders") || "[]");
         const filteredExp = exp.filter(o => {
             if (!o || !o.orderId) return false;
-            if (targetIds.has(o.orderId)) return false;
+            if (targetIds.has(o.orderId) || targetIds.has("#" + o.orderId) || targetIds.has(o.orderId.replace(/^#/, ''))) return false;
             const dKey = getReportDateKey(o.savedAt || o.createdAt || o.orderTime);
             return dKey !== targetDateKey;
         });
@@ -5281,7 +5321,8 @@ function clearDailyOrdersAndReport(targetDateKey) {
     // ถ้า activeOrder เป็นของวันนี้ ให้เคลียร์ออก
     if (state.activeOrder) {
         const activeDate = getReportDateKey(state.activeOrder.savedAt || state.activeOrder.createdAt || state.activeOrder.orderTime);
-        if (targetIds.has(state.activeOrder.orderId) || activeDate === targetDateKey) {
+        const actId = state.activeOrder.orderId || "";
+        if (targetIds.has(actId) || targetIds.has("#" + actId) || targetIds.has(actId.replace(/^#/, '')) || activeDate === targetDateKey) {
             state.activeOrder = null;
             localStorage.removeItem("talathub_active_order");
             localStorage.removeItem("hsong_active_order");
@@ -5296,18 +5337,21 @@ function clearDailyOrdersAndReport(targetDateKey) {
     // 4. ลบออกจาก Memory state
     state.orders = (state.orders || []).filter(o => {
         if (!o || !o.orderId) return false;
-        if (targetIds.has(o.orderId)) return false;
+        const oId = o.orderId;
+        if (targetIds.has(oId) || targetIds.has("#" + oId) || targetIds.has(oId.replace(/^#/, ''))) return false;
         return getReportDateKey(o.savedAt || o.createdAt || o.orderTime) !== targetDateKey;
     });
     state.merchantExpressOrders = (state.merchantExpressOrders || []).filter(o => {
         if (!o || !o.orderId) return false;
-        if (targetIds.has(o.orderId)) return false;
+        const oId = o.orderId;
+        if (targetIds.has(oId) || targetIds.has("#" + oId) || targetIds.has(oId.replace(/^#/, ''))) return false;
         return getReportDateKey(o.savedAt || o.createdAt || o.orderTime) !== targetDateKey;
     });
     if (window._cachedFirebaseOrders && Array.isArray(window._cachedFirebaseOrders)) {
         window._cachedFirebaseOrders = window._cachedFirebaseOrders.filter(o => {
             if (!o || !o.orderId) return false;
-            if (targetIds.has(o.orderId)) return false;
+            const oId = o.orderId;
+            if (targetIds.has(oId) || targetIds.has("#" + oId) || targetIds.has(oId.replace(/^#/, ''))) return false;
             return getReportDateKey(o.savedAt || o.createdAt || o.orderTime) !== targetDateKey;
         });
     }
@@ -5321,7 +5365,6 @@ function clearDailyOrdersAndReport(targetDateKey) {
 
     showToast(`✨ เคลียร์ข้อมูลเฉพาะวันที่ ${thaiDateText} เรียบร้อยแล้ว!`);
 }
-window.clearDailyOrdersAndReport = clearDailyOrdersAndReport;
 
 // ── 2. ลบออเดอร์แต่ละรายการ (รายตัว) — ต้องใช้รหัสผ่าน Admin
 function deleteSingleOrder(orderId, targetDateKey) {
@@ -5330,44 +5373,49 @@ function deleteSingleOrder(orderId, targetDateKey) {
 
     promptAdminAuthModal({
         title: `🗑️ ยืนยันการลบออเดอร์`,
-        headline: `กำลังจะลบคำสั่งซื้อ #${orderId}`,
-        description: `คุณต้องการลบออเดอร์ #${orderId} ออกจากระบบถาวรใช่หรือไม่? ยอดสรุปรายวันจะถูกคำนวณใหม่โดยอัตโนมัติ`,
+        headline: `กำลังจะลบคำสั่งซื้อ #${orderId.replace(/^#/, '')}`,
+        description: `คุณต้องการลบออเดอร์ ${orderId} ออกจากระบบถาวรใช่หรือไม่? ยอดสรุปรายวันจะถูกคำนวณใหม่โดยอัตโนมัติ`,
         onConfirm: () => {
-            // 1. ลบจาก Firebase
+            // 1. ลบจาก Firebase (แปลง # เป็น _ ด้วย toFirebaseKey)
             if (isFirebaseReady()) {
-                db.ref("orders/" + orderId).remove().catch(e => console.warn("Firebase delete order failed:", orderId, e));
+                const fbKey = toFirebaseKey(orderId);
+                db.ref("orders/" + fbKey).remove().catch(e => console.warn("Firebase delete order failed:", fbKey, e));
+                const rawId = orderId.replace(/^#/, '');
+                if (rawId !== fbKey) {
+                    db.ref("orders/" + rawId).remove().catch(() => {});
+                }
             }
 
             // 2. ลบจาก LocalStorage
             try {
                 const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
-                const filteredHist = hist.filter(o => o && o.orderId !== orderId);
+                const filteredHist = hist.filter(o => o && o.orderId !== orderId && o.orderId !== orderId.replace(/^#/, '') && o.orderId !== ("#" + orderId));
                 localStorage.setItem("talathub_order_history", JSON.stringify(filteredHist));
             } catch (e) {}
 
             try {
                 const hOrders = JSON.parse(localStorage.getItem("hsong_orders") || "[]");
-                const filteredH = hOrders.filter(o => o && o.orderId !== orderId);
+                const filteredH = hOrders.filter(o => o && o.orderId !== orderId && o.orderId !== orderId.replace(/^#/, '') && o.orderId !== ("#" + orderId));
                 localStorage.setItem("hsong_orders", JSON.stringify(filteredH));
             } catch (e) {}
 
             try {
                 const exp = JSON.parse(localStorage.getItem("hsong_merchant_express_orders") || "[]");
-                const filteredExp = exp.filter(o => o && o.orderId !== orderId);
+                const filteredExp = exp.filter(o => o && o.orderId !== orderId && o.orderId !== orderId.replace(/^#/, '') && o.orderId !== ("#" + orderId));
                 localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(filteredExp));
             } catch (e) {}
 
-            if (state.activeOrder && state.activeOrder.orderId === orderId) {
+            if (state.activeOrder && (state.activeOrder.orderId === orderId || state.activeOrder.orderId === orderId.replace(/^#/, ''))) {
                 state.activeOrder = null;
                 localStorage.removeItem("talathub_active_order");
                 localStorage.removeItem("hsong_active_order");
             }
 
             // 3. ลบจาก Memory
-            state.orders = (state.orders || []).filter(o => o && o.orderId !== orderId);
-            state.merchantExpressOrders = (state.merchantExpressOrders || []).filter(o => o && o.orderId !== orderId);
+            state.orders = (state.orders || []).filter(o => o && o.orderId !== orderId && o.orderId !== orderId.replace(/^#/, ''));
+            state.merchantExpressOrders = (state.merchantExpressOrders || []).filter(o => o && o.orderId !== orderId && o.orderId !== orderId.replace(/^#/, ''));
             if (window._cachedFirebaseOrders && Array.isArray(window._cachedFirebaseOrders)) {
-                window._cachedFirebaseOrders = window._cachedFirebaseOrders.filter(o => o && o.orderId !== orderId);
+                window._cachedFirebaseOrders = window._cachedFirebaseOrders.filter(o => o && o.orderId !== orderId && o.orderId !== orderId.replace(/^#/, ''));
             }
 
             // 4. ลบแคช Daily Report เก่าของวันนี้เพื่อให้ระบบคำนวณใหม่
@@ -5380,7 +5428,7 @@ function deleteSingleOrder(orderId, targetDateKey) {
             if (typeof renderHubMonitorBoard === "function") renderHubMonitorBoard();
             if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
 
-            showToast(`🗑️ ลบออเดอร์ #${orderId} เรียบร้อยแล้ว!`);
+            showToast(`🗑️ ลบออเดอร์ ${orderId} เรียบร้อยแล้ว!`);
         }
     });
 }
