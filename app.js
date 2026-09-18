@@ -4309,6 +4309,7 @@ function aggregateDailyOperations(targetDateKey) {
         totalCustomerGMV: 0,
         totalDeliveryFees: 0,
         totalDiscounts: 0,
+        totalExpressFees: 0,
         netCustomerPaid: 0,
         totalRefundCash: 0,
         paymentBreakdown: {
@@ -4330,9 +4331,11 @@ function aggregateDailyOperations(targetDateKey) {
         const delFee = Number(o.deliveryFee || 20);
         const discount = Number(o.discount || 0);
         const refundAmt = Number(o.refundCashTotal || o.cashRefund || 0);
+        const expFee = Number(o.expressFee || ((o.isExpress || o.orderType === "CUSTOMER_EXPRESS" || o.orderType === "MERCHANT_EXPRESS") ? 20 : 0));
 
         summary.totalCustomerGMV += orderTotal;
         summary.totalDeliveryFees += delFee;
+        summary.totalExpressFees += expFee;
         summary.totalDiscounts += discount;
         summary.totalRefundCash += refundAmt;
 
@@ -4448,17 +4451,30 @@ function aggregateDailyOperations(targetDateKey) {
         settledRiders
     };
 
-    // คำนวณยอดรวมแผงค้า
+    // โหลดการตั้งค่าระบบเพื่อหาอัตรา GP
+    const hubSettings = (typeof loadSavedHubSettings === "function") ? loadSavedHubSettings() : {};
+    const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number") ? hubSettings.merchantGP : 10;
+
+    // คำนวณยอดรวมแผงค้า (แยกยอดขายรวม, GP ที่ระบบหัก, และยอดโอนสุทธิ)
     const stallsList = Object.values(stallsMap);
+    let totalVendorGross = 0;
+    let totalVendorGP = 0;
     let totalVendorAmount = 0;
     let totalSettledAmount = 0;
     let settledCount = 0;
     let pendingCount = 0;
 
     stallsList.forEach(s => {
-        totalVendorAmount += s.totalAmount;
+        s.gpRate = gpRate;
+        s.gpAmount = Math.round(s.totalAmount * (gpRate / 100));
+        s.payoutAmount = Math.max(0, s.totalAmount - s.gpAmount);
+
+        totalVendorGross += s.totalAmount;
+        totalVendorGP += s.gpAmount;
+        totalVendorAmount += s.payoutAmount;
+
         if (s.isSettled) {
-            totalSettledAmount += s.totalAmount;
+            totalSettledAmount += s.payoutAmount;
             settledCount++;
         } else {
             pendingCount++;
@@ -4466,11 +4482,14 @@ function aggregateDailyOperations(targetDateKey) {
     });
 
     const vendorSettlement = {
-        totalVendorAmount,
+        totalVendorGross,
+        totalVendorGP,
+        totalVendorAmount, // ยอดโอนสุทธิให้แผงค้า
         totalSettledAmount,
         totalPendingAmount: totalVendorAmount - totalSettledAmount,
         settledCount,
         pendingCount,
+        gpRate,
         stalls: stallsList,
         settledVendors
     };
@@ -4555,8 +4574,52 @@ function renderHubDailyReport(targetDateKey) {
     const thaiDateText = formatThaiDateDisplay(targetDateKey);
     const isToday = targetDateKey === getReportDateKey(Date.now());
 
-    // คำนวณรายได้ค่าบริการสุทธิของฮับ (GMV - ยอดจ่ายแม่ค้า - ค่ารอบไรเดอร์)
-    const hubNetMargin = report.summary.totalCustomerGMV - report.vendorSettlement.totalVendorAmount - report.riderSettlement.totalRiderFees;
+    // คำนวณรายได้ค่าบริการสุทธิของฮับ:
+    // รายได้ฮับ = ค่าจัดส่งจากลูกค้า + ค่าธรรมเนียม GP จากแผงค้า + ค่าบริการส่งด่วน
+    // กำไรสุทธิฮับ = รายได้ฮับ - ค่ารอบไรเดอร์
+    const totalExpressFees = Number(report.summary.totalExpressFees || 0);
+    const totalVendorGP = Number(report.vendorSettlement.totalVendorGP || 0);
+    const totalDeliveryFees = Number(report.summary.totalDeliveryFees || 0);
+    const hubGrossRevenue = totalDeliveryFees + totalVendorGP + totalExpressFees;
+    const hubNetMargin = hubGrossRevenue - report.riderSettlement.totalRiderFees;
+
+    // โครงสร้างต้นทุนคงที่ (Fixed Costs) & จุดคุ้มทุน (Break-even):
+    const fc = (typeof loadPlatformFixedCosts === "function") ? loadPlatformFixedCosts() : {
+        officeRent: 4000,
+        staffSalary: 13000,
+        utilitiesSupplies: 2000,
+        daysInMonth: 30,
+        breakEvenDailyOrders: 38,
+        targetProfitDailyOrders: 45
+    };
+    const totalMonthlyFixedCost = fc.officeRent + fc.staffSalary + fc.utilitiesSupplies;
+    const dailyFixedCost = Math.round(totalMonthlyFixedCost / (fc.daysInMonth || 30));
+    const netDailyProfit = hubNetMargin - dailyFixedCost;
+
+    const completedOrders = report.summary.completedOrders || 0;
+    const progressPercent = Math.min(100, Math.round((completedOrders / (fc.breakEvenDailyOrders || 38)) * 100));
+
+    let breakEvenStatusClass = "text-rose-400";
+    let breakEvenBadgeText = `🔴 ยังไม่ถึงจุดคุ้มทุน (ขาดอีก ${Math.max(0, fc.breakEvenDailyOrders - completedOrders)} ออเดอร์)`;
+    let progressColorClass = "bg-gradient-to-r from-rose-500 to-amber-500";
+
+    if (completedOrders >= fc.targetProfitDailyOrders) {
+        breakEvenStatusClass = "text-emerald-300 font-black";
+        breakEvenBadgeText = `🏆 บรรลุเป้าหมายกำไร 5% แล้ว! (${completedOrders}/${fc.targetProfitDailyOrders} ออเดอร์)`;
+        progressColorClass = "bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 shadow-md shadow-emerald-500/30";
+    } else if (completedOrders >= fc.breakEvenDailyOrders) {
+        breakEvenStatusClass = "text-teal-300 font-bold";
+        breakEvenBadgeText = `🟢 ถึงจุดคุ้มทุนแล้ว! เริ่มมีกำไร (ขาดอีก ${fc.targetProfitDailyOrders - completedOrders} ออเดอร์สู่เป้ากำไร 5%)`;
+        progressColorClass = "bg-gradient-to-r from-amber-400 to-emerald-500";
+    } else if (completedOrders >= 20) {
+        breakEvenStatusClass = "text-amber-300 font-bold";
+        breakEvenBadgeText = `🟡 ใกล้ถึงจุดคุ้มทุน (ต้องการอีก ${fc.breakEvenDailyOrders - completedOrders} ออเดอร์)`;
+        progressColorClass = "bg-gradient-to-r from-amber-500 to-emerald-400";
+    }
+
+    const profitMarginPct = report.summary.totalCustomerGMV > 0 
+        ? ((netDailyProfit / report.summary.totalCustomerGMV) * 100).toFixed(1) 
+        : 0;
 
     const riderApps = loadRiderApplications();
     const pendingRiderApps = riderApps.filter(a => a.status === 'pending');
@@ -4673,13 +4736,13 @@ function renderHubDailyReport(targetDateKey) {
             <div class="flex items-center justify-between">
                 <span class="text-[10px] sm:text-[11px] font-bold text-amber-200 flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm">storefront</span>
-                    <span>ยอดเคลียร์แผงค้า</span>
+                    <span>ยอดโอนสุทธิแผงค้า</span>
                 </span>
                 <span class="text-[9px] bg-white/20 font-bold px-1.5 py-0.2 rounded-full">${report.vendorSettlement.stalls.length} แผง</span>
             </div>
             <div class="text-xl sm:text-2xl font-black tracking-tight">฿${report.vendorSettlement.totalVendorAmount.toLocaleString()}</div>
             <div class="text-[9px] sm:text-[10px] text-amber-100/90 pt-1 border-t border-white/15">
-                <span>โอนแล้ว ฿${report.vendorSettlement.totalSettledAmount.toLocaleString()} | รอโอน ฿${report.vendorSettlement.totalPendingAmount.toLocaleString()}</span>
+                <span>ยอดขาย ฿${report.vendorSettlement.totalVendorGross.toLocaleString()} | หัก GP -฿${report.vendorSettlement.totalVendorGP.toLocaleString()}</span>
             </div>
         </div>
 
@@ -4698,20 +4761,118 @@ function renderHubDailyReport(targetDateKey) {
             </div>
         </div>
 
-        <!-- Card 4: รายรับค่าบริการสุทธิของฮับ (Hub Margin) -->
+        <!-- Card 4: รายรับค่าบริการสุทธิของฮับ (Hub Net Margin) -->
         <div class="bg-gradient-to-br from-purple-700 to-indigo-900 text-white rounded-3xl p-3.5 sm:p-4 shadow-md space-y-1.5 relative overflow-hidden">
             <div class="flex items-center justify-between">
                 <span class="text-[10px] sm:text-[11px] font-bold text-purple-200 flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm">account_balance</span>
                     <span>กำไรค่าบริการสุทธิฮับ</span>
                 </span>
-                <span class="text-[9px] bg-white/20 font-bold px-1.5 py-0.2 rounded-full">Net</span>
+                <span class="text-[9px] bg-white/20 font-bold px-1.5 py-0.2 rounded-full">Net Margin</span>
             </div>
             <div class="text-xl sm:text-2xl font-black tracking-tight ${hubNetMargin >= 0 ? 'text-emerald-300' : 'text-rose-300'}">
                 ฿${hubNetMargin.toLocaleString()}
             </div>
             <div class="text-[9px] sm:text-[10px] text-purple-100/90 pt-1 border-t border-white/15">
-                <span>(ยอดขาย - ต้นทุนแผงค้า - ค่ารอบ)</span>
+                <span>(รายรับ ฿${hubGrossRevenue.toLocaleString()} - ค่ารอบ ฿${report.riderSettlement.totalRiderFees.toLocaleString()})</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🌟 แถบวิเคราะห์จุดคุ้มทุน & งบกำไร-ขาดทุนรายวัน (P&L & Break-even Ledger) -->
+    <div class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-4 sm:p-5 shadow-xl border border-indigo-500/30 space-y-4">
+        <!-- Header & Target Status -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+            <div class="flex items-center gap-3">
+                <span class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-400 to-orange-500 text-white flex items-center justify-center font-black text-lg shadow-sm">
+                    📊
+                </span>
+                <div>
+                    <h4 class="font-extrabold text-sm sm:text-base text-white flex items-center gap-2 flex-wrap">
+                        <span>วิเคราะห์จุดคุ้มทุน & งบกำไร-ขาดทุนรายวัน (Daily P&L Ledger)</span>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">เป้าหมายกำไร 5%</span>
+                    </h4>
+                    <p class="text-[11px] text-slate-400">หักต้นทุนคงที่เฉลี่ยรายวัน (ค่าเช่า ฿${fc.officeRent.toLocaleString()} + เงินเดือน ฿${fc.staffSalary.toLocaleString()} + สนง. ฿${fc.utilitiesSupplies.toLocaleString()})</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="openFixedCostsModal()" class="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-indigo-200 border border-white/15 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95">
+                    <span class="material-symbols-outlined text-sm">tune</span>
+                    <span>ปรับแต่งต้นทุนคงที่</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Break-even Progress Meter -->
+        <div class="bg-white/5 rounded-2xl p-3.5 border border-white/10 space-y-2.5">
+            <div class="flex items-center justify-between text-xs flex-wrap gap-1">
+                <span class="font-bold text-slate-300 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-amber-400 text-sm">flag</span>
+                    <span>ความคืบหน้าสู่จุดคุ้มทุนวันนี้ (Break-even Progress):</span>
+                </span>
+                <span class="font-extrabold ${breakEvenStatusClass}">
+                    ${breakEvenBadgeText}
+                </span>
+            </div>
+
+            <!-- Progress Bar with Markers -->
+            <div class="space-y-1">
+                <div class="w-full bg-slate-800 rounded-full h-3.5 p-0.5 border border-white/10 relative overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-700 ${progressColorClass}" style="width: ${progressPercent}%"></div>
+                </div>
+                <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                    <span>0 ออเดอร์</span>
+                    <span class="text-amber-300 font-bold">🎯 จุดคุ้มทุน: ${fc.breakEvenDailyOrders} ออเดอร์</span>
+                    <span class="text-emerald-300 font-bold">🏆 เป้ากำไร 5%: ${fc.targetProfitDailyOrders} ออเดอร์</span>
+                    <span class="text-white font-black">${completedOrders} สำเร็จ (${progressPercent}%)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3-Column Daily P&L Breakdown -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <!-- 1. รายรับรวมฮับ -->
+            <div class="bg-white/5 rounded-2xl p-3.5 border border-white/10 space-y-2">
+                <div class="text-[11px] font-bold text-emerald-400 flex items-center justify-between">
+                    <span>1. รายรับรวมฮับ (Gross Revenue)</span>
+                    <span class="material-symbols-outlined text-sm">arrow_circle_down</span>
+                </div>
+                <div class="text-xl font-black text-white">฿${hubGrossRevenue.toLocaleString()}</div>
+                <div class="text-[10px] text-slate-300 space-y-1 pt-1 border-t border-white/10 font-mono">
+                    <div class="flex justify-between"><span>• ค่าส่งลูกค้า:</span><strong>฿${totalDeliveryFees.toLocaleString()}</strong></div>
+                    <div class="flex justify-between"><span>• GP แผงค้า (${report.vendorSettlement.gpRate || 10}%):</span><strong class="text-amber-300">฿${totalVendorGP.toLocaleString()}</strong></div>
+                    <div class="flex justify-between"><span>• ค่าส่งด่วน Express:</span><strong>฿${totalExpressFees.toLocaleString()}</strong></div>
+                </div>
+            </div>
+
+            <!-- 2. ต้นทุนรวม (ผันแปร + คงที่) -->
+            <div class="bg-white/5 rounded-2xl p-3.5 border border-white/10 space-y-2">
+                <div class="text-[11px] font-bold text-rose-400 flex items-center justify-between">
+                    <span>2. ต้นทุนรวมฮับ (Total Costs)</span>
+                    <span class="material-symbols-outlined text-sm">arrow_circle_up</span>
+                </div>
+                <div class="text-xl font-black text-white">฿${(report.riderSettlement.totalRiderFees + dailyFixedCost).toLocaleString()}</div>
+                <div class="text-[10px] text-slate-300 space-y-1 pt-1 border-t border-white/10 font-mono">
+                    <div class="flex justify-between"><span>• ค่ารอบไรเดอร์ (ผันแปร):</span><strong>฿${report.riderSettlement.totalRiderFees.toLocaleString()}</strong></div>
+                    <div class="flex justify-between"><span>• ต้นทุนคงที่เฉลี่ยต่อวัน:</span><strong class="text-rose-300">฿${dailyFixedCost.toLocaleString()}</strong></div>
+                    <div class="flex justify-between text-[9px] text-slate-400"><span>(ค่าเช่า ฿${Math.round(fc.officeRent/fc.daysInMonth)} + เงินเดือน ฿${Math.round(fc.staffSalary/fc.daysInMonth)})</span></div>
+                </div>
+            </div>
+
+            <!-- 3. กำไรสุทธิหลังหักทุกอย่าง (Net Profit / Loss) -->
+            <div class="bg-gradient-to-br ${netDailyProfit >= 0 ? 'from-emerald-950/80 to-teal-900/60 border-emerald-500/40' : 'from-rose-950/80 to-pink-900/60 border-rose-500/40'} rounded-2xl p-3.5 border space-y-2">
+                <div class="text-[11px] font-bold ${netDailyProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'} flex items-center justify-between">
+                    <span>3. กำไร/ขาดทุนสุทธิ (Net Operating Profit)</span>
+                    <span class="material-symbols-outlined text-sm">${netDailyProfit >= 0 ? 'trending_up' : 'trending_down'}</span>
+                </div>
+                <div class="text-2xl font-black ${netDailyProfit >= 0 ? 'text-emerald-300' : 'text-rose-400'}">
+                    ${netDailyProfit >= 0 ? '+' : ''}฿${netDailyProfit.toLocaleString()}
+                </div>
+                <div class="text-[10px] ${netDailyProfit >= 0 ? 'text-emerald-200' : 'text-rose-200'} pt-1 border-t border-white/10 font-medium">
+                    ${netDailyProfit >= 0 
+                        ? `🎉 กำไรสุทธิคิดเป็น ${profitMarginPct}% ของยอดขาย (เกินจุดคุ้มทุนแล้ว)`
+                        : `⚠️ ขาดทุนสุทธิประจำวัน (ต้องการอีก ${Math.max(0, fc.breakEvenDailyOrders - completedOrders)} ออเดอร์เพื่อเท่าทุน)`}
+                </div>
             </div>
         </div>
     </div>
@@ -4828,7 +4989,14 @@ function renderHubDailyReport(targetDateKey) {
                         </td>
                         <td class="p-2.5 text-center font-bold text-slate-700">${r.tripsCount} เที่ยว</td>
                         <td class="p-2.5 text-right font-bold text-sky-700">฿${r.riderFeeEarned.toLocaleString()}</td>
-                        <td class="p-2.5 text-right font-bold text-amber-700">฿${r.codCollected.toLocaleString()}</td>
+                        <td class="p-2.5 text-right font-bold text-amber-700">
+                            <div>฿${r.codCollected.toLocaleString()}</div>
+                            ${r.codCollected >= 3000 ? `
+                            <span class="inline-flex items-center gap-0.5 text-[9px] bg-rose-100 text-rose-700 font-extrabold px-1.5 py-0.2 rounded-md animate-pulse">
+                                <span class="material-symbols-outlined text-[10px]">warning</span>
+                                <span>เกิน ฿3,000</span>
+                            </span>` : ''}
+                        </td>
                         <td class="p-2.5 text-right font-bold text-rose-600">${r.refundHanded > 0 ? `-฿${r.refundHanded.toLocaleString()}` : '฿0'}</td>
                         <td class="p-2.5 text-right">
                             <span class="font-black text-xs ${r.netCashToHub >= 0 ? 'text-emerald-700' : 'text-rose-700'}">
@@ -4837,6 +5005,11 @@ function renderHubDailyReport(targetDateKey) {
                             <div class="text-[9px] text-slate-400 font-medium">
                                 ${r.netCashToHub >= 0 ? '(ไรเดอร์ส่งฮับ)' : '(ฮับจ่ายเพิ่ม)'}
                             </div>
+                            ${(r.netCashToHub >= 3000 && !r.isSettled) ? `
+                            <div class="text-[9px] text-rose-600 font-black animate-pulse flex items-center justify-end gap-0.5 mt-0.5">
+                                <span class="material-symbols-outlined text-[11px]">priority_high</span>
+                                <span>ต้องส่งมอบฮับทันที</span>
+                            </div>` : ''}
                         </td>
                         <td class="p-2.5 text-center">
                             ${r.isSettled ? `
@@ -4908,7 +5081,9 @@ function renderHubDailyReport(targetDateKey) {
                         <th class="p-2.5 rounded-l-xl">แผงค้า / ร้านค้า</th>
                         <th class="p-2.5">เจ้าของ / เบอร์พร้อมเพย์</th>
                         <th class="p-2.5 text-center">จำนวนที่ขาย</th>
-                        <th class="p-2.5 text-right">ยอดเงินที่ต้องโอน</th>
+                        <th class="p-2.5 text-right">ยอดขายรวม</th>
+                        <th class="p-2.5 text-right">หัก GP (${report.vendorSettlement.gpRate || 10}%)</th>
+                        <th class="p-2.5 text-right">ยอดโอนสุทธิ</th>
                         <th class="p-2.5 text-center">สถานะ</th>
                         <th class="p-2.5 text-center">โอนเคลียร์</th>
                         <th class="p-2.5 text-center rounded-r-xl">พิมพ์ (80mm)</th>
@@ -4931,8 +5106,14 @@ function renderHubDailyReport(targetDateKey) {
                             <div class="font-bold text-slate-700">${s.itemsCount} ชิ้น</div>
                             <div class="text-[9px] text-slate-400 font-medium">(${s.orderCount} ออเดอร์)</div>
                         </td>
+                        <td class="p-2.5 text-right font-medium text-slate-600">
+                            ฿${s.totalAmount.toLocaleString()}
+                        </td>
+                        <td class="p-2.5 text-right font-bold text-orange-600">
+                            -฿${(s.gpAmount || 0).toLocaleString()}
+                        </td>
                         <td class="p-2.5 text-right">
-                            <div class="font-black text-sm text-emerald-800">฿${s.totalAmount.toLocaleString()}</div>
+                            <div class="font-black text-sm text-emerald-800">฿${(s.payoutAmount !== undefined ? s.payoutAmount : s.totalAmount).toLocaleString()}</div>
                         </td>
                         <td class="p-2.5 text-center">
                             ${s.isSettled ? `
@@ -4946,7 +5127,7 @@ function renderHubDailyReport(targetDateKey) {
                             </span>`}
                         </td>
                         <td class="p-2.5 text-center">
-                            <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', ${s.totalAmount}, '${s.phone}', '${s.ownerName.replace(/'/g, "\\'")}', '${s.stallNumber}')" class="px-2.5 py-1.5 ${s.isSettled ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'} font-bold rounded-xl text-[10px] active:scale-95 transition-all flex items-center gap-1 mx-auto">
+                            <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', ${(s.payoutAmount !== undefined ? s.payoutAmount : s.totalAmount)}, '${s.phone}', '${s.ownerName.replace(/'/g, "\\'")}', '${s.stallNumber}', ${s.totalAmount}, ${s.gpAmount || 0}, ${s.gpRate || 10})" class="px-2.5 py-1.5 ${s.isSettled ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'} font-bold rounded-xl text-[10px] active:scale-95 transition-all flex items-center gap-1 mx-auto">
                                 <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                 <span>${s.isSettled ? 'ดู QR / โอนซ้ำ' : '💳 โอนพร้อมเพย์'}</span>
                             </button>
@@ -5175,11 +5356,18 @@ function generatePromptPayPayload(target, amount) {
 window.generatePromptPayPayload = generatePromptPayPayload;
 
 // ── Modal Controllers: Vendor PromptPay Payout Modal
-function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, stallNumber) {
+function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, stallNumber, grossAmount, gpAmount, gpRate) {
+    const gross = grossAmount !== undefined ? grossAmount : amount;
+    const gp = gpAmount !== undefined ? gpAmount : 0;
+    const rate = gpRate !== undefined ? gpRate : 10;
+
     _currentPayoutStall = {
         stallId,
         stallName,
         amount,
+        grossAmount: gross,
+        gpAmount: gp,
+        gpRate: rate,
         phone: phone || "089-123-4567",
         cleanPhone: (phone || "0891234567").replace(/[^0-9]/g, ""),
         ownerName: ownerName || "แม่ค้าประจำแผง",
@@ -5194,6 +5382,7 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
     const ownerEl = document.getElementById("payout-owner-name");
     const phoneEl = document.getElementById("payout-phone");
     const amountEl = document.getElementById("payout-amount-text");
+    const gpBreakdownEl = document.getElementById("payout-gp-breakdown-text");
     const qrImg = document.getElementById("payout-qr-image");
     const ppNumEl = document.getElementById("payout-promptpay-number");
 
@@ -5202,6 +5391,13 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
     if (ownerEl) ownerEl.textContent = _currentPayoutStall.ownerName;
     if (phoneEl) phoneEl.textContent = _currentPayoutStall.phone;
     if (amountEl) amountEl.textContent = `฿${_currentPayoutStall.amount.toLocaleString()}`;
+    if (gpBreakdownEl) {
+        if (gp > 0) {
+            gpBreakdownEl.textContent = `ยอดขาย ฿${gross.toLocaleString()} (หัก GP ${rate}% ฿${gp.toLocaleString()} = โอนสุทธิ ฿${amount.toLocaleString()})`;
+        } else {
+            gpBreakdownEl.textContent = `ยอดขาย ฿${gross.toLocaleString()} (ไม่มีหักค่าธรรมเนียม)`;
+        }
+    }
     if (ppNumEl) ppNumEl.textContent = _currentPayoutStall.phone;
 
     // สร้าง PromptPay QR Code มาตรฐาน BOT EMVCo 100% พร้อมยอดเงิน
@@ -5295,6 +5491,80 @@ function settleAllVendors(dateKey) {
     showToast(`🎉 บันทึกการโอนเคลียร์เงินให้แผงค้าทั้งหมด (${report.vendorSettlement.stalls.length} แผง) เรียบร้อย!`);
     renderHubDailyReport(dateKey);
 }
+
+// ── Platform Fixed Costs & P&L Break-Even Engine
+function loadPlatformFixedCosts() {
+    try {
+        const raw = localStorage.getItem("hsong_fixed_costs");
+        if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {
+        officeRent: 4000,
+        staffSalary: 13000,
+        utilitiesSupplies: 2000,
+        daysInMonth: 30,
+        breakEvenDailyOrders: 38,
+        targetProfitDailyOrders: 45
+    };
+}
+
+function savePlatformFixedCosts(costs) {
+    try {
+        localStorage.setItem("hsong_fixed_costs", JSON.stringify(costs));
+    } catch (e) {}
+}
+
+function openFixedCostsModal() {
+    const modal = document.getElementById("admin-fixed-costs-modal");
+    if (!modal) return;
+    const fc = loadPlatformFixedCosts();
+    const rentEl = document.getElementById("fc-office-rent");
+    const staffEl = document.getElementById("fc-staff-salary");
+    const utilEl = document.getElementById("fc-utilities");
+    const beEl = document.getElementById("fc-breakeven-target");
+    const tpEl = document.getElementById("fc-profit-target");
+
+    if (rentEl) rentEl.value = fc.officeRent;
+    if (staffEl) staffEl.value = fc.staffSalary;
+    if (utilEl) utilEl.value = fc.utilitiesSupplies;
+    if (beEl) beEl.value = fc.breakEvenDailyOrders;
+    if (tpEl) tpEl.value = fc.targetProfitDailyOrders;
+
+    modal.classList.remove("hidden");
+}
+
+function closeFixedCostsModal() {
+    const modal = document.getElementById("admin-fixed-costs-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function saveFixedCostsFromModal() {
+    const rent = Number(document.getElementById("fc-office-rent")?.value || 4000);
+    const staff = Number(document.getElementById("fc-staff-salary")?.value || 13000);
+    const util = Number(document.getElementById("fc-utilities")?.value || 2000);
+    const be = Number(document.getElementById("fc-breakeven-target")?.value || 38);
+    const tp = Number(document.getElementById("fc-profit-target")?.value || 45);
+
+    const fc = {
+        officeRent: rent,
+        staffSalary: staff,
+        utilitiesSupplies: util,
+        daysInMonth: 30,
+        breakEvenDailyOrders: be,
+        targetProfitDailyOrders: tp
+    };
+
+    savePlatformFixedCosts(fc);
+    closeFixedCostsModal();
+    showToast("💾 บันทึกโครงสร้างต้นทุนคงที่และเป้าหมายจุดคุ้มทุนเรียบร้อย!");
+    renderHubDailyReport();
+}
+
+window.loadPlatformFixedCosts = loadPlatformFixedCosts;
+window.savePlatformFixedCosts = savePlatformFixedCosts;
+window.openFixedCostsModal = openFixedCostsModal;
+window.closeFixedCostsModal = closeFixedCostsModal;
+window.saveFixedCostsFromModal = saveFixedCostsFromModal;
 
 // ── Admin Security Auth Prompt Modal for High-Risk Actions
 let _pendingAdminAuthCallback = null;
@@ -9235,6 +9505,16 @@ function calculateCartTotals() {
 
     const deliveryFee = (state.deliveryLocation && typeof state.deliveryLocation.fee === "number") ? state.deliveryLocation.fee : 20;
 
+    // Express Delivery Fee calculation (เฉพาะกรณีสั่ง 1 แผงค้า และลูกค้าเลือกส่งด่วน)
+    let expressFee = 0;
+    if (state.isExpressDelivery) {
+        if (stallsCount === 1) {
+            expressFee = 20;
+        } else {
+            state.isExpressDelivery = false; // ปิดอัตโนมัติถ้าสั่งหลายแผง
+        }
+    }
+
     // Active coupon discount calculation
     let discountAmount = 0;
     let couponCode = "";
@@ -9249,7 +9529,7 @@ function calculateCartTotals() {
         }
     }
 
-    const grandTotal = Math.max(0, itemsSubtotal + multiStallFee + deliveryFee - discountAmount);
+    const grandTotal = Math.max(0, itemsSubtotal + multiStallFee + deliveryFee + expressFee - discountAmount);
 
     return {
         itemsCount,
@@ -9257,11 +9537,32 @@ function calculateCartTotals() {
         stallsCount,
         multiStallFee,
         deliveryFee,
+        expressFee,
+        isExpress: (expressFee > 0),
         discountAmount,
         couponCode,
         grandTotal
     };
 }
+
+// เลือกระบบการจัดส่ง (ปกติ vs ส่งด่วนหน้าร้านตรง +฿20)
+function setCheckoutDeliveryMode(mode) {
+    const totals = calculateCartTotals();
+    if (mode === "express") {
+        if (totals.stallsCount > 1) {
+            state.isExpressDelivery = false;
+            showToast("⚠️ การส่งด่วนรองรับเฉพาะสินค้าจากร้านเดียวเท่านั้นครับ (สั่งหลายร้านต้องรวบรวมของที่ฮับ)");
+        } else {
+            state.isExpressDelivery = true;
+            showToast("⚡ เลือกบริการส่งด่วนพิเศษ (+฿20) ไรเดอร์จะรับตรงที่หน้าร้านทันที!");
+        }
+    } else {
+        state.isExpressDelivery = false;
+        showToast("🛵 เลือกบริการจัดส่งตามรอบตลาดปกติ");
+    }
+    renderCheckoutPage();
+}
+window.setCheckoutDeliveryMode = setCheckoutDeliveryMode;
 
 function updateCartUI() {
     const totals = calculateCartTotals();
@@ -9414,6 +9715,87 @@ function renderCheckoutPage() {
     setVal("summary-stall-count", totals.stallsCount);
     setVal("summary-multistall-fee", `฿${totals.multiStallFee}`);
     setVal("summary-delivery-fee", `฿${totals.deliveryFee}`);
+
+    // Update Distance display if available
+    const distEl = document.getElementById("summary-delivery-dist");
+    if (distEl && state.deliveryLocation && state.deliveryLocation.distance) {
+        distEl.textContent = state.deliveryLocation.distance;
+    }
+
+    // Update Delivery Mode UI (Standard vs Express)
+    const modeBadge = document.getElementById("delivery-mode-badge");
+    const stdRadio = document.querySelector('input[name="checkout_delivery_mode"][value="standard"]');
+    const expRadio = document.getElementById("checkout-delivery-mode-express-radio");
+    const stdLabel = document.getElementById("delivery-opt-standard-label");
+    const expLabel = document.getElementById("delivery-opt-express-label");
+    const expDesc = document.getElementById("delivery-opt-express-desc");
+    const expRow = document.getElementById("summary-express-fee-row");
+    const multiRow = document.getElementById("summary-multistall-row");
+
+    if (totals.stallsCount > 1) {
+        // Multi-stall: Express delivery not allowed, Hub consolidated only
+        state.isExpressDelivery = false;
+        if (expRadio) {
+            expRadio.disabled = true;
+            expRadio.checked = false;
+        }
+        if (stdRadio) stdRadio.checked = true;
+        if (modeBadge) {
+            modeBadge.textContent = "ตามรอบปกติ (หลายแผง)";
+            modeBadge.className = "text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200";
+        }
+        if (expLabel) {
+            expLabel.className = "relative flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed select-none transition-all";
+        }
+        if (stdLabel) {
+            stdLabel.className = "relative flex items-start gap-2.5 p-2.5 rounded-xl border-2 border-emerald-500 bg-emerald-50/40 cursor-pointer select-none transition-all";
+        }
+        if (expDesc) {
+            expDesc.textContent = `⚠️ ใช้ได้เฉพาะสั่งจาก 1 แผงค้าเท่านั้น (ปัจจุบันสั่ง ${totals.stallsCount} แผง มีฮับรวมของให้)`;
+        }
+        if (expRow) expRow.classList.add("hidden");
+        if (multiRow) multiRow.classList.remove("hidden");
+    } else {
+        // Single-stall: Express delivery available
+        if (expRadio) expRadio.disabled = false;
+        if (expDesc) {
+            expDesc.textContent = "ไรเดอร์รับตรงจากหน้าร้าน ไม่ต้องรอรวมของ ถึงมือใน 15-25 นาที (เฉพาะสั่ง 1 แผงค้า)";
+        }
+        if (multiRow) multiRow.classList.add("hidden"); // สั่งแผงเดียวไม่มีค่าบริการรวมหลายแผง
+
+        if (state.isExpressDelivery) {
+            if (expRadio) expRadio.checked = true;
+            if (stdRadio) stdRadio.checked = false;
+            if (modeBadge) {
+                modeBadge.textContent = "⚡ ส่งด่วนทันที (+฿20)";
+                modeBadge.className = "text-[10px] bg-orange-100 text-orange-900 font-black px-2 py-0.5 rounded-full border border-orange-300";
+            }
+            if (expLabel) {
+                expLabel.className = "relative flex items-start gap-2.5 p-2.5 rounded-xl border-2 border-orange-500 bg-orange-50/50 cursor-pointer select-none transition-all shadow-xs";
+            }
+            if (stdLabel) {
+                stdLabel.className = "relative flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 cursor-pointer select-none transition-all";
+            }
+            if (expRow) {
+                expRow.classList.remove("hidden");
+                setVal("summary-express-fee", `+฿${totals.expressFee || 20}`);
+            }
+        } else {
+            if (stdRadio) stdRadio.checked = true;
+            if (expRadio) expRadio.checked = false;
+            if (modeBadge) {
+                modeBadge.textContent = "ตามรอบปกติ";
+                modeBadge.className = "text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200";
+            }
+            if (stdLabel) {
+                stdLabel.className = "relative flex items-start gap-2.5 p-2.5 rounded-xl border-2 border-emerald-500 bg-emerald-50/40 cursor-pointer select-none transition-all";
+            }
+            if (expLabel) {
+                expLabel.className = "relative flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200 bg-white hover:border-orange-300 cursor-pointer select-none transition-all";
+            }
+            if (expRow) expRow.classList.add("hidden");
+        }
+    }
 
     // Coupon Discount row in summary
     const discountRow = document.getElementById("summary-discount-row");
@@ -9786,10 +10168,25 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
 
     const nowTime = Date.now();
     const timeStr = new Date(nowTime).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.";
-    const uniqueOrderId = "#TH-" + String(nowTime).slice(-4) + Math.floor(10 + Math.random() * 90);
+    const isCustomerExpress = Boolean(totals.isExpress && totals.stallsCount === 1);
+    const orderPrefix = isCustomerExpress ? "#EXP-" : "#TH-";
+    const uniqueOrderId = orderPrefix + String(nowTime).slice(-4) + Math.floor(10 + Math.random() * 90);
+
+    const firstStall = Object.values(stallsMap)[0];
+    const stallInfo = firstStall ? findStallInfo(firstStall.stallId, firstStall.name) : null;
+    const originStallObj = (isCustomerExpress && firstStall) ? {
+        stallId: firstStall.stallId,
+        stallName: firstStall.name,
+        stallNumber: firstStall.tag || (stallInfo ? stallInfo.stallNumber : "แผงค้า"),
+        ownerPhone: (stallInfo && stallInfo.phone) ? stallInfo.phone : "081-444-5555"
+    } : null;
 
     state.activeOrder = {
         orderId: uniqueOrderId,
+        orderType: isCustomerExpress ? "CUSTOMER_EXPRESS" : "HUB_CONSOLIDATED",
+        isExpress: isCustomerExpress,
+        expressFee: isCustomerExpress ? (totals.expressFee || 20) : 0,
+        originStall: originStallObj,
         status: "picking",
         total: Number(totals.grandTotal || 0),
         grandTotal: Number(totals.grandTotal || 0),
@@ -9818,6 +10215,9 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         createdAt: nowTime,
         orderTime: timeStr
     };
+
+    // Reset express flag for next order
+    state.isExpressDelivery = false;
 
     // Clear uploaded slip cache
     state.currentUploadedSlip = null;
@@ -16242,7 +16642,7 @@ function loadRiderFleetSettings() {
         rainSurchargeAmount: 15,
         dailyBonusTrips: 10,
         dailyBonusAmount: 100,
-        maxCodLimit: 2500
+        maxCodLimit: 3000
     };
 }
 
@@ -18441,7 +18841,7 @@ function loadSavedHubSettings() {
         hubLocation: "ล็อคกลาง อาคาร 1 หน้าตลาดวิศิษฐ์ชัย",
         targetPickingTime: 12,
         staffPin: "hb6305",
-        merchantGP: 0,
+        merchantGP: 10,
         merchantOpen: "04:30",
         merchantClose: "17:30",
         payoutTime: "18:30",
@@ -18734,7 +19134,7 @@ function renderAdminSettings() {
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">ค่าธรรมเนียมส่วนแบ่งระบบ (GP %):</label>
                             <input type="number" id="cfg-merchant-gp" value="${s.merchantGP}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-emerald-700 bg-slate-50">
-                            <span class="text-[11px] text-slate-400">นโยบาย 0% ไม่หัก GP เพื่อส่งเสริมผู้ค้าชุมชน</span>
+                            <span class="text-[11px] text-slate-400">อัตราแนะนำ 10% เพื่อครอบคลุมค่าเช่าและเงินเดือนพนักงานตามแผนธุรกิจ (กำไรสุทธิ 5%)</span>
                         </div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
@@ -19602,13 +20002,35 @@ function renderHubPickingList() {
             ? Number(order.payAmountExact).toFixed(2)
             : Number(order.grandTotal || order.total || 0).toLocaleString();
 
+        const isExpressGrocery = Boolean(order.isExpress || order.orderType === "CUSTOMER_EXPRESS");
+
         finalHtml += `
-            <div class="bg-white rounded-3xl p-4 sm:p-5 shadow-card border border-slate-200 space-y-3.5 animate-fade-in text-left">
+            <div class="bg-white rounded-3xl p-4 sm:p-5 shadow-card ${isExpressGrocery ? 'border-2 border-orange-400' : 'border border-slate-200'} space-y-3.5 animate-fade-in text-left">
+                ${isExpressGrocery ? `
+                    <!-- Customer Express Urgent Banner in Hub -->
+                    <div class="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 text-white rounded-2xl p-3 shadow-md flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-lg font-black shrink-0">⚡</span>
+                            <div>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-extrabold text-xs">⚡ ออเดอร์ส่งด่วน (Customer Express)</span>
+                                    <span class="bg-white text-orange-800 text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs">ไรเดอร์รับตรงหน้าร้าน</span>
+                                </div>
+                                <p class="text-[10px] text-orange-100 mt-0.5">ลูกค้าชำระค่าส่งด่วน +฿20 ไรเดอร์จะไปรับของที่หน้าร้านแผงค้าโดยตรง <strong>ไม่ต้องรวมของที่ฮับ</strong></p>
+                            </div>
+                        </div>
+                        <button type="button" onclick="contactExpressStall('${(order.stalls && order.stalls[0]) ? order.stalls[0].stallId : ''}', '${order.orderId}')" class="px-3 py-1.5 bg-white hover:bg-orange-50 text-orange-700 font-extrabold text-xs rounded-xl shadow-xs active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer">
+                            <span class="material-symbols-outlined text-xs">call</span>
+                            <span>โทรตามแผงค้า</span>
+                        </button>
+                    </div>
+                ` : ''}
+
                 <div class="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div>
                         <div class="flex items-center gap-1.5">
-                            <span class="bg-emerald-100 text-emerald-800 font-extrabold text-[11px] px-2.5 py-0.5 rounded-full">${order.orderId}</span>
-                            <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">${order.status === 'delivering' ? '🛵 กำลังนำส่ง' : '📋 กำลังจัดของสด'}</span>
+                            <span class="${isExpressGrocery ? 'bg-orange-100 text-orange-800 border border-orange-200' : 'bg-emerald-100 text-emerald-800'} font-extrabold text-[11px] px-2.5 py-0.5 rounded-full">${order.orderId}</span>
+                            <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">${order.status === 'delivering' ? '🛵 กำลังนำส่ง' : (isExpressGrocery ? '⚡ รอกำลังพลรับหน้าร้าน' : '📋 กำลังจัดของสด')}</span>
                         </div>
                         <div class="text-xs font-bold text-slate-800 mt-1.5">ผู้รับ: ${customerName} (${address})</div>
                         <div class="text-[11px] text-slate-500">โทร: ${customerPhone} • โน้ต: ${note}</div>
@@ -19745,6 +20167,17 @@ function toggleHubItemOutOfStock(stallIndex, itemIndex) {
     renderTrackingScreen();
     renderHubSettlement();
 }
+
+function contactExpressStall(stallId, orderId) {
+    const info = (typeof findStallInfo === "function") ? findStallInfo(stallId) : null;
+    const phone = (info && info.phone) ? info.phone : "081-444-5555";
+    const name = (info && info.stallName) ? info.stallName : "แผงค้าในตลาด";
+    showToast(`📞 เตรียมติดต่อ ${name} (${phone}) สำหรับออเดอร์ด่วน ${orderId}`);
+    if (confirm(`โทรหาหน้าร้าน "${name}" (${phone}) เพื่อแจ้งเตือนให้เตรียมของด่วนหรือไม่?`)) {
+        window.location.href = `tel:${phone}`;
+    }
+}
+window.contactExpressStall = contactExpressStall;
 
 // Send Out-of-Stock Notice via LINE
 function sendOutOfStockLineNotice() {
@@ -19994,25 +20427,38 @@ function renderHubSettlement() {
 
     // 1. สรุปยอดจ่ายแผงค้า (Grocery Orders)
     if (hasGrocery) {
+        const hubSettings = (typeof loadSavedHubSettings === "function") ? loadSavedHubSettings() : {};
+        const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number") ? hubSettings.merchantGP : 10;
         let vendorListHtml = "";
         let vendorTotal = 0;
+        let vendorPayoutTotal = 0;
+        let totalStallGP = 0;
+
         order.stalls.forEach(stall => {
             const activeItems = (stall.items || []).filter(item => !item.outOfStock);
             const oosItems = (stall.items || []).filter(item => item.outOfStock);
             const stallItemsTotal = activeItems.reduce((sum, item) => sum + (item.actualPrice !== undefined ? item.actualPrice : item.price), 0);
+            const stallGP = Math.round(stallItemsTotal * (gpRate / 100));
+            const stallPayout = Math.max(0, stallItemsTotal - stallGP);
+
             vendorTotal += stallItemsTotal;
+            totalStallGP += stallGP;
+            vendorPayoutTotal += stallPayout;
 
             vendorListHtml += `
                 <div class="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
                     <div>
                         <div class="font-bold text-slate-800 text-xs">${stall.name}</div>
                         <div class="text-[10px] text-slate-500">
-                            หยิบจริง ${activeItems.length} รายการ ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length})</span>` : ''}
+                            ยอดขาย ฿${stallItemsTotal} <span class="text-amber-700 font-bold">(หัก GP ${gpRate}% -฿${stallGP})</span>
+                            ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length})</span>` : ''}
                         </div>
                     </div>
                     <div class="text-right">
-                        <div class="font-black text-emerald-700 text-xs">฿${stallItemsTotal}</div>
-                        <button type="button" onclick="clearHubSettlementVendor('${stall.name.replace(/'/g, "\\'")}', this)" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">โอนเคลียร์เงิน</button>
+                        <div class="font-black text-emerald-700 text-xs">โอนสุทธิ ฿${stallPayout}</div>
+                        <button type="button" onclick="openVendorPayoutModal('${stall.name.replace(/'/g, "\\'")}', ${stallItemsTotal}, ${stallGP}, ${stallPayout})" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
+                            โอนเคลียร์เงิน (PromptPay)
+                        </button>
                     </div>
                 </div>
             `;
@@ -20027,7 +20473,10 @@ function renderHubSettlement() {
                         <span class="material-symbols-outlined text-emerald-700 text-base">account_balance_wallet</span>
                         <span>สรุปยอดจ่ายแผงค้า (${order.orderId})</span>
                     </h3>
-                    <span class="text-[11px] text-slate-500 font-medium">รวม ฿${vendorTotal}</span>
+                    <div class="text-right">
+                        <div class="text-[10px] text-slate-500 font-medium">ยอดขายรวม ฿${vendorTotal}</div>
+                        <div class="text-xs text-emerald-700 font-black">โอนสุทธิ ฿${vendorPayoutTotal} (GP รวม ฿${totalStallGP})</div>
+                    </div>
                 </div>
                 <div class="space-y-2">
                     ${vendorListHtml}
@@ -20038,8 +20487,8 @@ function renderHubSettlement() {
                 <div class="text-xs text-emerald-300 font-bold">รายรับรวมระบบจัดส่ง (ค่าสินค้า + ค่าบริการรวมบิล + ค่าส่ง)</div>
                 <div class="text-2xl font-black">฿${orderGrandTotal} <span class="text-xs font-normal text-slate-300">บาท</span></div>
                 <div class="text-[11px] text-slate-300 flex justify-between pt-2 border-t border-slate-700">
-                    <span>ยอดรวมร้านค้า: ฿${vendorTotal}</span>
-                    <span>ค่าส่ง+บริการรวมแผง: ฿${Math.max(0, orderGrandTotal - vendorTotal)}</span>
+                    <span>ยอดโอนร้านค้าสุทธิ: ฿${vendorPayoutTotal}</span>
+                    <span>รายรับคงเหลือฮับ (GP+ค่าส่ง): ฿${Math.max(0, orderGrandTotal - vendorPayoutTotal)}</span>
                 </div>
             </div>
         `;
@@ -20075,7 +20524,7 @@ function renderHubSettlement() {
         });
 
         html += `
-            <div class="bg-white rounded-3xl p-4 shadow-card border border-orange-200 space-y-3 text-left">
+            <div class="bg-white rounded-3xl p-4 shadow-card border border-orange-200 space-y-3 mb-4 text-left">
                 <div class="flex items-center justify-between pb-2 border-b border-orange-100">
                     <h3 class="font-bold text-sm text-orange-950 flex items-center gap-1">
                         <span class="material-symbols-outlined text-orange-600 text-base">two_wheeler</span>
@@ -20085,6 +20534,55 @@ function renderHubSettlement() {
                 </div>
                 <div class="space-y-2">
                     ${expressRows}
+                </div>
+            </div>
+        `;
+    }
+
+    // 3. สรุปยอดเงินสด COD ไรเดอร์ค้างส่งมอบฮับ (Rider COD In-Hand Ledger)
+    const todayDateKey = getReportDateKey(Date.now());
+    const dailyReport = (typeof aggregateDailyOperations === "function") ? aggregateDailyOperations(todayDateKey) : null;
+    const activeRidersReport = (dailyReport && dailyReport.riderSettlement && dailyReport.riderSettlement.riders) || [];
+    const pendingCodRiders = activeRidersReport.filter(r => r.netCashToHub > 0 && !r.isSettled);
+
+    if (pendingCodRiders.length > 0) {
+        let riderCodRows = "";
+        let totalPendingCod = 0;
+        pendingCodRiders.forEach(r => {
+            totalPendingCod += r.netCashToHub;
+            const isExceeded = r.netCashToHub >= 3000;
+            riderCodRows += `
+                <div class="flex justify-between items-center p-3 ${isExceeded ? 'bg-rose-50 border-rose-300' : 'bg-slate-50 border-slate-200'} rounded-2xl border">
+                    <div>
+                        <div class="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
+                            <span>🛵 ${r.riderName}</span>
+                            ${isExceeded ? `<span class="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-md animate-pulse">⚠️ เกินเพดาน ฿3,000</span>` : ''}
+                        </div>
+                        <div class="text-[10px] text-slate-500 font-mono">
+                            เก็บ COD ฿${r.codCollected.toLocaleString()} • ค่ารอบ -฿${r.riderFeeEarned.toLocaleString()}
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-black ${isExceeded ? 'text-rose-700' : 'text-emerald-700'} text-xs">฿${r.netCashToHub.toLocaleString()}</div>
+                        <button type="button" onclick="settleRiderBalance('${r.riderName.replace(/'/g, "\\'")}', '${todayDateKey}'); renderHubSettlement();" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
+                            💵 รับเงินสด
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `
+            <div class="bg-white rounded-3xl p-4 shadow-card border border-slate-200 space-y-3 text-left">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <h3 class="font-bold text-sm text-slate-800 flex items-center gap-1">
+                        <span class="material-symbols-outlined text-amber-600 text-base">payments</span>
+                        <span>เงินสด COD ไรเดอร์ค้างส่งมอบฮับ</span>
+                    </h3>
+                    <span class="text-[11px] text-rose-700 font-black">ค้างส่ง ฿${totalPendingCod.toLocaleString()}</span>
+                </div>
+                <div class="space-y-2">
+                    ${riderCodRows}
                 </div>
             </div>
         `;
@@ -24895,10 +25393,19 @@ function renderRiderJobPool() {
 
     let poolOrders = [];
     
+    // 1. Merchant Express Orders
     if (state.merchantExpressOrders && state.merchantExpressOrders.length > 0) {
         poolOrders.push(...state.merchantExpressOrders.filter(o => o && (o.status === "waiting_rider" || !o.riderName)));
     }
 
+    // 2. Active Customer Express Order
+    if (state.activeOrder && (state.activeOrder.orderType === "CUSTOMER_EXPRESS" || state.activeOrder.isExpress) && !state.activeOrder.riderName && state.activeOrder.status !== "delivered") {
+        if (!poolOrders.some(o => o && o.orderId === state.activeOrder.orderId)) {
+            poolOrders.unshift(state.activeOrder);
+        }
+    }
+
+    // 3. Consolidated Hub Orders
     if (state.orders && state.orders.length > 0) {
         poolOrders.push(...state.orders.filter(o => o && (o.status === "waiting_rider" || o.status === "picking_completed" || (!o.riderName && o.status !== "delivered"))));
     }
@@ -24913,7 +25420,7 @@ function renderRiderJobPool() {
                 </div>
                 <div>
                     <h4 class="font-extrabold text-slate-700 text-sm">ยังไม่มีงานรอรับในขณะนี้</h4>
-                    <p class="text-xs text-slate-400 mt-1 max-w-xs mx-auto">ระบบจะแสดงงานทันทีเมื่อมีร้านค้าเรียกไรเดอร์ส่งด่วน หรือฮับรวมรอบสินค้าเสร็จสิ้น</p>
+                    <p class="text-xs text-slate-400 mt-1 max-w-xs mx-auto">ระบบจะแสดงงานทันทีเมื่อมีร้านค้าเรียกไรเดอร์ส่งด่วน ลูกค้าเลือกส่งด่วน หรือฮับรวมรอบสินค้าเสร็จสิ้น</p>
                 </div>
                 <div class="pt-1">
                     <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold">
@@ -24927,24 +25434,41 @@ function renderRiderJobPool() {
     }
 
     let html = poolOrders.map(job => {
-        const isExpress = job.orderType === "MERCHANT_EXPRESS";
-        const feeText = isExpress ? `฿${job.deliveryFee || 20} (ค่าส่งด่วน)` : `฿40 (ค่ารอบประจำ)`;
-        const originText = isExpress ? `🏪 ${job.originStall?.stallName || 'แผงค้า'}` : `🏬 ฮับรวมตลาดบ้านบึง`;
+        const isMerchantExpress = job.orderType === "MERCHANT_EXPRESS";
+        const isCustomerExpress = job.orderType === "CUSTOMER_EXPRESS" || job.isExpress;
+        const isExpress = isMerchantExpress || isCustomerExpress;
+        const feeText = `฿40 (ค่ารอบมาตรฐาน)`;
+        
+        let originText = `🏬 ฮับรวมตลาดบ้านบึง`;
+        let badgeText = '📦 รวมรอบฮับ';
+        let badgeClass = 'bg-amber-100 text-amber-900';
+
+        if (isCustomerExpress) {
+            const firstStallName = job.originStall?.stallName || (job.stalls && job.stalls[0] ? job.stalls[0].name : 'แผงค้าหน้าร้าน');
+            originText = `⚡ หน้าร้าน ${firstStallName}`;
+            badgeText = '⚡ ส่งด่วนลูกค้า (รับตรงหน้าร้าน)';
+            badgeClass = 'bg-orange-100 text-orange-900 border border-orange-300';
+        } else if (isMerchantExpress) {
+            originText = `🏪 หน้าร้าน ${job.originStall?.stallName || 'แผงค้า'}`;
+            badgeText = '⚡ ส่งด่วนแผงค้า (รับตรงหน้าร้าน)';
+            badgeClass = 'bg-rose-100 text-rose-800 border border-rose-300';
+        }
+
         return `
-            <div class="bg-white rounded-2xl p-4 border border-amber-200 shadow-sm space-y-3 relative overflow-hidden hover:border-amber-400 transition-all">
+            <div class="bg-white rounded-2xl p-4 border ${isExpress ? 'border-orange-300 shadow-md' : 'border-amber-200 shadow-sm'} space-y-3 relative overflow-hidden hover:border-amber-400 transition-all text-left">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-2">
                     <div class="flex items-center gap-2">
-                        <span class="px-2.5 py-1 rounded-lg ${isExpress ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-900'} text-[11px] font-extrabold flex items-center gap-1">
-                            ${isExpress ? '⚡ ส่งด่วนแผงค้า' : '📦 รวมรอบฮับ'}
+                        <span class="px-2.5 py-1 rounded-lg ${badgeClass} text-[11px] font-extrabold flex items-center gap-1">
+                            ${badgeText}
                         </span>
                         <span class="font-extrabold text-slate-800 text-xs">${job.orderId}</span>
                     </div>
-                    <span class="text-[10px] text-slate-400">${job.createdAt || 'เมื่อสักครู่'}</span>
+                    <span class="text-[10px] text-slate-400">${job.createdAt ? (typeof job.createdAt === 'number' ? new Date(job.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : job.createdAt) : 'เมื่อสักครู่'}</span>
                 </div>
                 <div class="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                        <div class="text-[10px] text-slate-400 font-medium">ต้นทางรับสินค้า</div>
-                        <div class="font-bold text-slate-800 truncate">${originText}</div>
+                        <div class="text-[10px] text-slate-400 font-medium">จุดรับสินค้า</div>
+                        <div class="font-bold ${isExpress ? 'text-orange-700' : 'text-slate-800'} truncate">${originText}</div>
                     </div>
                     <div>
                         <div class="text-[10px] text-slate-400 font-medium">ปลายทางจัดส่ง</div>
@@ -24953,7 +25477,7 @@ function renderRiderJobPool() {
                 </div>
                 <div class="bg-slate-50 p-2 rounded-xl text-[11px] text-slate-600">
                     <div class="truncate">🏠 ที่อยู่: ${job.address || 'บ้านบึง ชลบุรี'}</div>
-                    ${job.note ? `<div class="text-amber-800 font-medium mt-0.5 truncate">📝 ${job.note}</div>` : ''}
+                    ${job.deliveryNote || job.note ? `<div class="text-amber-800 font-medium mt-0.5 truncate">📝 ${job.deliveryNote || job.note}</div>` : ''}
                 </div>
                 <div class="flex items-center justify-between pt-1">
                     <div>
@@ -24977,15 +25501,18 @@ function claimOrderForRider(orderId) {
     if (!order) {
         order = (state.orders || []).find(o => o && o.orderId === orderId);
     }
+    if (!order && state.activeOrder && state.activeOrder.orderId === orderId) {
+        order = state.activeOrder;
+    }
     
     if (!order) {
         order = {
             orderId: orderId,
-            orderType: orderId.startsWith("EXPRESS") ? "MERCHANT_EXPRESS" : "HUB_CONSOLIDATED",
+            orderType: (orderId.startsWith("EXPRESS") || orderId.startsWith("EXP")) ? "CUSTOMER_EXPRESS" : "HUB_CONSOLIDATED",
             customerName: "คุณลูกค้า (งานด่วน)",
             customerPhone: "089-123-4567",
             address: "หมู่บ้านวิเศษสุข ต.บ้านบึง อ.บ้านบึง",
-            deliveryFee: 30,
+            deliveryFee: 40,
             grandTotal: 350,
             paymentType: "cod",
             paymentDesc: "COD เก็บเงินปลายทาง ฿350",
@@ -25005,7 +25532,13 @@ function claimOrderForRider(orderId) {
     saveActiveOrderToStorage(state.activeOrder);
     switchRiderMainTab('active');
     renderRiderScreen();
-    showToast(`🎉 รับงาน ${orderId} เรียบร้อยแล้ว! พร้อมออกไปรับของที่แผงค้า/ฮับ`);
+    
+    const isExpress = order.orderType === "MERCHANT_EXPRESS" || order.orderType === "CUSTOMER_EXPRESS" || order.isExpress;
+    if (isExpress) {
+        showToast(`⚡ รับงานด่วน ${orderId} สำเร็จ! กรุณาไปรับของที่หน้าร้านแผงค้าโดยตรง (+฿40 ค่ารอบ)`);
+    } else {
+        showToast(`🎉 รับงาน ${orderId} เรียบร้อยแล้ว! พร้อมออกไปรับของที่ฮับ (+฿40 ค่ารอบ)`);
+    }
 }
 window.claimOrderForRider = claimOrderForRider;
 
