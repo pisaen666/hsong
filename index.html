@@ -1570,35 +1570,6 @@
                         </div>
                     </div>
 
-                    <!-- Cross-Role Actions on Tracking Screen (เชื่อมโยงไปยัง Role 4 และ Role 2) -->
-                    <div
-                        class="bg-slate-100/90 rounded-2xl p-2.5 border border-slate-200/80 flex items-center justify-between gap-1.5 flex-wrap text-xs">
-                        <span class="text-[11px] font-bold text-slate-600 flex items-center gap-1">
-                            <span class="material-symbols-outlined text-xs text-sky-600">swap_horiz</span>
-                            <span>มุมมองจำลอง:</span>
-                        </span>
-                        <div class="flex items-center gap-1.5 flex-wrap">
-                            <button type="button" onclick="switchRole('rider')"
-                                class="px-2.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-[11px] shadow-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-                                title="สลับไปดูหน้าจอของไรเดอร์คนนี้ (Role 4)">
-                                <span class="material-symbols-outlined text-xs">two_wheeler</span>
-                                <span>🛵 มุมมองไรเดอร์ (Role 4)</span>
-                            </button>
-                            <button type="button" onclick="switchRole('hub')"
-                                class="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-[11px] shadow-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-                                title="สลับไปดูใบจัดของที่ฮับ (Role 2)">
-                                <span class="material-symbols-outlined text-xs">inventory_2</span>
-                                <span>📦 มุมมองฮับ (Role 2)</span>
-                            </button>
-                            <button type="button" onclick="switchRole('admin')"
-                                class="px-2.5 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-[11px] shadow-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-                                title="สลับไปดูศูนย์แอดมิน (Role 5)">
-                                <span class="material-symbols-outlined text-xs">admin_panel_settings</span>
-                                <span>🔑 แอดมิน (Role 5)</span>
-                            </button>
-                        </div>
-                    </div>
-
                     <!-- Post-Delivery Completed Actions (ปรากฏเมื่อส่งสำเร็จ) -->
                     <div id="tracking-completed-actions-box" class="space-y-2 hidden animate-fade-in">
                         <div
@@ -6418,7 +6389,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.04_admin_auth_firebase_key_fix"></script>
+    <script src="app.js?v=10.05_remove_tracking_simulator_buttons"></script>
 </body>
 
 </html>
