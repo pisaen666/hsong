@@ -4707,9 +4707,17 @@ function renderHubDailyReport(targetDateKey) {
                     <span class="material-symbols-outlined text-sm">chevron_right</span>
                 </button>
             </div>
-            <div class="flex items-center gap-1">
-                <button onclick="setReportDateQuick(0)" class="px-2.5 py-1 rounded-lg font-bold ${isToday ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-all">วันนี้</button>
-                <button onclick="setReportDateQuick(-1)" class="px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">เมื่อวาน</button>
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <button onclick="setReportDateQuick(0)" class="px-2.5 py-1 rounded-lg font-bold ${isToday ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-all cursor-pointer">วันนี้</button>
+                <button onclick="setReportDateQuick(-1)" class="px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all cursor-pointer">เมื่อวาน</button>
+                <button onclick="openWeeklyAnalysisModal()" class="px-2.5 py-1 rounded-lg font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 active:scale-95 transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="วิเคราะห์สรุปยอดขาย กำไร และสถิติรายสัปดาห์">
+                    <span class="material-symbols-outlined text-sm text-indigo-600">query_stats</span>
+                    <span>วิเคราะห์รายสัปดาห์</span>
+                </button>
+                <button onclick="openMonthlyAnalysisModal()" class="px-2.5 py-1 rounded-lg font-bold bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 active:scale-95 transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="วิเคราะห์สรุปยอดขาย กำไร และสถิติรายเดือน">
+                    <span class="material-symbols-outlined text-sm text-purple-600">calendar_month</span>
+                    <span>วิเคราะห์รายเดือน</span>
+                </button>
             </div>
         </div>
     </div>
@@ -6979,6 +6987,914 @@ function printDailyReport(dateKey) {
 
     executePrintHtml(`รายงานประจำวัน_${dateKey}`, content, false);
 }
+
+// ==========================================
+// TALATHUB PERIOD ANALYSIS (วิเคราะห์รายสัปดาห์ & รายเดือน)
+// ==========================================
+
+let _periodAnalysisActiveMode = "week"; // 'week' | 'month'
+let _periodAnalysisRefDateKey = null;
+
+function aggregatePeriodOperations(mode = "week", refDateKey = null) {
+    if (!refDateKey) refDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const parts = refDateKey.split("-");
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const day = parseInt(parts[2], 10);
+
+    let days = [];
+    let periodTitle = "";
+    let periodSubtitle = "";
+
+    if (mode === "month") {
+        const lastDay = new Date(year, month, 0).getDate();
+        for (let i = 1; i <= lastDay; i++) {
+            days.push(`${year}-${String(month).padStart(2, "0")}-${String(i).padStart(2, "0")}`);
+        }
+        const thaiMonthsLong = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+        const thaiYear = year > 2500 ? year : year + 543;
+        periodTitle = `ประจำเดือน ${thaiMonthsLong[month - 1]} ${thaiYear}`;
+        periodSubtitle = `1 - ${lastDay} ${thaiMonthsLong[month - 1]} ${thaiYear} (รวม ${days.length} วัน)`;
+    } else {
+        // week mode (Monday to Sunday)
+        const ref = new Date(year, month - 1, day);
+        const dayOfWeek = ref.getDay();
+        const diffToMonday = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;
+        const monday = new Date(ref);
+        monday.setDate(ref.getDate() + diffToMonday);
+
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(monday);
+            d.setDate(monday.getDate() + i);
+            days.push(getReportDateKey(d.getTime()));
+        }
+        const startDateKey = days[0];
+        const endDateKey = days[6];
+        periodTitle = `สัปดาห์: ${formatThaiDateDisplay(startDateKey)} - ${formatThaiDateDisplay(endDateKey)}`;
+        periodSubtitle = `รวม 7 วัน (จันทร์ - อาทิตย์)`;
+    }
+
+    const summary = {
+        totalOrders: 0,
+        completedOrders: 0,
+        pendingOrders: 0,
+        totalCustomerGMV: 0,
+        totalDeliveryFees: 0,
+        totalExpressFees: 0,
+        totalDiscounts: 0,
+        totalRefundCash: 0,
+        paymentBreakdown: {
+            promptpay: { count: 0, amount: 0, label: "พร้อมเพย์" },
+            bank_transfer: { count: 0, amount: 0, label: "โอนผ่าน SCB" },
+            cod: { count: 0, amount: 0, label: "เงินสดปลายทาง (COD)" }
+        }
+    };
+
+    let totalVendorGross = 0;
+    let totalVendorGP = 0;
+    let totalVendorAmount = 0;
+    let totalSettledVendorAmount = 0;
+
+    let totalTrips = 0;
+    let totalRiderFees = 0;
+    let totalCodCollected = 0;
+    let totalRefundHanded = 0;
+    let netCashToHub = 0;
+
+    const stallsMap = {};
+    const ridersMap = {};
+    const dailyBreakdown = [];
+
+    const thaiDayNames = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+
+    days.forEach(dayKey => {
+        const rep = aggregateDailyOperations(dayKey);
+        const dParts = dayKey.split("-");
+        const dObj = new Date(parseInt(dParts[0], 10), parseInt(dParts[1], 10) - 1, parseInt(dParts[2], 10));
+        const dayName = thaiDayNames[dObj.getDay()];
+        const thaiDate = formatThaiDateDisplay(dayKey);
+
+        summary.totalOrders += rep.summary.totalOrders || 0;
+        summary.completedOrders += rep.summary.completedOrders || 0;
+        summary.pendingOrders += rep.summary.pendingOrders || 0;
+        summary.totalCustomerGMV += rep.summary.totalCustomerGMV || 0;
+        summary.totalDeliveryFees += rep.summary.totalDeliveryFees || 0;
+        summary.totalExpressFees += rep.summary.totalExpressFees || 0;
+        summary.totalDiscounts += rep.summary.totalDiscounts || 0;
+        summary.totalRefundCash += rep.summary.totalRefundCash || 0;
+
+        if (rep.summary.paymentBreakdown) {
+            summary.paymentBreakdown.promptpay.count += rep.summary.paymentBreakdown.promptpay?.count || 0;
+            summary.paymentBreakdown.promptpay.amount += rep.summary.paymentBreakdown.promptpay?.amount || 0;
+            summary.paymentBreakdown.bank_transfer.count += rep.summary.paymentBreakdown.bank_transfer?.count || 0;
+            summary.paymentBreakdown.bank_transfer.amount += rep.summary.paymentBreakdown.bank_transfer?.amount || 0;
+            summary.paymentBreakdown.cod.count += rep.summary.paymentBreakdown.cod?.count || 0;
+            summary.paymentBreakdown.cod.amount += rep.summary.paymentBreakdown.cod?.amount || 0;
+        }
+
+        totalVendorGross += rep.vendorSettlement.totalVendorGross || 0;
+        totalVendorGP += rep.vendorSettlement.totalVendorGP || 0;
+        totalVendorAmount += rep.vendorSettlement.totalVendorAmount || 0;
+        totalSettledVendorAmount += rep.vendorSettlement.totalSettledAmount || 0;
+
+        (rep.vendorSettlement.stalls || []).forEach(st => {
+            const key = st.stallId || st.stallName;
+            if (!stallsMap[key]) {
+                stallsMap[key] = {
+                    stallId: st.stallId,
+                    stallName: st.stallName,
+                    stallNumber: st.stallNumber,
+                    zone: st.zone,
+                    ownerName: st.ownerName,
+                    phone: st.phone,
+                    orderCount: 0,
+                    itemsCount: 0,
+                    totalAmount: 0,
+                    gpAmount: 0,
+                    payoutAmount: 0
+                };
+            }
+            stallsMap[key].orderCount += st.orderCount || 0;
+            stallsMap[key].itemsCount += st.itemsCount || 0;
+            stallsMap[key].totalAmount += st.totalAmount || 0;
+            stallsMap[key].gpAmount += st.gpAmount || 0;
+            stallsMap[key].payoutAmount += st.payoutAmount || 0;
+        });
+
+        totalTrips += rep.riderSettlement.totalTrips || 0;
+        totalRiderFees += rep.riderSettlement.totalRiderFees || 0;
+        totalCodCollected += rep.riderSettlement.totalCodCollected || 0;
+        totalRefundHanded += rep.riderSettlement.totalRefundHanded || 0;
+        netCashToHub += rep.riderSettlement.netCashToHub || 0;
+
+        (rep.riderSettlement.riders || []).forEach(r => {
+            const rKey = r.riderName;
+            if (!ridersMap[rKey]) {
+                ridersMap[rKey] = {
+                    riderName: r.riderName,
+                    riderPhone: r.riderPhone,
+                    tripsCount: 0,
+                    riderFeeEarned: 0,
+                    codCollected: 0,
+                    refundHanded: 0,
+                    netCashToHub: 0
+                };
+            }
+            ridersMap[rKey].tripsCount += r.tripsCount || 0;
+            ridersMap[rKey].riderFeeEarned += r.riderFeeEarned || 0;
+            ridersMap[rKey].codCollected += r.codCollected || 0;
+            ridersMap[rKey].refundHanded += r.refundHanded || 0;
+            ridersMap[rKey].netCashToHub += r.netCashToHub || 0;
+        });
+
+        const dayHubGross = (rep.summary.totalDeliveryFees || 0) + (rep.vendorSettlement.totalVendorGP || 0) + (rep.summary.totalExpressFees || 0);
+        const dayHubNet = dayHubGross - (rep.riderSettlement.totalRiderFees || 0);
+
+        dailyBreakdown.push({
+            dateKey: dayKey,
+            dayName,
+            thaiDate,
+            orders: rep.summary.totalOrders || 0,
+            completedOrders: rep.summary.completedOrders || 0,
+            gmv: rep.summary.totalCustomerGMV || 0,
+            delFee: rep.summary.totalDeliveryFees || 0,
+            vendorGP: rep.vendorSettlement.totalVendorGP || 0,
+            vendorPayout: rep.vendorSettlement.totalVendorAmount || 0,
+            riderFees: rep.riderSettlement.totalRiderFees || 0,
+            riderTrips: rep.riderSettlement.totalTrips || 0,
+            hubNetMargin: dayHubNet
+        });
+    });
+
+    const hubGrossRevenue = summary.totalDeliveryFees + totalVendorGP + summary.totalExpressFees;
+    const hubNetMargin = hubGrossRevenue - totalRiderFees;
+
+    const fc = (typeof loadPlatformFixedCosts === "function") ? loadPlatformFixedCosts() : {
+        officeRent: 4000,
+        staffSalary: 13000,
+        utilitiesSupplies: 2000,
+        daysInMonth: 30,
+        breakEvenDailyOrders: 38,
+        targetProfitDailyOrders: 45
+    };
+    const totalMonthlyFixedCost = (fc.officeRent || 4000) + (fc.staffSalary || 13000) + (fc.utilitiesSupplies || 2000);
+    const dailyFixedCost = Math.round(totalMonthlyFixedCost / (fc.daysInMonth || 30));
+    const periodFixedCost = mode === "week" ? Math.round(dailyFixedCost * 7) : totalMonthlyFixedCost;
+    const netProfit = hubNetMargin - periodFixedCost;
+
+    const targetBreakEvenOrders = mode === "week" ? Math.round((fc.breakEvenDailyOrders || 38) * 7) : Math.round((fc.breakEvenDailyOrders || 38) * (fc.daysInMonth || 30));
+    const targetProfitOrders = mode === "week" ? Math.round((fc.targetProfitDailyOrders || 45) * 7) : Math.round((fc.targetProfitDailyOrders || 45) * (fc.daysInMonth || 30));
+
+    const stallsRanked = Object.values(stallsMap).sort((a, b) => b.totalAmount - a.totalAmount);
+    const ridersRanked = Object.values(ridersMap).sort((a, b) => b.tripsCount - a.tripsCount);
+
+    return {
+        mode,
+        refDateKey,
+        days,
+        startDateKey: days[0],
+        endDateKey: days[days.length - 1],
+        periodTitle,
+        periodSubtitle,
+        summary,
+        totalVendorGross,
+        totalVendorGP,
+        totalVendorAmount,
+        totalSettledVendorAmount,
+        totalTrips,
+        totalRiderFees,
+        totalCodCollected,
+        totalRefundHanded,
+        netCashToHub,
+        hubGrossRevenue,
+        hubNetMargin,
+        fc,
+        periodFixedCost,
+        netProfit,
+        targetBreakEvenOrders,
+        targetProfitOrders,
+        stallsRanked,
+        ridersRanked,
+        dailyBreakdown
+    };
+}
+
+function openPeriodAnalysisModal(mode = "week", refDateKey = null) {
+    _periodAnalysisActiveMode = mode || "week";
+    if (refDateKey) {
+        _periodAnalysisRefDateKey = refDateKey;
+    } else if (!_periodAnalysisRefDateKey) {
+        _periodAnalysisRefDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    }
+
+    let modal = document.getElementById("talathub-period-analysis-modal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "talathub-period-analysis-modal";
+        modal.className = "fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[150] flex items-center justify-center p-2 sm:p-4";
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+
+    renderPeriodAnalysisModalContent();
+}
+
+function openWeeklyAnalysisModal(refDateKey = null) {
+    openPeriodAnalysisModal("week", refDateKey);
+}
+
+function openMonthlyAnalysisModal(refDateKey = null) {
+    openPeriodAnalysisModal("month", refDateKey);
+}
+
+function closePeriodAnalysisModal() {
+    const modal = document.getElementById("talathub-period-analysis-modal");
+    if (modal) {
+        modal.classList.add("hidden");
+    }
+    document.body.style.overflow = "";
+}
+
+function setPeriodAnalysisMode(mode) {
+    _periodAnalysisActiveMode = mode;
+    renderPeriodAnalysisModalContent();
+}
+
+function setPeriodAnalysisCurrent() {
+    _periodAnalysisRefDateKey = getReportDateKey(Date.now());
+    renderPeriodAnalysisModalContent();
+}
+
+function navigatePeriodAnalysis(direction) {
+    if (!_periodAnalysisRefDateKey) _periodAnalysisRefDateKey = getReportDateKey(Date.now());
+    const parts = _periodAnalysisRefDateKey.split("-");
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const d = parseInt(parts[2], 10);
+
+    if (_periodAnalysisActiveMode === "week") {
+        const dateObj = new Date(y, m - 1, d);
+        dateObj.setDate(dateObj.getDate() + (direction * 7));
+        _periodAnalysisRefDateKey = getReportDateKey(dateObj.getTime());
+    } else {
+        const targetMonth = m - 1 + direction;
+        const dateObj = new Date(y, targetMonth, 1);
+        const maxDays = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate();
+        const finalD = Math.min(d, maxDays);
+        const newY = dateObj.getFullYear();
+        const newM = String(dateObj.getMonth() + 1).padStart(2, "0");
+        const newD = String(finalD).padStart(2, "0");
+        _periodAnalysisRefDateKey = `${newY}-${newM}-${newD}`;
+    }
+    renderPeriodAnalysisModalContent();
+}
+
+function renderPeriodAnalysisModalContent() {
+    const modal = document.getElementById("talathub-period-analysis-modal");
+    if (!modal) return;
+
+    const data = aggregatePeriodOperations(_periodAnalysisActiveMode, _periodAnalysisRefDateKey);
+
+    const completed = data.summary.completedOrders || 0;
+    const progressPercent = Math.min(100, Math.round((completed / (data.targetBreakEvenOrders || 1)) * 100));
+
+    let breakEvenBadge = "";
+    if (completed >= data.targetProfitOrders) {
+        breakEvenBadge = `<span class="bg-emerald-100 text-emerald-800 text-xs font-black px-3 py-1 rounded-full border border-emerald-300">🏆 กำไรเกินเป้าหมาย 5%! (${completed}/${data.targetProfitOrders} ออเดอร์)</span>`;
+    } else if (completed >= data.targetBreakEvenOrders) {
+        breakEvenBadge = `<span class="bg-teal-100 text-teal-800 text-xs font-black px-3 py-1 rounded-full border border-teal-300">🟢 บรรลุจุดคุ้มทุนแล้ว (${completed}/${data.targetBreakEvenOrders} ออเดอร์)</span>`;
+    } else if (completed >= Math.round(data.targetBreakEvenOrders * 0.5)) {
+        breakEvenBadge = `<span class="bg-amber-100 text-amber-800 text-xs font-black px-3 py-1 rounded-full border border-amber-300">🟡 ใกล้ถึงจุดคุ้มทุน (ขาดอีก ${Math.max(0, data.targetBreakEvenOrders - completed)} ออเดอร์)</span>`;
+    } else {
+        breakEvenBadge = `<span class="bg-rose-100 text-rose-800 text-xs font-black px-3 py-1 rounded-full border border-rose-300">🔴 ยังไม่ถึงจุดคุ้มทุน (ต้องการอีก ${Math.max(0, data.targetBreakEvenOrders - completed)} ออเดอร์)</span>`;
+    }
+
+    const profitMarginPct = data.summary.totalCustomerGMV > 0 
+        ? ((data.netProfit / data.summary.totalCustomerGMV) * 100).toFixed(1) 
+        : 0;
+
+    // Daily Trend Bars Calculation
+    const maxGMV = Math.max(...data.dailyBreakdown.map(d => d.gmv), 1);
+
+    let barsHtml = "";
+    data.dailyBreakdown.forEach(d => {
+        const heightPct = Math.max(6, Math.min(100, Math.round((d.gmv / maxGMV) * 100)));
+        const isCurrentDay = d.dateKey === getReportDateKey(Date.now());
+        barsHtml += `
+            <div class="flex-1 flex flex-col items-center gap-1 group relative min-w-[36px]">
+                <div class="text-[9px] font-bold text-slate-500 group-hover:text-indigo-600 transition-all truncate">
+                    ${d.gmv > 0 ? '฿' + (d.gmv >= 1000 ? Math.round(d.gmv/1000) + 'k' : d.gmv) : '0'}
+                </div>
+                <div class="w-full bg-slate-100 rounded-t-lg h-24 flex items-end p-0.5 relative overflow-hidden border border-slate-200">
+                    <div style="height: ${heightPct}%" class="w-full rounded-t-md transition-all duration-500 ${isCurrentDay ? 'bg-gradient-to-t from-emerald-600 to-teal-400 shadow-sm' : 'bg-gradient-to-t from-indigo-600 to-purple-500'} group-hover:brightness-110"></div>
+                </div>
+                <div class="text-[10px] font-extrabold ${isCurrentDay ? 'text-emerald-700 underline' : 'text-slate-700'}">${d.dayName.slice(0, 3)}</div>
+                <div class="text-[8px] text-slate-400">${d.dateKey.slice(8, 10)}/${d.dateKey.slice(5, 7)}</div>
+                <div class="text-[8px] font-bold bg-slate-100 text-slate-600 px-1 rounded-full">${d.orders} บิล</div>
+            </div>
+        `;
+    });
+
+    // Daily Table Rows
+    let tableRowsHtml = "";
+    data.dailyBreakdown.forEach((d, idx) => {
+        const isCurrentDay = d.dateKey === getReportDateKey(Date.now());
+        tableRowsHtml += `
+            <tr class="hover:bg-indigo-50/40 transition-all text-[11px] ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} ${isCurrentDay ? 'font-bold bg-emerald-50/40' : ''}">
+                <td class="py-2 px-2.5 border-b border-slate-100">
+                    <div class="flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full ${d.orders > 0 ? 'bg-emerald-500' : 'bg-slate-300'}"></span>
+                        <span>${d.thaiDate} (${d.dayName})</span>
+                        ${isCurrentDay ? '<span class="text-[9px] bg-emerald-100 text-emerald-800 px-1 rounded font-black">วันนี้</span>' : ''}
+                    </div>
+                </td>
+                <td class="py-2 px-2 text-center border-b border-slate-100 font-bold text-slate-700">${d.orders} (${d.completedOrders})</td>
+                <td class="py-2 px-2.5 text-right border-b border-slate-100 font-black text-emerald-700">฿${d.gmv.toLocaleString()}</td>
+                <td class="py-2 px-2 text-right border-b border-slate-100 text-slate-600">฿${d.delFee.toLocaleString()}</td>
+                <td class="py-2 px-2 text-right border-b border-slate-100 text-amber-700 font-bold">฿${d.vendorGP.toLocaleString()}</td>
+                <td class="py-2 px-2 text-right border-b border-slate-100 text-orange-700">฿${d.vendorPayout.toLocaleString()}</td>
+                <td class="py-2 px-2 text-center border-b border-slate-100 text-sky-700">${d.riderTrips}</td>
+                <td class="py-2 px-2.5 text-right border-b border-slate-100 font-black ${d.hubNetMargin >= 0 ? 'text-indigo-700' : 'text-rose-600'}">
+                    ฿${d.hubNetMargin.toLocaleString()}
+                </td>
+                <td class="py-2 px-2 text-center border-b border-slate-100">
+                    <button onclick="changeReportDate('${d.dateKey}'); closePeriodAnalysisModal();" class="px-2 py-1 bg-white hover:bg-emerald-600 hover:text-white text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-bold active:scale-95 transition-all shadow-2xs flex items-center gap-0.5 mx-auto cursor-pointer" title="เปิดดูรายงานประจำวันนี้">
+                        <span class="material-symbols-outlined text-[12px]">visibility</span>
+                        <span>ดูวันนี้</span>
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    // Top Stalls Rows (Top 5)
+    let topStallsHtml = "";
+    if (data.stallsRanked.length === 0) {
+        topStallsHtml = `<div class="p-4 text-center text-xs text-slate-400">ยังไม่มีรายการสั่งซื้อจากร้านค้าในรอบนี้</div>`;
+    } else {
+        data.stallsRanked.slice(0, 5).forEach((s, idx) => {
+            topStallsHtml += `
+                <div class="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100 transition-all text-xs">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="w-6 h-6 rounded-lg ${idx === 0 ? 'bg-amber-500 text-white font-black' : 'bg-slate-200 text-slate-700 font-bold'} flex items-center justify-center text-[10px] shrink-0">
+                            ${idx + 1}
+                        </span>
+                        <div class="truncate">
+                            <div class="font-bold text-slate-800 truncate">${s.stallName}</div>
+                            <div class="text-[10px] text-slate-500">${s.stallNumber || 'แผงตลาด'} • ${s.orderCount} ออเดอร์ (${s.itemsCount} ชิ้น)</div>
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0 ml-2">
+                        <div class="font-black text-amber-700">฿${s.totalAmount.toLocaleString()}</div>
+                        <div class="text-[9px] text-slate-400">GP ฿${s.gpAmount.toLocaleString()}</div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    // Top Riders Rows (Top 5)
+    let topRidersHtml = "";
+    if (data.ridersRanked.length === 0) {
+        topRidersHtml = `<div class="p-4 text-center text-xs text-slate-400">ยังไม่มีประวัติการวิ่งส่งของไรเดอร์ในรอบนี้</div>`;
+    } else {
+        data.ridersRanked.slice(0, 5).forEach((r, idx) => {
+            topRidersHtml += `
+                <div class="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100 transition-all text-xs">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="w-6 h-6 rounded-lg ${idx === 0 ? 'bg-sky-500 text-white font-black' : 'bg-slate-200 text-slate-700 font-bold'} flex items-center justify-center text-[10px] shrink-0">
+                            ${idx + 1}
+                        </span>
+                        <div class="truncate">
+                            <div class="font-bold text-slate-800 truncate">${r.riderName}</div>
+                            <div class="text-[10px] text-slate-500">${r.riderPhone} • วิ่งส่ง ${r.tripsCount} เที่ยว</div>
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0 ml-2">
+                        <div class="font-black text-sky-700">฿${r.riderFeeEarned.toLocaleString()}</div>
+                        <div class="text-[9px] text-slate-400">COD ฿${r.codCollected.toLocaleString()}</div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    modal.innerHTML = `
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-scale-up">
+        <!-- Top Sticky Header -->
+        <div class="px-4 sm:px-6 py-3.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border-b border-indigo-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+            <div class="flex items-center gap-3">
+                <span class="w-10 h-10 rounded-2xl bg-white/10 text-indigo-300 border border-white/10 flex items-center justify-center font-black text-xl shadow-inner shrink-0">
+                    ${data.mode === 'month' ? '📆' : '📊'}
+                </span>
+                <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h3 class="font-black text-base sm:text-lg text-white tracking-tight">รายงานวิเคราะห์ผลการดำเนินงานฮับ</h3>
+                        <!-- Mode Tabs -->
+                        <div class="bg-white/10 p-0.5 rounded-xl border border-white/15 flex items-center gap-0.5">
+                            <button onclick="setPeriodAnalysisMode('week')" class="px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${data.mode === 'week' ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-200 hover:text-white hover:bg-white/10'}">
+                                วิเคราะห์รายสัปดาห์
+                            </button>
+                            <button onclick="setPeriodAnalysisMode('month')" class="px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${data.mode === 'month' ? 'bg-purple-600 text-white shadow-md' : 'text-indigo-200 hover:text-white hover:bg-white/10'}">
+                                วิเคราะห์รายเดือน
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-indigo-200/90 mt-0.5 font-medium">${data.periodTitle} • <span class="text-white font-bold">${data.periodSubtitle}</span></p>
+                </div>
+            </div>
+
+            <!-- Controls: Navigator & Action Buttons -->
+            <div class="flex items-center gap-2 flex-wrap">
+                <div class="flex items-center bg-white/10 rounded-xl border border-white/15 p-0.5 shadow-2xs">
+                    <button onclick="navigatePeriodAnalysis(-1)" title="รอบก่อนหน้า" class="w-7 h-7 rounded-lg hover:bg-white/20 text-white flex items-center justify-center font-bold active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">chevron_left</span>
+                    </button>
+                    <button onclick="setPeriodAnalysisCurrent()" class="px-2.5 py-1 text-[11px] font-bold text-indigo-100 hover:text-white hover:bg-white/20 rounded-lg transition-all cursor-pointer" title="กลับมารอบปัจจุบัน">
+                        ${data.mode === 'month' ? 'เดือนนี้' : 'สัปดาห์นี้'}
+                    </button>
+                    <button onclick="navigatePeriodAnalysis(1)" title="รอบถัดไป" class="w-7 h-7 rounded-lg hover:bg-white/20 text-white flex items-center justify-center font-bold active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">chevron_right</span>
+                    </button>
+                </div>
+
+                <button onclick="exportPeriodAnalysisCSV()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-sm cursor-pointer" title="ดาวน์โหลดไฟล์ CSV สำหรับ Excel">
+                    <span class="material-symbols-outlined text-sm">download</span>
+                    <span>ส่งออก CSV</span>
+                </button>
+                <button onclick="printPeriodAnalysis()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-sm cursor-pointer" title="พิมพ์รายงาน A4">
+                    <span class="material-symbols-outlined text-sm">print</span>
+                    <span>พิมพ์ A4</span>
+                </button>
+                <button onclick="closePeriodAnalysisModal()" class="w-8 h-8 rounded-xl bg-white/10 hover:bg-rose-600 text-white flex items-center justify-center font-bold active:scale-95 transition-all cursor-pointer" title="ปิดหน้าต่าง">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Scrollable Modal Body -->
+        <div class="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4 bg-slate-50">
+            <!-- 4 Primary KPI Cards -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+                <!-- Card 1: Total GMV -->
+                <div class="bg-gradient-to-br from-emerald-600 to-teal-800 text-white rounded-3xl p-3.5 sm:p-4 shadow-md space-y-1.5 relative overflow-hidden">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] sm:text-[11px] font-bold text-emerald-200 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">shopping_bag</span>
+                            <span>ยอดขายรวม (GMV)</span>
+                        </span>
+                        <span class="text-[9px] bg-white/20 font-bold px-1.5 py-0.5 rounded-full">${data.summary.totalOrders} บิล</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black tracking-tight">฿${data.summary.totalCustomerGMV.toLocaleString()}</div>
+                    <div class="text-[9px] sm:text-[10px] text-emerald-100/90 pt-1 border-t border-white/15">
+                        <span>สำเร็จ ${data.summary.completedOrders} | ค่าส่ง ฿${data.summary.totalDeliveryFees.toLocaleString()}</span>
+                    </div>
+                </div>
+
+                <!-- Card 2: Vendor Settlement -->
+                <div class="bg-gradient-to-br from-amber-600 to-orange-700 text-white rounded-3xl p-3.5 sm:p-4 shadow-md space-y-1.5 relative overflow-hidden">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] sm:text-[11px] font-bold text-amber-200 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">storefront</span>
+                            <span>ยอดโอนสุทธิแผงค้า</span>
+                        </span>
+                        <span class="text-[9px] bg-white/20 font-bold px-1.5 py-0.5 rounded-full">${data.stallsRanked.length} แผง</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black tracking-tight">฿${data.totalVendorAmount.toLocaleString()}</div>
+                    <div class="text-[9px] sm:text-[10px] text-amber-100/90 pt-1 border-t border-white/15">
+                        <span>ยอดขาย ฿${data.totalVendorGross.toLocaleString()} | หัก GP -฿${data.totalVendorGP.toLocaleString()}</span>
+                    </div>
+                </div>
+
+                <!-- Card 3: Rider Settlement -->
+                <div class="bg-gradient-to-br from-sky-600 to-blue-800 text-white rounded-3xl p-3.5 sm:p-4 shadow-md space-y-1.5 relative overflow-hidden">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] sm:text-[11px] font-bold text-sky-200 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">two_wheeler</span>
+                            <span>เงินสดสุทธิส่งฮับ</span>
+                        </span>
+                        <span class="text-[9px] bg-white/20 font-bold px-1.5 py-0.5 rounded-full">${data.totalTrips} เที่ยว</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black tracking-tight">฿${data.netCashToHub.toLocaleString()}</div>
+                    <div class="text-[9px] sm:text-[10px] text-sky-100/90 pt-1 border-t border-white/15">
+                        <span>COD ฿${data.totalCodCollected.toLocaleString()} | ค่ารอบ -฿${data.totalRiderFees.toLocaleString()}</span>
+                    </div>
+                </div>
+
+                <!-- Card 4: Hub Net Margin -->
+                <div class="bg-gradient-to-br from-indigo-600 via-purple-700 to-indigo-900 text-white rounded-3xl p-3.5 sm:p-4 shadow-md space-y-1.5 relative overflow-hidden">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] sm:text-[11px] font-bold text-indigo-200 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">account_balance_wallet</span>
+                            <span>กำไรค่าบริการสุทธิ</span>
+                        </span>
+                        <span class="text-[9px] bg-white/20 font-bold px-1.5 py-0.5 rounded-full">Margin</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black tracking-tight ${data.hubNetMargin >= 0 ? 'text-white' : 'text-rose-200'}">
+                        ฿${data.hubNetMargin.toLocaleString()}
+                    </div>
+                    <div class="text-[9px] sm:text-[10px] text-indigo-100/90 pt-1 border-t border-white/15">
+                        <span>(ค่าส่ง + GP แผงค้า) - ค่ารอบ</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- P&L and Break-even Ledger Banner -->
+            <div class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-4 sm:p-5 shadow-lg border border-indigo-800/40 space-y-3.5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-white/10">
+                    <div class="flex items-center gap-2">
+                        <span class="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-base">
+                            ⚖️
+                        </span>
+                        <div>
+                            <h4 class="font-extrabold text-sm sm:text-base text-white">
+                                วิเคราะห์จุดคุ้มทุน & งบกำไร-ขาดทุน (${data.mode === 'month' ? 'รายเดือน' : 'รายสัปดาห์'})
+                            </h4>
+                            <p class="text-[10px] sm:text-xs text-indigo-200">
+                                ต้นทุนคงที่ในรอบ ฿${data.periodFixedCost.toLocaleString()} (ค่าเช่า + เงินเดือนแอดมิน + ค่าน้ำไฟ)
+                            </p>
+                        </div>
+                    </div>
+                    <div>${breakEvenBadge}</div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between items-center text-[11px] font-bold">
+                        <span class="text-indigo-200">ความคืบหน้าสู่เป้าหมายจุดคุ้มทุน</span>
+                        <span class="text-white">${completed} / ${data.targetBreakEvenOrders} ออเดอร์ (${progressPercent}%)</span>
+                    </div>
+                    <div class="w-full bg-white/10 h-3 rounded-full overflow-hidden p-0.5 border border-white/10">
+                        <div style="width: ${progressPercent}%" class="h-full rounded-full transition-all duration-700 ${progressPercent >= 100 ? 'bg-gradient-to-r from-teal-400 to-emerald-400' : 'bg-gradient-to-r from-rose-400 via-amber-400 to-emerald-400'}"></div>
+                    </div>
+                </div>
+
+                <!-- 4 Metrics Row in Ledger -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-white/10 text-center">
+                    <div class="p-2 rounded-2xl bg-white/5 border border-white/10">
+                        <div class="text-[10px] text-indigo-300 font-bold">กำไรค่าบริการ (Margin)</div>
+                        <div class="text-base font-black text-white mt-0.5">฿${data.hubNetMargin.toLocaleString()}</div>
+                    </div>
+                    <div class="p-2 rounded-2xl bg-white/5 border border-white/10">
+                        <div class="text-[10px] text-rose-300 font-bold">ต้นทุนคงที่เฉลี่ยในรอบ</div>
+                        <div class="text-base font-black text-rose-300 mt-0.5">฿${data.periodFixedCost.toLocaleString()}</div>
+                    </div>
+                    <div class="p-2 rounded-2xl bg-white/5 border border-white/10">
+                        <div class="text-[10px] ${data.netProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'} font-bold">กำไรสุทธิหลังหักต้นทุน</div>
+                        <div class="text-base font-black ${data.netProfit >= 0 ? 'text-emerald-300' : 'text-rose-400'} mt-0.5">฿${data.netProfit.toLocaleString()}</div>
+                    </div>
+                    <div class="p-2 rounded-2xl bg-white/5 border border-white/10">
+                        <div class="text-[10px] text-amber-300 font-bold">อัตรากำไรสุทธิ (Net Margin %)</div>
+                        <div class="text-base font-black text-amber-300 mt-0.5">${profitMarginPct}%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Trend Visual Bar Chart -->
+            <div class="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm space-y-3">
+                <div class="flex items-center justify-between">
+                    <h4 class="font-extrabold text-sm text-slate-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-indigo-600 text-lg">bar_chart</span>
+                        <span>แนวโน้มยอดขายตามวัน (Daily GMV Distribution)</span>
+                    </h4>
+                    <span class="text-[11px] text-slate-400 font-bold">คลิกที่วันด้านล่างเพื่อเปิดรายงานละเอียด</span>
+                </div>
+                <div class="flex items-end gap-1.5 sm:gap-2 pt-2 overflow-x-auto pb-2 scrollbar-none">
+                    ${barsHtml}
+                </div>
+            </div>
+
+            <!-- Daily Breakdown Table -->
+            <div class="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm space-y-3">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <h4 class="font-extrabold text-sm text-slate-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-emerald-600 text-lg">table_chart</span>
+                        <span>ตารางสถิติและผลประกอบการรายวัน (${data.days.length} วัน)</span>
+                    </h4>
+                    <span class="text-xs text-slate-500">เรียงตามวันที่ในรอบ</span>
+                </div>
+
+                <div class="overflow-x-auto border border-slate-100 rounded-2xl">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 text-[10px] font-black uppercase">
+                                <th class="py-2.5 px-2.5">วันที่ / วัน</th>
+                                <th class="py-2.5 px-2 text-center">ออเดอร์ (สำเร็จ)</th>
+                                <th class="py-2.5 px-2.5 text-right">ยอดขาย GMV</th>
+                                <th class="py-2.5 px-2 text-right">ค่าส่งฮับ</th>
+                                <th class="py-2.5 px-2 text-right">GP แผงค้า</th>
+                                <th class="py-2.5 px-2 text-right">โอนแผงค้า</th>
+                                <th class="py-2.5 px-2 text-center">ไรเดอร์วิ่ง</th>
+                                <th class="py-2.5 px-2.5 text-right">กำไรสุทธิฮับ</th>
+                                <th class="py-2.5 px-2 text-center">ดำเนินการ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 2-Column: Top Stalls & Top Riders -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                <!-- Top Stalls -->
+                <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-2.5">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h4 class="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-amber-600 text-base">store</span>
+                            <span>แผงค้ายอดขายสูงสุดในรอบ (Top 5 Vendors)</span>
+                        </h4>
+                        <span class="text-[10px] font-bold text-slate-400">ทั้งหมด ${data.stallsRanked.length} แผง</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        ${topStallsHtml}
+                    </div>
+                </div>
+
+                <!-- Top Riders -->
+                <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-2.5">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h4 class="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-sky-600 text-base">two_wheeler</span>
+                            <span>ไรเดอร์ยอดขยันในรอบ (Top 5 Riders)</span>
+                        </h4>
+                        <span class="text-[10px] font-bold text-slate-400">ทั้งหมด ${data.ridersRanked.length} คน</span>
+                    </div>
+                    <div class="space-y-1.5">
+                        ${topRidersHtml}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payment Methods Breakdown -->
+            <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-2.5">
+                <h4 class="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-purple-600 text-base">payments</span>
+                    <span>สัดส่วนช่องทางการชำระเงินของลูกค้า</span>
+                </h4>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div class="p-3 bg-blue-50/70 border border-blue-200 rounded-2xl flex items-center justify-between">
+                        <div>
+                            <div class="text-[11px] font-bold text-blue-900">📱 พร้อมเพย์ (PromptPay)</div>
+                            <div class="text-xs text-blue-700">${data.summary.paymentBreakdown.promptpay.count} ออเดอร์</div>
+                        </div>
+                        <div class="text-base font-black text-blue-950">฿${data.summary.paymentBreakdown.promptpay.amount.toLocaleString()}</div>
+                    </div>
+                    <div class="p-3 bg-purple-50/70 border border-purple-200 rounded-2xl flex items-center justify-between">
+                        <div>
+                            <div class="text-[11px] font-bold text-purple-900">🏦 โอนผ่านธนาคาร (SCB)</div>
+                            <div class="text-xs text-purple-700">${data.summary.paymentBreakdown.bank_transfer.count} ออเดอร์</div>
+                        </div>
+                        <div class="text-base font-black text-purple-950">฿${data.summary.paymentBreakdown.bank_transfer.amount.toLocaleString()}</div>
+                    </div>
+                    <div class="p-3 bg-amber-50/70 border border-amber-200 rounded-2xl flex items-center justify-between">
+                        <div>
+                            <div class="text-[11px] font-bold text-amber-900">💵 เงินสดปลายทาง (COD)</div>
+                            <div class="text-xs text-amber-700">${data.summary.paymentBreakdown.cod.count} ออเดอร์</div>
+                        </div>
+                        <div class="text-base font-black text-amber-950">฿${data.summary.paymentBreakdown.cod.amount.toLocaleString()}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sticky Footer -->
+        <div class="px-4 sm:px-6 py-3 bg-white border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+            <div class="text-[11px] text-slate-500 hidden sm:block">
+                ระบบวิเคราะห์ข้อมูลบัญชีตลาดฮับวิศิษฐ์ชัย • อัปเดตข้อมูลแบบ Real-time
+            </div>
+            <div class="flex items-center gap-2 ml-auto">
+                <button onclick="exportPeriodAnalysisCSV()" class="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">download</span>
+                    <span>ส่งออก CSV</span>
+                </button>
+                <button onclick="printPeriodAnalysis()" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">print</span>
+                    <span>พิมพ์รายงาน A4</span>
+                </button>
+                <button onclick="closePeriodAnalysisModal()" class="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold active:scale-95 transition-all cursor-pointer">
+                    <span>ปิด</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    `;
+}
+
+function exportPeriodAnalysisCSV() {
+    const data = aggregatePeriodOperations(_periodAnalysisActiveMode, _periodAnalysisRefDateKey);
+    let csv = "\uFEFF"; // UTF-8 BOM
+    csv += `รายงานวิเคราะห์${data.mode === 'month' ? 'รายเดือน' : 'รายสัปดาห์'} ตลาดฮับวิศิษฐ์ชัย,${data.periodTitle}\n`;
+    csv += `ช่วงวันที่,${data.startDateKey} ถึง ${data.endDateKey}\n`;
+    csv += `สร้างรายงานเมื่อ,${new Date().toLocaleString("th-TH")}\n\n`;
+
+    // 1. ภาพรวม
+    csv += "--- 1. สรุปภาพรวมยอดขายและรายได้ฮับ ---\n";
+    csv += "หัวข้อ,จำนวน\n";
+    csv += `จำนวนออเดอร์ทั้งหมด,${data.summary.totalOrders} ใบ\n`;
+    csv += `ส่งสำเร็จ,${data.summary.completedOrders} ใบ\n`;
+    csv += `ยอดขายรวมลูกค้า (GMV),${data.summary.totalCustomerGMV} บาท\n`;
+    csv += `ค่าบริการจัดส่งรวม,${data.summary.totalDeliveryFees} บาท\n`;
+    csv += `GP แผงค้ารวม,${data.totalVendorGP} บาท\n`;
+    csv += `ยอดโอนสุทธิแผงค้า,${data.totalVendorAmount} บาท\n`;
+    csv += `ค่ารอบไรเดอร์รวม,${data.totalRiderFees} บาท\n`;
+    csv += `กำไรค่าบริการสุทธิฮับ (Net Margin),${data.hubNetMargin} บาท\n`;
+    csv += `ต้นทุนคงที่เฉลี่ยในรอบ,${data.periodFixedCost} บาท\n`;
+    csv += `กำไรสุทธิหลังหักต้นทุนคงที่,${data.netProfit} บาท\n\n`;
+
+    // 2. สรุปรายวัน
+    csv += "--- 2. ข้อมูลสถิติรายวัน (Daily Breakdown) ---\n";
+    csv += "วันที่,วัน,ออเดอร์,สำเร็จ,ยอดขาย GMV(บาท),ค่าส่ง(บาท),GP ตลาด(บาท),โอนแผงค้า(บาท),ค่ารอบไรเดอร์(บาท),กำไรสุทธิฮับ(บาท)\n";
+    data.dailyBreakdown.forEach(d => {
+        csv += `"${d.dateKey}","${d.dayName}",${d.orders},${d.completedOrders},${d.gmv},${d.delFee},${d.vendorGP},${d.vendorPayout},${d.riderFees},${d.hubNetMargin}\n`;
+    });
+    csv += "\n";
+
+    // 3. แผงค้ายอดนิยม
+    csv += "--- 3. สรุปยอดขายรายแผงค้า ---\n";
+    csv += "ชื่อแผงค้า,เลขแผง/โซน,เจ้าของ,ออเดอร์,จำนวนชิ้น,ยอดขายรวม(บาท),GP(บาท),ยอดโอนสุทธิ(บาท)\n";
+    data.stallsRanked.forEach(s => {
+        csv += `"${s.stallName}","${s.stallNumber}",${s.ownerName},${s.orderCount},${s.itemsCount},${s.totalAmount},${s.gpAmount},${s.payoutAmount}\n`;
+    });
+    csv += "\n";
+
+    // 4. ไรเดอร์
+    csv += "--- 4. สรุปการปฏิบัติงานไรเดอร์ ---\n";
+    csv += "ชื่อไรเดอร์,เบอร์โทร,เที่ยววิ่ง,ค่ารอบรวม(บาท),COD เก็บมา(บาท),เงินสดส่งมอบฮับ(บาท)\n";
+    data.ridersRanked.forEach(r => {
+        csv += `"${r.riderName}","${r.riderPhone}",${r.tripsCount},${r.riderFeeEarned},${r.codCollected},${r.netCashToHub}\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `talathub_${data.mode}_report_${data.startDateKey}_to_${data.endDateKey}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`📥 ดาวน์โหลดรายงาน CSV (${data.periodTitle}) เรียบร้อยแล้ว`);
+}
+
+function printPeriodAnalysis() {
+    const data = aggregatePeriodOperations(_periodAnalysisActiveMode, _periodAnalysisRefDateKey);
+    const printTime = new Date().toLocaleString("th-TH");
+    const modeLabel = data.mode === "month" ? "รายเดือน (Monthly Analysis)" : "รายสัปดาห์ (Weekly Analysis)";
+
+    let dailyRowsHtml = "";
+    data.dailyBreakdown.forEach(d => {
+        dailyRowsHtml += `
+            <tr>
+                <td>${d.thaiDate} (${d.dayName})</td>
+                <td class="text-center">${d.orders}</td>
+                <td class="text-right">฿${d.gmv.toLocaleString()}</td>
+                <td class="text-right">฿${d.delFee.toLocaleString()}</td>
+                <td class="text-right">฿${d.vendorGP.toLocaleString()}</td>
+                <td class="text-right">฿${d.vendorPayout.toLocaleString()}</td>
+                <td class="text-right font-bold" style="color: ${d.hubNetMargin >= 0 ? '#047857' : '#e11d48'};">฿${d.hubNetMargin.toLocaleString()}</td>
+            </tr>
+        `;
+    });
+
+    let stallsRowsHtml = "";
+    data.stallsRanked.slice(0, 10).forEach((s, idx) => {
+        stallsRowsHtml += `
+            <tr>
+                <td>${idx + 1}. ${s.stallName} (${s.stallNumber || 'แผงค้า'})</td>
+                <td class="text-center">${s.orderCount}</td>
+                <td class="text-right">฿${s.totalAmount.toLocaleString()}</td>
+                <td class="text-right font-bold">฿${s.payoutAmount.toLocaleString()}</td>
+            </tr>
+        `;
+    });
+
+    const content = `
+        <div class="a4-header">
+            <div class="a4-title">รายงานวิเคราะห์ผลการดำเนินงาน${modeLabel}</div>
+            <div class="a4-meta">
+                ตลาดสดฮับวิศิษฐ์ชัย • ${data.periodTitle} (${data.periodSubtitle}) • พิมพ์เมื่อ: ${printTime}
+            </div>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div>ยอดขายรวม (GMV):</div>
+                <div style="font-size: 16px; font-weight: bold; color: #047857;">฿${data.summary.totalCustomerGMV.toLocaleString()}</div>
+                <div style="font-size: 10px; color: #666;">ออเดอร์ทั้งหมด ${data.summary.totalOrders} ใบ</div>
+            </div>
+            <div class="summary-box">
+                <div>ยอดโอนสุทธิแผงค้า:</div>
+                <div style="font-size: 16px; font-weight: bold; color: #ea580c;">฿${data.totalVendorAmount.toLocaleString()}</div>
+                <div style="font-size: 10px; color: #666;">GP ตลาด ฿${data.totalVendorGP.toLocaleString()}</div>
+            </div>
+            <div class="summary-box">
+                <div>เงินสดไรเดอร์ส่งฮับ:</div>
+                <div style="font-size: 16px; font-weight: bold; color: #0284c7;">฿${data.netCashToHub.toLocaleString()}</div>
+                <div style="font-size: 10px; color: #666;">วิ่งส่งรวม ${data.totalTrips} เที่ยว</div>
+            </div>
+            <div class="summary-box">
+                <div>กำไรสุทธิฮับหลังหัก Fixed Cost:</div>
+                <div style="font-size: 16px; font-weight: bold; color: ${data.netProfit >= 0 ? '#7c3aed' : '#e11d48'};">฿${data.netProfit.toLocaleString()}</div>
+                <div style="font-size: 10px; color: #666;">(Margin ฿${data.hubNetMargin.toLocaleString()} - ต้นทุนคงที่ ฿${data.periodFixedCost.toLocaleString()})</div>
+            </div>
+        </div>
+
+        <h4 style="margin: 14px 0 4px; font-size: 12px; font-weight: bold;">1. สถิติรายวันตลอดช่วงเวลา (${data.days.length} วัน)</h4>
+        <table class="a4-table">
+            <thead>
+                <tr>
+                    <th>วันที่</th>
+                    <th class="text-center">ออเดอร์</th>
+                    <th class="text-right">ยอดขาย GMV</th>
+                    <th class="text-right">ค่าส่ง</th>
+                    <th class="text-right">GP ตลาด</th>
+                    <th class="text-right">โอนแผงค้า</th>
+                    <th class="text-right">กำไรสุทธิฮับ</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${dailyRowsHtml}
+            </tbody>
+        </table>
+
+        <h4 style="margin: 14px 0 4px; font-size: 12px; font-weight: bold;">2. แผงค้ายอดขายสูงสุด Top 10</h4>
+        <table class="a4-table">
+            <thead>
+                <tr>
+                    <th>แผงค้า</th>
+                    <th class="text-center">จำนวนออเดอร์</th>
+                    <th class="text-right">ยอดขายรวม</th>
+                    <th class="text-right">ยอดโอนสุทธิ</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${stallsRowsHtml}
+            </tbody>
+        </table>
+
+        <div style="margin-top: 25px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 10px; color: #666; display: flex; justify-content: space-between;">
+            <div>ระบบสารสนเทศบัญชีและปฏิบัติการตลาดสดฮับวิศิษฐ์ชัย (Talathub Operational Cloud)</div>
+            <div>หน้า 1 จาก 1</div>
+        </div>
+    `;
+
+    executePrintHtml(`รายงานวิเคราะห์${modeLabel} - ${data.periodTitle}`, content, false);
+}
+
+// Window bindings
+window.aggregatePeriodOperations = aggregatePeriodOperations;
+window.openPeriodAnalysisModal = openPeriodAnalysisModal;
+window.openWeeklyAnalysisModal = openWeeklyAnalysisModal;
+window.openMonthlyAnalysisModal = openMonthlyAnalysisModal;
+window.closePeriodAnalysisModal = closePeriodAnalysisModal;
+window.setPeriodAnalysisMode = setPeriodAnalysisMode;
+window.setPeriodAnalysisCurrent = setPeriodAnalysisCurrent;
+window.navigatePeriodAnalysis = navigatePeriodAnalysis;
+window.exportPeriodAnalysisCSV = exportPeriodAnalysisCSV;
+window.printPeriodAnalysis = printPeriodAnalysis;
 
 // Global attachment
 
