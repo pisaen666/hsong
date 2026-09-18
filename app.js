@@ -5346,7 +5346,8 @@ function generatePromptPayPayload(target, amount) {
     }
 
     // CRC-16/CCITT-FALSE (Polynomial 0x1021, Init 0xFFFF)
-    const raw = tag00 + tag01 + tag29 + tag58 + tag54 + tag53 + "6304";
+    // Standard Tag Order: 00 -> 01 -> 29 -> 53 -> 54 -> 58 -> 63
+    const raw = tag00 + tag01 + tag29 + tag53 + tag54 + tag58 + "6304";
     let crc = 0xFFFF;
     for (let i = 0; i < raw.length; i++) {
         crc ^= (raw.charCodeAt(i) << 8);
@@ -5365,21 +5366,67 @@ window.generatePromptPayPayload = generatePromptPayPayload;
 
 // ── Modal Controllers: Vendor PromptPay Payout Modal
 function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, stallNumber, grossAmount, gpAmount, gpRate) {
-    const gross = grossAmount !== undefined ? grossAmount : amount;
-    const gp = gpAmount !== undefined ? gpAmount : 0;
-    const rate = gpRate !== undefined ? gpRate : 10;
+    let finalStallId = stallId;
+    let finalStallName = stallName;
+    let finalAmount = amount;
+    let finalPhone = phone;
+    let finalOwner = ownerName;
+    let finalNumber = stallNumber;
+    let finalGross = grossAmount;
+    let finalGP = gpAmount;
+    let finalRate = gpRate;
+
+    // รองรับกรณีเรียกแบบ 4 พารามิเตอร์: openVendorPayoutModal(stallName, stallItemsTotal, stallGP, stallPayout)
+    if (typeof stallName === "number") {
+        finalStallName = stallId;
+        finalGross = stallName;
+        finalGP = typeof amount === "number" ? amount : 0;
+        finalAmount = typeof phone === "number" ? phone : Math.max(0, finalGross - finalGP);
+        finalStallId = null;
+        finalPhone = null;
+        finalOwner = null;
+        finalNumber = null;
+    }
+
+    // ดึงข้อมูลร้านค้าจากฐานข้อมูล 100 แผงค้า (ALL_100_STALLS / MARKET_DATA)
+    const meta = (typeof findStallInfo === "function") ? findStallInfo(finalStallId, finalStallName) : null;
+    if (meta) {
+        if (!finalStallId) finalStallId = meta.stallId;
+        if (!finalStallName || finalStallName === finalStallId) finalStallName = meta.stallName || finalStallName;
+        if (!finalOwner || finalOwner === "undefined") finalOwner = meta.ownerName;
+        if (!finalNumber || finalNumber === "undefined") finalNumber = meta.stallNumber;
+        if (!finalPhone || finalPhone === "undefined" || String(finalPhone).replace(/[^0-9]/g, "").length < 9) {
+            finalPhone = meta.phone;
+        }
+    }
+
+    finalStallName = finalStallName || "แผงค้าในตลาด";
+    finalOwner = finalOwner && finalOwner !== "undefined" ? finalOwner : "แม่ค้าประจำแผง";
+    finalNumber = finalNumber && finalNumber !== "undefined" ? finalNumber : "แผงตลาด";
+    finalPhone = finalPhone && finalPhone !== "undefined" ? String(finalPhone) : "089-123-4567";
+
+    let cleanPhone = finalPhone.replace(/[^0-9]/g, "");
+    if (cleanPhone.length < 9) {
+        cleanPhone = "0891234567";
+        finalPhone = "089-123-4567";
+    }
+
+    finalAmount = Number(finalAmount || 0);
+    finalGross = finalGross !== undefined && finalGross !== null ? Number(finalGross) : finalAmount;
+    finalGP = finalGP !== undefined && finalGP !== null ? Number(finalGP) : 0;
+    finalRate = finalRate !== undefined && finalRate !== null ? Number(finalRate) : 10;
 
     _currentPayoutStall = {
-        stallId,
-        stallName,
-        amount,
-        grossAmount: gross,
-        gpAmount: gp,
-        gpRate: rate,
-        phone: phone || "089-123-4567",
-        cleanPhone: (phone || "0891234567").replace(/[^0-9]/g, ""),
-        ownerName: ownerName || "แม่ค้าประจำแผง",
-        stallNumber: stallNumber || "แผงตลาด"
+        stallId: finalStallId,
+        stallName: finalStallName,
+        amount: finalAmount,
+        grossAmount: finalGross,
+        gpAmount: finalGP,
+        gpRate: finalRate,
+        phone: finalPhone,
+        cleanPhone: cleanPhone,
+        ownerName: finalOwner,
+        stallNumber: finalNumber
     };
 
     const modal = document.getElementById("vendor-payout-modal");
@@ -5400,18 +5447,44 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
     if (phoneEl) phoneEl.textContent = _currentPayoutStall.phone;
     if (amountEl) amountEl.textContent = `฿${_currentPayoutStall.amount.toLocaleString()}`;
     if (gpBreakdownEl) {
-        if (gp > 0) {
-            gpBreakdownEl.textContent = `ยอดขาย ฿${gross.toLocaleString()} (หัก GP ${rate}% ฿${gp.toLocaleString()} = โอนสุทธิ ฿${amount.toLocaleString()})`;
+        if (finalGP > 0) {
+            gpBreakdownEl.textContent = `ยอดขาย ฿${finalGross.toLocaleString()} (หัก GP ${finalRate}% ฿${finalGP.toLocaleString()} = โอนสุทธิ ฿${finalAmount.toLocaleString()})`;
         } else {
-            gpBreakdownEl.textContent = `ยอดขาย ฿${gross.toLocaleString()} (ไม่มีหักค่าธรรมเนียม)`;
+            gpBreakdownEl.textContent = `ยอดขาย ฿${finalGross.toLocaleString()} (ไม่มีหักค่าธรรมเนียม)`;
         }
     }
     if (ppNumEl) ppNumEl.textContent = _currentPayoutStall.phone;
 
     // สร้าง PromptPay QR Code มาตรฐาน BOT EMVCo 100% พร้อมยอดเงิน
+    // ใช้ระบบ Multi-Source Failover เพื่อให้ QR โหลดได้รวดเร็วและไม่มีปัญหา 404/บล็อก
     if (qrImg) {
         const payload = generatePromptPayPayload(_currentPayoutStall.cleanPhone, _currentPayoutStall.amount);
-        qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(payload)}`;
+        const encoded = encodeURIComponent(payload);
+
+        // 1. promptpay.io (ตรงสำหรับ PromptPay ไทย โหลดเร็วมากและรองรับทุกเบราว์เซอร์)
+        // 2. quickchart.io (Global CDN มาตรฐานสูง สำหรับ EMVCo payload)
+        // 3. api.qrserver.com (Fallback สำรอง)
+        const promptpayIoUrl = _currentPayoutStall.amount > 0
+            ? `https://promptpay.io/${_currentPayoutStall.cleanPhone}/${_currentPayoutStall.amount}.png`
+            : `https://promptpay.io/${_currentPayoutStall.cleanPhone}.png`;
+        const quickChartUrl = `https://quickchart.io/qr?size=250&text=${encoded}`;
+        const qrServerUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encoded}`;
+
+        const fallbackUrls = [promptpayIoUrl, quickChartUrl, qrServerUrl];
+        let urlIndex = 0;
+
+        function loadNextQR() {
+            if (urlIndex < fallbackUrls.length) {
+                qrImg.src = fallbackUrls[urlIndex++];
+            }
+        }
+
+        qrImg.onerror = function() {
+            console.warn(`PromptPay QR source failed, trying next fallback (${urlIndex}/${fallbackUrls.length})...`);
+            loadNextQR();
+        };
+
+        loadNextQR();
     }
 
     modal.classList.remove("hidden");
@@ -5443,7 +5516,8 @@ function confirmVendorPayoutSettled() {
     _saveVendorSettlementState(dateKey, settledVendors);
     closeVendorPayoutModal();
     showToast(`🎉 บันทึกการโอนเงินให้ ${_currentPayoutStall.stallName} (฿${_currentPayoutStall.amount.toLocaleString()}) สำเร็จ!`);
-    renderHubDailyReport(dateKey);
+    if (typeof renderHubDailyReport === "function") renderHubDailyReport(dateKey);
+    if (typeof renderHubSettlement === "function") renderHubSettlement();
 }
 
 function copyPayoutPromptPayNumber() {
@@ -21351,11 +21425,16 @@ function renderHubSettlement() {
         let totalStallGP = 0;
 
         order.stalls.forEach(stall => {
+            const meta = (typeof findStallInfo === "function") ? findStallInfo(stall.stallId, stall.name) : {};
             const activeItems = (stall.items || []).filter(item => !item.outOfStock);
             const oosItems = (stall.items || []).filter(item => item.outOfStock);
             const stallItemsTotal = activeItems.reduce((sum, item) => sum + (item.actualPrice !== undefined ? item.actualPrice : item.price), 0);
             const stallGP = Math.round(stallItemsTotal * (gpRate / 100));
             const stallPayout = Math.max(0, stallItemsTotal - stallGP);
+            const stallPhone = meta.phone || "089-123-4567";
+            const stallOwner = meta.ownerName || "แม่ค้าประจำแผง";
+            const stallNum = meta.stallNumber || "แผงตลาด";
+            const stallId = stall.stallId || meta.stallId || stall.name;
 
             vendorTotal += stallItemsTotal;
             totalStallGP += stallGP;
@@ -21372,7 +21451,7 @@ function renderHubSettlement() {
                     </div>
                     <div class="text-right">
                         <div class="font-black text-emerald-700 text-xs">โอนสุทธิ ฿${stallPayout}</div>
-                        <button type="button" onclick="openVendorPayoutModal('${stall.name.replace(/'/g, "\\'")}', ${stallItemsTotal}, ${stallGP}, ${stallPayout})" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
+                        <button type="button" onclick="openVendorPayoutModal('${stallId}', '${stall.name.replace(/'/g, "\\'")}', ${stallPayout}, '${stallPhone}', '${stallOwner.replace(/'/g, "\\'")}', '${stallNum}', ${stallItemsTotal}, ${stallGP}, ${gpRate})" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
                             โอนเคลียร์เงิน (PromptPay)
                         </button>
                     </div>
