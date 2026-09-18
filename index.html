@@ -4588,6 +4588,69 @@
         </div>
     </div>
 
+    <!-- ========================================== -->
+    <!-- HUB CLEAR ORDERS AUTH MODAL (ยืนยันรหัสผ่านเพื่อล้างออเดอร์) -->
+    <!-- ========================================== -->
+    <div id="hub-clear-orders-modal"
+        class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 hidden animate-fade-in"
+        onclick="if (event.target === this) closeHubClearOrdersModal();">
+        <div class="bg-white rounded-3xl max-w-sm w-full shadow-2xl p-5 sm:p-6 space-y-4 text-left border border-slate-200 animate-scale-up">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div class="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center text-sm shadow-xs shrink-0">
+                        <span class="material-symbols-outlined text-base">delete_sweep</span>
+                    </span>
+                    <div>
+                        <h3 class="font-black text-slate-900 text-sm sm:text-base leading-tight">ยืนยันรหัสผ่านล้างออเดอร์</h3>
+                        <p class="text-[10px] text-slate-400 font-bold">Role 2: ศูนย์จัดส่งและรวมสินค้า</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeHubClearOrdersModal()" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div class="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-rose-900 space-y-1">
+                    <div class="font-extrabold flex items-center gap-1.5 text-rose-700">
+                        <span class="material-symbols-outlined text-base shrink-0">warning</span>
+                        <span>ต้องการยืนยันรหัสผ่านก่อนดำเนินการ</span>
+                    </div>
+                    <p class="text-[11.5px] text-rose-800 leading-snug">
+                        การล้างออเดอร์จะลบข้อมูลคิวจัดของและรายการสั่งซื้อทั้งหมดในระบบ กรุณากรอกรหัสผ่านล็อกอินของฮับจัดส่งเพื่อยืนยัน
+                    </p>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="font-bold text-slate-700 block text-xs">รหัสผ่านล็อกอินฮับ (Hub Password):</label>
+                    <div class="relative">
+                        <input type="password" id="hub-clear-orders-pin-input" placeholder="กรอกรหัสผ่านประจำฮับ" maxlength="25"
+                            class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-center text-lg tracking-widest text-slate-900 focus:ring-2 focus:ring-rose-500 outline-none bg-slate-50 transition-all pr-10"
+                            autocomplete="off">
+                        <button type="button" onclick="toggleHubClearPasswordVisibility()"
+                            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                            title="แสดง/ซ่อนรหัสผ่าน">
+                            <span id="hub-clear-password-icon" class="material-symbols-outlined text-lg">visibility</span>
+                        </button>
+                    </div>
+                    <div id="hub-clear-orders-error" class="text-[11px] text-rose-600 font-bold hidden text-center pt-1"></div>
+                </div>
+
+                <div class="flex gap-2 pt-1">
+                    <button type="button" onclick="closeHubClearOrdersModal()"
+                        class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl transition-all text-xs cursor-pointer">
+                        ยกเลิก
+                    </button>
+                    <button type="button" id="hub-clear-orders-submit-btn" onclick="submitHubClearOrdersAuth()"
+                        class="flex-1 py-2.5 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1 cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">delete_sweep</span>
+                        <span>ยืนยันล้างออเดอร์</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
 
     <!-- ========================================== -->
@@ -4956,14 +5019,14 @@
             </div>
 
             <!-- PromptPay QR Code Image -->
-            <div class="text-center space-y-1.5 py-1">
-                <div class="relative inline-block bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
-                    <img id="payout-qr-image" src="https://promptpay.io/0891234567/1420.png" alt="PromptPay QR"
+            <div class="text-center space-y-2 py-1">
+                <div class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200/80 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold mx-auto shadow-2xs">
+                    <span class="material-symbols-outlined text-xs">qr_code_scanner</span>
+                    <span>PromptPay Official QR</span>
+                </div>
+                <div class="inline-block bg-white p-2.5 rounded-2xl border border-slate-200 shadow-sm">
+                    <img id="payout-qr-image" src="" alt="PromptPay QR"
                         class="w-44 h-44 object-contain mx-auto rounded-xl">
-                    <div
-                        class="absolute top-3 left-3 bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-2xs">
-                        พร้อมเพย์
-                    </div>
                 </div>
                 <div class="flex items-center justify-center gap-1.5 text-[11px]">
                     <span class="text-slate-500">หมายเลขพร้อมเพย์: <strong id="payout-promptpay-number"

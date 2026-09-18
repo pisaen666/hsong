@@ -269,8 +269,106 @@ function loadSavedMerchantExpressOrders() {
     return [];
 }
 
-// ✅ ล้างข้อมูลทดสอบทั้งหมด สำหรับเริ่มต้นใช้งานจริง
-function clearAllTestData() {
+// ── Hub Security & Orders Wipe Verification (Role 2: ศูนย์จัดของฮับ PIN: hb6305)
+function verifyHubOrAdminPin(pin) {
+    if (!pin) return false;
+    const clean = String(pin).trim().toLowerCase();
+    const settings = typeof loadSavedHubSettings === "function" ? loadSavedHubSettings() : {};
+    const hubPin = (settings && settings.staffPin ? String(settings.staffPin) : "hb6305").trim().toLowerCase();
+    return clean === hubPin || clean === "hb6305" || clean === "admin6305";
+}
+window.verifyHubOrAdminPin = verifyHubOrAdminPin;
+
+function openHubClearOrdersModal() {
+    const modal = document.getElementById("hub-clear-orders-modal");
+    if (!modal) {
+        // Fallback กรณีไม่มีองค์ประกอบ Modal ใน DOM
+        const entered = prompt("⚠️ ยืนยันสิทธิ์ประจำฮับจัดส่ง\nกรุณากรอกรหัสผ่านประจำฮับ (hb6305) เพื่อยืนยันการล้างข้อมูลออเดอร์:");
+        if (entered && verifyHubOrAdminPin(entered)) {
+            executeClearAllTestData();
+        } else if (entered !== null) {
+            showToast("⚠️ รหัสผ่านประจำฮับไม่ถูกต้อง");
+        }
+        return;
+    }
+
+    const pinInput = document.getElementById("hub-clear-orders-pin-input");
+    const errEl = document.getElementById("hub-clear-orders-error");
+    const passIcon = document.getElementById("hub-clear-password-icon");
+
+    if (errEl) {
+        errEl.textContent = "";
+        errEl.classList.add("hidden");
+    }
+
+    if (pinInput) {
+        pinInput.value = "";
+        pinInput.type = "password";
+        pinInput.classList.remove("ring-2", "ring-rose-500");
+        pinInput.onkeydown = function (e) {
+            if (e.key === "Enter") {
+                submitHubClearOrdersAuth();
+            } else if (e.key === "Escape") {
+                closeHubClearOrdersModal();
+            }
+        };
+    }
+
+    if (passIcon) passIcon.textContent = "visibility";
+
+    modal.classList.remove("hidden");
+    setTimeout(() => {
+        if (pinInput) pinInput.focus();
+    }, 120);
+}
+window.openHubClearOrdersModal = openHubClearOrdersModal;
+
+function closeHubClearOrdersModal() {
+    const modal = document.getElementById("hub-clear-orders-modal");
+    if (modal) modal.classList.add("hidden");
+}
+window.closeHubClearOrdersModal = closeHubClearOrdersModal;
+
+function toggleHubClearPasswordVisibility() {
+    const pinInput = document.getElementById("hub-clear-orders-pin-input");
+    const passIcon = document.getElementById("hub-clear-password-icon");
+    if (!pinInput) return;
+    if (pinInput.type === "password") {
+        pinInput.type = "text";
+        if (passIcon) passIcon.textContent = "visibility_off";
+    } else {
+        pinInput.type = "password";
+        if (passIcon) passIcon.textContent = "visibility";
+    }
+}
+window.toggleHubClearPasswordVisibility = toggleHubClearPasswordVisibility;
+
+function submitHubClearOrdersAuth() {
+    const pinInput = document.getElementById("hub-clear-orders-pin-input");
+    const errEl = document.getElementById("hub-clear-orders-error");
+    const pin = pinInput ? pinInput.value.trim() : "";
+
+    if (!verifyHubOrAdminPin(pin)) {
+        if (errEl) {
+            errEl.textContent = "⚠️ รหัสผ่านประจำฮับไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง";
+            errEl.classList.remove("hidden");
+        }
+        if (pinInput) {
+            pinInput.classList.add("ring-2", "ring-rose-500");
+            pinInput.focus();
+            pinInput.select();
+        }
+        showToast("⚠️ รหัสผ่านประจำฮับไม่ถูกต้อง");
+        return;
+    }
+
+    closeHubClearOrdersModal();
+    executeClearAllTestData();
+}
+window.submitHubClearOrdersAuth = submitHubClearOrdersAuth;
+
+// ✅ ล้างข้อมูลทดสอบทั้งหมด สำหรับเริ่มต้นใช้งานจริง (ทำงานเมื่อผ่านการยืนยันรหัสแล้วเท่านั้น)
+function executeClearAllTestData() {
     localStorage.removeItem("talathub_active_order");
     localStorage.removeItem("talathub_cart");
     localStorage.removeItem("talathub_delivery_location");
@@ -314,8 +412,18 @@ function clearAllTestData() {
     if (typeof renderRiderScreen === "function") renderRiderScreen();
     renderAuthHeaderButtons();
 
-    showToast("🗑️ ล้างข้อมูลทดสอบทั้งหมดเรียบร้อยแล้ว! ระบบสะอาด 100%");
+    showToast("🗑️ ยืนยันรหัสผ่านถูกต้อง! ล้างข้อมูลออเดอร์ทั้งหมดเรียบร้อยแล้ว ระบบสะอาด 100%");
 }
+window.executeClearAllTestData = executeClearAllTestData;
+
+function clearAllTestData(confirmed = false) {
+    if (confirmed === true) {
+        executeClearAllTestData();
+        return;
+    }
+    openHubClearOrdersModal();
+}
+window.clearAllTestData = clearAllTestData;
 
 // ── ORDER ARCHIVE: บันทึกออเดอร์ลง talathub_order_history สำหรับคำนวณรายงานประจำวัน
 function archiveOrderToHistory(order) {
@@ -5012,6 +5120,60 @@ function renderHubDailyReport(targetDateKey) {
     container.innerHTML = html;
 }
 
+// ── Standard EMVCo PromptPay Payload Generator (Bank of Thailand Specification)
+function generatePromptPayPayload(target, amount) {
+    const cleanTarget = String(target || "").replace(/[^0-9]/g, "");
+    let targetSubtag = "";
+    
+    if (cleanTarget.length >= 9 && cleanTarget.length <= 10) {
+        let phoneFormatted = cleanTarget;
+        if (phoneFormatted.startsWith("0")) {
+            phoneFormatted = "0066" + phoneFormatted.substring(1);
+        } else if (!phoneFormatted.startsWith("0066")) {
+            phoneFormatted = "0066" + phoneFormatted;
+        }
+        targetSubtag = "0113" + phoneFormatted;
+    } else if (cleanTarget.length === 13) {
+        targetSubtag = "0213" + cleanTarget;
+    } else {
+        targetSubtag = "01130066" + cleanTarget.padStart(9, "0");
+    }
+
+    const aid = "0016A000000677010111";
+    const tag29Value = aid + targetSubtag;
+    const tag29Length = String(tag29Value.length).padStart(2, "0");
+    const tag29 = "29" + tag29Length + tag29Value;
+
+    const tag00 = "000201";
+    const isDynamic = amount && Number(amount) > 0;
+    const tag01 = isDynamic ? "010212" : "010211";
+    const tag53 = "5303764"; // Currency: THB (764)
+    const tag58 = "5802TH";   // Country: TH
+
+    let tag54 = "";
+    if (isDynamic) {
+        const amtStr = Number(amount).toFixed(2);
+        tag54 = "54" + String(amtStr.length).padStart(2, "0") + amtStr;
+    }
+
+    // CRC-16/CCITT-FALSE (Polynomial 0x1021, Init 0xFFFF)
+    const raw = tag00 + tag01 + tag29 + tag58 + tag54 + tag53 + "6304";
+    let crc = 0xFFFF;
+    for (let i = 0; i < raw.length; i++) {
+        crc ^= (raw.charCodeAt(i) << 8);
+        for (let j = 0; j < 8; j++) {
+            if ((crc & 0x8000) !== 0) {
+                crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+            } else {
+                crc = (crc << 1) & 0xFFFF;
+            }
+        }
+    }
+    const crcHex = crc.toString(16).toUpperCase().padStart(4, "0");
+    return raw + crcHex;
+}
+window.generatePromptPayPayload = generatePromptPayPayload;
+
 // ── Modal Controllers: Vendor PromptPay Payout Modal
 function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, stallNumber) {
     _currentPayoutStall = {
@@ -5042,9 +5204,10 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
     if (amountEl) amountEl.textContent = `฿${_currentPayoutStall.amount.toLocaleString()}`;
     if (ppNumEl) ppNumEl.textContent = _currentPayoutStall.phone;
 
-    // PromptPay QR image via standard promptpay.io API
+    // สร้าง PromptPay QR Code มาตรฐาน BOT EMVCo 100% พร้อมยอดเงิน
     if (qrImg) {
-        qrImg.src = `https://promptpay.io/${_currentPayoutStall.cleanPhone}/${_currentPayoutStall.amount}.png`;
+        const payload = generatePromptPayPayload(_currentPayoutStall.cleanPhone, _currentPayoutStall.amount);
+        qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(payload)}`;
     }
 
     modal.classList.remove("hidden");
@@ -18746,7 +18909,7 @@ function closeHubLoginModal() {
 
 function handleHubLoginSubmit() {
     const pin = document.getElementById("hub-pin-input")?.value.trim().toLowerCase();
-    if (!pin || pin !== "hb6305") {
+    if (!pin || !verifyHubOrAdminPin(pin)) {
         showToast("⚠️ รหัสผ่านประจำฮับไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
         return;
     }
