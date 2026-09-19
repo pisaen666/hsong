@@ -21511,6 +21511,73 @@ function openLineShareApp() {
 // ==========================================
 // HUB / DISPATCH SYSTEM DYNAMIC LOGIC
 // ==========================================
+
+function createDemoMerchantExpressOrder() {
+    const demoId = "EXP-" + Date.now().toString().slice(-4);
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const demoOrder = {
+        orderId: demoId,
+        orderType: "MERCHANT_EXPRESS",
+        createdAt: now.toISOString(),
+        time: `${timeStr} น.`,
+        originStall: {
+            stallId: "stall_veg",
+            stallName: "แผงผักสดป้าสมร",
+            stallNumber: "A-01",
+            zone: "โซน A (ผักสด)",
+            ownerName: "ป้าสมร",
+            ownerPhone: "081-234-5678"
+        },
+        customerName: "คุณอรพิน (ลูกค้าทดสอบ)",
+        customerPhone: "089-888-9999",
+        address: "บ้านเลขที่ 124/5 หมู่ 2 ซอยเทศบาล 4 (ปักหมุด GPS)",
+        houseNumber: "124/5",
+        subdistrict: "ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
+        lat: 13.3105,
+        lng: 101.1250,
+        distanceKm: 1.2,
+        deliveryFee: 20,
+        isCod: false,
+        codAmount: 0,
+        isPaid: true,
+        paymentStatus: "paid",
+        itemDesc: "ผักสดแพ็คกล่องเรียบร้อย (พร้อมส่ง)",
+        grandTotal: 20,
+        paymentDesc: "ชำระค่าส่งล่วงหน้าแล้ว ฿20 (PromptPay)",
+        status: "waiting_rider",
+        assignedRider: null,
+        stalls: [{
+            name: "แผงผักสดป้าสมร",
+            stallNumber: "A-01",
+            items: [{ name: "ผักสดแพ็คกล่องเรียบร้อย", price: 20, actualPrice: 20, picked: true }]
+        }],
+        savedAt: Date.now()
+    };
+
+    state.activeOrder = demoOrder;
+    state.merchantExpressOrders = state.merchantExpressOrders || [];
+    state.merchantExpressOrders.unshift(demoOrder);
+    state.orders = state.orders || [];
+    state.orders.unshift(demoOrder);
+
+    try {
+        localStorage.setItem("hsong_active_order", JSON.stringify(demoOrder));
+        localStorage.setItem("talathub_active_order", JSON.stringify(demoOrder));
+        localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
+        localStorage.setItem("talathub_order_history", JSON.stringify(state.orders.slice(0, 30)));
+    } catch(e) {}
+
+    saveActiveOrderToStorage(demoOrder);
+    if (typeof syncOrderToCloud === "function") {
+        syncOrderToCloud(demoOrder);
+    }
+
+    showToast(`🛵 สร้างงานด่วนทดสอบ ${demoId} สำเร็จ! ข้อมูลซิงค์ขึ้น Cloud เรียบร้อยแล้ว`);
+    renderHubPickingList();
+}
+window.createDemoMerchantExpressOrder = createDemoMerchantExpressOrder;
+
 function renderHubPickingList() {
     const container = document.getElementById("hub-content-picking");
     const queueBadge = document.getElementById("hub-queue-count");
@@ -21579,11 +21646,15 @@ function renderHubPickingList() {
                     เมื่อแผงค้าเรียกไรเดอร์ หรือลูกค้าสั่งซื้อของสดจากหน้าตลาด ข้อมูลงานจะปรากฏที่นี่แบบเรียลไทม์
                 </p>
                 <div class="pt-3 flex flex-col gap-2 max-w-xs mx-auto">
-                    <button onclick="goToHomePage()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all">
+                    <button type="button" onclick="createDemoMerchantExpressOrder()" class="w-full bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white font-black py-3 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-base">delivery_dining</span>
+                        <span>⚡ กดสร้างออเดอร์ร้านค้าเรียกไรเดอร์ (ทดสอบด่วน)</span>
+                    </button>
+                    <button type="button" onclick="goToHomePage()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-base">storefront</span>
                         <span>ไปหน้าตลาดสดเพื่อสั่งซื้อสินค้า</span>
                     </button>
-                    <button onclick="clearAllTestData()" class="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold py-2 rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-1">
+                    <button type="button" onclick="clearAllTestData()" class="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold py-2 rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-sm">delete_sweep</span>
                         <span>ล้างข้อมูลทดสอบ เริ่มต้นใหม่</span>
                     </button>
