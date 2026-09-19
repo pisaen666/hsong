@@ -5509,6 +5509,10 @@ function confirmVendorPayoutSettled() {
         isSettled: true,
         settledAt: Date.now(),
         amount: _currentPayoutStall.amount,
+        grossAmount: _currentPayoutStall.grossAmount || _currentPayoutStall.amount,
+        gpAmount: _currentPayoutStall.gpAmount || 0,
+        gpRate: _currentPayoutStall.gpRate || 10,
+        orderCount: _currentPayoutStall.orderCount || 0,
         stallName: _currentPayoutStall.stallName,
         stallId: _currentPayoutStall.stallId,
         phone: _currentPayoutStall.phone
@@ -12990,12 +12994,26 @@ function renderMerchantSettlement() {
 
         const isSettled = Boolean(settledInfo && settledInfo.isSettled);
 
+        // ถ้ายังไม่พบออเดอร์ในเครื่อง (ร้านค้าไม่มี localStorage ของออเดอร์ฝั่งลูกค้า)
+        // ให้ใช้ข้อมูลจาก settlement record ที่ฮับบันทึกไว้ใน Firebase แทน
+        if (grossSales === 0 && settledInfo && settledInfo.grossAmount) {
+            grossSales = settledInfo.grossAmount;
+        }
+        if (orderCount === 0 && settledInfo && settledInfo.orderCount) {
+            orderCount = settledInfo.orderCount;
+        }
+
         // GP Calculation (มาตรฐานแพลตฟอร์ม 10%)
         const hubSettings = (typeof loadSavedHubSettings === "function") ? loadSavedHubSettings() : {};
-        const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number" && hubSettings.merchantGP > 0) ? hubSettings.merchantGP : 10;
-        const hubFee = Math.round(grossSales * (gpRate / 100));
+        const gpRate = (settledInfo && settledInfo.gpRate > 0) ? settledInfo.gpRate
+            : ((hubSettings && typeof hubSettings.merchantGP === "number" && hubSettings.merchantGP > 0) ? hubSettings.merchantGP : 10);
+        // ใช้ gpAmount จาก hub record ก่อน (แม่นยำกว่า) แล้วค่อย fallback คำนวณ
+        const hubFee = (settledInfo && settledInfo.gpAmount !== undefined) ? settledInfo.gpAmount : Math.round(grossSales * (gpRate / 100));
         const calculatedNetPayout = Math.max(0, grossSales - hubFee);
-        const finalPayoutAmount = (settledInfo && settledInfo.amount !== undefined && settledInfo.amount <= calculatedNetPayout) ? settledInfo.amount : calculatedNetPayout;
+        // ใช้ยอดโอนที่ฮับบันทึกไว้เสมอ — ถูกต้องที่สุด ไม่มีเงื่อนไข <=
+        const finalPayoutAmount = (settledInfo && settledInfo.amount !== undefined)
+            ? settledInfo.amount
+            : calculatedNetPayout;
 
         const bank = (stall && stall.bankInfo) ? stall.bankInfo : {
             bankName: (stall && (stall.bankName || stall.bank)) || "กสิกรไทย (KBank)",
