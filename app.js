@@ -469,30 +469,88 @@ function saveActiveOrderToStorage(order) {
     } catch (e) { }
 
     // 2. Firebase — push order เพื่อให้ Hub/PC เห็นทันที
-    if (isFirebaseReady() && order && !isMockOrder(order)) {
-        const orderKey = toFirebaseKey(order.orderId);
-        try {
-            const cleanOrder = JSON.parse(JSON.stringify({
-                ...order,
-                savedAt: order.savedAt || Date.now(),
-                status: order.status || "picking"
-            }));
-            db.ref(`orders/${orderKey}`).set(cleanOrder).catch(e => console.warn("Firebase order save failed:", e));
-        } catch(e) {
-            console.warn("Firebase cleanOrder serialize error:", e);
-        }
-    } else if (isFirebaseReady() && !order) {
-        // ไม่ลบ เพื่อให้ประวัติยังอยู่
+    if (order && !isMockOrder(order)) {
+        syncOrderToCloud(order);
     }
+}
+
+// ── CLOUD ORDER SYNC: ซิงค์ออเดอร์เข้า Firebase Realtime Database (ทั้ง WebSocket & REST Fallback)
+function syncOrderToCloud(order) {
+    if (!order || !order.orderId || isMockOrder(order)) return;
+    const orderKey = toFirebaseKey(order.orderId);
+
+    // ทำสำเนาข้อมูลที่ปลอดภัยสำหรับ JSON
+    let cleanOrder;
+    try {
+        cleanOrder = JSON.parse(JSON.stringify({
+            ...order,
+            savedAt: order.savedAt || Date.now(),
+            status: order.status || "waiting_rider"
+        }));
+    } catch(e) {
+        cleanOrder = { ...order, savedAt: order.savedAt || Date.now(), status: order.status || "waiting_rider" };
+    }
+
+    // อัปเดตใน memory cache ของ browser ทันที
+    if (!window._cachedFirebaseOrders) window._cachedFirebaseOrders = [];
+    const cacheIdx = window._cachedFirebaseOrders.findIndex(o => o && o.orderId === order.orderId);
+    if (cacheIdx >= 0) {
+        window._cachedFirebaseOrders[cacheIdx] = { ...window._cachedFirebaseOrders[cacheIdx], ...cleanOrder };
+    } else {
+        window._cachedFirebaseOrders.unshift(cleanOrder);
+    }
+
+    // 1. ส่งผ่าน Firebase SDK
+    if (isFirebaseReady() && typeof db !== "undefined" && db) {
+        db.ref(`orders/${orderKey}`).set(cleanOrder)
+            .then(() => {
+                console.log(`☁️ Firebase RTDB sync success for order: ${order.orderId}`);
+            })
+            .catch(e => {
+                console.warn("Firebase SDK save failed, using REST fallback:", e);
+                _syncOrderViaREST(orderKey, cleanOrder);
+            });
+    } else {
+        _syncOrderViaREST(orderKey, cleanOrder);
+    }
+}
+window.syncOrderToCloud = syncOrderToCloud;
+
+function _syncOrderViaREST(orderKey, orderData) {
+    fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/orders/${orderKey}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderData)
+    }).then(res => {
+        if (res.ok) console.log(`☁️ REST sync success for order: ${orderKey}`);
+    }).catch(err => console.warn("REST sync failed:", err));
 }
 
 // ── ORDER STATUS: อัปเดต status ใน Firebase (Hub อัปเดตเพื่อให้มือถือเห็น)
 function updateOrderStatusInFirebase(orderId, newStatus) {
-    if (!isFirebaseReady() || !orderId) return;
+    if (!orderId) return;
     const orderKey = toFirebaseKey(orderId);
-    db.ref(`orders/${orderKey}/status`).set(newStatus)
-      .catch(e => console.warn("Firebase status update failed:", e));
+    const updatePayload = { status: newStatus, updatedAt: Date.now() };
+
+    if (isFirebaseReady() && typeof db !== "undefined" && db) {
+        db.ref(`orders/${orderKey}`).update(updatePayload)
+            .catch(e => {
+                console.warn("Firebase status update SDK error, trying REST:", e);
+                fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/orders/${orderKey}/status.json`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(newStatus)
+                }).catch(() => {});
+            });
+    } else {
+        fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/orders/${orderKey}/status.json`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newStatus)
+        }).catch(() => {});
+    }
 }
+window.updateOrderStatusInFirebase = updateOrderStatusInFirebase;
 
 // ✅ ปุ่ม "ซิงค์สด" — ดึงออเดอร์ล่าสุดจาก Firebase Cloud หรือ LocalStorage มาอัปเดตหน้าจอ Hub ทันที
 async function syncLatestOrderFromCloud() {
@@ -501,14 +559,29 @@ async function syncLatestOrderFromCloud() {
 
         // 1. ตรวจสอบและดึงข้อมูลจาก Firebase Realtime Database (Cloud)
         if (isFirebaseReady()) {
-            const snapshot = await db.ref("orders").limitToLast(10).once("value");
+            const snapshot = await db.ref("orders").limitToLast(50).once("value");
             const data = snapshot.val();
             if (data) {
-                // หา order ล่าสุดที่ยังไม่ delivered และมี savedAt และไม่ใช่ mock order
-                const ordersList = Object.values(data).filter(o => o && o.orderId && o.status !== "delivered" && !isMockOrder(o));
-                if (ordersList.length > 0) {
-                    ordersList.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-                    syncedOrder = ordersList[0];
+                const ordersList = Object.values(data).filter(o => o && o.orderId && !isMockOrder(o));
+                window._cachedFirebaseOrders = ordersList;
+
+                // Sync active Express Orders (งานด่วนแผงค้า)
+                const activeExp = ordersList.filter(o => (o.orderType === "MERCHANT_EXPRESS" || (o.orderId && o.orderId.startsWith("EXP-"))) && o.status !== "delivered");
+                state.merchantExpressOrders = state.merchantExpressOrders || [];
+                activeExp.forEach(exp => {
+                    const idx = state.merchantExpressOrders.findIndex(e => e.orderId === exp.orderId);
+                    if (idx >= 0) state.merchantExpressOrders[idx] = { ...state.merchantExpressOrders[idx], ...exp };
+                    else state.merchantExpressOrders.unshift(exp);
+                });
+                try {
+                    localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
+                } catch(e) {}
+
+                // หา grocery order ล่าสุดที่ยังไม่ delivered
+                const activeGroceries = ordersList.filter(o => o.orderType !== "MERCHANT_EXPRESS" && !o.orderId.startsWith("EXP-") && o.status !== "delivered");
+                if (activeGroceries.length > 0) {
+                    activeGroceries.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+                    syncedOrder = activeGroceries[0];
                 }
             }
         }
@@ -518,13 +591,17 @@ async function syncLatestOrderFromCloud() {
             syncedOrder = loadSavedActiveOrder();
         }
 
-        // โหลดข้อมูล Express Orders ของแผงค้าด้วย
+        // โหลดข้อมูล Express Orders ของแผงค้าจาก LocalStorage เสริม
         try {
             const expRaw = localStorage.getItem("hsong_merchant_express_orders");
             if (expRaw) {
                 const parsedExp = JSON.parse(expRaw);
                 if (Array.isArray(parsedExp)) {
-                    state.merchantExpressOrders = parsedExp.filter(o => o && o.orderId && !isMockOrder(o));
+                    parsedExp.filter(o => o && o.orderId && !isMockOrder(o)).forEach(exp => {
+                        if (!state.merchantExpressOrders.some(e => e.orderId === exp.orderId)) {
+                            state.merchantExpressOrders.push(exp);
+                        }
+                    });
                 }
             }
         } catch(e) {}
@@ -533,25 +610,30 @@ async function syncLatestOrderFromCloud() {
         if (syncedOrder && syncedOrder.orderId && !isMockOrder(syncedOrder)) {
             state.activeOrder = syncedOrder;
             try { localStorage.setItem("talathub_active_order", JSON.stringify(syncedOrder)); } catch (e) {}
-        } else {
-            state.activeOrder = null;
         }
 
-        // อัปเดตหน้าจอ Hub ทันที
+        // อัปเดตหน้าจอ Hub และบทบาทต่างๆ ทันที
         if (typeof renderHubPickingList === "function") renderHubPickingList();
         if (typeof renderHubSettlement === "function") renderHubSettlement();
         if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
             
+        const activeExpCount = (state.merchantExpressOrders || []).filter(o => o && o.status !== "delivered").length;
+        const totalCount = activeExpCount + (syncedOrder ? 1 : 0);
+
         const hubBadge = document.getElementById("hub-badge-count");
         if (hubBadge) {
-            hubBadge.classList.remove("hidden");
-            hubBadge.textContent = "SYNCED";
+            if (totalCount > 0) {
+                hubBadge.classList.remove("hidden");
+                hubBadge.textContent = "SYNCED";
+            }
         }
             
-        if (syncedOrder && syncedOrder.orderId) {
+        if (activeExpCount > 0 && syncedOrder) {
+            showToast(`✅ ซิงค์สำเร็จ! ตรวจพบงานด่วนแผงค้า ${activeExpCount} งาน และออเดอร์จัดของ ${syncedOrder.orderId}`);
+        } else if (activeExpCount > 0) {
+            showToast(`✅ ซิงค์สำเร็จ! ตรวจพบงานด่วนแผงค้า ${activeExpCount} รายการเข้าสู่คิวจัดส่งแล้ว`);
+        } else if (syncedOrder && syncedOrder.orderId) {
             showToast(`✅ ซิงค์สำเร็จ! ดึงออเดอร์ ${syncedOrder.orderId} เข้าสู่ใบจัดของแล้ว`);
-        } else if (state.merchantExpressOrders && state.merchantExpressOrders.length > 0) {
-            showToast(`✅ ซิงค์สำเร็จ! ตรวจพบงานด่วนแผงค้า ${state.merchantExpressOrders.length} รายการ`);
         } else {
             showToast("ℹ️ ระบบคลาวด์ปกติ: ยังไม่มีออเดอร์ใหม่ที่ค้างจัด");
         }
@@ -569,16 +651,51 @@ async function syncLatestOrderFromCloud() {
     }
 }
 
-// ✅ ซิงค์ประวัติออเดอร์ทั้งหมดจาก Firebase Cloud เพื่อนำมาคำนวณรายงานแอดมิน Tab 1 และ Tab 2
+// ✅ ซิงค์ประวัติออเดอร์ทั้งหมดจาก Firebase Cloud เพื่อนำมาคำนวณรายงานแอดมิน Tab 1 และ Tab 2 และคิวฮับ
 async function syncAdminOrdersFromCloud() {
-    if (!isFirebaseReady()) return;
     try {
-        const snap = await db.ref("orders").limitToLast(200).once("value");
-        const val = snap.val();
-        if (val && typeof val === "object") {
-            const list = Object.values(val).filter(o => o && o.orderId && !isMockOrder(o));
+        let list = [];
+        if (isFirebaseReady() && typeof db !== "undefined" && db) {
+            const snap = await db.ref("orders").limitToLast(200).once("value");
+            const val = snap.val();
+            if (val && typeof val === "object") {
+                list = Object.values(val).filter(o => o && o.orderId && !isMockOrder(o));
+            }
+        } else {
+            // Direct REST fetch fallback
+            const res = await fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/orders.json");
+            if (res.ok) {
+                const val = await res.json();
+                if (val && typeof val === "object") {
+                    list = Object.values(val).filter(o => o && o.orderId && !isMockOrder(o));
+                }
+            }
+        }
+
+        if (list.length > 0) {
             window._cachedFirebaseOrders = list;
             
+            // Sync Merchant Express Orders
+            const activeExp = list.filter(o => (o.orderType === "MERCHANT_EXPRESS" || (o.orderId && o.orderId.startsWith("EXP-"))) && o.status !== "delivered");
+            state.merchantExpressOrders = state.merchantExpressOrders || [];
+            activeExp.forEach(exp => {
+                const idx = state.merchantExpressOrders.findIndex(e => e.orderId === exp.orderId);
+                if (idx >= 0) state.merchantExpressOrders[idx] = { ...state.merchantExpressOrders[idx], ...exp };
+                else state.merchantExpressOrders.unshift(exp);
+            });
+            try {
+                localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
+            } catch(e) {}
+
+            // Sync Active Grocery Order if none currently
+            if (!state.activeOrder || state.activeOrder.status === "delivered") {
+                const activeOrders = list.filter(o => o.status !== "delivered");
+                if (activeOrders.length > 0) {
+                    activeOrders.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+                    state.activeOrder = activeOrders[0];
+                }
+            }
+
             // Merge into talathub_order_history so localStorage and reports stay updated
             let hist = [];
             try {
@@ -600,6 +717,21 @@ async function syncAdminOrdersFromCloud() {
                     localStorage.setItem("talathub_order_history", JSON.stringify(hist));
                 } catch(e) {}
             }
+
+            // Update queue badges
+            const expCount = (state.merchantExpressOrders || []).filter(o => o && o.status !== "delivered").length;
+            const totalActive = expCount + (state.activeOrder && state.activeOrder.status !== "delivered" && state.activeOrder.orderType !== "MERCHANT_EXPRESS" ? 1 : 0);
+            const queueBadge = document.getElementById("hub-queue-count");
+            if (queueBadge) queueBadge.textContent = String(totalActive);
+            const hubBadge = document.getElementById("hub-badge-count");
+            if (hubBadge) {
+                if (totalActive > 0) {
+                    hubBadge.classList.remove("hidden");
+                    hubBadge.textContent = totalActive > 1 ? String(totalActive) : "NEW";
+                } else {
+                    hubBadge.classList.add("hidden");
+                }
+            }
         }
     } catch(e) {
         console.warn("syncAdminOrdersFromCloud error:", e);
@@ -618,9 +750,54 @@ function listenToFirebaseOrdersForAdmin() {
             if (val && typeof val === "object") {
                 const list = Object.values(val).filter(o => o && o.orderId && !isMockOrder(o));
                 window._cachedFirebaseOrders = list;
-                if (state.currentRoleView === "admin") {
+
+                // Sync Merchant Express Orders
+                const activeExp = list.filter(o => (o.orderType === "MERCHANT_EXPRESS" || (o.orderId && o.orderId.startsWith("EXP-"))) && o.status !== "delivered");
+                state.merchantExpressOrders = state.merchantExpressOrders || [];
+                activeExp.forEach(exp => {
+                    const idx = state.merchantExpressOrders.findIndex(e => e.orderId === exp.orderId);
+                    if (idx >= 0) state.merchantExpressOrders[idx] = { ...state.merchantExpressOrders[idx], ...exp };
+                    else state.merchantExpressOrders.unshift(exp);
+                });
+                try {
+                    localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
+                } catch(e) {}
+
+                // Active order update
+                if (!state.activeOrder || state.activeOrder.status === "delivered") {
+                    const activeOrders = list.filter(o => o.status !== "delivered");
+                    if (activeOrders.length > 0) {
+                        activeOrders.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+                        state.activeOrder = activeOrders[0];
+                    }
+                }
+
+                // Update queue badge
+                const expCount = (state.merchantExpressOrders || []).filter(o => o && o.status !== "delivered").length;
+                const totalActive = expCount + (state.activeOrder && state.activeOrder.status !== "delivered" && state.activeOrder.orderType !== "MERCHANT_EXPRESS" ? 1 : 0);
+                const queueBadge = document.getElementById("hub-queue-count");
+                if (queueBadge) queueBadge.textContent = String(totalActive);
+                const hubBadge = document.getElementById("hub-badge-count");
+                if (hubBadge) {
+                    if (totalActive > 0) {
+                        hubBadge.classList.remove("hidden");
+                        hubBadge.textContent = totalActive > 1 ? String(totalActive) : "NEW";
+                    } else {
+                        hubBadge.classList.add("hidden");
+                    }
+                }
+
+                const currentRole = state.currentRole || state.currentRoleView;
+                if (currentRole === "admin") {
                     if (typeof renderHubDailyReport === "function") renderHubDailyReport();
                     if (typeof renderAdminAnalytics === "function") renderAdminAnalytics();
+                } else if (currentRole === "hub") {
+                    if (typeof renderHubPickingList === "function") renderHubPickingList();
+                    if (typeof renderHubSettlement === "function") renderHubSettlement();
+                } else if (currentRole === "merchant") {
+                    if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
+                } else if (currentRole === "rider") {
+                    if (typeof renderRiderScreen === "function") renderRiderScreen();
                 }
             }
         });
@@ -4327,11 +4504,12 @@ function aggregateDailyOperations(targetDateKey) {
         if (isDelivered) summary.completedOrders++;
         else summary.pendingOrders++;
 
-        const orderTotal = Number(o.grandTotal || o.total || o.netTotal || 0);
-        const delFee = Number(o.deliveryFee || 20);
+        const isExpOrder = o.orderType === "MERCHANT_EXPRESS" || (o.orderId && o.orderId.startsWith("EXP-"));
+        const orderTotal = Number(o.grandTotal || o.total || o.netTotal || o.deliveryFee || 0);
+        const delFee = Number(o.deliveryFee || (isExpOrder ? orderTotal : 20));
         const discount = Number(o.discount || 0);
         const refundAmt = Number(o.refundCashTotal || o.cashRefund || 0);
-        const expFee = Number(o.expressFee || ((o.isExpress || o.orderType === "CUSTOMER_EXPRESS" || o.orderType === "MERCHANT_EXPRESS") ? 20 : 0));
+        const expFee = Number(o.expressFee || (isExpOrder ? delFee : ((o.isExpress || o.orderType === "CUSTOMER_EXPRESS") ? 20 : 0)));
 
         summary.totalCustomerGMV += orderTotal;
         summary.totalDeliveryFees += delFee;
@@ -4353,8 +4531,8 @@ function aggregateDailyOperations(targetDateKey) {
         }
 
         // จัดกลุ่มไรเดอร์
-        const rName = o.riderName || (o.status === "delivered" || o.status === "dispatched" || o.status === "on_the_way" ? "ไรเดอร์ประจำชุมชน" : "รอไรเดอร์รับงาน");
-        const rPhone = o.riderPhone || "-";
+        const rName = o.riderName || (o.assignedRider && o.assignedRider.name) || (o.status === "delivered" || o.status === "dispatched" || o.status === "on_the_way" ? "ไรเดอร์ประจำชุมชน" : "รอไรเดอร์รับงาน");
+        const rPhone = o.riderPhone || (o.assignedRider && o.assignedRider.phone) || "-";
         if (!ridersMap[rName]) {
             const isRiderSettled = Boolean(settledRiders[rName]?.isSettled);
             ridersMap[rName] = {
@@ -4369,7 +4547,7 @@ function aggregateDailyOperations(targetDateKey) {
                 settledAt: settledRiders[rName]?.settledAt || null
             };
         }
-        if (o.status === "delivered" || o.status === "on_the_way" || o.status === "dispatched") {
+        if (o.status === "delivered" || o.status === "on_the_way" || o.status === "dispatched" || o.status === "assigned") {
             ridersMap[rName].tripsCount++;
             ridersMap[rName].riderFeeEarned += 40; // ค่ารอบ ฿40
             if (pType === "cod" || pType === "cash") {
@@ -4378,8 +4556,8 @@ function aggregateDailyOperations(targetDateKey) {
             ridersMap[rName].refundHanded += refundAmt;
         }
 
-        // จัดกลุ่มแผงค้า (Vendor)
-        if (o.stalls && Array.isArray(o.stalls)) {
+        // จัดกลุ่มแผงค้า (Vendor) — เฉพาะออเดอร์ของสดทั่วไป (งานด่วนร้านค้าไม่ใช่งานขายสินค้าของฮับ)
+        if (!isExpOrder && o.stalls && Array.isArray(o.stalls)) {
             o.stalls.forEach(st => {
                 const sKey = st.stallId || st.name;
                 const meta = findStallInfo(st.stallId, st.name);
@@ -14181,12 +14359,42 @@ function handleMerchantSlipUpload(event) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function(e) {
-        _merchantSlipBase64 = e.target.result;
-        const previewBox = document.getElementById("m-pay-slip-preview-box");
-        const slipImg = document.getElementById("m-pay-slip-img");
-        if (previewBox) previewBox.classList.remove("hidden");
-        if (slipImg) slipImg.src = _merchantSlipBase64;
-        showToast("✅ แนบสลิปโอนเงินเรียบร้อย");
+        const rawBase64 = e.target.result;
+        // ย่อขนาดภาพผ่าน Canvas เพื่อประหยัด Bandwidth และซิงค์ข้ามคลาวด์ได้ทันที
+        const img = new Image();
+        img.onload = function() {
+            try {
+                const canvas = document.createElement("canvas");
+                const maxW = 600;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxW) {
+                    h = Math.round((h * maxW) / w);
+                    w = maxW;
+                }
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, w, h);
+                _merchantSlipBase64 = canvas.toDataURL("image/jpeg", 0.75);
+            } catch(canvasErr) {
+                _merchantSlipBase64 = rawBase64;
+            }
+            const previewBox = document.getElementById("m-pay-slip-preview-box");
+            const slipImg = document.getElementById("m-pay-slip-img");
+            if (previewBox) previewBox.classList.remove("hidden");
+            if (slipImg) slipImg.src = _merchantSlipBase64;
+            showToast("✅ แนบสลิปโอนเงินเรียบร้อย");
+        };
+        img.onerror = function() {
+            _merchantSlipBase64 = rawBase64;
+            const previewBox = document.getElementById("m-pay-slip-preview-box");
+            const slipImg = document.getElementById("m-pay-slip-img");
+            if (previewBox) previewBox.classList.remove("hidden");
+            if (slipImg) slipImg.src = _merchantSlipBase64;
+            showToast("✅ แนบสลิปโอนเงินเรียบร้อย");
+        };
+        img.src = rawBase64;
     };
     reader.readAsDataURL(file);
 }
@@ -14236,6 +14444,8 @@ function confirmMerchantPaymentAndDispatch() {
         localStorage.setItem("talathub_order_history", JSON.stringify(state.orders.slice(0, 30)));
     } catch(e) {}
 
+    // ✅ บันทึกลง Storage และซิงค์เข้า Firebase Realtime Database (Cloud) เพื่อให้ Hub (โรล 2) และ Admin (โรล 5) เห็นทันที
+    saveActiveOrderToStorage(order);
     if (typeof syncOrderToCloud === "function") {
         syncOrderToCloud(order);
     }
@@ -14250,16 +14460,17 @@ function confirmMerchantPaymentAndDispatch() {
     clearMerchantPinnedLocation();
     closeMerchantPaymentModal();
 
-    showToast(`🎉 ขั้นตอนที่ 2 สำเร็จ! ชำระค่าส่ง ฿${order.deliveryFee} เรียบร้อย เข้าสู่ขั้นตอนที่ 3: ส่งงาน ${order.orderId} เข้าฮับทันที`);
+    showToast(`🎉 ส่งงาน ${order.orderId} เข้าฮับสำเร็จ! ระบบซิงค์ข้อมูลไปยังศูนย์จัดส่ง (โรล 2) และแอดมิน (โรล 5) แบบเรียลไทม์แล้ว`);
 
     if (typeof playOrderAlertSound === "function") playOrderAlertSound();
 
+    const activeExpCount = (state.merchantExpressOrders || []).filter(o => o && o.status !== "delivered").length;
     const queueBadge = document.getElementById("hub-queue-count");
-    if (queueBadge) queueBadge.textContent = "1";
+    if (queueBadge) queueBadge.textContent = String(activeExpCount);
     const hubBadge = document.getElementById("hub-badge-count");
     if (hubBadge) {
         hubBadge.classList.remove("hidden");
-        hubBadge.textContent = "NEW";
+        hubBadge.textContent = activeExpCount > 1 ? String(activeExpCount) : "NEW";
     }
 
     if (typeof renderHubPickingList === "function") renderHubPickingList();
@@ -15359,6 +15570,14 @@ function markExpressDeliveredByHub(orderId) {
         localStorage.setItem("talathub_active_order", JSON.stringify(targetOrder));
     } catch(e) {}
 
+    // ซิงค์สถานะใหม่ไปยัง Cloud เพื่อให้แผงค้าและไรเดอร์เห็นทันที
+    if (typeof syncOrderToCloud === "function") {
+        syncOrderToCloud(targetOrder);
+    }
+    if (typeof updateOrderStatusInFirebase === "function") {
+        updateOrderStatusInFirebase(targetOrder.orderId, "delivered");
+    }
+
     showToast(`✅ ยืนยันงาน ${orderId} ส่งมอบสำเร็จเรียบร้อยแล้ว!`);
     if (typeof renderHubPickingList === "function") renderHubPickingList();
     if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
@@ -15433,6 +15652,14 @@ function assignExpressOrderToRider(param1 = "R1", param2 = null) {
         localStorage.setItem("hsong_active_order", JSON.stringify(targetOrder));
         localStorage.setItem("talathub_active_order", JSON.stringify(targetOrder));
     } catch(e) {}
+
+    // ซิงค์สถานะใหม่ไปยัง Cloud เพื่อให้แผงค้าและไรเดอร์เห็นทันที
+    if (typeof syncOrderToCloud === "function") {
+        syncOrderToCloud(targetOrder);
+    }
+    if (typeof updateOrderStatusInFirebase === "function") {
+        updateOrderStatusInFirebase(targetOrder.orderId, "assigned");
+    }
 
     showToast(`🛵 จ่ายงานด่วน ${targetOrder.orderId} ให้ "${rider.name}" เรียบร้อยแล้ว!`);
     if (typeof renderHubPickingList === "function") renderHubPickingList();
@@ -15967,6 +16194,12 @@ function switchRole(targetRole) {
         renderAuthHeaderButtons();
         renderHubPickingList();
         renderHubSettlement();
+        if (typeof syncAdminOrdersFromCloud === "function") {
+            syncAdminOrdersFromCloud().then(() => {
+                renderHubPickingList();
+                renderHubSettlement();
+            });
+        }
         return;
     }
 
@@ -16003,6 +16236,7 @@ function switchRole(targetRole) {
 
 function setActiveRoleView(role) {
     state.currentRole = role;
+    state.currentRoleView = role;
 
     // Toggle main container between mobile phone frame and full PC widescreen for all roles!
     const mainContainer = document.getElementById("main-app-container");
@@ -16068,6 +16302,12 @@ function setActiveRoleView(role) {
     if (role === "hub") {
         renderHubPickingList();
         renderHubSettlement();
+        if (typeof syncAdminOrdersFromCloud === "function") {
+            syncAdminOrdersFromCloud().then(() => {
+                renderHubPickingList();
+                renderHubSettlement();
+            });
+        }
     } else if (role === "merchant") {
         if (typeof renderMerchantView === "function") renderMerchantView();
     } else if (role === "rider") {
@@ -21283,14 +21523,37 @@ function renderHubPickingList() {
         const savedExp = loadSavedMerchantExpressOrders();
         expressOrders = savedExp.filter(o => o && o.orderId && o.status !== "delivered" && !isMockOrder(o));
     }
-    if (state.activeOrder && state.activeOrder.orderType === "MERCHANT_EXPRESS" && state.activeOrder.status !== "delivered" && !isMockOrder(state.activeOrder)) {
+    if (state.activeOrder && (state.activeOrder.orderType === "MERCHANT_EXPRESS" || (state.activeOrder.orderId && state.activeOrder.orderId.startsWith("EXP-"))) && state.activeOrder.status !== "delivered" && !isMockOrder(state.activeOrder)) {
         if (!expressOrders.some(o => o.orderId === state.activeOrder.orderId)) {
             expressOrders.unshift(state.activeOrder);
         }
     }
+    // ดึงงานด่วนจากคลาวด์แคชมารวมด้วย เพื่อให้ Hub บนอุปกรณ์อื่นเห็นทันที
+    if (window._cachedFirebaseOrders && Array.isArray(window._cachedFirebaseOrders)) {
+        const cloudExp = window._cachedFirebaseOrders.filter(o =>
+            o && o.orderId && o.status !== "delivered" && !isMockOrder(o) &&
+            (o.orderType === "MERCHANT_EXPRESS" || o.orderId.startsWith("EXP-"))
+        );
+        cloudExp.forEach(co => {
+            if (!expressOrders.some(e => e.orderId === co.orderId)) {
+                expressOrders.push(co);
+            }
+        });
+    }
 
     // 2. รวบรวมงานจัดของสดจากลูกค้าทั่วไป (GROCERY ORDER)
-    const groceryOrder = (state.activeOrder && state.activeOrder.orderType !== "MERCHANT_EXPRESS" && state.activeOrder.status !== "delivered" && !isMockOrder(state.activeOrder) && state.activeOrder.stalls && state.activeOrder.stalls.length > 0) ? state.activeOrder : null;
+    let groceryOrder = (state.activeOrder && state.activeOrder.orderType !== "MERCHANT_EXPRESS" && !(state.activeOrder.orderId && state.activeOrder.orderId.startsWith("EXP-")) && state.activeOrder.status !== "delivered" && !isMockOrder(state.activeOrder) && state.activeOrder.stalls && state.activeOrder.stalls.length > 0) ? state.activeOrder : null;
+    if (!groceryOrder && window._cachedFirebaseOrders && Array.isArray(window._cachedFirebaseOrders)) {
+        const cloudGroceries = window._cachedFirebaseOrders.filter(o =>
+            o && o.orderId && o.status !== "delivered" && !isMockOrder(o) &&
+            o.orderType !== "MERCHANT_EXPRESS" && !(o.orderId && o.orderId.startsWith("EXP-"))
+        );
+        if (cloudGroceries.length > 0) {
+            cloudGroceries.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+            groceryOrder = cloudGroceries[0];
+            state.activeOrder = groceryOrder;
+        }
+    }
 
     const totalActiveCount = expressOrders.length + (groceryOrder ? 1 : 0);
 
