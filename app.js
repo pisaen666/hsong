@@ -13199,6 +13199,12 @@ function renderMerchantSettlement() {
             accountName: (stall && (stall.accountName || stall.bankAccountName || stall.ownerName)) || (stall ? stall.stallName : "เจ้าของร้าน")
         };
 
+        const bank2 = (stall && stall.bankInfo2 && (stall.bankInfo2.accountNo || stall.bankInfo2.bankName)) ? stall.bankInfo2 : (stall && (stall.bankAccountNo2 || stall.bankName2) ? {
+            bankName: stall.bankName2 || "",
+            accountNo: stall.bankAccountNo2 || "",
+            accountName: stall.bankAccountName2 || ""
+        } : null);
+
         const thaiDateText = (typeof formatThaiDateDisplay === "function") ? formatThaiDateDisplay(targetDateKey) : targetDateKey;
 
         let html = `
@@ -13342,30 +13348,62 @@ function renderMerchantSettlement() {
                 </div>
 
                 <!-- Bank Account Card -->
-                <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-2.5 shadow-xs">
+                <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-xs">
                     <div class="flex items-center justify-between border-b border-slate-100 pb-2">
                         <div class="font-extrabold text-slate-800 flex items-center gap-1.5 text-xs sm:text-sm">
                             <span class="material-symbols-outlined text-orange-600 text-base">account_balance</span>
-                            <span>บัญชีธนาคารรับเงินโอนของแผงค้า</span>
+                            <span>ช่องทางการรับชำระเงิน / บัญชีโอนเงินของแผงค้า</span>
                         </div>
                         <button onclick="openActiveStallEditor()" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer">
                             ✏️ แก้ไขบัญชี
                         </button>
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                            <div class="text-[10px] text-slate-400">ธนาคาร:</div>
-                            <div class="font-black text-slate-800">${bank.bankName}</div>
+
+                    <!-- Primary Bank Account -->
+                    <div>
+                        <div class="text-[11px] font-bold text-slate-600 mb-1.5 flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            <span>บัญชีหลักที่ 1 (ใช้รับเงินโอนเป็นหลัก)</span>
                         </div>
-                        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                            <div class="text-[10px] text-slate-400">เลขที่บัญชี / เบอร์พร้อมเพย์:</div>
-                            <div class="font-mono font-black text-emerald-700 text-sm">${bank.accountNo}</div>
-                        </div>
-                        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                            <div class="text-[10px] text-slate-400">ชื่อบัญชี:</div>
-                            <div class="font-bold text-slate-800">${bank.accountName}</div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                <div class="text-[10px] text-slate-400">ธนาคาร:</div>
+                                <div class="font-black text-slate-800">${bank.bankName}</div>
+                            </div>
+                            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                <div class="text-[10px] text-slate-400">เลขที่บัญชี / เบอร์พร้อมเพย์:</div>
+                                <div class="font-mono font-black text-emerald-700 text-sm">${bank.accountNo}</div>
+                            </div>
+                            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                <div class="text-[10px] text-slate-400">ชื่อบัญชี:</div>
+                                <div class="font-bold text-slate-800">${bank.accountName}</div>
+                            </div>
                         </div>
                     </div>
+
+                    ${bank2 && (bank2.accountNo || bank2.bankName) ? `
+                    <!-- Secondary Bank Account -->
+                    <div class="pt-2 border-t border-slate-100">
+                        <div class="text-[11px] font-bold text-amber-800 mb-1.5 flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                            <span>บัญชีสำรองที่ 2 (สำรองกรณีบัญชีหลักติดขัด)</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                            <div class="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/60">
+                                <div class="text-[10px] text-slate-400">ธนาคาร:</div>
+                                <div class="font-black text-slate-800">${bank2.bankName || '-'}</div>
+                            </div>
+                            <div class="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/60">
+                                <div class="text-[10px] text-slate-400">เลขที่บัญชี / เบอร์พร้อมเพย์:</div>
+                                <div class="font-mono font-black text-amber-900 text-sm">${bank2.accountNo || '-'}</div>
+                            </div>
+                            <div class="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/60">
+                                <div class="text-[10px] text-slate-400">ชื่อบัญชี:</div>
+                                <div class="font-bold text-slate-800">${bank2.accountName || '-'}</div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
                 </div>
 
                 <!-- Order Breakdown List -->
@@ -25014,6 +25052,17 @@ async function saveMerchantStallData() {
             accountName: bankAccountName
         };
 
+        // Collect Bank Account 2 (สำรอง)
+        const bankName2 = document.getElementById("m-bank-name-2") ? document.getElementById("m-bank-name-2").value : "";
+        const bankAccountNo2 = document.getElementById("m-bank-account-no-2") ? document.getElementById("m-bank-account-no-2").value.trim() : "";
+        const bankAccountName2 = document.getElementById("m-bank-account-name-2") ? document.getElementById("m-bank-account-name-2").value.trim() : "";
+
+        const bankInfo2 = {
+            bankName: bankName2,
+            accountNo: bankAccountNo2,
+            accountName: bankAccountName2
+        };
+
         const contacts = [
             { name: contact1Name, phone: contact1Phone, line: contact1Line },
             { name: contact2Name, phone: contact2Phone, line: contact2Line }
@@ -25036,6 +25085,10 @@ async function saveMerchantStallData() {
             bankName: bankName,
             bankAccountNo: bankAccountNo,
             bankAccountName: bankAccountName,
+            bankInfo2: bankInfo2,
+            bankName2: bankName2,
+            bankAccountNo2: bankAccountNo2,
+            bankAccountName2: bankAccountName2,
             highlight: highlight,
             description: desc,
             shopDescription: desc,
@@ -25246,6 +25299,10 @@ function previewMerchantLiveStore() {
     const bankName = document.getElementById("m-bank-name") ? document.getElementById("m-bank-name").value : "กสิกรไทย (KBank)";
     const bankAccountNo = document.getElementById("m-bank-account-no") ? document.getElementById("m-bank-account-no").value.trim() : "-";
     const bankAccountName = document.getElementById("m-bank-account-name") ? document.getElementById("m-bank-account-name").value.trim() : "-";
+
+    const bankName2 = document.getElementById("m-bank-name-2") ? document.getElementById("m-bank-name-2").value : "";
+    const bankAccountNo2 = document.getElementById("m-bank-account-no-2") ? document.getElementById("m-bank-account-no-2").value.trim() : "";
+    const bankAccountName2 = document.getElementById("m-bank-account-name-2") ? document.getElementById("m-bank-account-name-2").value.trim() : "";
 
     const highlight = document.getElementById("m-highlight")?.value.trim() || "ของสดคุณภาพดี คัดเกรดสดใหม่";
     const desc = document.getElementById("m-desc")?.value.trim() || "จำหน่ายของสดคุณภาพดีประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)";
@@ -25484,12 +25541,13 @@ function previewMerchantLiveStore() {
                     <span class="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
                         <span class="material-symbols-outlined text-sm">account_balance</span>
                     </span>
-                    <span>บัญชีธนาคารรับเงินโอน</span>
+                    <span>บัญชีธนาคารรับเงินโอน (รองรับ 2 บัญชี)</span>
                 </div>
 
+                <!-- Account 1 -->
                 <div class="bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-200/80 space-y-1.5">
                     <div class="font-bold text-emerald-900 text-[11px] flex items-center justify-between">
-                        <span>🏦 ธนาคาร:</span>
+                        <span>🏦 บัญชีหลักที่ 1:</span>
                         <span class="bg-emerald-200 text-emerald-900 font-extrabold px-2 py-0.5 rounded text-[10px]">${bankName}</span>
                     </div>
                     <div class="text-xs text-slate-800 pt-1">
@@ -25501,6 +25559,24 @@ function previewMerchantLiveStore() {
                         <strong class="text-emerald-800">${bankAccountName || '-'}</strong>
                     </div>
                 </div>
+
+                ${(bankAccountNo2 || bankName2) ? `
+                <!-- Account 2 -->
+                <div class="bg-amber-50/60 p-2.5 rounded-xl border border-amber-200/80 space-y-1.5">
+                    <div class="font-bold text-amber-900 text-[11px] flex items-center justify-between">
+                        <span>🏦 บัญชีสำรองที่ 2:</span>
+                        <span class="bg-amber-200 text-amber-900 font-extrabold px-2 py-0.5 rounded text-[10px]">${bankName2 || 'ธนาคารสำรอง'}</span>
+                    </div>
+                    <div class="text-xs text-slate-800 pt-1">
+                        <span class="text-slate-500">เลขที่บัญชี: </span>
+                        <span class="font-mono font-black text-sm text-slate-900 tracking-wider">${bankAccountNo2 || '-'}</span>
+                    </div>
+                    <div class="text-xs text-slate-800">
+                        <span class="text-slate-500">ชื่อบัญชี: </span>
+                        <strong class="text-amber-800">${bankAccountName2 || '-'}</strong>
+                    </div>
+                </div>
+                ` : ''}
 
                 <div class="text-[10px] text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-100 leading-snug">
                     ℹ️ ศูนย์ฮับตลาดสดจะโอนยอดขายสุทธิของร้านค้าเข้าบัญชีนี้ทุกวัน
