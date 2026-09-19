@@ -18,3 +18,9 @@
 - Ensure all interactive onclick functions are explicitly bound to `window` (e.g. `window.myFunction = myFunction`).
 - Preserve existing `localStorage` keys prefixed with `talathub_*`.
 - Avoid breaking changes to `state.activeOrder` and `MARKET_DATA`.
+
+## Development & Deployment Workflow
+1. **Local Development First**: Always develop and test on localhost via `node server.js` (`http://localhost:3000`).
+2. **Real Cloud Database**: Firebase Realtime Database is connected live even during local testing.
+3. **No Cache Issue**: Local server (`server.js`) enforces `no-cache` headers for immediate feedback.
+4. **Git Production Push**: Only commit and push to GitHub `main` branch after the user has reviewed and verified changes on localhost.

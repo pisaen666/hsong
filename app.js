@@ -382,6 +382,23 @@ function executeClearAllTestData() {
     localStorage.removeItem("talathub_mock_orders");
     localStorage.removeItem("hsong_merchant_express_orders");
     localStorage.removeItem("hsong_active_order");
+    localStorage.removeItem("hsong_orders");
+    localStorage.removeItem("talathub_market_stall_settings");
+
+    try {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith("talathub_daily_report_") || key.startsWith("talathub_settled_riders_") || key.startsWith("talathub_settled_vendors_"))) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch(e) {}
+
+    if (typeof ALL_100_STALLS !== "undefined" && Array.isArray(ALL_100_STALLS)) {
+        ALL_100_STALLS.forEach(s => s.isClosed = false);
+    }
 
     // ล้าง Firebase orders ทั้งหมด
     if (isFirebaseReady()) {
@@ -5209,8 +5226,9 @@ function renderHubDailyReport(targetDateKey) {
                             </span>`}
                         </td>
                         <td class="p-2.5 text-center">
-                            <button onclick="settleRiderBalance('${r.riderName.replace(/'/g, "\\'")}', '${targetDateKey}')" class="px-2.5 py-1 ${r.isSettled ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} font-bold rounded-lg text-[10px] active:scale-95 transition-all shadow-2xs">
-                                ${r.isSettled ? 'ยกเลิก' : 'ยืนยันรับเงิน'}
+                            <button onclick="goToFleetClearance()" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="ไปเคลียร์เงินที่หน้าไรเดอร์">
+                                <span class="material-symbols-outlined text-xs">open_in_new</span>
+                                <span>ไปหน้าไรเดอร์</span>
                             </button>
                         </td>
                         <td class="p-2.5 text-center">
@@ -5742,6 +5760,16 @@ function settleRiderBalance(riderName, dateKey) {
     showToast(next ? `✅ เคลียร์ยอดเงินสดกับ ${riderName} เรียบร้อยแล้ว` : `↩️ ยกเลิกสถานะเคลียร์เงินของ ${riderName}`);
     renderHubDailyReport(dateKey);
 }
+
+// ── Navigate to Rider Fleet Settlement (single source of truth for COD clearance)
+function goToFleetClearance() {
+    if (typeof switchAdminTab === 'function') switchAdminTab('riders');
+    if (typeof switchAdminRiderSubTab === 'function') {
+        setTimeout(() => switchAdminRiderSubTab('settlement'), 150);
+    }
+    showToast('🏍️ ไปยังหน้าเคลียร์เงิน COD ไรเดอร์แล้ว');
+}
+window.goToFleetClearance = goToFleetClearance;
 
 // ── Batch Settle All Stalls
 function settleAllVendors(dateKey) {
@@ -13574,10 +13602,20 @@ function openActiveStallEditor() {
 }
 window.openActiveStallEditor = openActiveStallEditor;
 
+// Global state for merchant order period filter
+if (typeof window._merchantOrderPeriod === 'undefined') window._merchantOrderPeriod = 'today';
+
+function setMerchantOrderFilter(period) {
+    window._merchantOrderPeriod = period;
+    renderMerchantIncomingOrders();
+}
+window.setMerchantOrderFilter = setMerchantOrderFilter;
+
 function renderMerchantIncomingOrders() {
     const listEl = document.getElementById("merchant-incoming-orders-list");
     const badgeEl = document.getElementById("merchant-incoming-orders-badge");
     if (!listEl) return;
+    const currentPeriod = window._merchantOrderPeriod || 'today';
 
     let stall = null;
     if (activeMerchantStallId) {
@@ -13599,13 +13637,29 @@ function renderMerchantIncomingOrders() {
         });
     } catch(e) {}
 
+    // ---- Date range helper for filter ----
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+    const startOfYesterday = startOfToday - 86400000;
+    const startOfWeek = startOfToday - ((now.getDay() === 0 ? 6 : now.getDay() - 1) * 86400000);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).getTime();
+
+    function isInPeriod(ts, period) {
+        const t = Number(ts) || 0;
+        if (period === 'today') return t >= startOfToday;
+        if (period === 'yesterday') return t >= startOfYesterday && t < startOfToday;
+        if (period === 'week') return t >= startOfWeek;
+        if (period === 'month') return t >= startOfMonth;
+        return true;
+    }
+
     // Filter items for this stall
-    const stallOrders = [];
+    const allStallOrders = [];
     allOrders.forEach(order => {
         if (!order || !order.stalls) return;
         const matchingStallGroup = order.stalls.find(s => s && (s.stallId === currentStallId || (currentStallName && s.name && (s.name.includes(currentStallName) || currentStallName.includes(s.name)))));
         if (matchingStallGroup && matchingStallGroup.items && matchingStallGroup.items.length > 0) {
-            stallOrders.push({
+            allStallOrders.push({
                 orderId: order.orderId,
                 status: order.status || "picking",
                 createdAt: order.savedAt || Date.now(),
@@ -13617,6 +13671,10 @@ function renderMerchantIncomingOrders() {
             });
         }
     });
+
+    // Apply period filter
+    const stallOrders = allStallOrders.filter(o => isInPeriod(o.createdAt, currentPeriod));
+    const allOrdersCount = allStallOrders.length;
 
     if (badgeEl) {
         if (stallOrders.length > 0) {
@@ -13726,14 +13784,31 @@ function renderMerchantIncomingOrders() {
         </div>
         ` : '')}
 
-        <div class="flex items-center justify-between pt-1">
-            <h4 class="font-extrabold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-orange-600 text-base">receipt_long</span>
-                <span>รายการออเดอร์ของสดที่สั่งซื้อเข้ามา (${stallOrders.length} รายการ)</span>
-            </h4>
-            <button onclick="renderMerchantIncomingOrders(); showToast('🔄 อัปเดตรายการออเดอร์เรียบร้อย');" class="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-all cursor-pointer" title="รีเฟรชออเดอร์">
-                <span class="material-symbols-outlined text-sm">refresh</span>
-            </button>
+        <div class="space-y-2.5 pt-1">
+            <div class="flex items-center justify-between">
+                <h4 class="font-extrabold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-orange-600 text-base">receipt_long</span>
+                    <span>รายการออเดอร์ (${stallOrders.length} รายการ)</span>
+                </h4>
+                <button onclick="renderMerchantIncomingOrders(); showToast('🔄 อัปเดตรายการออเดอร์เรียบร้อย');" class="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-all cursor-pointer" title="รีเฟรชออเดอร์">
+                    <span class="material-symbols-outlined text-sm">refresh</span>
+                </button>
+            </div>
+            <!-- Period Filter Buttons -->
+            <div class="flex items-center gap-1.5 flex-wrap">
+                ${[{key:'today',label:'📅 วันนี้'},{key:'yesterday',label:'🗓️ เมื่อวาน'},{key:'week',label:'📆 รายสัปดาห์'},{key:'month',label:'📊 รายเดือน'}].map(btn => {
+                    const isActive = currentPeriod === btn.key;
+                    return `<button
+                        onclick="setMerchantOrderFilter('${btn.key}')"
+                        class="px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer active:scale-95 ${
+                            isActive
+                            ? 'bg-orange-500 text-white shadow-sm'
+                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                        }">
+                        ${btn.label}
+                    </button>`;
+                }).join('')}
+            </div>
         </div>
     `;
 
@@ -16637,21 +16712,40 @@ function renderAdminAnalytics() {
     `;
 }
 
-// ── Tab 3: Stalls Directory, Roster & Merchant Applications
+// ── Tab 3: Stalls Directory, Roster & Merchant Applications (Merchant & Kitchen Operations)
+let _adminStallSubTab = "live"; // 'live' | 'roster' | 'settlement' | 'settings'
+let _adminStallStatusFilter = "all"; // 'all' | 'active_orders' | 'open' | 'closed'
+_adminStallZoneFilter = "all"; // 'all' | 'A' | 'B' | 'C' | 'E'
+_adminStallSearchQuery = "";
 let _adminStallRosterView = "roster"; // 'roster' | 'applications'
 let _adminMerchantAppFilter = "all"; // 'all' | 'pending' | 'approved' | 'rejected'
 
-function filterAdminStalls(query) {
-    _adminStallSearchQuery = (query || "").toLowerCase();
-    renderAdminStalls();
+function loadMarketStallSettings() {
+    try {
+        const raw = localStorage.getItem("talathub_market_stall_settings");
+        if (raw) return JSON.parse(raw);
+    } catch(e) {}
+    return {
+        gpRate: 0,
+        rushMode: false,
+        openHour: "04:00",
+        closeHour: "18:00",
+        alertPrepMinutes: 15,
+        refundPolicy: "cash_envelope"
+    };
 }
-window.filterAdminStalls = filterAdminStalls;
 
-function filterAdminStallsByZone(zone) {
-    _adminStallZoneFilter = zone;
+function saveMarketStallSettings(settings) {
+    try {
+        localStorage.setItem("talathub_market_stall_settings", JSON.stringify(settings));
+    } catch(e) {}
+}
+
+function switchAdminStallSubTab(tabKey) {
+    _adminStallSubTab = tabKey;
     renderAdminStalls();
 }
-window.filterAdminStallsByZone = filterAdminStallsByZone;
+window.switchAdminStallSubTab = switchAdminStallSubTab;
 
 function switchAdminStallRosterView(viewKey) {
     _adminStallRosterView = viewKey;
@@ -16664,6 +16758,326 @@ function filterAdminMerchantApps(filterKey) {
     renderAdminStalls();
 }
 window.filterAdminMerchantApps = filterAdminMerchantApps;
+
+function filterAdminStalls(query) {
+    _adminStallSearchQuery = (query || "").toLowerCase();
+    renderAdminStalls();
+}
+window.filterAdminStalls = filterAdminStalls;
+
+function handleAdminStallSearch(val) {
+    _adminStallSearchQuery = (val || "").toLowerCase();
+    renderAdminStalls();
+}
+window.handleAdminStallSearch = handleAdminStallSearch;
+
+function filterAdminStallsByZone(zone) {
+    _adminStallZoneFilter = zone;
+    renderAdminStalls();
+}
+window.filterAdminStallsByZone = filterAdminStallsByZone;
+
+function filterAdminStallsByStatus(status) {
+    _adminStallStatusFilter = status;
+    renderAdminStalls();
+}
+window.filterAdminStallsByStatus = filterAdminStallsByStatus;
+
+function toggleMarketRushMode() {
+    const s = loadMarketStallSettings();
+    s.rushMode = !s.rushMode;
+    saveMarketStallSettings(s);
+    if (s.rushMode) {
+        showToast("🔥 เปิดโหมดตลาดหนาแน่น (Rush Hour) ส่งสัญญาณเร่งทุกแผงค้าแล้ว!");
+    } else {
+        showToast("☀️ ปรับกลับสู่โหมดบรรยากาศตลาดปกติ");
+    }
+    renderAdminStalls();
+}
+window.toggleMarketRushMode = toggleMarketRushMode;
+
+function toggleStallOpenStatusByAdmin(stallId) {
+    const s = ALL_100_STALLS.find(x => x.stallId === stallId) || MARKET_DATA.find(x => x.stallId === stallId);
+    if (!s) return;
+    s.isClosed = !s.isClosed;
+    saveMarketDataToStorage();
+    showToast(`${s.isClosed ? '🔴 ปิด/พักร้าน' : '🟢 เปิดรับออเดอร์ปกติ'} แผง ${s.stallName || stallId} สำเร็จ`);
+    renderAdminStalls();
+}
+window.toggleStallOpenStatusByAdmin = toggleStallOpenStatusByAdmin;
+
+function adminMarkStallReady(orderId, stallId) {
+    let orders = [];
+    try {
+        orders = JSON.parse(localStorage.getItem("hsong_orders") || "[]");
+    } catch(e) {}
+
+    let target = orders.find(o => o && o.orderId === orderId);
+    if (!target && state.activeOrder && state.activeOrder.orderId === orderId) {
+        target = state.activeOrder;
+    }
+
+    if (target && target.stalls) {
+        const st = target.stalls.find(s => s.stallId === stallId || (s.name && s.name.includes(stallId)));
+        if (st) {
+            st.ready = true;
+            try {
+                localStorage.setItem("hsong_orders", JSON.stringify(orders));
+                if (state.activeOrder && state.activeOrder.orderId === orderId && state.activeOrder.stalls) {
+                    const stActive = state.activeOrder.stalls.find(s => s.stallId === stallId || (s.name && s.name.includes(stallId)));
+                    if (stActive) stActive.ready = true;
+                }
+            } catch(e) {}
+            showToast(`✓ แผง ${st.name || stallId} จัดเตรียมของสดเสร็จแล้ว! ไรเดอร์สามารถเข้ามารับของได้`);
+            renderAdminStalls();
+            return;
+        }
+    }
+    showToast(`✓ บันทึกยืนยันแผง ${stallId} เตรียมของสดเสร็จแล้ว`);
+    renderAdminStalls();
+}
+window.adminMarkStallReady = adminMarkStallReady;
+
+function printStallOrderThermalSlip(orderId, stallId) {
+    if (typeof merchantPrintStallSlip === "function") {
+        merchantPrintStallSlip(orderId, stallId);
+    } else {
+        showToast("🖨️ กำลังพิมพ์สลิปหน้าเขียง 80mm...");
+    }
+}
+window.printStallOrderThermalSlip = printStallOrderThermalSlip;
+
+function seedMerchantSampleOrders() {
+    let orders = [];
+    try {
+        orders = JSON.parse(localStorage.getItem("hsong_orders") || "[]");
+    } catch(e) {}
+
+    const now = Date.now();
+    const sampleOrders = [
+        {
+            orderId: `OD-${now.toString().slice(-4)}`,
+            customerName: "คุณสมหมาย แสนสุข",
+            customerPhone: "081-998-7654",
+            customerAddress: "45 ม.3 ซอยเทศบาล 8 หนองชาก",
+            status: "picking",
+            createdAt: new Date().toISOString(),
+            savedAt: now,
+            stalls: [
+                {
+                    stallId: "A01",
+                    name: "เจ๊หมึก เนื้อวัวสด",
+                    ready: false,
+                    items: [
+                        { name: "เนื้อสะโพกสด 1 กก.", qty: 1, price: 240 },
+                        { name: "เนื้อน่องลาย 500 กรัม", qty: 1, price: 160 }
+                    ]
+                }
+            ]
+        },
+        {
+            orderId: `OD-${(now + 1).toString().slice(-4)}`,
+            customerName: "คุณปรียาพร พรประเสริฐ",
+            customerPhone: "089-776-5544",
+            customerAddress: "112/5 ซอยราษฎร์อุทิศ บ้านบึง",
+            status: "picking",
+            createdAt: new Date(now - 1000 * 60 * 15).toISOString(),
+            savedAt: now - 1000 * 60 * 15,
+            stalls: [
+                {
+                    stallId: "B03",
+                    name: "ป้าศรี ผักสดปลอดสาร",
+                    ready: true,
+                    items: [
+                        { name: "ผักกาดขาว 1 กก.", qty: 1, price: 40 },
+                        { name: "ต้นหอม ผักชีสด 1 กำ", qty: 1, price: 25 },
+                        { name: "มะนาวแป้น 1 ถุง (10 ลูก)", qty: 1, price: 50 }
+                    ]
+                }
+            ]
+        },
+        {
+            orderId: `OD-${(now + 2).toString().slice(-4)}`,
+            customerName: "คุณธนกร เจริญผล",
+            customerPhone: "086-554-3322",
+            customerAddress: "88 หมู่ 1 ต.หนองซ้ำซาก",
+            status: "delivering",
+            riderName: "สมชาย ขยันส่ง (พี่ชาย)",
+            createdAt: new Date(now - 1000 * 60 * 30).toISOString(),
+            savedAt: now - 1000 * 60 * 30,
+            stalls: [
+                {
+                    stallId: "E02",
+                    name: "ลุงนวย ซีฟู้ดสดจากอ่าว",
+                    ready: true,
+                    items: [
+                        { name: "กุ้งแชบ๊วยสด 1 กก.", qty: 1, price: 320 },
+                        { name: "ปลาหมึกกล้วยสด 500 กรัม", qty: 1, price: 150 }
+                    ]
+                }
+            ]
+        }
+    ];
+
+    sampleOrders.forEach(so => {
+        if (!orders.some(o => o.orderId === so.orderId)) {
+            orders.unshift(so);
+        }
+    });
+
+    try {
+        localStorage.setItem("hsong_orders", JSON.stringify(orders));
+        if (!state.activeOrder) {
+            state.activeOrder = sampleOrders[0];
+        }
+    } catch(e) {}
+
+    showToast("⚡ จำลอง 3 ออเดอร์ของสดเข้าแผงค้าสำเร็จ! (หมวด: กำลังเตรียม, เตรียมเสร็จ, ไรเดอร์รับของ)");
+    renderAdminStalls();
+}
+window.seedMerchantSampleOrders = seedMerchantSampleOrders;
+
+function clearMerchantTestData() {
+    if (!confirm("⚠️ คุณต้องการล้างข้อมูลจำลองออเดอร์และรีเซ็ตสถานะแผงค้าทั้งหมดหรือไม่?\n\n• ข้อมูลออเดอร์จำลองจะถูกลบ\n• แผงค้าจะถูกรีเซ็ตสถานะเป็นเปิดรับงานปกติ")) return;
+    localStorage.removeItem("hsong_orders");
+    ALL_100_STALLS.forEach(s => s.isClosed = false);
+    saveMarketDataToStorage();
+    showToast("🧹 ล้างข้อมูลทดสอบและรีเซ็ตสถานะแผงค้าเรียบร้อย");
+    renderAdminStalls();
+}
+window.clearMerchantTestData = clearMerchantTestData;
+
+function saveMarketStallSettingsFromForm() {
+    const gpInput = document.getElementById("admin-market-gp-input");
+    const openInput = document.getElementById("admin-market-open-hour");
+    const closeInput = document.getElementById("admin-market-close-hour");
+    const alertInput = document.getElementById("admin-market-alert-minutes");
+    const refundInput = document.getElementById("admin-market-refund-policy");
+
+    const settings = loadMarketStallSettings();
+    if (gpInput) settings.gpRate = Number(gpInput.value) || 0;
+    if (openInput) settings.openHour = openInput.value || "04:00";
+    if (closeInput) settings.closeHour = closeInput.value || "18:00";
+    if (alertInput) settings.alertPrepMinutes = Number(alertInput.value) || 15;
+    if (refundInput) settings.refundPolicy = refundInput.value || "cash_envelope";
+
+    saveMarketStallSettings(settings);
+    showToast("💾 บันทึกการตั้งค่าร้านค้า & กฎตลาดสดเรียบร้อยแล้ว");
+    renderAdminStalls();
+}
+window.saveMarketStallSettingsFromForm = saveMarketStallSettingsFromForm;
+
+function printA4VendorSettlementsReport(targetDateKey) {
+    if (!targetDateKey) targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(targetDateKey);
+    const vendors = (report && report.vendorSettlement && report.vendorSettlement.stalls) || [];
+    const printTime = new Date().toLocaleString("th-TH");
+    const totalDue = report && report.vendorSettlement ? report.vendorSettlement.totalVendorDue : 0;
+    const settledAmt = report && report.vendorSettlement ? report.vendorSettlement.settledAmount : 0;
+    const unsettledAmt = report && report.vendorSettlement ? report.vendorSettlement.unsettledAmount : 0;
+
+    let rowsHtml = "";
+    if (vendors.length === 0) {
+        rowsHtml = `<tr><td colspan="7" style="padding: 12px; text-align: center; color: #64748b;">ไม่มีรายการยอดขายของแผงค้าในวันที่เลือก</td></tr>`;
+    } else {
+        rowsHtml = vendors.map((v, idx) => `
+            <tr>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${v.stallNumber || '-'} (${v.zone || '-'})</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${v.stallName}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${v.orderCount} ออเดอร์</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold; text-align: right; color: #047857;">฿${Number(v.totalAmount || 0).toLocaleString()}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${v.phone || '-'}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: ${v.isSettled ? '#047857' : '#d97706'};">
+                    ${v.isSettled ? 'โอนแล้ว ✓' : 'รอโอน'}
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    const content = `
+        <div class="a4-header">
+            <div class="a4-title">รายงานสรุปยอดจำหน่าย & โอนเงินแผงค้า (Vendor Settlements)</div>
+            <div class="a4-meta">ประจำวันที่: ${targetDateKey} • พิมพ์เมื่อ: ${printTime}</div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin: 12px 0; font-size: 11px; background: #f8fafc; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px;">
+            <div>ยอดจำหน่ายรวม: <strong>฿${totalDue.toLocaleString()}</strong> (${vendors.length} แผง)</div>
+            <div>โอนแล้ว: <strong style="color: #047857;">฿${settledAmt.toLocaleString()}</strong></div>
+            <div>คงค้างรอโอน: <strong style="color: #d97706;">฿${unsettledAmt.toLocaleString()}</strong></div>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 10px;">
+            <thead>
+                <tr style="background: #f1f5f9;">
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">ลำดับ</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">เลขแผง/โซน</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">ชื่อแผงค้า</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">จำนวนออเดอร์</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">ยอดเงินสุทธิ (0% GP)</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">พร้อมเพย์</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">สถานะโอนเงิน</th>
+                </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+        </table>
+        <div style="margin-top: 40px; display: flex; justify-content: space-between; font-size: 11px; padding: 0 30px;">
+            <div style="text-align: center;">
+                <div>ลงชื่อ .................................................... ผู้ตรวจสอบ</div>
+                <div style="margin-top: 4px; color: #64748b;">( เจ้าหน้าที่การเงิน / แอดมิน )</div>
+            </div>
+            <div style="text-align: center;">
+                <div>ลงชื่อ .................................................... ผู้อนุมัติจ่าย</div>
+                <div style="margin-top: 4px; color: #64748b;">( ผู้จัดการตลาดสดวิศิษฐ์ชัย )</div>
+            </div>
+        </div>
+    `;
+    executePrintHtml(`รายงานเคลียร์เงินร้านค้า_${targetDateKey}`, content, false);
+}
+window.printA4VendorSettlementsReport = printA4VendorSettlementsReport;
+
+function printA4MerchantRules() {
+    const printTime = new Date().toLocaleString("th-TH");
+    const settings = loadMarketStallSettings();
+    const content = `
+        <div class="a4-header" style="text-align: center; border-bottom: 2px solid #7c3aed; padding-bottom: 12px; margin-bottom: 20px;">
+            <div style="font-size: 20px; font-weight: 900; color: #4c1d95;">ระเบียบปฏิบัติสำหรับ 100 แผงค้า ตลาดสดวิศิษฐ์ชัย (เฮียส่ง)</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">ประกาศใช้อย่างเป็นทางการสำหรับผู้เช่าแผงและผู้ประกอบการค้าทุกโซน (A, B, C, E)</div>
+        </div>
+        <div style="font-size: 12px; line-height: 1.8; color: #1e293b; space-y-4;">
+            <div style="margin-bottom: 12px; padding: 10px; background: #faf5ff; border-left: 4px solid #7c3aed; border-radius: 4px;">
+                <strong>ข้อที่ 1: การรักษาคุณภาพความสด สะอาด และสุขอนามัย</strong><br>
+                สินค้าของสดทุกชนิด (เนื้อสัตว์, ผักสด, อาหารทะเล, ของแห้ง) ต้องคัดเกรดคุณภาพดี สดใหม่ทุกวัน และรักษาความสะอาดบริเวณหน้าเขียงและแผงค้าตามมาตรฐานสาธารณสุข
+            </div>
+            <div style="margin-bottom: 12px; padding: 10px; background: #f0fdf4; border-left: 4px solid #16a34a; border-radius: 4px;">
+                <strong>ข้อที่ 2: การรับออเดอร์และการจัดเตรียมของสด (ภายใน ${settings.alertPrepMinutes || 15} นาที)</strong><br>
+                เมื่อมีออเดอร์จากระบบลูกค้าส่งเข้ามา ให้ร้านค้าทำการชั่งน้ำหนัก จัดแพ็ก และกดปุ่ม 'รับออเดอร์ & เตรียมเสร็จ' ภายใน ${settings.alertPrepMinutes || 15} นาที เพื่อให้ไรเดอร์เข้ามารับของสดได้อย่างรวดเร็ว
+            </div>
+            <div style="margin-bottom: 12px; padding: 10px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px;">
+                <strong>ข้อที่ 3: ความเที่ยงตรงของน้ำหนัก และนโยบายของหมด</strong><br>
+                การชั่งน้ำหนักสินค้าต้องใช้ตาชั่งมาตรฐานที่ผ่านการตรวจรับรอง กรณีสินค้าบางรายการหมด ให้แจ้งในระบบทันทีและนำเงินสดส่วนต่างใส่ซองแนบไปกับถุงสินค้าเพื่อส่งคืนลูกค้าอย่างซื่อสัตย์
+            </div>
+            <div style="margin-bottom: 12px; padding: 10px; background: #eff6ff; border-left: 4px solid #2563eb; border-radius: 4px;">
+                <strong>ข้อที่ 4: การรับเงินโอนค่าสินค้าผ่านระบบพร้อมเพย์ (0% GP)</strong><br>
+                ตลาดฮับวิศิษฐ์ชัยสนับสนุนเศรษฐกิจชุมชน ไม่มีการหักค่าธรรมเนียม GP (${settings.gpRate || 0}% GP) เงินค่าสินค้าจะถูกโอนตรงเข้าบัญชีพร้อมเพย์ของเจ้าของแผงค้าทุกวันหลังตัดรอบ
+            </div>
+            <div style="margin-bottom: 12px; padding: 10px; background: #fdf2f8; border-left: 4px solid #db2777; border-radius: 4px;">
+                <strong>ข้อที่ 5: เวลาทำการเปิด-ปิดแผงค้า</strong><br>
+                เปิดรับออเดอร์ตั้งแต่เวลา ${settings.openHour || '04:00'} น. ถึง ${settings.closeHour || '18:00'} น. หากมีความจำเป็นต้องพักแผงค้าชั่วคราว ให้กดสลับสถานะเป็น 'พักร้านชั่วคราว' ในแอปพลิเคชัน
+            </div>
+        </div>
+        <div style="margin-top: 50px; display: flex; justify-content: space-between; font-size: 11px; padding: 0 40px;">
+            <div style="text-align: center;">
+                <div>ประกาศ ณ วันที่: ${printTime}</div>
+                <div style="margin-top: 4px; color: #64748b;">( ฝ่ายบริหารจัดการแผงค้า )</div>
+            </div>
+            <div style="text-align: center;">
+                <div>ลงชื่อ ....................................................</div>
+                <div style="margin-top: 4px; font-weight: bold; color: #4c1d95;">( เฮียส่ง ผู้บริหารตลาดสดวิศิษฐ์ชัย )</div>
+            </div>
+        </div>
+    `;
+    executePrintHtml(`ระเบียบปฏิบัติแผงค้าตลาดวิศิษฐ์ชัย`, content, false);
+}
+window.printA4MerchantRules = printA4MerchantRules;
 
 function renderAdminStalls() {
     const container = document.getElementById("admin-content-stalls");
@@ -16680,13 +17094,94 @@ function renderAdminStalls() {
     else if (_adminMerchantAppFilter === "approved") displayedApps = approvedMerchantApps;
     else if (_adminMerchantAppFilter === "rejected") displayedApps = rejectedMerchantApps;
 
-    let stalls = ALL_100_STALLS;
+    const targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const report = aggregateDailyOperations(targetDateKey);
+    const vendorSettlement = (report && report.vendorSettlement) || { totalVendors: 0, totalVendorDue: 0, settledAmount: 0, unsettledAmount: 0, stalls: [] };
+    const settledVendors = _loadVendorSettlementState(targetDateKey);
+    const marketSettings = loadMarketStallSettings();
+
+    // 1. Data processing for Live Orders & Stalls
+    const allOrders = _collectAllOrders();
+    const stallActiveTasks = [];
+    allOrders.forEach(o => {
+        if (!o || !o.stalls || !Array.isArray(o.stalls)) return;
+        const isToday = getReportDateKey(o.savedAt || o.createdAt || Date.now()) === targetDateKey;
+        const isPendingStatus = o.status === "picking" || o.status === "preparing" || o.status === "paid" || o.status === "ready_for_rider" || o.status === "assigned" || o.status === "on_the_way" || o.status === "delivering";
+        if (!isPendingStatus && !isToday) return;
+
+        o.stalls.forEach(st => {
+            const stallMeta = findStallInfo(st.stallId, st.name);
+            const sId = st.stallId || stallMeta.stallId || st.name;
+            const items = (st.items || []).filter(it => !it.outOfStock);
+            if (items.length === 0) return;
+
+            let stage = 2;
+            let stageLabel = "กำลังปรุง / ชั่งของสด";
+            let stageBadge = "bg-amber-100 text-amber-900 border-amber-300";
+            let isReady = Boolean(st.ready);
+
+            if (o.status === "delivered") {
+                stage = 4;
+                stageLabel = "ส่งสำเร็จแล้ว";
+                stageBadge = "bg-emerald-100 text-emerald-900 border-emerald-300";
+            } else if (o.status === "delivering" || o.status === "on_the_way") {
+                stage = 4;
+                stageLabel = "ไรเดอร์กำลังจัดส่ง";
+                stageBadge = "bg-sky-100 text-sky-900 border-sky-300";
+            } else if (isReady || o.status === "ready_for_rider" || o.status === "assigned") {
+                stage = 3;
+                stageLabel = "เตรียมเสร็จ รอไรเดอร์";
+                stageBadge = "bg-emerald-100 text-emerald-900 border-emerald-300";
+            } else {
+                stage = 2;
+                stageLabel = "กำลังปรุง / ชั่งของสด";
+                stageBadge = "bg-amber-100 text-amber-900 border-amber-300";
+            }
+
+            const taskTotal = items.reduce((sum, it) => sum + (Number(it.price || it.unitPrice || 0) * Number(it.qty || it.quantity || 1)), 0);
+
+            stallActiveTasks.push({
+                orderId: o.orderId,
+                stallId: sId,
+                stallName: stallMeta.stallName || st.name,
+                stallNumber: stallMeta.stallNumber || "แผงตลาด",
+                zone: stallMeta.zone || "A",
+                ownerName: stallMeta.ownerName || "เจ้าของแผง",
+                phone: stallMeta.phone || "089-123-4567",
+                customerName: o.customerName || "ลูกค้าชุมชน",
+                customerPhone: o.customerPhone || "-",
+                deliveryAddress: o.address || o.deliveryAddress || "จัดส่งตามพิกัด",
+                orderTime: o.savedAt || o.createdAt || Date.now(),
+                items,
+                taskTotal,
+                stage,
+                stageLabel,
+                stageBadge,
+                isReady
+            });
+        });
+    });
+
+    const openStallsCount = ALL_100_STALLS.filter(s => !s.isClosed).length;
+    const closedStallsCount = ALL_100_STALLS.length - openStallsCount;
+    const activeTasksCount = stallActiveTasks.filter(t => t.stage < 4).length;
+    const preparingTasksCount = stallActiveTasks.filter(t => t.stage === 2).length;
+    const readyTasksCount = stallActiveTasks.filter(t => t.stage === 3).length;
+
+    let todayStallSalesTotal = vendorSettlement.totalVendorDue || 0;
+    if (!todayStallSalesTotal) {
+        todayStallSalesTotal = stallActiveTasks.reduce((sum, t) => sum + t.taskTotal, 0);
+    }
+    const unsettledVendorTotal = vendorSettlement.unsettledAmount || (todayStallSalesTotal - (vendorSettlement.settledAmount || 0));
+
+    // Stalls filtering for Tab 2 (Roster)
+    let filteredStalls = ALL_100_STALLS;
     if (_adminStallZoneFilter && _adminStallZoneFilter !== "all") {
-        stalls = stalls.filter(s => s.zone === _adminStallZoneFilter);
+        filteredStalls = filteredStalls.filter(s => s.zone === _adminStallZoneFilter);
     }
     if (_adminStallSearchQuery) {
         const q = _adminStallSearchQuery.toLowerCase();
-        stalls = stalls.filter(s =>
+        filteredStalls = filteredStalls.filter(s =>
             (s.stallName && s.stallName.toLowerCase().includes(q)) ||
             (s.stallNumber && s.stallNumber.toLowerCase().includes(q)) ||
             (s.ownerName && s.ownerName.toLowerCase().includes(q)) ||
@@ -16695,39 +17190,349 @@ function renderAdminStalls() {
         );
     }
 
-    container.innerHTML = `
-        <div class="space-y-4">
-            <!-- Header Box & Segment Controls (Style exactly matching Rider Fleet HR) -->
-            <div class="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs space-y-3">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                    <div>
-                        <h4 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
-                            <span class="material-symbols-outlined text-purple-600 text-xl">storefront</span>
-                            <span>ศูนย์บริหารงานร้านค้าและทำเนียบแผงค้า (Vendors & Merchant Roster)</span>
-                        </h4>
-                        <p class="text-xs text-slate-500 mt-0.5">จัดการข้อมูล 100 แผงค้าประจำตลาด ตรวจสอบเอกสาร และคัดเลือกใบสมัครเปิดร้านใหม่</p>
+    // Filter stalls with active tasks for Tab 1 (Live)
+    const stallsWithOrdersIds = new Set(stallActiveTasks.map(t => t.stallId));
+    let displayLiveStalls = ALL_100_STALLS;
+    if (_adminStallZoneFilter && _adminStallZoneFilter !== "all") {
+        displayLiveStalls = displayLiveStalls.filter(s => s.zone === _adminStallZoneFilter);
+    }
+    if (_adminStallStatusFilter === "active_orders") {
+        displayLiveStalls = displayLiveStalls.filter(s => stallsWithOrdersIds.has(s.stallId));
+    } else if (_adminStallStatusFilter === "open") {
+        displayLiveStalls = displayLiveStalls.filter(s => !s.isClosed);
+    } else if (_adminStallStatusFilter === "closed") {
+        displayLiveStalls = displayLiveStalls.filter(s => s.isClosed);
+    }
+    if (_adminStallSearchQuery) {
+        const q = _adminStallSearchQuery.toLowerCase();
+        displayLiveStalls = displayLiveStalls.filter(s =>
+            (s.stallName && s.stallName.toLowerCase().includes(q)) ||
+            (s.stallNumber && s.stallNumber.toLowerCase().includes(q)) ||
+            (s.ownerName && s.ownerName.toLowerCase().includes(q)) ||
+            (s.phone && s.phone.includes(q))
+        );
+    }
+
+    // Sub-Tab Content Generator
+    let subTabContentHtml = "";
+
+    // ─────────────────────────────────────────────────────────────
+    // SUB-TAB 1: 🍳 มอนิเตอร์สด & คิวออเดอร์แผงค้า (LIVE MONITOR)
+    // ─────────────────────────────────────────────────────────────
+    if (_adminStallSubTab === "live") {
+        // Collect urgent items
+        const urgentItemsList = [];
+        stallActiveTasks.filter(t => t.stage <= 2).forEach(t => {
+            t.items.forEach(it => {
+                urgentItemsList.push({
+                    name: it.name,
+                    qty: it.qty || 1,
+                    stallName: t.stallName,
+                    stallNumber: t.stallNumber,
+                    zone: t.zone
+                });
+            });
+        });
+
+        subTabContentHtml = `
+            <!-- Live KPIs (4 Summary Cards matching Rider style) -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+                <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
+                    <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>ร้านเปิดทำการตอนนี้</span>
+                        <span class="material-symbols-outlined text-base text-purple-600">storefront</span>
                     </div>
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <button onclick="printA4MerchantDirectory()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์ทำเนียบแผงค้ากระดาษ A4 เข้าแฟ้ม">
-                            <span class="material-symbols-outlined text-sm font-bold text-slate-700">description</span>
-                            <span>📄 พิมพ์ทำเนียบ A4</span>
-                        </button>
-                        <button onclick="registerNewMerchantStall()" class="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold rounded-xl text-xs shadow-sm flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
-                            <span class="material-symbols-outlined text-sm">store</span>
-                            <span>ฟอร์มสมัครร้านค้า</span>
-                        </button>
-                        <button onclick="registerNewMerchantStall()" class="px-3.5 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
-                            <span class="material-symbols-outlined text-sm font-bold">add_business</span>
-                            <span>+ เพิ่มแผงค้าใหม่</span>
-                        </button>
+                    <div class="text-xl sm:text-2xl font-black text-slate-800">${openStallsCount} <span class="text-xs font-bold text-slate-500 font-sans">/ ${ALL_100_STALLS.length} แผง</span></div>
+                    <div class="text-[10px] sm:text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
+                        <span class="text-emerald-600 font-bold">🟢 เปิด ${openStallsCount}</span>
+                        <span>•</span>
+                        <span class="text-slate-400 font-bold">⚪ พัก ${closedStallsCount}</span>
                     </div>
                 </div>
 
-                <!-- Segment Switcher: ทำเนียบแผงค้า vs ใบสมัครเปิดร้านใหม่ -->
+                <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
+                    <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>ออเดอร์ที่แผงกำลังทำสด</span>
+                        <span class="material-symbols-outlined text-base text-amber-600">skillet</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black text-amber-600">${activeTasksCount} <span class="text-xs font-bold text-slate-500 font-sans">คิวงาน</span></div>
+                    <div class="text-[10px] sm:text-[11px] text-slate-500">
+                        🔪 เตรียม <strong class="text-amber-700">${preparingTasksCount}</strong> • 📦 พร้อมส่ง <strong class="text-emerald-700">${readyTasksCount}</strong>
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
+                    <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>ยอดขายแผงค้ารวมวันนี้</span>
+                        <span class="material-symbols-outlined text-base text-emerald-600">payments</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black text-emerald-700">฿${todayStallSalesTotal.toLocaleString()}</div>
+                    <div class="text-[10px] sm:text-[11px] text-slate-500">
+                        ยอดสินค้าของสด 100 แผงค้าวันนี้ (0% GP)
+                    </div>
+                </div>
+
+                <div onclick="toggleMarketRushMode()" class="bg-white p-3 sm:p-4 rounded-2xl border cursor-pointer hover:shadow-sm transition-all space-y-1 ${marketSettings.rushMode ? 'bg-gradient-to-br from-rose-50 to-orange-50/60 border-rose-300' : 'border-slate-200/80'}">
+                    <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>ความหนาแน่น & Rush Mode</span>
+                        <span class="material-symbols-outlined text-base ${marketSettings.rushMode ? 'text-rose-600 animate-bounce' : 'text-amber-500'}">
+                            ${marketSettings.rushMode ? 'local_fire_department' : 'wb_sunny'}
+                        </span>
+                    </div>
+                    <div class="text-xs sm:text-sm font-black ${marketSettings.rushMode ? 'text-rose-700' : 'text-slate-700'}">
+                        ${marketSettings.rushMode ? '🔥 ออเดอร์หนาแน่น Rush Hour' : '☀️ บรรยากาศตลาดปกติ'}
+                    </div>
+                    <div class="text-[10px] sm:text-[11px] text-slate-400">
+                        คลิกเพื่อสลับโหมดเร่งด่วน 1-Click
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toolbar: Search & Status Filters -->
+            <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                <div class="w-full sm:w-72 relative">
+                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
+                    <input type="text" value="${_adminStallSearchQuery}" oninput="handleAdminStallSearch(this.value)" placeholder="ค้นหาชื่อร้าน, เลขแผง, โซน..." class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+
+                <div class="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0 scrollbar-none text-xs w-full sm:w-auto">
+                    <button onclick="filterAdminStallsByStatus('all')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminStallStatusFilter === 'all' ? 'bg-purple-700 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        ทั้งหมด (${ALL_100_STALLS.length})
+                    </button>
+                    <button onclick="filterAdminStallsByStatus('active_orders')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminStallStatusFilter === 'active_orders' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        🔴 มีออเดอร์ค้างทำ (${stallsWithOrdersIds.size})
+                    </button>
+                    <button onclick="filterAdminStallsByStatus('open')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminStallStatusFilter === 'open' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        🟢 เปิดร้าน (${openStallsCount})
+                    </button>
+                    <button onclick="filterAdminStallsByStatus('closed')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminStallStatusFilter === 'closed' ? 'bg-slate-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                        ⚪ พักร้าน (${closedStallsCount})
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2-Column Responsive Layout (Matching Rider split-view) -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <!-- Left: Stall Order Cards (Span 7) -->
+                <div class="lg:col-span-7 space-y-3">
+                    ${stallActiveTasks.length === 0 ? `
+                        <div class="bg-white p-8 rounded-3xl border border-dashed border-slate-300 text-center space-y-3">
+                            <div class="w-14 h-14 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto text-2xl font-black">
+                                🍳
+                            </div>
+                            <div class="font-extrabold text-slate-800 text-sm sm:text-base">ยังไม่มีออเดอร์ของสดที่กำลังจัดเตรียมในขณะนี้</div>
+                            <p class="text-xs text-slate-500 max-w-md mx-auto">ท่านสามารถกดปุ่มด้านล่างเพื่อจำลองออเดอร์สดจากลูกค้า ทดสอบดูขั้นตอนการจัดเตรียมของแผงค้าได้ทันทีครับ</p>
+                            <div class="pt-2 flex items-center justify-center gap-2 flex-wrap">
+                                <button onclick="seedMerchantSampleOrders()" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer flex items-center gap-1.5">
+                                    <span class="material-symbols-outlined text-sm font-bold">bolt</span>
+                                    <span>⚡ จำลอง 3 ออเดอร์ของสดเข้าแผงค้า</span>
+                                </button>
+                                <button onclick="filterAdminStallsByStatus('all')" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer">
+                                    ดูทำเนียบแผงค้าทั้งหมด
+                                </button>
+                            </div>
+                        </div>
+                    ` : stallActiveTasks.map(task => `
+                        <div class="bg-white rounded-2xl border ${task.isReady ? 'border-emerald-300 shadow-sm' : 'border-amber-300 shadow-sm'} p-3.5 sm:p-4 space-y-3 hover:shadow-md transition-all">
+                            <!-- Card Header: Stall Profile -->
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
+                                        🏪
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center gap-1.5 flex-wrap">
+                                            <span class="font-black text-sm text-slate-900">${task.stallName}</span>
+                                            <span class="bg-slate-100 text-slate-700 text-[10px] font-mono px-2 py-0.5 rounded-md font-bold">${task.stallNumber}</span>
+                                            <span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded-md">โซน ${task.zone}</span>
+                                        </div>
+                                        <div class="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap mt-0.5">
+                                            <span>เจ้าของ: <strong>${task.ownerName}</strong></span>
+                                            <span>•</span>
+                                            <a href="tel:${task.phone}" class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
+                                                <span class="material-symbols-outlined text-xs">call</span>
+                                                <span>${task.phone}</span>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-1.5 self-end sm:self-auto">
+                                    <span class="px-2.5 py-1 rounded-full text-[10px] font-black border ${task.stageBadge}">
+                                        ${task.stageLabel}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- 4 Order Pipeline Progress Steps (Interactive) -->
+                            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-2">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                                    <span>ขั้นตอนการจัดการออเดอร์แผงค้า (Order Pipeline):</span>
+                                    <span class="font-mono text-slate-500 font-black">#${task.orderId}</span>
+                                </div>
+                                <div class="grid grid-cols-4 gap-1 text-center text-[10.5px]">
+                                    <div class="p-1.5 rounded-lg font-bold ${task.stage >= 1 ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-white text-slate-400 border border-slate-200'}">
+                                        📥 1. รับออเดอร์
+                                    </div>
+                                    <div class="p-1.5 rounded-lg font-bold ${task.stage === 2 ? 'bg-amber-400 text-slate-950 border border-amber-500 animate-pulse font-black shadow-2xs' : (task.stage > 2 ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-white text-slate-400 border border-slate-200')}">
+                                        🔪 2. เตรียม/ชั่งสด
+                                    </div>
+                                    <div class="p-1.5 rounded-lg font-bold ${task.stage === 3 ? 'bg-emerald-500 text-white border border-emerald-600 font-black shadow-2xs' : (task.stage > 3 ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-white text-slate-400 border border-slate-200')}">
+                                        📦 3. รอไรเดอร์
+                                    </div>
+                                    <div class="p-1.5 rounded-lg font-bold ${task.stage === 4 ? 'bg-sky-500 text-white border border-sky-600 font-black' : 'bg-white text-slate-400 border border-slate-200'}">
+                                        🚀 4. ส่งมอบแล้ว
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Items List -->
+                            <div class="space-y-1">
+                                <div class="text-[10px] font-bold text-slate-400 flex items-center justify-between">
+                                    <span>รายการที่ต้องจัดเตรียม:</span>
+                                    <span class="text-amber-700 font-black">ยอดรวมแผงนี้: ฿${task.taskTotal.toLocaleString()}</span>
+                                </div>
+                                <div class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100 text-xs p-1">
+                                    ${task.items.map(it => `
+                                        <div class="p-1.5 flex items-center justify-between">
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="text-emerald-600 font-black">✓</span>
+                                                <span class="font-bold text-slate-800">${it.name || 'สินค้า'}</span>
+                                                <span class="text-slate-400 font-normal">x${it.qty || 1}</span>
+                                            </div>
+                                            <div class="font-mono font-bold text-slate-700">฿${Number(it.price || 0).toLocaleString()}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+
+                            <!-- Customer & Address Summary -->
+                            <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex-wrap gap-2">
+                                <div>ลูกค้า: <strong>${task.customerName}</strong> (${task.customerPhone})</div>
+                                <div class="text-slate-400 text-[10px]">ปลายทาง: ${task.deliveryAddress}</div>
+                            </div>
+
+                            <!-- Card Action Buttons -->
+                            <div class="flex items-center justify-between pt-2 border-t border-slate-100 gap-2 flex-wrap">
+                                <div class="flex items-center gap-1.5">
+                                    ${!task.isReady && task.stage <= 2 ? `
+                                        <button onclick="adminMarkStallReady('${task.orderId}', '${task.stallId}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-sm font-bold">check_circle</span>
+                                            <span>✓ ช่วยยืนยันเตรียมเสร็จ</span>
+                                        </button>
+                                    ` : `
+                                        <span class="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl font-bold text-xs flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-sm text-emerald-600">verified</span>
+                                            <span>เตรียมเสร็จแล้ว รอไรเดอร์มารับ</span>
+                                        </span>
+                                    `}
+                                    <button onclick="loginAsMerchantStall('${task.stallId}')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าร้านนี้">
+                                        <span class="material-symbols-outlined text-xs">store</span>
+                                        <span>เข้าร้าน</span>
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <button onclick="printStallOrderThermalSlip('${task.orderId}', '${task.stallId}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสั่งของสด 80mm">
+                                        <span class="material-symbols-outlined text-xs">print</span>
+                                        <span>สลิป 80mm</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <!-- Right: Interactive Market Zone Grid & Urgent Watch (Span 5) -->
+                <div class="lg:col-span-5 space-y-3">
+                    <!-- Market Stall Interactive Matrix -->
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                            <div class="font-extrabold text-xs sm:text-sm text-slate-800 flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-purple-600 text-base">map</span>
+                                <span>ผังโซน 100 แผงค้า (Market Stall Grid)</span>
+                            </div>
+                            <span class="text-[10px] text-slate-400">คลิกที่แผงเพื่อกรอง</span>
+                        </div>
+                        <div class="text-[10px] text-slate-500 flex items-center gap-2 flex-wrap pb-1">
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> 🔴 มีออเดอร์</span>
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> 🟢 เปิดร้าน</span>
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-300"></span> ⚪ พักร้าน</span>
+                        </div>
+
+                        <!-- 4 Zones Mini Grid -->
+                        <div class="space-y-2.5 text-xs max-h-[360px] overflow-y-auto pr-1">
+                            ${['A', 'B', 'C', 'E'].map(z => {
+                                const zoneStalls = ALL_100_STALLS.filter(s => s.zone === z);
+                                const zoneLabel = z === 'A' ? 'โซน A (เนื้อ/ไก่สด)' : (z === 'B' ? 'โซน B (ผักสด)' : (z === 'C' ? 'โซน C (ของแห้ง/แกง)' : 'โซน E (อาหารทะเล)'));
+                                return `
+                                    <div class="p-2 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5">
+                                        <div class="font-black text-[11px] text-slate-700 flex items-center justify-between">
+                                            <span>${zoneLabel}</span>
+                                            <span class="text-[10px] text-slate-400 font-mono">${zoneStalls.length} แผง</span>
+                                        </div>
+                                        <div class="flex flex-wrap gap-1">
+                                            ${zoneStalls.slice(0, 20).map(s => {
+                                                const hasOrder = stallsWithOrdersIds.has(s.stallId);
+                                                return `
+                                                    <button onclick="handleAdminStallSearch('${s.stallNumber}')" title="${s.stallNumber}: ${s.stallName} (${hasOrder ? 'มีออเดอร์ค้างทำ!' : (s.isClosed ? 'พักร้าน' : 'เปิดปกติ')})" class="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold transition-all active:scale-95 cursor-pointer ${
+                                                        hasOrder
+                                                        ? 'bg-amber-400 text-slate-950 font-black animate-pulse border border-amber-500 shadow-2xs'
+                                                        : (s.isClosed ? 'bg-slate-200 text-slate-400 opacity-60' : 'bg-white hover:bg-emerald-50 text-slate-700 border border-slate-200')
+                                                    }">
+                                                        ${s.stallNumber}
+                                                    </button>
+                                                `;
+                                            }).join('')}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Urgent Kitchen Items Watch -->
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
+                        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                            <div class="font-extrabold text-xs sm:text-sm text-slate-800 flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-amber-600 text-base">checklist</span>
+                                <span>รายการของสดที่ต้องเร่งชั่ง/จัดเตรียม (${urgentItemsList.length})</span>
+                            </div>
+                        </div>
+                        ${urgentItemsList.length === 0 ? `
+                            <div class="py-6 text-center text-slate-400 text-xs">
+                                ไม่มีรายการค้างเตรียมในขณะนี้ ทุกแผงจัดเสร็จครบแล้ว
+                            </div>
+                        ` : `
+                            <div class="space-y-1.5 max-h-[220px] overflow-y-auto pr-1 text-xs">
+                                ${urgentItemsList.map(it => `
+                                    <div class="p-2 bg-amber-50/60 rounded-xl border border-amber-200/80 flex items-center justify-between">
+                                        <div>
+                                            <span class="font-bold text-slate-800">${it.name}</span>
+                                            <span class="text-slate-500 font-normal"> x${it.qty}</span>
+                                        </div>
+                                        <div class="text-[10px] font-bold text-amber-900 bg-white px-2 py-0.5 rounded-lg border border-amber-200">
+                                            ${it.stallNumber} (${it.stallName})
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SUB-TAB 2: 👥 ทำเนียบแผงค้า & ใบสมัครเปิดร้านใหม่ (ROSTER & HR)
+    // ─────────────────────────────────────────────────────────────
+    else if (_adminStallSubTab === "roster") {
+        subTabContentHtml = `
+            <!-- Segment Switcher: ทำเนียบแผงค้า vs ใบสมัครเปิดร้านใหม่ -->
+            <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2 flex-wrap">
                 <div class="flex items-center gap-2">
                     <button onclick="switchAdminStallRosterView('roster')" class="px-4 py-2 rounded-xl font-extrabold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${_adminStallRosterView === 'roster' ? 'bg-purple-700 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
                         <span class="material-symbols-outlined text-sm">badge</span>
-                        <span>1. ทำเนียบแผงค้าประจำตลาด (${stalls.length} ร้าน)</span>
+                        <span>1. ทำเนียบแผงค้าประจำตลาด (${ALL_100_STALLS.length} ร้าน)</span>
                     </button>
                     <button onclick="switchAdminStallRosterView('applications')" class="px-4 py-2 rounded-xl font-extrabold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${_adminStallRosterView === 'applications' ? 'bg-purple-700 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
                         <span class="material-symbols-outlined text-sm">assignment</span>
@@ -16735,12 +17540,25 @@ function renderAdminStalls() {
                         ${pendingMerchantApps.length > 0 ? `<span class="bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded-full text-[10px] font-black animate-pulse">รอ ${pendingMerchantApps.length}</span>` : ''}
                     </button>
                 </div>
+                <div class="flex items-center gap-1.5">
+                    <button onclick="printA4MerchantDirectory()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์ทำเนียบแผงค้ากระดาษ A4 เข้าแฟ้ม">
+                        <span class="material-symbols-outlined text-sm font-bold text-slate-700">description</span>
+                        <span>📄 พิมพ์ทำเนียบ A4</span>
+                    </button>
+                    <button onclick="registerNewMerchantStall()" class="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold rounded-xl text-xs shadow-sm flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">store</span>
+                        <span>ฟอร์มสมัครร้านค้า</span>
+                    </button>
+                    <button onclick="registerNewMerchantStall()" class="px-3.5 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm font-bold">add_business</span>
+                        <span>+ เพิ่มแผงค้าใหม่</span>
+                    </button>
+                </div>
             </div>
 
             ${_adminStallRosterView === 'applications' ? `
-                <!-- SUB-VIEW 2: APPLICATIONS LIST (Style matching Rider applications) -->
+                <!-- APPLICATIONS VIEW -->
                 <div class="space-y-3">
-                    <!-- Filter Tabs -->
                     <div class="flex items-center gap-1.5 overflow-x-auto text-xs pb-0.5">
                         <button onclick="filterAdminMerchantApps('all')" class="px-3 py-1 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${_adminMerchantAppFilter === 'all' ? 'bg-purple-700 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
                             ทั้งหมด (${merchantApps.length})
@@ -16756,7 +17574,6 @@ function renderAdminStalls() {
                         </button>
                     </div>
 
-                    <!-- Applications Cards List -->
                     ${displayedApps.length === 0 ? `
                         <div class="py-12 px-4 bg-white border border-dashed border-slate-200 rounded-3xl text-center space-y-2">
                             <span class="material-symbols-outlined text-4xl text-slate-300">inbox</span>
@@ -16766,155 +17583,72 @@ function renderAdminStalls() {
                         const stall = app.stallData || {};
                         const productsList = (stall.products || []).slice(0, 3).map(p => `<span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold">✓ ${p.name || 'สินค้า'} ฿${p.price || 0}</span>`).join('');
                         return `
-                        <div id="merchant-app-card-${app.id}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
-                            <!-- Card Header -->
-                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
-                                <div class="flex items-start gap-3">
-                                    <div class="w-11 h-11 rounded-2xl bg-gradient-to-br ${app.status === 'pending' ? 'from-amber-400 to-orange-500' : app.status === 'approved' ? 'from-emerald-500 to-teal-600' : 'from-rose-400 to-red-600'} text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
-                                        🏪
-                                    </div>
-                                    <div>
-                                        <div class="flex items-center gap-2 flex-wrap">
-                                            <span class="font-black text-sm text-slate-900">${stall.stallName || 'แผงค้าใหม่'}</span>
-                                            <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${stall.stallNumber || app.id}</span>
-                                            ${app.status === 'pending' ? `
-                                                <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⏳ รอการอนุมัติ</span>
-                                            ` : app.status === 'approved' ? `
-                                                <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✓ อนุมัติแล้ว</span>
-                                            ` : `
-                                                <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✕ ปฏิเสธ</span>
-                                            `}
-                                            ${app.accessCode ? `
-                                                <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 text-[10px] font-mono font-black px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
-                                                    <span>🔑 รหัส:</span>
-                                                    <span class="tracking-widest">${app.accessCode}</span>
-                                                </span>
-                                            ` : ''}
+                            <div id="merchant-app-card-${app.id}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
+                                    <div class="flex items-start gap-3">
+                                        <div class="w-11 h-11 rounded-2xl bg-gradient-to-br ${app.status === 'pending' ? 'from-amber-400 to-orange-500' : app.status === 'approved' ? 'from-emerald-500 to-teal-600' : 'from-rose-400 to-red-600'} text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
+                                            🏪
                                         </div>
-                                        <div class="text-[11px] text-slate-500 flex items-center gap-2.5 flex-wrap mt-0.5 font-mono">
-                                            <a href="tel:${stall.phone}" class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
-                                                <span class="material-symbols-outlined text-xs">call</span>
-                                                <span>${stall.phone || '-'}</span>
-                                            </a>
-                                            <span>•</span>
-                                            <span class="text-emerald-700 font-bold flex items-center gap-0.5">
-                                                <span class="material-symbols-outlined text-xs">chat</span>
-                                                <span>LINE: ${stall.lineId || stall.phone || '-'}</span>
-                                            </span>
-                                            <span>•</span>
-                                            <span class="text-slate-500 font-sans">เจ้าของ: <strong>${stall.ownerName || '-'}</strong></span>
+                                        <div>
+                                            <div class="flex items-center gap-2 flex-wrap">
+                                                <span class="font-black text-sm text-slate-900">${stall.stallName || 'แผงค้าใหม่'}</span>
+                                                <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${stall.stallNumber || app.id}</span>
+                                                ${app.status === 'pending' ? `
+                                                    <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⏳ รอการอนุมัติ</span>
+                                                ` : app.status === 'approved' ? `
+                                                    <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✓ อนุมัติแล้ว</span>
+                                                ` : `
+                                                    <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✕ ปฏิเสธ</span>
+                                                `}
+                                                ${app.accessCode ? `
+                                                    <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 text-[10px] font-mono font-black px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
+                                                        <span>🔑 รหัส:</span>
+                                                        <span class="tracking-widest">${app.accessCode}</span>
+                                                    </span>
+                                                ` : ''}
+                                            </div>
+                                            <div class="text-[11px] text-slate-500 flex items-center gap-2.5 flex-wrap mt-0.5 font-mono">
+                                                <a href="tel:${stall.phone}" class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
+                                                    <span class="material-symbols-outlined text-xs">call</span>
+                                                    <span>${stall.phone || '-'}</span>
+                                                </a>
+                                                <span>•</span>
+                                                <span class="text-slate-500 font-sans">เจ้าของ: <strong>${stall.ownerName || '-'}</strong></span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                <!-- Card Actions -->
-                                <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
-                                    <button onclick="printA4MerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
-                                        <span class="material-symbols-outlined text-xs">print</span>
-                                        <span>พิมพ์ A4</span>
-                                    </button>
-                                    <button onclick="viewMerchantAppDetail('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
-                                        <span class="material-symbols-outlined text-xs">visibility</span>
-                                        <span>ดูรายละเอียด</span>
-                                    </button>
-                                    <button onclick="loginAsMerchantStall('${stall.stallId}')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้">
-                                        <span class="material-symbols-outlined text-xs">store</span>
-                                        <span>สลับเข้าร้าน</span>
-                                    </button>
-
-                                    ${app.status === 'pending' ? `
-                                        <button onclick="approveMerchantApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
-                                            <span class="material-symbols-outlined text-xs font-bold">check_circle</span>
-                                            <span>อนุมัติ</span>
+                                    <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
+                                        <button onclick="printA4MerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
+                                            <span class="material-symbols-outlined text-xs">print</span>
+                                            <span>พิมพ์ A4</span>
                                         </button>
-                                        <button onclick="rejectMerchantApplication('${app.id}')" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all cursor-pointer">
-                                            ✕ ปฏิเสธ
+                                        <button onclick="viewMerchantAppDetail('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                            <span class="material-symbols-outlined text-xs">visibility</span>
+                                            <span>ดูรายละเอียด</span>
                                         </button>
-                                    ` : app.status === 'approved' ? `
-                                        <button onclick="reconsiderMerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="ย้อนสถานะกลับไปรอพิจารณา">
-                                            <span class="material-symbols-outlined text-xs">replay</span>
-                                            <span>รอพิจารณา</span>
+                                        <button onclick="loginAsMerchantStall('${stall.stallId}')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้">
+                                            <span class="material-symbols-outlined text-xs">store</span>
+                                            <span>สลับเข้าร้าน</span>
                                         </button>
-                                    ` : `
-                                        <button onclick="reconsiderMerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
-                                            <span class="material-symbols-outlined text-xs">replay</span>
-                                            <span>พิจารณาใหม่</span>
-                                        </button>
-                                    `}
-                                    <button onclick="deleteMerchantApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
-                                        <span class="material-symbols-outlined text-base">delete</span>
-                                    </button>
+                                        ${app.status === 'pending' ? `
+                                            <button onclick="approveMerchantApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                                <span class="material-symbols-outlined text-xs font-bold">check_circle</span>
+                                                <span>อนุมัติ</span>
+                                            </button>
+                                            <button onclick="rejectMerchantApplication('${app.id}')" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all cursor-pointer">
+                                                ✕ ปฏิเสธ
+                                            </button>
+                                        ` : ''}
+                                    </div>
                                 </div>
                             </div>
-
-                            <!-- 4-Column Info Grid (Style matching Rider info grid) -->
-                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 bg-slate-50/70 p-3 rounded-xl border border-slate-100 text-xs">
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1">
-                                        <span class="material-symbols-outlined text-xs text-emerald-600">storefront</span>
-                                        <span>ข้อมูลแผง & โซน:</span>
-                                    </div>
-                                    <div class="font-extrabold text-slate-800">${stall.stallName || '-'}</div>
-                                    <div class="text-[11px] text-slate-500 font-mono">แผง: <strong class="text-slate-800">${stall.stallNumber || '-'}</strong> • โซน ${stall.zone || '-'}</div>
-                                    <div class="text-[10px] text-slate-400">หมวด: ${stall.category || stall.stallTag || 'ของสด'}</div>
-                                </div>
-
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1">
-                                        <span class="material-symbols-outlined text-xs text-amber-600">star</span>
-                                        <span>จุดเด่นร้านค้า:</span>
-                                    </div>
-                                    <div class="font-bold text-slate-700">${stall.highlight || 'ของสดคุณภาพดี'}</div>
-                                    <div class="text-[10px] text-slate-500 line-clamp-2">${stall.description || stall.story || 'ร้านค้าประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)'}</div>
-                                </div>
-
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1">
-                                        <span class="material-symbols-outlined text-xs text-purple-600">inventory_2</span>
-                                        <span>สินค้าตัวอย่าง & เมนู:</span>
-                                    </div>
-                                    <div class="flex flex-wrap gap-1">
-                                        ${productsList || '<span class="text-slate-400 text-[10px] italic">- ยังไม่ได้ระบุ -</span>'}
-                                    </div>
-                                </div>
-
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1">
-                                        <span class="material-symbols-outlined text-xs text-emerald-600">account_balance_wallet</span>
-                                        <span>บัญชีรับเงินแผงค้า:</span>
-                                    </div>
-                                    <div class="font-mono font-black text-emerald-700">${stall.promptPayNumber || stall.phone || '-'}</div>
-                                    <div class="text-[10px] text-slate-500">ธนาคาร: ${stall.promptPayBank || 'พร้อมเพย์'}</div>
-                                    <div class="text-[10px] text-slate-400">ยื่นเมื่อ: ${formatRiderAppDate(app.appliedAt || app.submittedAt)}</div>
-                                </div>
-                            </div>
-                        </div>
                         `;
                     }).join('')}
                 </div>
             ` : `
-                <!-- SUB-VIEW 1: ACTIVE STALLS DIRECTORY (TABLE & FILTERS) -->
-                <div class="space-y-4">
-                    ${pendingMerchantApps.length > 0 ? `
-                        <div class="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-300 p-3.5 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
-                            <div class="flex items-center gap-2.5">
-                                <span class="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center text-lg shadow-xs shrink-0">⏳</span>
-                                <div>
-                                    <div class="font-black text-xs sm:text-sm text-slate-900 flex items-center gap-1.5 flex-wrap">
-                                        <span>มีใบสมัครร้านค้าใหม่รอการอนุมัติ <span class="text-amber-700 underline font-black font-mono">${pendingMerchantApps.length} ใบ</span></span>
-                                        <span class="bg-amber-400 text-slate-950 px-2 py-0.2 rounded-full text-[10px] font-black">รอดำเนินการ</span>
-                                    </div>
-                                    <div class="text-[11px] text-slate-600 mt-0.5">มีร้านค้าส่งข้อมูลเปิดแผงเข้ามาใหม่ คลิกปุ่มด้านขวาเพื่อเปิดดูใบสมัครและอนุมัติสร้างรหัสผ่าน 6 หลัก</div>
-                                </div>
-                            </div>
-                            <button onclick="switchAdminStallRosterView('applications'); filterAdminMerchantApps('pending');" class="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black rounded-xl text-xs shadow-md active:scale-95 transition-all shrink-0 cursor-pointer flex items-center gap-1">
-                                <span class="material-symbols-outlined text-sm font-bold">assignment</span>
-                                <span>ดูใบสมัคร (${pendingMerchantApps.length})</span>
-                            </button>
-                        </div>
-                    ` : ''}
-
-                    <!-- Search & Zone Filters -->
+                <!-- ROSTER 100 STALLS TABLE -->
+                <div class="space-y-3">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
                         <div class="flex items-center gap-1.5 overflow-x-auto text-xs pb-1 sm:pb-0">
                             <button onclick="filterAdminStallsByZone('all')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${_adminStallZoneFilter === 'all' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">ทั้งหมด (${ALL_100_STALLS.length})</button>
@@ -16929,7 +17663,6 @@ function renderAdminStalls() {
                         </div>
                     </div>
 
-                    <!-- Stalls Table (with Access Code column) -->
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-xs">
@@ -16945,51 +17678,351 @@ function renderAdminStalls() {
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-slate-100">
-                                    ${stalls.slice(0, 60).map(s => `
-                                    <tr class="hover:bg-slate-50 transition-colors">
-                                        <td class="p-3 font-mono font-bold text-slate-700">
-                                            <span class="bg-slate-100 px-2 py-0.5 rounded">${s.stallNumber || 'แผงตลาด'}</span>
-                                            <span class="text-[10px] text-slate-400 ml-1">โซน ${s.zone || '-'}</span>
-                                        </td>
-                                        <td class="p-3">
-                                            <div class="font-extrabold text-slate-900">${s.stallName}</div>
-                                            <div class="text-[10px] text-slate-400">${s.stallTag || s.category || ''}</div>
-                                        </td>
-                                        <td class="p-3 text-slate-700 font-medium">${s.ownerName || 'เจ้าของแผง'}</td>
-                                        <td class="p-3 font-mono font-bold text-emerald-700">📱 ${s.phone || '-'}</td>
-                                        <td class="p-3">
-                                            ${s.accessCode ? `
-                                                <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-lg font-mono font-bold text-xs tracking-wider inline-flex items-center gap-1 cursor-pointer" onclick="navigator.clipboard.writeText('${s.accessCode}'); showToast('📋 คัดลอกรหัส ${s.accessCode} แล้ว');" title="คลิกเพื่อคัดลอกรหัส">
-                                                    <span>🔑</span>
-                                                    <span>${s.accessCode}</span>
-                                                </span>
-                                            ` : `
-                                                <span class="text-slate-400 text-[11px] italic">- ไม่มีรหัส -</span>
-                                            `}
-                                        </td>
-                                        <td class="p-3 text-center">
-                                            <span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">เปิดทำการ</span>
-                                        </td>
-                                        <td class="p-3 text-center">
-                                            <div class="flex items-center justify-center gap-1">
-                                                <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', 500, '${s.phone || '089-123-4567'}', '${s.ownerName || 'เจ้าของแผง'}', '${s.stallNumber || 'แผงตลาด'}')" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
-                                                    QR โอน
+                                    ${filteredStalls.slice(0, 80).map(s => `
+                                        <tr class="hover:bg-slate-50 transition-colors">
+                                            <td class="p-3 font-mono font-bold text-slate-700">
+                                                <span class="bg-slate-100 px-2 py-0.5 rounded">${s.stallNumber || 'แผงตลาด'}</span>
+                                                <span class="text-[10px] text-slate-400 ml-1">โซน ${s.zone || '-'}</span>
+                                            </td>
+                                            <td class="p-3">
+                                                <div class="font-extrabold text-slate-900">${s.stallName}</div>
+                                                <div class="text-[10px] text-slate-400">${s.stallTag || s.category || ''}</div>
+                                            </td>
+                                            <td class="p-3 text-slate-700 font-medium">${s.ownerName || 'เจ้าของแผง'}</td>
+                                            <td class="p-3 font-mono font-bold text-emerald-700">📱 ${s.phone || '-'}</td>
+                                            <td class="p-3">
+                                                ${s.accessCode ? `
+                                                    <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-lg font-mono font-bold text-xs tracking-wider inline-flex items-center gap-1 cursor-pointer" onclick="navigator.clipboard.writeText('${s.accessCode}'); showToast('📋 คัดลอกรหัส ${s.accessCode} แล้ว');" title="คลิกเพื่อคัดลอกรหัส">
+                                                        <span>🔑</span>
+                                                        <span>${s.accessCode}</span>
+                                                    </span>
+                                                ` : '<span class="text-slate-400 text-[11px] italic">- ไม่มีรหัส -</span>'}
+                                            </td>
+                                            <td class="p-3 text-center">
+                                                <button onclick="toggleStallOpenStatusByAdmin('${s.stallId}')" class="px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer ${s.isClosed ? 'bg-slate-100 text-slate-500 border border-slate-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}">
+                                                    ${s.isClosed ? '⚪ พักร้าน' : '🟢 เปิดร้าน'}
                                                 </button>
-                                                <button onclick="loginAsMerchantStall('${s.stallId}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
-                                                    เข้าร้าน
-                                                </button>
-                                                <button onclick="deleteStallByAdmin('${s.stallId}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer" title="ลบแผงค้านี้">
-                                                    ลบร้าน
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>`).join("")}
+                                            </td>
+                                            <td class="p-3 text-center">
+                                                <div class="flex items-center justify-center gap-1">
+                                                    <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', 500, '${s.phone || '089-123-4567'}', '${s.ownerName || 'เจ้าของแผง'}', '${s.stallNumber || 'แผงตลาด'}')" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
+                                                        QR โอน
+                                                    </button>
+                                                    <button onclick="loginAsMerchantStall('${s.stallId}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
+                                                        เข้าร้าน
+                                                    </button>
+                                                    <button onclick="deleteStallByAdmin('${s.stallId}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer" title="ลบแผงค้านี้">
+                                                        ลบร้าน
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
             `}
+        `;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SUB-TAB 3: 💵 เคลียร์เงินยอดขาย & โอนพร้อมเพย์ (SETTLEMENTS)
+    // ─────────────────────────────────────────────────────────────
+    else if (_adminStallSubTab === "settlement") {
+        const vendorList = vendorSettlement.stalls || [];
+        const settledCount = vendorList.filter(v => v.isSettled).length;
+        const unsettledCount = vendorList.length - settledCount;
+
+        subTabContentHtml = `
+            <!-- Financial Summary KPIs (3 Cards) -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
+                    <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>ยอดขายรวมที่ต้องโอนวันนี้</span>
+                        <span class="material-symbols-outlined text-base text-purple-600">account_balance_wallet</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black text-slate-800">฿${(vendorSettlement.totalVendorDue || 0).toLocaleString()}</div>
+                    <div class="text-[10px] sm:text-[11px] text-slate-500">
+                        รวมทั้งหมด ${vendorList.length} แผงค้า (0% GP)
+                    </div>
+                </div>
+
+                <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
+                    <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>โอนเงินสำเร็จแล้ว</span>
+                        <span class="material-symbols-outlined text-base text-emerald-600">task_alt</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black text-emerald-700">฿${(vendorSettlement.settledAmount || 0).toLocaleString()}</div>
+                    <div class="text-[10px] sm:text-[11px] text-emerald-600 font-bold">
+                        ✓ โอนแล้ว ${settledCount} แผงค้า
+                    </div>
+                </div>
+
+                <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1 ${unsettledVendorTotal > 0 ? 'bg-amber-50/40 border-amber-200' : ''}">
+                    <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>ยอดคงค้างรอโอน</span>
+                        <span class="material-symbols-outlined text-base text-amber-600">pending</span>
+                    </div>
+                    <div class="text-xl sm:text-2xl font-black text-amber-700">฿${unsettledVendorTotal.toLocaleString()}</div>
+                    <div class="text-[10px] sm:text-[11px] text-amber-800 font-bold">
+                        ⏳ รอโอน ${unsettledCount} แผงค้า
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toolbar & Actions -->
+            <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                <div class="flex items-center gap-2 text-xs">
+                    <span class="font-bold text-slate-700 flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm text-purple-600">calendar_month</span>
+                        <span>รอบบัญชีประจำวันที่: <strong>${targetDateKey}</strong></span>
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="printA4VendorSettlementsReport('${targetDateKey}')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">print</span>
+                        <span>📄 พิมพ์สรุปส่งฝ่ายบัญชี A4</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Vendor Settlements Table -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                <th class="p-3">เลขแผง / โซน</th>
+                                <th class="p-3">ชื่อแผงค้า / เจ้าของ</th>
+                                <th class="p-3 text-center">ออเดอร์</th>
+                                <th class="p-3 text-right">ยอดเงินสุทธิ (0% GP)</th>
+                                <th class="p-3">บัญชีพร้อมเพย์</th>
+                                <th class="p-3 text-center">สถานะการโอน</th>
+                                <th class="p-3 text-center">การจัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            ${vendorList.length === 0 ? `
+                                <tr>
+                                    <td colspan="7" class="p-8 text-center text-slate-400">
+                                        <div class="space-y-2">
+                                            <span class="material-symbols-outlined text-3xl text-slate-300">payments</span>
+                                            <div>ยังไม่มียอดขายของแผงค้าในวันที่เลือก (${targetDateKey})</div>
+                                            <button onclick="seedMerchantSampleOrders()" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-lg text-xs">
+                                                ⚡ จำลองออเดอร์เพื่อดูการเคลียร์เงิน
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ` : vendorList.map(v => `
+                                <tr class="hover:bg-slate-50 transition-colors">
+                                    <td class="p-3 font-mono font-bold text-slate-700">
+                                        <span class="bg-slate-100 px-2 py-0.5 rounded">${v.stallNumber || 'แผง'}</span>
+                                        <span class="text-[10px] text-slate-400 ml-1">โซน ${v.zone || '-'}</span>
+                                    </td>
+                                    <td class="p-3">
+                                        <div class="font-extrabold text-slate-900">${v.stallName}</div>
+                                        <div class="text-[10px] text-slate-400">เจ้าของ: ${v.ownerName || '-'}</div>
+                                    </td>
+                                    <td class="p-3 text-center font-bold text-slate-700">
+                                        ${v.orderCount} งาน
+                                    </td>
+                                    <td class="p-3 text-right font-mono font-black text-emerald-700 text-sm">
+                                        ฿${Number(v.totalAmount || 0).toLocaleString()}
+                                    </td>
+                                    <td class="p-3 font-mono text-slate-600">
+                                        ${v.phone || '-'}
+                                    </td>
+                                    <td class="p-3 text-center">
+                                        ${v.isSettled ? `
+                                            <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded-full text-[10px] font-black">
+                                                ✓ โอนแล้ว
+                                            </span>
+                                        ` : `
+                                            <span class="bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-0.5 rounded-full text-[10px] font-black">
+                                                ⏳ รอโอน
+                                            </span>
+                                        `}
+                                    </td>
+                                    <td class="p-3 text-center">
+                                        <div class="flex items-center justify-center gap-1.5">
+                                            <button onclick="openVendorPayoutModal('${v.stallId}', '${v.stallName.replace(/'/g, "\\'")}', ${v.totalAmount}, '${v.phone}', '${v.ownerName}', '${v.stallNumber}', ${v.totalAmount}, 0, 0, ${v.orderCount})" class="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                                                <span class="material-symbols-outlined text-xs">qr_code_2</span>
+                                                <span>${v.isSettled ? 'ดู QR ซ้ำ' : '💸 สแกน QR โอน'}</span>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SUB-TAB 4: ⚙️ ตั้งค่าร้านค้า & กฎตลาดสด (SETTINGS & RULES)
+    // ─────────────────────────────────────────────────────────────
+    else if (_adminStallSubTab === "settings") {
+        subTabContentHtml = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Settings Form -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                    <div class="border-b border-slate-100 pb-2.5">
+                        <h4 class="font-black text-sm text-slate-800 flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-purple-600 text-base">tune</span>
+                            <span>ตั้งค่านโยบายแผงค้าและตลาดสด (Market Policies)</span>
+                        </h4>
+                        <p class="text-[11px] text-slate-500">กำหนดค่ามาตรฐานสำหรับ 100 แผงค้าในระบบตลาดสดวิศิษฐ์ชัย</p>
+                    </div>
+
+                    <div class="space-y-3 text-xs">
+                        <div class="space-y-1">
+                            <label class="font-bold text-slate-700 flex items-center justify-between">
+                                <span>ค่าธรรมเนียม GP ตลาด (% GP)</span>
+                                <span class="text-emerald-600 font-bold">ปัจจุบัน 0% เพื่อชุมชน</span>
+                            </label>
+                            <input id="admin-market-gp-input" type="number" min="0" max="30" value="${marketSettings.gpRate || 0}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            <p class="text-[10.5px] text-slate-400">ระบบตลาดสดไม่หัก GP ผู้ค้าชุมชน ช่วยให้ราคาของสดเท่าหน้าร้านจริง</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <div class="space-y-1">
+                                <label class="font-bold text-slate-700">เวลาเปิดตลาด (เช้า)</label>
+                                <input id="admin-market-open-hour" type="time" value="${marketSettings.openHour || '04:00'}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="font-bold text-slate-700">เวลาปิดตลาด (เย็น)</label>
+                                <input id="admin-market-close-hour" type="time" value="${marketSettings.closeHour || '18:00'}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="font-bold text-slate-700">เกณฑ์แจ้งเตือนออเดอร์ค้างทำ (นาที)</label>
+                            <input id="admin-market-alert-minutes" type="number" min="5" max="60" value="${marketSettings.alertPrepMinutes || 15}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            <p class="text-[10.5px] text-slate-400">แจ้งเตือนแอดมินหากแผงค้าไม่กดยืนยันรับออเดอร์ภายในเวลาที่กำหนด</p>
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="font-bold text-slate-700">นโยบายกรณีของหมด / น้ำหนักขาด</label>
+                            <select id="admin-market-refund-policy" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                                <option value="cash_envelope" ${marketSettings.refundPolicy === 'cash_envelope' ? 'selected' : ''}>แนบเงินสดใส่ซองคืนลูกค้าพร้อมถุงของ (แนะนำ)</option>
+                                <option value="promptpay_refund" ${marketSettings.refundPolicy === 'promptpay_refund' ? 'selected' : ''}>โอนพร้อมเพย์คืนผ่านระบบฮับ</option>
+                            </select>
+                        </div>
+
+                        <div class="pt-2">
+                            <button onclick="saveMarketStallSettingsFromForm()" class="w-full py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                                <span class="material-symbols-outlined text-sm">save</span>
+                                <span>💾 บันทึกการตั้งค่าร้านค้า</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Market Rules Notice & Print -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 flex flex-col justify-between">
+                    <div class="space-y-3">
+                        <div class="border-b border-slate-100 pb-2.5">
+                            <h4 class="font-black text-sm text-slate-800 flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-emerald-600 text-base">verified</span>
+                                <span>ระเบียบปฏิบัติ 100 แผงค้า (Market Code of Conduct)</span>
+                            </h4>
+                            <p class="text-[11px] text-slate-500">ข้อกำหนดการค้ามาตรฐานเพื่อรักษาคุณภาพความสดและความพึงพอใจของลูกค้า</p>
+                        </div>
+
+                        <div class="space-y-2 text-xs text-slate-600">
+                            <div class="p-2 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-2">
+                                <span class="font-black text-purple-700 shrink-0">1.</span>
+                                <span>รักษาคุณภาพความสด สะอาด ถูกหลักสุขอนามัย และจัดเก็บของสดอย่างเหมาะสม</span>
+                            </div>
+                            <div class="p-2 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-2">
+                                <span class="font-black text-purple-700 shrink-0">2.</span>
+                                <span>จัดเตรียมและชั่งของสดให้เสร็จสิ้นภายใน ${marketSettings.alertPrepMinutes || 15} นาที หลังได้รับแจ้งเตือน</span>
+                            </div>
+                            <div class="p-2 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-2">
+                                <span class="font-black text-purple-700 shrink-0">3.</span>
+                                <span>ใช้ตาชั่งมาตรฐานเที่ยงตรง กรณีของหมดแจ้งในระบบและแนบซองเงินทอนทันที</span>
+                            </div>
+                            <div class="p-2 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-2">
+                                <span class="font-black text-purple-700 shrink-0">4.</span>
+                                <span>รับเงินโอนค่าสินค้า 100% เต็มจำนวนแบบ 0% GP ทุกวันผ่านพร้อมเพย์</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-100">
+                        <button onclick="printA4MerchantRules()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold rounded-xl shadow-xs active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                            <span class="material-symbols-outlined text-sm">print</span>
+                            <span>📄 พิมพ์ระเบียบร้านค้า A4 ติดบอร์ดตลาด</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Wrap in Outer Container with Header & 4 Sub-Tabs Bar
+    container.innerHTML = `
+        <div class="space-y-4">
+            <!-- Header Box & Quick Controls (Style exactly matching Rider Fleet) -->
+            <div class="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                    <div>
+                        <h4 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-purple-600 text-xl">storefront</span>
+                            <span>ศูนย์บริหารงาน 100 แผงค้า & ควบคุมออเดอร์สด (Merchant & Kitchen Operations)</span>
+                        </h4>
+                        <p class="text-xs text-slate-500 mt-0.5">ระบบจัดการร้านค้า 4 หมวด: มอนิเตอร์สด คิวออเดอร์ ทำเนียบแผงค้า เคลียร์เงิน และตั้งค่าตลาด</p>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button onclick="clearMerchantTestData()" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-extrabold rounded-xl text-xs shadow-2xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="ล้างข้อมูลจำลอง/ทดสอบออก">
+                            <span class="material-symbols-outlined text-xs font-bold text-rose-600">delete_sweep</span>
+                            <span>ล้างข้อมูลทดสอบ</span>
+                        </button>
+                        <button onclick="seedMerchantSampleOrders()" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-extrabold rounded-xl text-xs shadow-2xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="จำลองออเดอร์ของสดเข้าหลายแผง">
+                            <span class="material-symbols-outlined text-xs font-bold text-amber-600">bolt</span>
+                            <span>⚡ จำลองออเดอร์สด</span>
+                        </button>
+                        <button onclick="renderAdminStalls(); showToast('🔄 อัปเดตข้อมูลร้านค้าเรียบร้อย');" class="p-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl shadow-xs active:scale-95 transition-all cursor-pointer" title="รีเฟรชข้อมูล">
+                            <span class="material-symbols-outlined text-base">refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 4 Sub-Tabs Segmented Navigation Bar -->
+                <div class="bg-slate-200/80 p-1.5 rounded-2xl flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs">
+                    <button onclick="switchAdminStallSubTab('live')" class="flex-1 min-w-[150px] py-2 px-3 rounded-xl font-extrabold flex items-center justify-center gap-1.5 transition-all ${_adminStallSubTab === 'live' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}">
+                        <span class="material-symbols-outlined text-base">skillet</span>
+                        <span>1. 🍳 มอนิเตอร์สด & คิวออเดอร์</span>
+                        <span class="text-[10px] px-1.5 py-0.2 rounded-full ${_adminStallSubTab === 'live' ? 'bg-purple-900/60 text-amber-300' : 'bg-slate-300 text-slate-700'}">${activeTasksCount} งาน</span>
+                    </button>
+
+                    <button onclick="switchAdminStallSubTab('roster')" class="flex-1 min-w-[150px] py-2 px-3 rounded-xl font-extrabold flex items-center justify-center gap-1.5 transition-all ${_adminStallSubTab === 'roster' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}">
+                        <span class="material-symbols-outlined text-base">store</span>
+                        <span>2. 👥 ทำเนียบ & ใบสมัคร</span>
+                        ${pendingMerchantApps.length > 0 ? `<span class="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 animate-pulse font-black">รอ ${pendingMerchantApps.length}</span>` : `<span class="text-[10px] px-1.5 py-0.2 rounded-full ${_adminStallSubTab === 'roster' ? 'bg-purple-900/60 text-slate-200' : 'bg-slate-300 text-slate-700'}">${ALL_100_STALLS.length} ร้าน</span>`}
+                    </button>
+
+                    <button onclick="switchAdminStallSubTab('settlement')" class="flex-1 min-w-[150px] py-2 px-3 rounded-xl font-extrabold flex items-center justify-center gap-1.5 transition-all ${_adminStallSubTab === 'settlement' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}">
+                        <span class="material-symbols-outlined text-base">payments</span>
+                        <span>3. 💵 เคลียร์เงิน & โอนพร้อมเพย์</span>
+                        ${unsettledVendorTotal > 0 ? `<span class="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-black">฿${unsettledVendorTotal.toLocaleString()}</span>` : ''}
+                    </button>
+
+                    <button onclick="switchAdminStallSubTab('settings')" class="flex-1 min-w-[150px] py-2 px-3 rounded-xl font-extrabold flex items-center justify-center gap-1.5 transition-all ${_adminStallSubTab === 'settings' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'}">
+                        <span class="material-symbols-outlined text-base">tune</span>
+                        <span>4. ⚙️ ตั้งค่าร้านค้า & กฎตลาด</span>
+                        ${marketSettings.rushMode ? `<span class="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-black animate-pulse">🔥 Rush Hour</span>` : ''}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sub-Tab Content -->
+            ${subTabContentHtml}
         </div>
     `;
 }
@@ -17021,6 +18054,33 @@ function viewMerchantAppDetail(appId) {
         statusBadge = `<span class="bg-rose-100 text-rose-900 border border-rose-300 font-extrabold px-2.5 py-0.5 rounded-full text-xs">✕ ปฏิเสธ</span>`;
     }
 
+    // Contact 1 & 2 extraction
+    const contacts = Array.isArray(stall.contacts) ? stall.contacts : [];
+    const c1 = contacts[0] || {
+        name: stall.ownerName || '',
+        phone: stall.phone || '',
+        line: stall.lineId || stall.line || ''
+    };
+    const c2 = contacts[1] || {
+        name: stall.owner2Name || '',
+        phone: stall.phone2 || '',
+        line: stall.line2 || ''
+    };
+    const hasContact2 = !!(c2.name || c2.phone || c2.line);
+
+    // Bank Account 1 & 2 extraction
+    const bank1 = stall.bankInfo || {
+        bankName: stall.bankName || stall.promptPayBank || 'กสิกรไทย (KBank)',
+        accountNo: stall.bankAccountNo || stall.accountNo || stall.promptPayNumber || stall.phone || '',
+        accountName: stall.bankAccountName || stall.accountName || stall.ownerName || ''
+    };
+    const bank2 = stall.bankInfo2 || {
+        bankName: stall.bankName2 || '',
+        accountNo: stall.bankAccountNo2 || stall.accountNo2 || '',
+        accountName: stall.bankAccountName2 || stall.accountName2 || ''
+    };
+    const hasBank2 = !!(bank2.accountNo || bank2.bankName || bank2.accountName);
+
     if (body) {
         body.innerHTML = `
             <!-- Top Shop Profile Card -->
@@ -17031,7 +18091,7 @@ function viewMerchantAppDetail(appId) {
                     </div>
                     <div>
                         <h4 class="font-black text-base text-slate-900">${stall.stallName || 'แผงค้าใหม่'}</h4>
-                        <div class="text-slate-500 font-mono text-[11px]">${stall.phone || '-'} • LINE: ${stall.lineId || stall.phone || '-'}</div>
+                        <div class="text-slate-500 font-mono text-[11px]">${c1.phone || stall.phone || '-'} • LINE: ${c1.line || stall.lineId || stall.phone || '-'}</div>
                     </div>
                 </div>
                 <div>${statusBadge}</div>
@@ -17051,19 +18111,19 @@ function viewMerchantAppDetail(appId) {
                     <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">พร้อมใช้งาน</span>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-emerald-200/60">
-                    <button type="button" onclick="sendRealSmsToApplicant('${stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
+                    <button type="button" onclick="sendRealSmsToApplicant('${c1.phone || stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
                         <span class="material-symbols-outlined text-sm">sms</span>
                         <span>ส่ง SMS จริง</span>
                     </button>
-                    <button type="button" onclick="sendLineNotificationToApplicant('${stall.lineId || stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
+                    <button type="button" onclick="sendLineNotificationToApplicant('${c1.line || stall.lineId || stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
                         <span>💬</span>
                         <span>ส่งแจ้ง LINE</span>
                     </button>
-                    <button type="button" onclick="copyApprovalNotificationMessage('${stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
+                    <button type="button" onclick="copyApprovalNotificationMessage('${c1.phone || stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
                         <span class="material-symbols-outlined text-sm">content_copy</span>
                         <span>คัดลอกข้อความ</span>
                     </button>
-                    <a href="tel:${stall.phone}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
+                    <a href="tel:${c1.phone || stall.phone}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
                         <span class="material-symbols-outlined text-sm">call</span>
                         <span>โทรหา</span>
                     </a>
@@ -17071,26 +18131,79 @@ function viewMerchantAppDetail(appId) {
             </div>
             ` : ''}
 
-            <!-- 2-Column Info Grid -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
-                    <div class="text-[10px] font-bold text-slate-400">ข้อมูลแผงค้า & หมวดหมู่</div>
-                    <div class="font-bold text-slate-800">เลขแผง: <span class="font-mono text-slate-700">${stall.stallNumber || '-'}</span></div>
-                    <div class="font-bold text-slate-800">โซน: <span class="font-mono text-purple-700">โซน ${stall.zone || '-'}</span></div>
-                    <div class="text-[11px] text-slate-600 mt-1">จุดเด่น: ${stall.highlight || '-'}</div>
+            <!-- 1. ข้อมูลแผงค้า & หมวดหมู่ -->
+            <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-1">
+                <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs text-purple-600">storefront</span>
+                    <span>ข้อมูลแผงค้า & หมวดหมู่</span>
                 </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-0.5">
+                    <div>
+                        <span class="text-[10px] text-slate-400">เลขแผง:</span>
+                        <div class="font-mono font-bold text-slate-800">${stall.stallNumber || '-'}</div>
+                    </div>
+                    <div>
+                        <span class="text-[10px] text-slate-400">โซนตลาด:</span>
+                        <div class="font-bold text-purple-700">${stall.zone ? 'โซน ' + stall.zone : '-'}</div>
+                    </div>
+                    <div>
+                        <span class="text-[10px] text-slate-400">หมวดหมู่สินค้า:</span>
+                        <div class="font-bold text-slate-700">${stall.category || stall.stallTag || 'ของสด'}</div>
+                    </div>
+                </div>
+                ${stall.highlight ? `
+                <div class="pt-1 text-[11px] text-slate-600 border-t border-slate-200/60 mt-1">
+                    <span class="font-bold text-slate-500">จุดเด่น:</span> ${stall.highlight}
+                </div>
+                ` : ''}
+            </div>
 
-                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
-                    <div class="text-[10px] font-bold text-slate-400">ข้อมูลผู้ลงทะเบียน & เจ้าของ</div>
-                    <div class="font-bold text-slate-800">ชื่อเจ้าของ: ${stall.ownerName || '-'}</div>
-                    <div class="font-bold text-slate-800 font-mono">เบอร์โทร: ${stall.phone || '-'}</div>
-                    <div class="text-[11px] text-slate-600 mt-1">LINE ID: ${stall.lineId || stall.phone || '-'}</div>
+            <!-- 2. ข้อมูลส่วนตัวและผู้ติดต่อ (ผู้ติดต่อที่ 1 และ 2) -->
+            <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-2">
+                <div class="text-[10px] font-bold text-slate-400 flex items-center justify-between">
+                    <span class="flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs text-blue-600">contacts</span>
+                        <span>ข้อมูลส่วนตัวผู้ลงทะเบียน & ผู้ติดต่อ (รองรับ 2 ผู้ติดต่อ)</span>
+                    </span>
+                    <span class="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded">ผู้ติดต่อ</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <!-- Contact 1 -->
+                    <div class="bg-white p-2.5 rounded-xl border border-slate-200/80 space-y-1">
+                        <div class="font-bold text-blue-900 text-[11px] flex items-center gap-1 border-b border-slate-100 pb-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                            <span>ผู้ติดต่อที่ 1 (หลัก)</span>
+                        </div>
+                        <div><span class="text-slate-400 text-[10px]">ชื่อ-นามสกุล:</span> <strong class="text-slate-800">${c1.name || stall.ownerName || '-'}</strong></div>
+                        <div><span class="text-slate-400 text-[10px]">เบอร์โทร:</span> <a href="tel:${c1.phone || stall.phone || ''}" class="font-mono font-bold text-blue-700 hover:underline">📱 ${c1.phone || stall.phone || '-'}</a></div>
+                        <div><span class="text-slate-400 text-[10px]">LINE ID:</span> <span class="font-mono text-slate-700">${c1.line || stall.lineId || stall.phone || '-'}</span></div>
+                    </div>
+
+                    <!-- Contact 2 -->
+                    <div class="bg-white p-2.5 rounded-xl border border-slate-200/80 space-y-1">
+                        <div class="font-bold text-slate-700 text-[11px] flex items-center gap-1 border-b border-slate-100 pb-1">
+                            <span class="w-1.5 h-1.5 rounded-full ${hasContact2 ? 'bg-amber-500' : 'bg-slate-300'}"></span>
+                            <span>ผู้ติดต่อที่ 2 (สำรอง)</span>
+                        </div>
+                        ${hasContact2 ? `
+                        <div><span class="text-slate-400 text-[10px]">ชื่อ-นามสกุล:</span> <strong class="text-slate-800">${c2.name || '-'}</strong></div>
+                        <div><span class="text-slate-400 text-[10px]">เบอร์โทร:</span> ${c2.phone ? `<a href="tel:${c2.phone}" class="font-mono font-bold text-blue-700 hover:underline">📱 ${c2.phone}</a>` : '<span class="text-slate-400">-</span>'}</div>
+                        <div><span class="text-slate-400 text-[10px]">LINE ID:</span> <span class="font-mono text-slate-700">${c2.line || '-'}</span></div>
+                        ` : `
+                        <div class="py-2 text-center text-slate-400 text-[11px] italic">
+                            ไม่ได้ระบุผู้ติดต่อสำรอง (ไม่บังคับ)
+                        </div>
+                        `}
+                    </div>
                 </div>
             </div>
 
-            <!-- Products / Menu List -->
-            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
-                <div class="text-[10px] font-bold text-slate-400">รายการสินค้าตัวอย่าง & เมนูของร้าน</div>
+            <!-- 3. รายการสินค้าตัวอย่าง & เมนูของร้าน -->
+            <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-2">
+                <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs text-emerald-600">inventory_2</span>
+                    <span>รายการสินค้าตัวอย่าง & เมนูของร้าน</span>
+                </div>
                 <div class="flex flex-wrap gap-1.5">
                     ${(stall.products || []).length > 0 ? (stall.products || []).map(p => `
                         <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px]">✓ ${p.name || 'สินค้า'} (฿${p.price || 0}${p.unit ? `/${p.unit}` : ''})</span>
@@ -17098,14 +18211,62 @@ function viewMerchantAppDetail(appId) {
                 </div>
             </div>
 
-            <!-- Payout Account Box -->
-            <div class="bg-emerald-50/70 border border-emerald-200 p-3 rounded-xl flex items-center justify-between">
-                <div>
-                    <div class="text-[10px] font-bold text-emerald-800">บัญชีรับเงินแผงค้า (พร้อมเพย์สำหรับเคลียร์ยอด)</div>
-                    <div class="font-black text-sm text-emerald-950 font-mono">${stall.promptPayNumber || stall.phone || '-'}</div>
-                    <div class="text-[10px] text-emerald-700">ธนาคาร: ${stall.promptPayBank || 'พร้อมเพย์'}</div>
+            <!-- 4. ข้อมูลทางการเงิน / ช่องทางการรับชำระเงิน (บัญชี 1 & 2) -->
+            <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-2">
+                <div class="text-[10px] font-bold text-slate-400 flex items-center justify-between">
+                    <span class="flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs text-emerald-600">account_balance</span>
+                        <span>ข้อมูลทางการเงิน / ช่องทางการรับชำระเงิน (รองรับ 2 บัญชี)</span>
+                    </span>
+                    <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">บัญชีโอนเงิน</span>
                 </div>
-                <span class="material-symbols-outlined text-2xl text-emerald-600">account_balance</span>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <!-- Bank Account 1 -->
+                    <div class="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200 space-y-1">
+                        <div class="font-bold text-emerald-900 text-[11px] flex items-center justify-between border-b border-emerald-200/80 pb-1">
+                            <span class="flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                                <span>บัญชีหลักที่ 1</span>
+                            </span>
+                            <span class="bg-emerald-200 text-emerald-900 text-[9px] font-black px-1.5 py-0.2 rounded">${bank1.bankName || 'ธนาคาร'}</span>
+                        </div>
+                        <div class="pt-0.5">
+                            <span class="text-[10px] text-emerald-800">เลขที่บัญชี:</span>
+                            <div class="font-mono font-black text-sm text-emerald-950">${bank1.accountNo || '-'}</div>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-emerald-800">ชื่อบัญชี:</span>
+                            <strong class="text-slate-800 text-xs">${bank1.accountName || '-'}</strong>
+                        </div>
+                    </div>
+
+                    <!-- Bank Account 2 -->
+                    <div class="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200 space-y-1">
+                        <div class="font-bold text-amber-900 text-[11px] flex items-center justify-between border-b border-amber-200/80 pb-1">
+                            <span class="flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full ${hasBank2 ? 'bg-amber-600' : 'bg-slate-300'}"></span>
+                                <span>บัญชีสำรองที่ 2</span>
+                            </span>
+                            ${hasBank2 && bank2.bankName ? `
+                            <span class="bg-amber-200 text-amber-900 text-[9px] font-black px-1.5 py-0.2 rounded">${bank2.bankName}</span>
+                            ` : ''}
+                        </div>
+                        ${hasBank2 ? `
+                        <div class="pt-0.5">
+                            <span class="text-[10px] text-amber-800">เลขที่บัญชี:</span>
+                            <div class="font-mono font-black text-sm text-amber-950">${bank2.accountNo || '-'}</div>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-amber-800">ชื่อบัญชี:</span>
+                            <strong class="text-slate-800 text-xs">${bank2.accountName || '-'}</strong>
+                        </div>
+                        ` : `
+                        <div class="py-2 text-center text-slate-400 text-[11px] italic">
+                            ไม่ได้ระบุบัญชีสำรอง (ไม่บังคับ)
+                        </div>
+                        `}
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -17175,19 +18336,41 @@ function openEditMerchantAppModal(appId) {
     if (!modal) return;
 
     const stall = app.stallData || {};
+    const contacts = Array.isArray(stall.contacts) ? stall.contacts : [];
+    const c1 = contacts[0] || { name: stall.ownerName || '', phone: stall.phone || '', line: stall.lineId || stall.line || '' };
+    const c2 = contacts[1] || { name: stall.owner2Name || '', phone: stall.phone2 || '', line: stall.line2 || '' };
+
+    const bank1 = stall.bankInfo || {};
+    const bank2 = stall.bankInfo2 || {};
+
     document.getElementById("merchant-edit-id").value = app.id;
     document.getElementById("merchant-edit-modal-sub").textContent = app.id;
     document.getElementById("merchant-edit-modal-title").textContent = `แก้ไขใบสมัครร้าน: ${stall.stallName || ''}`;
     document.getElementById("merchant-edit-stallname").value = stall.stallName || "";
     document.getElementById("merchant-edit-stallnumber").value = stall.stallNumber || "";
-    document.getElementById("merchant-edit-ownername").value = stall.ownerName || "";
-    document.getElementById("merchant-edit-phone").value = stall.phone || "";
-    document.getElementById("merchant-edit-lineid").value = stall.lineId || "";
+    document.getElementById("merchant-edit-ownername").value = c1.name || stall.ownerName || "";
+    document.getElementById("merchant-edit-phone").value = c1.phone || stall.phone || "";
+    document.getElementById("merchant-edit-lineid").value = c1.line || stall.lineId || stall.line || "";
     document.getElementById("merchant-edit-zone").value = stall.zone || "A";
     document.getElementById("merchant-edit-accesscode").value = app.accessCode || "";
     document.getElementById("merchant-edit-status").value = app.status || "pending";
     document.getElementById("merchant-edit-promptpay").value = stall.promptPayNumber || stall.phone || "";
     document.getElementById("merchant-edit-highlight").value = stall.highlight || "";
+
+    // Contact 2
+    if (document.getElementById("merchant-edit-contact2-name")) document.getElementById("merchant-edit-contact2-name").value = c2.name || "";
+    if (document.getElementById("merchant-edit-contact2-phone")) document.getElementById("merchant-edit-contact2-phone").value = c2.phone || stall.phone2 || "";
+    if (document.getElementById("merchant-edit-contact2-line")) document.getElementById("merchant-edit-contact2-line").value = c2.line || "";
+
+    // Bank 1
+    if (document.getElementById("merchant-edit-bank-name")) document.getElementById("merchant-edit-bank-name").value = bank1.bankName || stall.bankName || "กสิกรไทย (KBank)";
+    if (document.getElementById("merchant-edit-bank-no")) document.getElementById("merchant-edit-bank-no").value = bank1.accountNo || stall.bankAccountNo || stall.promptPayNumber || stall.phone || "";
+    if (document.getElementById("merchant-edit-bank-account-name")) document.getElementById("merchant-edit-bank-account-name").value = bank1.accountName || stall.bankAccountName || stall.ownerName || "";
+
+    // Bank 2
+    if (document.getElementById("merchant-edit-bank-name-2")) document.getElementById("merchant-edit-bank-name-2").value = bank2.bankName || stall.bankName2 || "";
+    if (document.getElementById("merchant-edit-bank-no-2")) document.getElementById("merchant-edit-bank-no-2").value = bank2.accountNo || stall.bankAccountNo2 || "";
+    if (document.getElementById("merchant-edit-bank-account-name-2")) document.getElementById("merchant-edit-bank-account-name-2").value = bank2.accountName || stall.bankAccountName2 || "";
 
     modal.style.zIndex = "9999";
     modal.classList.remove("hidden");
@@ -17220,6 +18403,20 @@ function handleMerchantAppEditSubmit(e) {
     const promptPay = document.getElementById("merchant-edit-promptpay")?.value.trim();
     const highlight = document.getElementById("merchant-edit-highlight")?.value.trim();
 
+    // Contact 2
+    const contact2Name = document.getElementById("merchant-edit-contact2-name")?.value.trim() || "";
+    const contact2Phone = document.getElementById("merchant-edit-contact2-phone")?.value.trim() || "";
+    const contact2Line = document.getElementById("merchant-edit-contact2-line")?.value.trim() || "";
+
+    // Banks 1 & 2
+    const bankName = document.getElementById("merchant-edit-bank-name")?.value || "กสิกรไทย (KBank)";
+    const bankNo = document.getElementById("merchant-edit-bank-no")?.value.trim() || "";
+    const bankAccountName = document.getElementById("merchant-edit-bank-account-name")?.value.trim() || "";
+
+    const bankName2 = document.getElementById("merchant-edit-bank-name-2")?.value || "";
+    const bankNo2 = document.getElementById("merchant-edit-bank-no-2")?.value.trim() || "";
+    const bankAccountName2 = document.getElementById("merchant-edit-bank-account-name-2")?.value.trim() || "";
+
     if (!stallName || !stallNumber || !ownerName || !phone) {
         showToast("⚠️ กรุณากรอกข้อมูลสำคัญให้ครบถ้วน");
         return;
@@ -17230,13 +18427,33 @@ function handleMerchantAppEditSubmit(e) {
     app.stallData.stallNumber = stallNumber;
     app.stallData.ownerName = ownerName;
     app.stallData.phone = phone;
+    app.stallData.phone2 = contact2Phone;
     app.stallData.lineId = lineId;
     app.stallData.zone = zone;
-    app.stallData.promptPayNumber = promptPay;
+    app.stallData.promptPayNumber = promptPay || bankNo || phone;
     app.stallData.highlight = highlight;
     app.accessCode = accessCode || null;
     app.status = status;
     app.updatedAt = new Date().toISOString();
+
+    // Save Contacts Array
+    const contacts = [
+        { name: ownerName, phone: phone, line: lineId },
+        { name: contact2Name, phone: contact2Phone, line: contact2Line }
+    ].filter(c => c.name || c.phone);
+    app.stallData.contacts = contacts;
+
+    // Save Banks
+    const bankInfo = { bankName: bankName, accountNo: bankNo, accountName: bankAccountName };
+    const bankInfo2 = { bankName: bankName2, accountNo: bankNo2, accountName: bankAccountName2 };
+    app.stallData.bankInfo = bankInfo;
+    app.stallData.bankName = bankName;
+    app.stallData.bankAccountNo = bankNo;
+    app.stallData.bankAccountName = bankAccountName;
+    app.stallData.bankInfo2 = bankInfo2;
+    app.stallData.bankName2 = bankName2;
+    app.stallData.bankAccountNo2 = bankNo2;
+    app.stallData.bankAccountName2 = bankAccountName2;
 
     saveMerchantApplications(apps);
 
@@ -19551,8 +20768,20 @@ function settleRiderCod(riderId) {
     }
 
     if (confirm(`ยืนยันการรับมอบเงินสด COD จำนวน ฿${inHandCod.toLocaleString()} จาก ${r.name} เข้าสู่ฮับกลาง?`)) {
+        // 1. Update rider fleet state
         r.codSettledToday = (Number(r.codSettledToday) || 0) + inHandCod;
         saveCommunityRiders(riders);
+
+        // 2. Sync settlement status back to Daily Report state (single source of truth)
+        const settledRiders = _loadRiderSettlementState(targetDateKey);
+        settledRiders[r.name] = {
+            isSettled: true,
+            settledAt: Date.now(),
+            amount: inHandCod,
+            riderId: r.id
+        };
+        _saveRiderSettlementState(targetDateKey, settledRiders);
+
         showToast(`✅ เคลียร์ยอดเงินสด COD ฿${inHandCod.toLocaleString()} ของ ${r.name} เรียบร้อยแล้ว!`);
         renderAdminRiders();
     }
@@ -26265,6 +27494,50 @@ function autoSanitizeProductionData() {
             }
             keysToDel.forEach(k => localStorage.removeItem(k));
             localStorage.setItem("talathub_admin_reports_clean_v10", "true");
+        }
+    } catch (e) {}
+
+    // 12. Complete Purge of all test/sample data requested by user (v11)
+    try {
+        if (localStorage.getItem("talathub_admin_purge_test_v11") !== "true") {
+            localStorage.removeItem("talathub_order_history");
+            localStorage.removeItem("talathub_active_order");
+            localStorage.removeItem("hsong_active_order");
+            localStorage.removeItem("hsong_merchant_express_orders");
+            localStorage.removeItem("hsong_orders");
+            localStorage.removeItem("talathub_mock_orders");
+            localStorage.removeItem("talathub_community_riders");
+            localStorage.removeItem("talathub_rider_applications");
+            localStorage.removeItem("talathub_logged_in_rider");
+            localStorage.removeItem("talathub_cart");
+            localStorage.removeItem("talathub_delivery_location");
+            localStorage.removeItem("talathub_market_stall_settings");
+
+            const keysToDel = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && (k.startsWith("talathub_daily_report_") || k.startsWith("talathub_settled_riders_") || k.startsWith("talathub_settled_vendors_"))) {
+                    keysToDel.push(k);
+                }
+            }
+            keysToDel.forEach(k => localStorage.removeItem(k));
+
+            if (typeof isFirebaseReady === "function" && isFirebaseReady()) {
+                db.ref("orders").remove().catch(() => {});
+                db.ref("daily_reports").remove().catch(() => {});
+                db.ref("riders").remove().catch(() => {});
+            }
+
+            if (typeof ALL_100_STALLS !== "undefined" && Array.isArray(ALL_100_STALLS)) {
+                ALL_100_STALLS.forEach(s => s.isClosed = false);
+            }
+
+            state.activeOrder = null;
+            state.cart = [];
+            state.merchantExpressOrders = [];
+            if (window._cachedFirebaseOrders) window._cachedFirebaseOrders = [];
+
+            localStorage.setItem("talathub_admin_purge_test_v11", "true");
         }
     } catch (e) {}
 

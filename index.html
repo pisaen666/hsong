@@ -2365,7 +2365,7 @@
                 <button onclick="switchAdminTab('stalls')" id="admin-tab-stalls"
                     class="admin-tab-btn font-medium text-slate-500 pb-1.5 hover:text-slate-900 whitespace-nowrap px-3 flex items-center gap-1.5 relative">
                     <span class="material-symbols-outlined text-base text-slate-400">storefront</span>
-                    <span>3. ทำเนียบร้านค้า & ใบสมัครแผงค้า</span>
+                    <span>3. จัดการร้านค้า & แผงค้า</span>
                     <span id="admin-stalls-badge"
                         class="hidden ml-1 px-1.5 py-0.2 text-[10px] font-black bg-rose-500 text-white rounded-full animate-pulse">0</span>
                 </button>
@@ -5595,7 +5595,7 @@
         class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in"
         onclick="if (event.target === this) closeMerchantAppDetailModal();">
         <div
-            class="bg-white rounded-3xl p-5 max-w-lg w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[92vh] flex flex-col">
+            class="bg-white rounded-3xl p-5 max-w-xl w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[92vh] flex flex-col">
             <div class="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
                 <div class="flex items-center gap-2">
                     <span
@@ -5631,7 +5631,7 @@
         class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in"
         onclick="if (event.target === this) closeMerchantAppEditModal();">
         <div
-            class="bg-white rounded-3xl p-5 max-w-lg w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[92vh] flex flex-col">
+            class="bg-white rounded-3xl p-5 max-w-xl w-full shadow-2xl space-y-4 animate-scale-up text-left border border-slate-200 max-h-[92vh] flex flex-col">
             <div class="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
                 <div class="flex items-center gap-2">
                     <span
@@ -5697,6 +5697,106 @@
                             <option value="D">โซน D (อาหารปรุงสำเร็จ/ขนม)</option>
                             <option value="E">โซน E (อาหารทะเล/ซีฟู้ด)</option>
                         </select>
+                    </div>
+                </div>
+
+                <!-- Contact 2 (Secondary) -->
+                <div class="p-3 bg-blue-50/60 rounded-2xl border border-blue-200/80 space-y-2">
+                    <div class="font-bold text-blue-900 text-[11px] flex items-center justify-between">
+                        <span>👤 ผู้ติดต่อที่ 2 (สำรอง - ไม่บังคับ)</span>
+                        <span class="text-[9px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded">สำรอง</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-600 block mb-0.5">ชื่อผู้ติดต่อ 2:</label>
+                            <input type="text" id="merchant-edit-contact2-name" placeholder="ชื่อ-นามสกุล"
+                                class="w-full border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-600 block mb-0.5">เบอร์โทร 2:</label>
+                            <input type="tel" id="merchant-edit-contact2-phone" placeholder="08x-xxx-xxxx"
+                                class="w-full border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-mono text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-600 block mb-0.5">LINE ID 2:</label>
+                            <input type="text" id="merchant-edit-contact2-line" placeholder="LINE ID"
+                                class="w-full border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bank Accounts (Primary & Secondary) -->
+                <div class="p-3 bg-amber-50/60 rounded-2xl border border-amber-200/80 space-y-2.5">
+                    <div class="font-bold text-amber-900 text-[11px] flex items-center justify-between">
+                        <span>🏦 ช่องทางการรับชำระเงิน (รองรับ 2 บัญชี)</span>
+                        <span class="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">การเงิน</span>
+                    </div>
+
+                    <!-- Bank 1 -->
+                    <div class="bg-white p-2.5 rounded-xl border border-amber-200/50 space-y-1.5">
+                        <div class="font-bold text-emerald-900 text-[10px] flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            <span>บัญชีหลักที่ 1 *</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div>
+                                <label class="text-[10px] text-slate-500 block mb-0.5">ธนาคาร:</label>
+                                <select id="merchant-edit-bank-name"
+                                    class="w-full border border-slate-300 rounded-xl px-2 py-1.5 text-xs font-medium text-slate-800 bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                                    <option value="กสิกรไทย (KBank)">กสิกรไทย (KBank)</option>
+                                    <option value="ไทยพาณิชย์ (SCB)">ไทยพาณิชย์ (SCB)</option>
+                                    <option value="กรุงเทพ (BBL)">กรุงเทพ (BBL)</option>
+                                    <option value="กรุงไทย (KTB)">กรุงไทย (KTB)</option>
+                                    <option value="ออมสิน (GSB)">ออมสิน (GSB)</option>
+                                    <option value="กรุงศรี (BAY)">กรุงศรี (BAY)</option>
+                                    <option value="พร้อมเพย์ (PromptPay)">พร้อมเพย์ (PromptPay)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500 block mb-0.5">เลขที่บัญชี:</label>
+                                <input type="text" id="merchant-edit-bank-no" placeholder="เลขที่บัญชี"
+                                    class="w-full border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500 block mb-0.5">ชื่อบัญชี:</label>
+                                <input type="text" id="merchant-edit-bank-account-name" placeholder="ชื่อบัญชี"
+                                    class="w-full border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bank 2 -->
+                    <div class="bg-white p-2.5 rounded-xl border border-amber-200/50 space-y-1.5">
+                        <div class="font-bold text-amber-900 text-[10px] flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            <span>บัญชีสำรองที่ 2 (ไม่บังคับ)</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div>
+                                <label class="text-[10px] text-slate-500 block mb-0.5">ธนาคาร:</label>
+                                <select id="merchant-edit-bank-name-2"
+                                    class="w-full border border-slate-300 rounded-xl px-2 py-1.5 text-xs font-medium text-slate-800 bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                                    <option value="">เลือกธนาคาร...</option>
+                                    <option value="กสิกรไทย (KBank)">กสิกรไทย (KBank)</option>
+                                    <option value="ไทยพาณิชย์ (SCB)">ไทยพาณิชย์ (SCB)</option>
+                                    <option value="กรุงเทพ (BBL)">กรุงเทพ (BBL)</option>
+                                    <option value="กรุงไทย (KTB)">กรุงไทย (KTB)</option>
+                                    <option value="ออมสิน (GSB)">ออมสิน (GSB)</option>
+                                    <option value="กรุงศรี (BAY)">กรุงศรี (BAY)</option>
+                                    <option value="พร้อมเพย์ (PromptPay)">พร้อมเพย์ (PromptPay)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500 block mb-0.5">เลขที่บัญชี:</label>
+                                <input type="text" id="merchant-edit-bank-no-2" placeholder="เลขที่บัญชีสำรอง"
+                                    class="w-full border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-500 block mb-0.5">ชื่อบัญชี:</label>
+                                <input type="text" id="merchant-edit-bank-account-name-2" placeholder="ชื่อบัญชีสำรอง"
+                                    class="w-full border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            </div>
+                        </div>
                     </div>
                 </div>
 
