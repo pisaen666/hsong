@@ -4451,11 +4451,11 @@ function aggregateDailyOperations(targetDateKey) {
         settledRiders
     };
 
-    // โหลดการตั้งค่าระบบเพื่อหาอัตรา GP
+    // โหลดการตั้งค่าระบบเพื่อหาอัตรา GP (มาตรฐานแพลตฟอร์ม 10%)
     const hubSettings = (typeof loadSavedHubSettings === "function") ? loadSavedHubSettings() : {};
-    const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number") ? hubSettings.merchantGP : 10;
+    const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number" && hubSettings.merchantGP > 0) ? hubSettings.merchantGP : 10;
 
-    // คำนวณยอดรวมแผงค้า (แยกยอดขายรวม, GP ที่ระบบหัก, และยอดโอนสุทธิ)
+    // คำนวณยอดรวมแผงค้า (แยกยอดขายรวม, GP ที่ระบบหัก 10%, และยอดโอนสุทธิ)
     const stallsList = Object.values(stallsMap);
     let totalVendorGross = 0;
     let totalVendorGP = 0;
@@ -5569,10 +5569,14 @@ function settleAllVendors(dateKey) {
 
     report.vendorSettlement.stalls.forEach(s => {
         const sKey = s.stallId || s.stallName;
+        const netPayout = s.payoutAmount !== undefined ? s.payoutAmount : Math.max(0, s.totalAmount - (s.gpAmount || 0));
         settledVendors[sKey] = {
             isSettled: true,
             settledAt: Date.now(),
-            amount: s.totalAmount,
+            amount: netPayout,
+            grossAmount: s.totalAmount,
+            gpAmount: s.gpAmount || 0,
+            gpRate: s.gpRate || 10,
             stallName: s.stallName
         };
     });
@@ -6423,10 +6427,11 @@ function printThermalVendorSlip(stallId, dateKey) {
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">จำนวนออเดอร์ที่เข้ารับ:</span><span class="slip-value">${s.orderCount} บิล</span></div>
         <div class="slip-row"><span class="slip-label">จำนวนสินค้าที่ขายได้จริง:</span><span class="slip-value">${s.itemsCount} ชิ้น</span></div>
-        <div class="slip-row"><span class="slip-label">ค่าธรรมเนียม GP ตลาด (0%):</span><span class="slip-value">฿0</span></div>
+        <div class="slip-row"><span class="slip-label">ยอดจำหน่ายรวม:</span><span class="slip-value">฿${s.totalAmount.toLocaleString()}</span></div>
+        <div class="slip-row"><span class="slip-label">หัก GP ตลาด (${s.gpRate || 10}%):</span><span class="slip-value" style="color: #b91c1c;">-฿${(s.gpAmount || 0).toLocaleString()}</span></div>
         <div class="settle-box">
-            <div class="settle-title">ยอดเงินสุทธิที่ฮับโอนให้</div>
-            <div class="settle-amount">฿${s.totalAmount.toLocaleString()}</div>
+            <div class="settle-title">ยอดเงินโอนสุทธิให้แผงค้า</div>
+            <div class="settle-amount">฿${(s.payoutAmount !== undefined ? s.payoutAmount : Math.max(0, s.totalAmount - (s.gpAmount || 0))).toLocaleString()}</div>
             <div class="settle-sub">โอนผ่าน PromptPay: ${s.phone}</div>
         </div>
         <div class="slip-row" style="margin-top: 4px;">
@@ -6734,6 +6739,7 @@ function printA4VendorsSummary(dateKey) {
 
     let tableRows = "";
     report.vendorSettlement.stalls.forEach((s, idx) => {
+        const netPayout = s.payoutAmount !== undefined ? s.payoutAmount : Math.max(0, s.totalAmount - (s.gpAmount || 0));
         tableRows += `
             <tr>
                 <td class="text-center">${idx + 1}</td>
@@ -6743,7 +6749,9 @@ function printA4VendorsSummary(dateKey) {
                 <td class="text-center">${s.phone}</td>
                 <td class="text-center">${s.itemsCount} ชิ้น</td>
                 <td class="text-center">${s.orderCount} บิล</td>
-                <td class="text-right font-bold">฿${s.totalAmount.toLocaleString()}</td>
+                <td class="text-right font-medium">฿${s.totalAmount.toLocaleString()}</td>
+                <td class="text-right font-semibold" style="color: #b91c1c;">-฿${(s.gpAmount || 0).toLocaleString()}</td>
+                <td class="text-right font-bold" style="color: #047857;">฿${netPayout.toLocaleString()}</td>
                 <td class="text-center font-bold">
                     ${s.isSettled ? '✅ โอนแล้ว' : '⏳ รอโอน'}
                 </td>
@@ -6765,16 +6773,16 @@ function printA4VendorsSummary(dateKey) {
                 <div style="font-size: 15px; font-weight: bold;">${report.vendorSettlement.stalls.length} แผง</div>
             </div>
             <div class="summary-box">
-                <div>ยอดรวมค่าสินค้าทั้งหมด:</div>
+                <div>ยอดขายรวม (Gross):</div>
+                <div style="font-size: 15px; font-weight: bold; color: #1e293b;">฿${report.vendorSettlement.totalVendorGross.toLocaleString()}</div>
+            </div>
+            <div class="summary-box">
+                <div>หัก GP ตลาด (${report.vendorSettlement.gpRate || 10}%):</div>
+                <div style="font-size: 15px; font-weight: bold; color: #b91c1c;">-฿${report.vendorSettlement.totalVendorGP.toLocaleString()}</div>
+            </div>
+            <div class="summary-box">
+                <div>ยอดโอนสุทธิให้แผงค้า:</div>
                 <div style="font-size: 15px; font-weight: bold; color: #047857;">฿${report.vendorSettlement.totalVendorAmount.toLocaleString()}</div>
-            </div>
-            <div class="summary-box">
-                <div>โอนเงินเรียบร้อยแล้ว:</div>
-                <div style="font-size: 15px; font-weight: bold; color: #1e40af;">฿${report.vendorSettlement.totalSettledAmount.toLocaleString()} (${report.vendorSettlement.settledCount} แผง)</div>
-            </div>
-            <div class="summary-box">
-                <div>คงเหลือรอโอนเคลียร์:</div>
-                <div style="font-size: 15px; font-weight: bold; color: #b91c1c;">฿${report.vendorSettlement.totalPendingAmount.toLocaleString()} (${report.vendorSettlement.pendingCount} แผง)</div>
             </div>
         </div>
 
@@ -6788,18 +6796,22 @@ function printA4VendorsSummary(dateKey) {
                     <th class="text-center">เบอร์พร้อมเพย์</th>
                     <th class="text-center">ชิ้นที่ขาย</th>
                     <th class="text-center">ออเดอร์</th>
-                    <th class="text-right">ยอดเงินโอน</th>
+                    <th class="text-right">ยอดขายรวม</th>
+                    <th class="text-right">หัก GP (${report.vendorSettlement.gpRate || 10}%)</th>
+                    <th class="text-right">ยอดโอนสุทธิ</th>
                     <th class="text-center">สถานะ</th>
                 </tr>
             </thead>
             <tbody>
-                ${tableRows || '<tr><td colspan="9" class="text-center">ไม่มีข้อมูลการขายแผงค้าในวันที่เลือก</td></tr>'}
+                ${tableRows || '<tr><td colspan="11" class="text-center">ไม่มีข้อมูลการขายแผงค้าในวันที่เลือก</td></tr>'}
             </tbody>
             <tfoot>
                 <tr style="background: #f8fafc; font-weight: bold; border-top: 2px solid #000;">
                     <td colspan="5" class="text-center">รวมทั้งสิ้น</td>
                     <td class="text-center">${report.vendorSettlement.stalls.reduce((a,b)=>a+b.itemsCount,0)} ชิ้น</td>
                     <td class="text-center">${report.vendorSettlement.stalls.reduce((a,b)=>a+b.orderCount,0)} บิล</td>
+                    <td class="text-right">฿${report.vendorSettlement.totalVendorGross.toLocaleString()}</td>
+                    <td class="text-right" style="color: #b91c1c;">-฿${report.vendorSettlement.totalVendorGP.toLocaleString()}</td>
                     <td class="text-right" style="color: #047857;">฿${report.vendorSettlement.totalVendorAmount.toLocaleString()}</td>
                     <td></td>
                 </tr>
@@ -12978,12 +12990,12 @@ function renderMerchantSettlement() {
 
         const isSettled = Boolean(settledInfo && settledInfo.isSettled);
 
-        // GP Calculation
+        // GP Calculation (มาตรฐานแพลตฟอร์ม 10%)
         const hubSettings = (typeof loadSavedHubSettings === "function") ? loadSavedHubSettings() : {};
-        const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number") ? hubSettings.merchantGP : 10;
+        const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number" && hubSettings.merchantGP > 0) ? hubSettings.merchantGP : 10;
         const hubFee = Math.round(grossSales * (gpRate / 100));
         const calculatedNetPayout = Math.max(0, grossSales - hubFee);
-        const finalPayoutAmount = (settledInfo && settledInfo.amount !== undefined) ? settledInfo.amount : calculatedNetPayout;
+        const finalPayoutAmount = (settledInfo && settledInfo.amount !== undefined && settledInfo.amount <= calculatedNetPayout) ? settledInfo.amount : calculatedNetPayout;
 
         const bank = (stall && stall.bankInfo) ? stall.bankInfo : {
             bankName: (stall && (stall.bankName || stall.bank)) || "กสิกรไทย (KBank)",
@@ -20214,11 +20226,7 @@ function resetSettingsCustomNote(roleKey) {
 }
 
 function loadSavedHubSettings() {
-    try {
-        const saved = localStorage.getItem("hsong_hub_settings");
-        if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return {
+    const defaultSettings = {
         minOrder: 50,
         baseDeliveryFee: 20,
         maxRadius: 5.0,
@@ -20242,6 +20250,22 @@ function loadSavedHubSettings() {
         maxCodLimit: 3000,
         riderCutoff: "18:30"
     };
+    try {
+        const saved = localStorage.getItem("hsong_hub_settings");
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            const settings = Object.assign({}, defaultSettings, parsed);
+            // ถ้า merchantGP <= 0 หรือเป็น NaN/null/undefined (ตกค้างจากนโยบายเดิมหรือข้อผิดพลาด) ปรับเป็น 10%
+            if (typeof settings.merchantGP !== "number" || isNaN(settings.merchantGP) || settings.merchantGP <= 0) {
+                settings.merchantGP = 10;
+                try {
+                    localStorage.setItem("hsong_hub_settings", JSON.stringify(settings));
+                } catch (e) {}
+            }
+            return settings;
+        }
+    } catch (e) {}
+    return defaultSettings;
 }
 
 function saveAdminSettingsConfig(roleKey) {
@@ -20261,7 +20285,9 @@ function saveAdminSettingsConfig(roleKey) {
         s.targetPickingTime = Number(document.getElementById("cfg-picking-time")?.value || 12);
         s.staffPin = document.getElementById("cfg-staff-pin")?.value || "hb6305";
     } else if (roleKey === "merchant") {
-        s.merchantGP = Number(document.getElementById("cfg-merchant-gp")?.value || 0);
+        const gpEl = document.getElementById("cfg-merchant-gp");
+        const gpVal = gpEl ? Number(gpEl.value) : 10;
+        s.merchantGP = (!isNaN(gpVal) && gpVal > 0) ? gpVal : 10;
         s.merchantOpen = document.getElementById("cfg-merchant-open")?.value || "04:30";
         s.merchantClose = document.getElementById("cfg-merchant-close")?.value || "17:30";
         s.payoutTime = document.getElementById("cfg-payout-time")?.value || "18:30";
@@ -21818,7 +21844,7 @@ function renderHubSettlement() {
     // 1. สรุปยอดจ่ายแผงค้า (Grocery Orders)
     if (hasGrocery) {
         const hubSettings = (typeof loadSavedHubSettings === "function") ? loadSavedHubSettings() : {};
-        const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number") ? hubSettings.merchantGP : 10;
+        const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number" && hubSettings.merchantGP > 0) ? hubSettings.merchantGP : 10;
         let vendorListHtml = "";
         let vendorTotal = 0;
         let vendorPayoutTotal = 0;
