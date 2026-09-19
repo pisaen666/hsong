@@ -6572,13 +6572,90 @@
         </div>
     </div>
 
+    <!-- ============================================================ -->
+    <!-- 🗺️ MERCHANT MAP PICKER MODAL (แผนที่ปักหมุดสำหรับร้านค้าโดยเฉพาะ) -->
+    <!-- ============================================================ -->
+    <div id="merchant-map-modal"
+        class="fixed inset-0 z-[9999] hidden flex flex-col bg-black/75 backdrop-blur-sm"
+        style="touch-action:none;">
+
+        <!-- Modal Panel -->
+        <div class="flex flex-col w-full h-full max-w-lg mx-auto bg-white shadow-2xl"
+            style="max-height:100dvh;">
+
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white px-4 py-3 flex items-center justify-between shrink-0 shadow-md">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-emerald-300 text-xl">pin_drop</span>
+                    <div>
+                        <div class="font-black text-sm leading-tight">ปักหมุดปลายทางของลูกค้า</div>
+                        <div class="text-[10px] text-emerald-200 font-medium">แตะหรือลากหมุดบนแผนที่ดาวเทียมจริง</div>
+                    </div>
+                </div>
+                <button type="button" onclick="closeMerchantMapModal()"
+                    class="w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center active:scale-90 transition-all cursor-pointer">
+                    <span class="material-symbols-outlined text-white text-lg">close</span>
+                </button>
+            </div>
+
+            <!-- GPS detect button -->
+            <div class="px-3 py-2 bg-emerald-50 border-b border-emerald-200 shrink-0 flex items-center gap-2">
+                <button type="button" onclick="detectMerchantGPS()"
+                    class="flex-1 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-sm">
+                    <span class="material-symbols-outlined text-sm">my_location</span>
+                    <span id="merchant-gps-btn-label">🛰️ ระบุตำแหน่ง GPS ปัจจุบัน (ดาวเทียม)</span>
+                </button>
+                <div class="text-[10px] text-slate-500 leading-tight max-w-[100px] text-right">หรือแตะจุดบนแผนที่โดยตรง</div>
+            </div>
+
+            <!-- Leaflet Map Container -->
+            <div id="merchant-leaflet-map"
+                class="flex-1 w-full z-0"
+                style="min-height:260px;"></div>
+
+            <!-- Distance & Fee display -->
+            <div class="px-4 py-2.5 bg-slate-50 border-t border-slate-200 shrink-0 flex items-center justify-between gap-3">
+                <div class="space-y-0.5 min-w-0">
+                    <div class="text-[10px] text-slate-500 font-medium">ระยะทางจากตลาดวิศิษฐ์ชัย:</div>
+                    <div class="font-extrabold text-slate-800 text-xs flex items-center gap-1">
+                        <span class="material-symbols-outlined text-emerald-600 text-sm">route</span>
+                        <span id="merchant-map-dist-label">แตะแผนที่เพื่อปักหมุด...</span>
+                    </div>
+                </div>
+                <div class="text-right shrink-0">
+                    <div class="text-[10px] text-slate-500">ค่าส่งประมาณ</div>
+                    <div class="font-black text-xl text-emerald-700" id="merchant-map-fee-label">฿0</div>
+                </div>
+            </div>
+
+            <!-- Address detail form (granular) -->
+            <div class="px-4 pt-2 pb-2 bg-white border-t border-slate-100 shrink-0 space-y-1.5">
+                <label class="text-[10px] text-slate-600 font-bold">บ้านเลขที่ / ซอย / จุดสังเกต (ไม่บังคับ — ระบบดึงจากพิกัดได้อัตโนมัติ):</label>
+                <input type="text" id="merchant-map-addr-input"
+                    placeholder="เช่น บ้านเลขที่ 45/2 ซอย 3 หลังเสาธง"
+                    class="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
+            </div>
+
+            <!-- Confirm Button -->
+            <div class="px-4 pb-4 pt-2 bg-white shrink-0">
+                <button type="button" id="merchant-map-confirm-btn" onclick="confirmMerchantMapPin()"
+                    class="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-2xl text-sm shadow-lg active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 opacity-50 pointer-events-none"
+                    disabled>
+                    <span class="material-symbols-outlined text-base">check_circle</span>
+                    <span id="merchant-map-confirm-label">แตะจุดบนแผนที่ก่อนเพื่อยืนยัน</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- END MERCHANT MAP PICKER MODAL -->
+
     <!-- Firebase SDK (compat version - ใช้ได้กับ HTML/JS ธรรมดา) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.12_merchant_settlement_display_fix"></script>
+    <script src="app.js?v=10.13_merchant_map_picker_modal"></script>
 </body>
 
 </html>

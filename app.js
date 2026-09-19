@@ -13810,10 +13810,208 @@ function toggleMerchantCodInput(checkbox) {
     // No-op: Hub has no policy for COD
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// 🗺️ MERCHANT MAP PICKER MODAL — แผนที่ปักหมุดเฉพาะสำหรับร้านค้า
+// แยกจาก Customer map เพื่อให้ทำงานได้ถูกต้องเมื่อ merchant view active อยู่
+// ──────────────────────────────────────────────────────────────────────────
+
+let merchantPickerMap = null;
+let merchantPickerMarker = null;
+let merchantPickerCoords = { lat: null, lng: null };
+
 function openMerchantDestinationMap() {
-    window._isMerchantMapPicker = true;
-    openLocationModal();
+    const modal = document.getElementById("merchant-map-modal");
+    if (!modal) { console.error("merchant-map-modal not found in DOM"); return; }
+
+    // Show modal
+    modal.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+
+    // Reset confirm button
+    _merchantMapSetConfirmReady(false);
+
+    // Init map after modal is visible (Leaflet needs visible container)
+    setTimeout(() => { _initMerchantPickerMap(); }, 80);
 }
+
+function closeMerchantMapModal() {
+    const modal = document.getElementById("merchant-map-modal");
+    if (modal) modal.classList.add("hidden");
+    document.body.style.overflow = "";
+}
+
+function _initMerchantPickerMap() {
+    const mapEl = document.getElementById("merchant-leaflet-map");
+    if (!mapEl) return;
+    if (typeof L === "undefined") { showToast("⚠️ ระบบแผนที่ยังโหลดไม่เสร็จ กรุณารอสักครู่"); return; }
+
+    const defaultLat = MARKET_ORIGIN.lat;
+    const defaultLng = MARKET_ORIGIN.lng;
+
+    if (!merchantPickerMap) {
+        merchantPickerMap = L.map("merchant-leaflet-map", {
+            zoomControl: true,
+            attributionControl: false,
+            scrollWheelZoom: true
+        }).setView([defaultLat, defaultLng], 15);
+
+        // Google Satellite Hybrid layer
+        L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+            maxZoom: 20,
+            subdomains: ["mt0", "mt1", "mt2", "mt3"]
+        }).addTo(merchantPickerMap);
+
+        // Draggable marker icon (same style as customer picker)
+        const pinIcon = L.divIcon({
+            className: "custom-map-pin",
+            html: `<div style="position:relative;transform:translate(-50%,-100%);cursor:grab;">
+                <div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,0.6);border:3px solid #ffffff;font-size:22px;">
+                    🏠
+                </div>
+                <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:14px;height:6px;background:rgba(0,0,0,0.5);border-radius:50%;filter:blur(1px);"></div>
+            </div>`,
+            iconSize: [40, 40],
+            iconAnchor: [20, 40]
+        });
+
+        merchantPickerMarker = L.marker([defaultLat, defaultLng], { draggable: true, icon: pinIcon }).addTo(merchantPickerMap);
+
+        merchantPickerMarker.on("dragend", function (e) {
+            const pos = merchantPickerMarker.getLatLng();
+            _onMerchantMapPinMoved(pos.lat, pos.lng);
+        });
+
+        merchantPickerMap.on("click", function (e) {
+            merchantPickerMarker.setLatLng(e.latlng);
+            _onMerchantMapPinMoved(e.latlng.lat, e.latlng.lng);
+        });
+    }
+
+    // If merchant already had pinned coords, center on those
+    if (state.merchantPinnedCoords && state.merchantPinnedCoords.lat) {
+        const pl = state.merchantPinnedCoords;
+        merchantPickerMap.setView([pl.lat, pl.lng], 17);
+        merchantPickerMarker.setLatLng([pl.lat, pl.lng]);
+        merchantPickerCoords = { lat: pl.lat, lng: pl.lng };
+        _onMerchantMapPinMoved(pl.lat, pl.lng);
+    } else {
+        merchantPickerMap.setView([defaultLat, defaultLng], 15);
+        merchantPickerMarker.setLatLng([defaultLat, defaultLng]);
+        merchantPickerCoords = { lat: null, lng: null };
+    }
+
+    // Force Leaflet to recalculate size after display
+    setTimeout(() => { if (merchantPickerMap) merchantPickerMap.invalidateSize(); }, 120);
+    setTimeout(() => { if (merchantPickerMap) merchantPickerMap.invalidateSize(); }, 450);
+}
+
+function _onMerchantMapPinMoved(lat, lng) {
+    merchantPickerCoords.lat = lat;
+    merchantPickerCoords.lng = lng;
+    const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+    const fee = calculateDeliveryFee(distKm);
+
+    const distLabel = document.getElementById("merchant-map-dist-label");
+    const feeLabel = document.getElementById("merchant-map-fee-label");
+    if (distLabel) distLabel.textContent = `~${distKm.toFixed(2)} กม. จากตลาดวิศิษฐ์ชัย`;
+    if (feeLabel) feeLabel.textContent = `฿${fee}`;
+    _merchantMapSetConfirmReady(true, distKm, fee);
+}
+
+function _merchantMapSetConfirmReady(ready, distKm = 0, fee = 0) {
+    const btn = document.getElementById("merchant-map-confirm-btn");
+    const label = document.getElementById("merchant-map-confirm-label");
+    if (!btn) return;
+    if (ready) {
+        btn.disabled = false;
+        btn.classList.remove("opacity-50", "pointer-events-none");
+        if (label) label.textContent = `✅ ยืนยันปักหมุด (~${distKm.toFixed(1)} กม. ค่าส่ง ฿${fee})`;
+    } else {
+        btn.disabled = true;
+        btn.classList.add("opacity-50", "pointer-events-none");
+        if (label) label.textContent = "แตะจุดบนแผนที่ก่อนเพื่อยืนยัน";
+    }
+}
+
+function detectMerchantGPS() {
+    const btnLabel = document.getElementById("merchant-gps-btn-label");
+    if (btnLabel) btnLabel.textContent = "🛰️ กำลังค้นหาสัญญาณดาวเทียม...";
+
+    const applyGPS = (lat, lng) => {
+        if (!merchantPickerMap) return;
+        merchantPickerMap.setView([lat, lng], 17);
+        merchantPickerMarker.setLatLng([lat, lng]);
+        _onMerchantMapPinMoved(lat, lng);
+        setTimeout(() => { if (merchantPickerMap) merchantPickerMap.invalidateSize(); }, 150);
+        if (btnLabel) btnLabel.textContent = "🛰️ ระบุตำแหน่ง GPS ปัจจุบัน (ดาวเทียม)";
+    };
+
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => applyGPS(pos.coords.latitude, pos.coords.longitude),
+            () => {
+                showToast("⚠️ ไม่สามารถเข้าถึง GPS ได้ — กรุณาแตะจุดบนแผนที่แทน");
+                if (btnLabel) btnLabel.textContent = "🛰️ ระบุตำแหน่ง GPS ปัจจุบัน (ดาวเทียม)";
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    } else {
+        showToast("⚠️ เบราว์เซอร์ไม่รองรับ GPS — กรุณาแตะจุดบนแผนที่โดยตรง");
+        if (btnLabel) btnLabel.textContent = "🛰️ ระบุตำแหน่ง GPS ปัจจุบัน (ดาวเทียม)";
+    }
+}
+
+function confirmMerchantMapPin() {
+    if (!merchantPickerCoords.lat || !merchantPickerCoords.lng) {
+        showToast("⚠️ กรุณาแตะจุดบนแผนที่ก่อนยืนยัน");
+        return;
+    }
+
+    const lat = merchantPickerCoords.lat;
+    const lng = merchantPickerCoords.lng;
+    const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+    const fee = calculateDeliveryFee(distKm);
+
+    // Build title from manual input or coordinates
+    const addrInput = document.getElementById("merchant-map-addr-input");
+    const manualAddr = addrInput ? addrInput.value.trim() : "";
+    const fullTitle = manualAddr || `พิกัด GPS (${lat.toFixed(4)}, ${lng.toFixed(4)}) อ.บ้านบึง`;
+
+    // Save to state
+    state.merchantPinnedCoords = {
+        title: fullTitle,
+        lat: lat,
+        lng: lng,
+        distKm: distKm,
+        fee: fee,
+        subdistrict: "อ.บ้านบึง จ.ชลบุรี"
+    };
+
+    // Update badge in the form
+    const badge = document.getElementById("merchant-pinned-badge");
+    const badgeText = document.getElementById("merchant-pinned-text");
+    const badgeSub = document.getElementById("merchant-pinned-sub");
+    if (badge) badge.classList.remove("hidden");
+    if (badgeText) badgeText.textContent = `📍 ปักหมุด: ${fullTitle}`;
+    if (badgeSub) badgeSub.textContent = `ระยะทาง ~${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee}`;
+
+    // Fill destination address if empty
+    const extraAddr = document.getElementById("merchant-dest-address");
+    if (extraAddr && !extraAddr.value) extraAddr.value = fullTitle;
+
+    // Recalculate fee display in form
+    calculateMerchantFee();
+
+    // Close modal and show success toast
+    closeMerchantMapModal();
+    showToast(`📍 ปักหมุดปลายทางสำเร็จ! ระยะ ~${distKm.toFixed(1)} กม. ค่าส่ง ฿${fee}`);
+}
+
+window.openMerchantDestinationMap = openMerchantDestinationMap;
+window.closeMerchantMapModal = closeMerchantMapModal;
+window.detectMerchantGPS = detectMerchantGPS;
+window.confirmMerchantMapPin = confirmMerchantMapPin;
+
 
 function clearMerchantPinnedLocation() {
     state.merchantPinnedCoords = null;
