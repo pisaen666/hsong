@@ -17305,18 +17305,23 @@ let _adminStallRosterView = "roster"; // 'roster' | 'applications'
 let _adminMerchantAppFilter = "all"; // 'all' | 'pending' | 'approved' | 'rejected'
 
 function loadMarketStallSettings() {
+    let s = null;
     try {
         const raw = localStorage.getItem("talathub_market_stall_settings");
-        if (raw) return JSON.parse(raw);
+        if (raw) s = JSON.parse(raw);
     } catch(e) {}
-    return {
-        gpRate: 0,
-        rushMode: false,
-        openHour: "04:00",
-        closeHour: "18:00",
-        alertPrepMinutes: 15,
-        refundPolicy: "cash_envelope"
-    };
+    if (!s || typeof s !== "object") {
+        s = {
+            rushMode: false,
+            openHour: "04:00",
+            closeHour: "18:00",
+            alertPrepMinutes: 15,
+            refundPolicy: "cash_envelope"
+        };
+    }
+    // อัตรา GP มีแหล่งเดียวคือ hubSettings.merchantGP (ค่าเริ่มต้น 10%) ทุกหน้าจอจึงเห็นตรงกัน
+    s.gpRate = loadSavedHubSettings().merchantGP;
+    return s;
 }
 
 function saveMarketStallSettings(settings) {
@@ -17541,8 +17546,10 @@ function saveMarketStallSettingsFromForm() {
     const settings = loadMarketStallSettings();
     if (gpInput) {
         const gVal = Number(gpInput.value);
-        settings.gpRate = (!isNaN(gVal) && gVal >= 0) ? gVal : 0;
-        // ซิงค์ไปยัง hubSettings ด้วย เพื่อให้ทุกระบบใช้อัตรา GP เดียวกัน
+        const gpValid = !isNaN(gVal) && gVal > 0;
+        settings.gpRate = gpValid ? gVal : 10;
+        if (!gpValid) showToast("⚠️ GP ต้องมากกว่า 0% จึงตั้งเป็น 10% ให้");
+        // เก็บที่ hubSettings.merchantGP ที่เดียว (แหล่งเดียวของอัตรา GP)
         try {
             const hSettings = loadSavedHubSettings();
             hSettings.merchantGP = settings.gpRate;
@@ -17570,7 +17577,7 @@ function printA4VendorSettlementsReport(targetDateKey) {
     const totalDue = report && report.vendorSettlement ? (report.vendorSettlement.totalVendorAmount || 0) : 0;
     const settledAmt = report && report.vendorSettlement ? (report.vendorSettlement.totalSettledAmount || 0) : 0;
     const unsettledAmt = report && report.vendorSettlement ? (report.vendorSettlement.totalPendingAmount || 0) : 0;
-    const gpRate = report && report.vendorSettlement ? (report.vendorSettlement.gpRate || 0) : 0;
+    const gpRate = report && report.vendorSettlement ? (report.vendorSettlement.gpRate || 10) : 10;
 
     let rowsHtml = "";
     if (vendors.length === 0) {
@@ -17656,8 +17663,8 @@ function printA4MerchantRules() {
                 การชั่งน้ำหนักสินค้าต้องใช้ตาชั่งมาตรฐานที่ผ่านการตรวจรับรอง กรณีสินค้าบางรายการหมด ให้แจ้งในระบบทันทีและนำเงินสดส่วนต่างใส่ซองแนบไปกับถุงสินค้าเพื่อส่งคืนลูกค้าอย่างซื่อสัตย์
             </div>
             <div style="margin-bottom: 12px; padding: 10px; background: #eff6ff; border-left: 4px solid #2563eb; border-radius: 4px;">
-                <strong>ข้อที่ 4: การรับเงินโอนค่าสินค้าผ่านระบบพร้อมเพย์ (0% GP)</strong><br>
-                ตลาดฮับวิศิษฐ์ชัยสนับสนุนเศรษฐกิจชุมชน ไม่มีการหักค่าธรรมเนียม GP (${settings.gpRate || 0}% GP) เงินค่าสินค้าจะถูกโอนตรงเข้าบัญชีพร้อมเพย์ของเจ้าของแผงค้าทุกวันหลังตัดรอบ
+                <strong>ข้อที่ 4: การรับเงินโอนค่าสินค้าผ่านระบบพร้อมเพย์ (หัก GP ${settings.gpRate}%)</strong><br>
+                ตลาดฮับวิศิษฐ์ชัยหักค่าบริการแพลตฟอร์ม (GP) ${settings.gpRate}% จากยอดขายสินค้า ส่วนที่เหลือจะถูกโอนเข้าบัญชีพร้อมเพย์ของเจ้าของแผงค้าทุกวันหลังตัดรอบ
             </div>
             <div style="margin-bottom: 12px; padding: 10px; background: #fdf2f8; border-left: 4px solid #db2777; border-radius: 4px;">
                 <strong>ข้อที่ 5: เวลาทำการเปิด-ปิดแผงค้า</strong><br>
@@ -17870,7 +17877,7 @@ function renderAdminStalls() {
                     </div>
                     <div class="text-xl sm:text-2xl font-black text-emerald-700">฿${todayStallSalesTotal.toLocaleString()}</div>
                     <div class="text-[10px] sm:text-[11px] text-slate-500">
-                        ยอดสินค้าของสด 100 แผงค้าวันนี้ (0% GP)
+                        ยอดสินค้าของสด 100 แผงค้าวันนี้ (ก่อนหัก GP)
                     </div>
                 </div>
 
@@ -18526,7 +18533,7 @@ function renderAdminStalls() {
                                 <span>ค่าธรรมเนียม GP ตลาด (% GP)</span>
                                 <span class="text-purple-700 font-bold">ปัจจุบัน ${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || 10)}%</span>
                             </label>
-                            <input id="admin-market-gp-input" type="number" min="0" max="30" value="${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || 10)}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            <input id="admin-market-gp-input" type="number" min="1" max="30" value="${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || 10)}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
                             <p class="text-[10.5px] text-slate-400">อัตราค่าธรรมเนียมส่วนแบ่งยอดขายร้านค้า (GP) คำนวณหักอัตโนมัติก่อนโอนเคลียร์เงินรอบวัน</p>
                         </div>
 
@@ -18590,7 +18597,7 @@ function renderAdminStalls() {
                             </div>
                             <div class="p-2 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-2">
                                 <span class="font-black text-purple-700 shrink-0">4.</span>
-                                <span>รับเงินโอนค่าสินค้า 100% เต็มจำนวนแบบ 0% GP ทุกวันผ่านพร้อมเพย์</span>
+                                <span>รับเงินโอนค่าสินค้าหลังหัก GP ${marketSettings.gpRate}% ทุกวันผ่านพร้อมเพย์</span>
                             </div>
                         </div>
                     </div>
@@ -19437,6 +19444,31 @@ function reconcileApprovedRiders(apps, currentRiders) {
 }
 window.reconcileApprovedRiders = reconcileApprovedRiders;
 
+// ถอนสิทธิ์ไรเดอร์ที่ผูกกับใบสมัครนี้ (ตอนปฏิเสธ / ย้อนกลับไปรอพิจารณา) — ไม่ให้รับงานต่อ
+// ต้องเรียกหลังเปลี่ยนสถานะใบสมัครเป็นไม่ใช่ "approved" แล้ว ไม่งั้น reconcileApprovedRiders จะกู้ไรเดอร์กลับมา
+function revokeRiderAccessForApplication(app) {
+    if (!app) return false;
+    const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
+    const matches = (r) => {
+        if (!r) return false;
+        const rPhone = (r.phone || "").replace(/[-\s]/g, "");
+        return (cleanPhone && rPhone === cleanPhone) ||
+            (app.accessCode && r.accessCode === app.accessCode) ||
+            (app.id && r.id === app.id);
+    };
+    const riders = loadCommunityRiders();
+    const remaining = riders.filter(r => !matches(r));
+    const removed = remaining.length !== riders.length;
+    if (removed) saveCommunityRiders(remaining);
+    try {
+        const saved = localStorage.getItem("talathub_logged_in_rider");
+        if (saved && matches(JSON.parse(saved))) localStorage.removeItem("talathub_logged_in_rider");
+    } catch (e) { }
+    if (state.activeRider && matches(state.activeRider)) state.activeRider = null;
+    return removed;
+}
+window.revokeRiderAccessForApplication = revokeRiderAccessForApplication;
+
 function loadCommunityRiders() {
     try {
         const raw = localStorage.getItem("talathub_community_riders");
@@ -19963,10 +19995,10 @@ function goToAdminRiderSettlementFromComplete() {
 window.goToAdminRiderSettlementFromComplete = goToAdminRiderSettlementFromComplete;
 
 function goToAdminRiderSettlement(riderId) {
-    // 🔒 SECURITY: ตรวจสอบสถานะการเข้าสู่ระบบแอดมิน (ต้องใส่ PIN เท่านั้น ไม่อนุญาต Auto-login ข้ามบทบาท)
+    // 🔒 SECURITY: ตรวจสอบสถานะการเข้าสู่ระบบแอดมิน (ต้องล็อกอินเจ้าของเท่านั้น ไม่อนุญาต Auto-login ข้ามบทบาท)
     if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
         openAdminLoginModal();
-        showToast("🔒 กรุณากรอกรหัส PIN ผู้ดูแลระบบ (Admin) เพื่อเข้าสู่ระบบเคลียร์เงิน");
+        showToast("🔒 กรุณาล็อกอินด้วยอีเมลและรหัสผ่านเจ้าของ เพื่อเข้าสู่ระบบเคลียร์เงิน");
         return;
     }
     renderAuthHeaderButtons();
@@ -20886,10 +20918,10 @@ function goToAdminToApproveRider(appId) {
     closeRiderRegisterModal();
     closeRiderLoginModal();
 
-    // 🔒 SECURITY: Require Admin PIN authentication (No auto-login)
+    // 🔒 SECURITY: Require owner sign-in (No auto-login)
     if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
         openAdminLoginModal();
-        showToast("🔒 กรุณากรอกรหัส PIN ผู้ดูแลระบบ เพื่อตรวจสอบและอนุมัติใบสมัคร");
+        showToast("🔒 กรุณาล็อกอินด้วยอีเมลและรหัสผ่านเจ้าของ เพื่อตรวจสอบและอนุมัติใบสมัคร");
         return;
     }
     renderAuthHeaderButtons();
@@ -21151,10 +21183,15 @@ function rejectRiderApplication(appId) {
     const app = apps.find(x => x.id === appId);
     if (!app) return;
 
-    if (confirm(`ยืนยันการปฏิเสธใบสมัครของ "${app.fullName}" ใช่หรือไม่?`)) {
+    const wasApproved = app.status === "approved";
+    const confirmMsg = wasApproved
+        ? `"${app.fullName}" เป็นไรเดอร์ที่อนุมัติแล้ว\nถ้าปฏิเสธ จะถูกถอนสิทธิ์และรับงานไม่ได้อีก\n\nยืนยันการปฏิเสธใช่หรือไม่?`
+        : `ยืนยันการปฏิเสธใบสมัครของ "${app.fullName}" ใช่หรือไม่?`;
+    if (confirm(confirmMsg)) {
         app.status = "rejected";
         app.rejectedAt = new Date().toISOString();
         saveRiderApplications(apps);
+        if (wasApproved) revokeRiderAccessForApplication(app);
         updateAdminRiderBadges();
         showToast(`❌ ปฏิเสธใบสมัครของ ${app.fullName} เรียบร้อยแล้ว`);
         closeRiderAppDetailModal();
@@ -23023,8 +23060,11 @@ function reconsiderRiderApplication(appId) {
     const apps = loadRiderApplications();
     const app = apps.find(x => x.id === appId);
     if (!app) return;
+    const wasApproved = app.status === "approved";
+    if (wasApproved && !confirm(`"${app.fullName}" เป็นไรเดอร์ที่อนุมัติแล้ว\nถ้าย้อนกลับไปรอพิจารณา จะถูกถอนสิทธิ์และรับงานไม่ได้จนกว่าจะอนุมัติใหม่\n\nยืนยันใช่หรือไม่?`)) return;
     app.status = "pending";
     saveRiderApplications(apps);
+    if (wasApproved) revokeRiderAccessForApplication(app);
     closeRiderAppDetailModal();
     showToast(`🔄 นำใบสมัครของ ${app.fullName} กลับมาพิจารณาใหม่แล้ว`);
     renderAdminRiders();
@@ -23890,7 +23930,7 @@ function getDefaultSettingsNote(roleKey) {
     } else if (roleKey === "hub") {
         return "📋 คู่มือและระเบียบปฏิบัติงานฝ่ายจัดเตรียมสินค้า (ฮับ):\n1. เมื่อมีออเดอร์เข้า ให้ตรวจสอบใบจัดของ (Picking List) แล้วแยกตะกร้าตามแผงค้าทันที\n2. สินค้าสดต้องชั่งน้ำหนักให้ตรงตามบิล และติดสติกเกอร์รหัสออเดอร์ให้ชัดเจน\n3. เนื้อสัตว์และอาหารทะเลสดต้องใส่น้ำแข็งหลอดในถุงเพื่อคงความสดก่อนส่งมอบให้ไรเดอร์\n4. ตรวจสอบสลิปโอนเงินทุกรายการ หากเป็นออเดอร์ COD ให้แจ้งไรเดอร์เก็บเงินสดให้ครบถ้วน";
     } else if (roleKey === "merchant") {
-        return "🏪 ข้อตกลงและระเบียบสำหรับ 100 แผงค้าในตลาดสด:\n1. แผงค้าต้องจัดเตรียมของสดคุณภาพดี สะอาด และราคาต้องตรงกับราคาขายหน้าร้านจริง\n2. เมื่อได้รับแจ้งเตือนออเดอร์ กรุณาเตรียมสินค้าให้เสร็จภายใน 5-10 นาที\n3. ระบบตัดยอดและโอนเงินเข้าบัญชีพร้อมเพย์ของแผงค้าทุกวันเวลา 18:30 น. (ไม่มีหัก GP 0%)\n4. หากสินค้าตัวใดหมดชั่วคราว ให้แจ้งฝ่ายจัดของหรือปิดการขายในระบบทันที";
+        return "🏪 ข้อตกลงและระเบียบสำหรับ 100 แผงค้าในตลาดสด:\n1. แผงค้าต้องจัดเตรียมของสดคุณภาพดี สะอาด และราคาต้องตรงกับราคาขายหน้าร้านจริง\n2. เมื่อได้รับแจ้งเตือนออเดอร์ กรุณาเตรียมสินค้าให้เสร็จภายใน 5-10 นาที\n3. ระบบตัดยอดและโอนเงินเข้าบัญชีพร้อมเพย์ของแผงค้าทุกวันเวลา 18:30 น. (หลังหัก GP " + loadSavedHubSettings().merchantGP + "%)\n4. หากสินค้าตัวใดหมดชั่วคราว ให้แจ้งฝ่ายจัดของหรือปิดการขายในระบบทันที";
     } else if (roleKey === "rider") {
         return "🛵 ระเบียบวินัยและข้อปฏิบัติสำหรับไรเดอร์ประจำตลาด:\n1. ตรวจสอบจำนวนถุงและรหัสออเดอร์ให้ถูกต้องก่อนออกจากฮับทุกครั้ง\n2. สินค้าสดต้องบรรจุในกล่อง/กระเป๋าเก็บความเย็นที่มีถุงน้ำแข็งตลอดการเดินทาง\n3. โทรแจ้งลูกค้าล่วงหน้า 5 นาทีก่อนถึงบ้าน และพูดจาสุภาพเรียบร้อย\n4. ออเดอร์ COD ต้องเก็บเงินสดให้ครบ และนำส่งยอดเคลียร์เงินที่ฮับทุก 3 เที่ยวส่ง หรือก่อน 18:30 น.\n5. ขับขี่ปลอดภัย สวมหมวกกันน็อก ปฏิบัติตามกฎจราจรอย่างเคร่งครัด";
     }
@@ -24244,7 +24284,7 @@ function renderAdminSettings() {
                     <div class="space-y-3 text-xs">
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">ค่าธรรมเนียมส่วนแบ่งระบบ (GP %):</label>
-                            <input type="number" id="cfg-merchant-gp" value="${s.merchantGP}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-emerald-700 bg-slate-50">
+                            <input type="number" min="1" max="30" id="cfg-merchant-gp" value="${s.merchantGP}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-emerald-700 bg-slate-50">
                             <span class="text-[11px] text-slate-400">อัตราแนะนำ 10% เพื่อครอบคลุมค่าเช่าและเงินเดือนพนักงานตามแผนธุรกิจ (กำไรสุทธิ 5%)</span>
                         </div>
                         <div class="grid grid-cols-2 gap-3">
@@ -30566,10 +30606,10 @@ window.approveMerchantApplication = approveMerchantApplication;
 
 function goToAdminToApproveMerchantFromSuccess() {
     closeMerchantPortalModal();
-    // 🔒 SECURITY: Require Admin PIN authentication (No auto-login)
+    // 🔒 SECURITY: Require owner sign-in (No auto-login)
     if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
         openAdminLoginModal();
-        showToast("🔒 กรุณากรอกรหัส PIN ผู้ดูแลระบบ เพื่อตรวจสอบและอนุมัติแผงค้า");
+        showToast("🔒 กรุณาล็อกอินด้วยอีเมลและรหัสผ่านเจ้าของ เพื่อตรวจสอบและอนุมัติแผงค้า");
         return;
     }
     setActiveRoleView("admin");

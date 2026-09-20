@@ -12,7 +12,7 @@
 ## 👥 2. The 5 Core Roles & Current Status
 1. **Role 1 (Customer / ลูกค้า)**: [✅ Complete] Market catalog, multi-stall cart, GPS destination picker, checkout, order tracking.
 2. **Role 2 (Hub Operations / ศูนย์จัดส่งฮับ)**: [✅ Complete] Consolidated picking list, packing verification, rider assignment/dispatch, end-of-day settlement.
-3. **Role 3 (Merchant / แผงค้าตลาด)**: [✅ Complete] Stall open/close status, product availability, bank setup, GP 5% fee calculation, express call.
+3. **Role 3 (Merchant / แผงค้าตลาด)**: [✅ Complete] Stall open/close status, product availability, bank setup, GP 10% fee calculation (owner decision 2026-09-21), express call.
 4. **Role 4 (Rider / ไรเดอร์)**: [✅ Complete & Purged]
    - **Guest Portal (`#rider-guest-view`)**: Shown when not logged in.
      - Tab 1: 📝 Registration form (`#onpage-rider-reg-form`) with `1-Click Sample Data Fill` and `1-Click Instant Register & Login`.
@@ -76,6 +76,9 @@ The production database is shared and currently open to everyone. Lesson from 20
 
 ## ⚠️ 6. Known Constraints (update when resolved)
 - Firebase rules are open read/write until 2026-11-02 (`1793552400000` in `database.rules.json`, which is git-ignored). After that date the app cannot read or write. Personal data (ID numbers, addresses, driver-license photos in `rider_documents/<riderId>`) is publicly readable until Auth-based rules exist. Plan: Firebase Auth email/password for the owner (one account for hub + admin, plus a backup account), UID-based rules, tested on `hsong-test` first.
-- Admin/hub PINs (`admin6305`, `hb6305`) and the admin "test mode" quick login are checked only in the browser and can be bypassed.
+- (Resolved 2026-09-20) Admin/hub PINs and the admin "test mode" quick login were removed; see section 5b.
 - Both rider registration forms auto-approve; documents are collected but nobody must verify them before a rider can take jobs.
-- GP rate: docs elsewhere say 5%, code defaults to 10% (Admin can set 0 but the report silently turns it into 10%). Rider fee is hard-coded to 40 THB per trip in the report. Waiting for the owner's decision.
+- GP rate is 10% (owner decision 2026-09-21). Single source: `hubSettings.merchantGP` (localStorage `hsong_hub_settings`); `loadMarketStallSettings().gpRate` reads from it and both settings forms reject values <= 0 (fall back to 10). Rider fee is still hard-coded to 40 THB per trip in the report.
+- Admin "Settings" tab: only GP (`merchantGP`) is read by app logic. The other keys (minOrder, baseDeliveryFee, cutoffs, rider fares...) are saved but nothing uses them, and all settings live in one browser's localStorage (not synced to Firebase).
+- Approving a rider adds them to `community_riders`; rejecting or moving an approved application back to pending now calls `revokeRiderAccessForApplication` to remove them again (2026-09-21).
+- Firebase rules for orders, carts, rider_applications, community_riders, merchant_applications etc. still expire 2026-11-02 (`1793552400000` in `firebase-rules/hsong-1f342.rules.json`) and are open to everyone until then. Needs a new rules design before that date.
