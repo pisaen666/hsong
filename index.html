@@ -6788,18 +6788,26 @@
             </div>
 
             <!-- ⚡ Quick 1-Click Fast Login for Instant Access -->
-            <div class="p-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-sky-500/10 border border-emerald-300 rounded-2xl">
-                <div class="text-[11px] font-bold text-emerald-800 mb-1.5 flex items-center justify-between">
+            <div class="p-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-sky-500/10 border border-emerald-300 rounded-2xl space-y-2">
+                <div class="text-[11px] font-bold text-emerald-800 flex items-center justify-between">
                     <span class="flex items-center gap-1">
                         <span class="material-symbols-outlined text-sm text-emerald-600">bolt</span>
-                        <span>เข้าสู่ระบบด่วน (คลิกเดียวรับงานได้ทันที)</span>
+                        <span>เข้าสู่ระบบด่วน (แตะปุ่มเดียวรับงานได้ทันที)</span>
                     </span>
                     <span class="text-[9px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">1-Click Fast Login</span>
                 </div>
                 <button type="button" onclick="loginRiderById('RD6735')" class="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer">
                     <span class="material-symbols-outlined text-base">two_wheeler</span>
-                    <span>⚡ เข้าสู่ระบบทันที: สมชาย ขยันส่ง (LX1536)</span>
+                    <span>⚡ สมชาย ขยันส่ง (LX1536 / RD6735)</span>
                 </button>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" onclick="loginRiderById('RD0313')" class="py-2 px-2.5 bg-white hover:bg-slate-50 text-slate-800 border border-emerald-200 rounded-xl text-[11px] font-bold shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                        <span>🛵 โนอาห์ (RD0313)</span>
+                    </button>
+                    <button type="button" onclick="loginRiderById('RD6436')" class="py-2 px-2.5 bg-white hover:bg-slate-50 text-slate-800 border border-emerald-200 rounded-xl text-[11px] font-bold shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                        <span>🛵 แซม (RD6436)</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Method 1: Login via 6-digit Rider Code, Phone, or Master Admin PIN -->
@@ -6809,12 +6817,12 @@
                         <span class="material-symbols-outlined text-base text-sky-600 font-bold">key</span>
                         <span>หรือกรอกรหัสไรเดอร์ / เบอร์โทร:</span>
                     </span>
-                    <span class="text-[10px] text-sky-700 font-mono bg-sky-100 px-1.5 py-0.5 rounded font-bold">เช่น LX1536, admin6305</span>
+                    <span class="text-[10px] text-sky-700 font-mono bg-sky-100 px-1.5 py-0.5 rounded font-bold">เช่น LX1536, 6305, เบอร์โทร</span>
                 </label>
                 <div class="relative">
                     <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">pin</span>
                     <input type="text" id="rider-login-phone-input"
-                        placeholder="กรอกรหัส (เช่น LX1536 หรือ admin6305) หรือเบอร์โทร"
+                        placeholder="กรอกรหัส (เช่น LX1536, 6305) หรือเบอร์โทร"
                         class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-sky-300 font-bold font-mono text-xs text-slate-800 focus:ring-2 focus:ring-sky-500 uppercase outline-none bg-white shadow-xs"
                         onkeydown="if(event.key === 'Enter') handleRiderPhoneLoginSubmit()">
                 </div>
@@ -7104,7 +7112,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.20_universal_rider_login"></script>
+    <script src="app.js?v=10.21_comprehensive_rider_login_fix"></script>
 </body>
 
 </html>
