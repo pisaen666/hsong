@@ -4551,7 +4551,8 @@ function aggregateDailyOperations(targetDateKey) {
         const rName = o.riderName || (o.assignedRider && o.assignedRider.name) || (o.status === "delivered" || o.status === "dispatched" || o.status === "on_the_way" ? "ไรเดอร์ประจำชุมชน" : "รอไรเดอร์รับงาน");
         const rPhone = o.riderPhone || (o.assignedRider && o.assignedRider.phone) || "-";
         if (!ridersMap[rName]) {
-            const isRiderSettled = Boolean(settledRiders[rName]?.isSettled);
+            const rRec = settledRiders[rName] || (o.assignedRider && settledRiders[o.assignedRider.id]) || {};
+            const isRiderSettled = Boolean(rRec.isSettled);
             ridersMap[rName] = {
                 riderName: rName,
                 riderPhone: rPhone,
@@ -4561,7 +4562,10 @@ function aggregateDailyOperations(targetDateKey) {
                 refundHanded: 0,
                 netCashToHub: 0,
                 isSettled: isRiderSettled,
-                settledAt: settledRiders[rName]?.settledAt || null
+                settledAt: rRec.settledAt || null,
+                settledBy: rRec.settledBy || null,
+                slipImage: rRec.slipImage || null,
+                slipNote: rRec.slipNote || ""
             };
         }
         if (o.status === "delivered" || o.status === "on_the_way" || o.status === "dispatched" || o.status === "assigned") {
@@ -20211,16 +20215,37 @@ function renderAdminRiders() {
         const codCollected = rep ? (rep.codCollected || 0) : 0;
         const inHandCod = Math.max(0, codCollected - (Number(r.codSettledToday) || 0));
 
+        const settledRidersMap = _loadRiderSettlementState(targetDateKey);
+        const sRec = settledRidersMap[r.id] || settledRidersMap[r.name] || {};
+        const isSettled = Boolean(sRec.isSettled);
+
+        let bonus = 0;
+        if (settings.rainSurcharge && trips > 0) {
+            bonus += trips * (settings.rainSurchargeAmount || 15);
+        }
+        if (trips >= (settings.dailyBonusTrips || 10)) {
+            bonus += (settings.dailyBonusAmount || 100);
+        }
+        const totalPayout = (sRec.amount !== undefined) ? sRec.amount : (feeEarned + bonus);
+
         totalCompletedTrips += trips;
-        totalRiderFeesEarned += feeEarned;
+        totalRiderFeesEarned += totalPayout;
         totalInHandCod += inHandCod;
 
         return {
             ...r,
             trips,
-            feeEarned,
+            baseEarned: feeEarned,
+            bonus,
+            totalPayout,
+            feeEarned: totalPayout,
             inHandCod,
-            isCodExceeded: inHandCod >= settings.maxCodLimit
+            isCodExceeded: inHandCod >= settings.maxCodLimit,
+            isSettled,
+            settledAt: sRec.settledAt || null,
+            settledBy: sRec.settledBy || null,
+            slipImage: sRec.slipImage || null,
+            slipNote: sRec.slipNote || ""
         };
     });
 
@@ -20837,23 +20862,64 @@ function renderAdminRiders() {
                                 </div>
                                 <div class="text-right">
                                     <div class="text-[10px] text-slate-400">ค่ารอบสะสม</div>
-                                    <div class="font-black text-emerald-700">฿${r.feeEarned.toLocaleString()}</div>
+                                    <div class="font-black text-emerald-700">฿${r.totalPayout.toLocaleString()}</div>
                                 </div>
                                 <div class="text-right">
                                     <div class="text-[10px] text-slate-400">เงินสด COD ในมือ</div>
                                     <div class="font-black ${r.inHandCod > 0 ? 'text-amber-700 font-mono' : 'text-slate-400'}">฿${r.inHandCod.toLocaleString()}</div>
                                 </div>
+                                <div class="text-center min-w-[85px]">
+                                    <div class="text-[10px] text-slate-400 mb-0.5">สถานะค่ารอบ</div>
+                                    ${r.isSettled ? `
+                                        <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full text-[10px] font-black inline-flex items-center gap-1">
+                                            ✓ โอนแล้ว
+                                        </span>
+                                        ${r.slipImage ? `
+                                            <div class="mt-1">
+                                                <button type="button" onclick="openRiderSlipViewerModal('${r.id || r.name}', '${targetDateKey}')" class="bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[9px] font-bold inline-flex items-center gap-0.5 cursor-pointer shadow-2xs transition-all mx-auto">
+                                                    <span class="material-symbols-outlined text-[11px]">receipt_long</span>
+                                                    <span>มีสลิปหลักฐาน</span>
+                                                </button>
+                                            </div>
+                                        ` : `
+                                            <div class="mt-1">
+                                                <span class="text-[9.5px] text-amber-600 font-medium">รอแนบสลิป</span>
+                                            </div>
+                                        `}
+                                    ` : `
+                                        <span class="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full text-[10px] font-black">
+                                            ⏳ รอโอน
+                                        </span>
+                                    `}
+                                </div>
                             </div>
 
                             <div class="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
+                                <button onclick="openSingleRiderPayoutModal('${r.id}', ${r.totalPayout}, '${r.promptPay || r.phone}', '${r.name.replace(/'/g, "\\'")}', '${r.plate || '-'}', ${r.trips}, ${r.baseEarned}, ${r.bonus})" class="px-2.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="โอนค่ารอบให้ไรเดอร์ผ่านพร้อมเพย์">
+                                    <span class="material-symbols-outlined text-xs">qr_code_2</span>
+                                    <span>${r.isSettled ? 'ดู QR ซ้ำ' : '💸 สแกน QR โอน'}</span>
+                                </button>
+                                ${r.slipImage ? `
+                                    <button onclick="openRiderSlipViewerModal('${r.id || r.name}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="ดูสลิปหลักฐานการโอนค่ารอบ">
+                                        <span class="material-symbols-outlined text-xs">image</span>
+                                        <span>ดูสลิปโอน</span>
+                                    </button>
+                                ` : `
+                                    <button onclick="openRiderDirectSlipUploadModal('${r.id}', ${r.totalPayout}, '${r.promptPay || r.phone}', '${r.name.replace(/'/g, "\\'")}', '${r.plate || '-'}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-xl text-xs flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="แนบสลิปโอนค่ารอบ">
+                                        <span class="material-symbols-outlined text-xs">attach_file</span>
+                                        <span>แนบสลิป</span>
+                                    </button>
+                                `}
                                 <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์สลิปสรุปยอดความร้อน 80mm ให้ไรเดอร์">
                                     <span class="material-symbols-outlined text-xs text-sky-700">receipt_long</span>
                                     <span>🧾 สลิป 80mm</span>
                                 </button>
-                                <button onclick="settleRiderCod('${r.id}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer" title="รับมอบเงินสด COD จากไรเดอร์เข้าฮับ">
-                                    <span class="material-symbols-outlined text-xs">payments</span>
-                                    <span>💵 เคลียร์เงิน COD</span>
-                                </button>
+                                ${r.inHandCod > 0 ? `
+                                    <button onclick="settleRiderCod('${r.id}')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-xl text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer" title="รับมอบเงินสด COD จากไรเดอร์เข้าฮับ">
+                                        <span class="material-symbols-outlined text-xs">payments</span>
+                                        <span>💵 เคลียร์ COD</span>
+                                    </button>
+                                ` : ''}
                             </div>
                         </div>
                     `).join('')}
@@ -21983,6 +22049,467 @@ function createSampleRiderApplication() {
     renderAdminRiders();
 }
 
+
+// ── Rider Payout Slip State & Controllers
+let _currentRiderPayout = null;
+let _currentRiderPayoutSlipBase64 = null;
+let _currentRiderPayoutSlipNote = "";
+let _activeRiderSlipViewerData = null;
+
+function handleRiderPayoutSlipSelected(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const rawBase64 = e.target.result;
+        const img = new Image();
+        img.onload = function() {
+            try {
+                const canvas = document.createElement("canvas");
+                const maxW = 800;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxW) {
+                    h = Math.round((h * maxW) / w);
+                    w = maxW;
+                }
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, w, h);
+                _currentRiderPayoutSlipBase64 = canvas.toDataURL("image/jpeg", 0.80);
+            } catch(err) {
+                _currentRiderPayoutSlipBase64 = rawBase64;
+            }
+
+            const slipPlaceholder = document.getElementById("rider-payout-slip-upload-placeholder");
+            const slipPreviewBox = document.getElementById("rider-payout-slip-preview-box");
+            const slipPreviewImg = document.getElementById("rider-payout-slip-preview-img");
+            const slipInfoText = document.getElementById("rider-payout-slip-info-text");
+
+            if (slipPreviewImg) slipPreviewImg.src = _currentRiderPayoutSlipBase64;
+            if (slipInfoText) slipInfoText.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
+            if (slipPreviewBox) slipPreviewBox.classList.remove("hidden");
+            if (slipPlaceholder) slipPlaceholder.classList.add("hidden");
+
+            showToast("✅ แนบรูปสลิปค่ารอบเรียบร้อยแล้ว");
+        };
+        img.onerror = function() {
+            _currentRiderPayoutSlipBase64 = rawBase64;
+            const slipPlaceholder = document.getElementById("rider-payout-slip-upload-placeholder");
+            const slipPreviewBox = document.getElementById("rider-payout-slip-preview-box");
+            const slipPreviewImg = document.getElementById("rider-payout-slip-preview-img");
+            if (slipPreviewImg) slipPreviewImg.src = _currentRiderPayoutSlipBase64;
+            if (slipPreviewBox) slipPreviewBox.classList.remove("hidden");
+            if (slipPlaceholder) slipPlaceholder.classList.add("hidden");
+            showToast("✅ แนบรูปสลิปค่ารอบเรียบร้อยแล้ว");
+        };
+        img.src = rawBase64;
+    };
+    reader.readAsDataURL(file);
+}
+window.handleRiderPayoutSlipSelected = handleRiderPayoutSlipSelected;
+
+function removeRiderPayoutSlip() {
+    _currentRiderPayoutSlipBase64 = null;
+    const slipFileInput = document.getElementById("rider-payout-slip-file-input");
+    const slipPlaceholder = document.getElementById("rider-payout-slip-upload-placeholder");
+    const slipPreviewBox = document.getElementById("rider-payout-slip-preview-box");
+    const slipPreviewImg = document.getElementById("rider-payout-slip-preview-img");
+
+    if (slipFileInput) slipFileInput.value = "";
+    if (slipPreviewImg) slipPreviewImg.src = "";
+    if (slipPreviewBox) slipPreviewBox.classList.add("hidden");
+    if (slipPlaceholder) slipPlaceholder.classList.remove("hidden");
+    showToast("🗑️ ลบรูปสลิปค่ารอบออกแล้ว");
+}
+window.removeRiderPayoutSlip = removeRiderPayoutSlip;
+
+function openSingleRiderPayoutModal(riderId, amount, phone, name, plate, trips, baseEarned, bonus) {
+    const riders = loadCommunityRiders();
+    const r = riders.find(x => x.id === riderId) || { id: riderId, name: name || "ไรเดอร์", phone: phone || "089-123-4567", plate: plate || "-" };
+    
+    let finalPhone = phone || r.promptPay || r.phone || "089-123-4567";
+    let cleanPhone = String(finalPhone).replace(/[^0-9]/g, "");
+    if (cleanPhone.length < 9) {
+        cleanPhone = "0891234567";
+        finalPhone = "089-123-4567";
+    }
+
+    const finalAmount = Number(amount || 0);
+    const finalTrips = trips !== undefined ? Number(trips) : 0;
+    const finalBase = baseEarned !== undefined ? Number(baseEarned) : finalAmount;
+    const finalBonus = bonus !== undefined ? Number(bonus) : 0;
+
+    _currentRiderPayout = {
+        riderId: r.id || riderId,
+        name: r.name || name,
+        phone: finalPhone,
+        cleanPhone: cleanPhone,
+        plate: r.plate || plate || "-",
+        amount: finalAmount,
+        trips: finalTrips,
+        baseEarned: finalBase,
+        bonus: finalBonus
+    };
+
+    const modal = document.getElementById("rider-single-payout-modal");
+    if (!modal) return;
+
+    const nameEl = document.getElementById("rider-payout-name");
+    const plateEl = document.getElementById("rider-payout-plate");
+    const phoneEl = document.getElementById("rider-payout-phone");
+    const tripsEl = document.getElementById("rider-payout-trips-text");
+    const amountEl = document.getElementById("rider-payout-amount-text");
+    const breakdownEl = document.getElementById("rider-payout-breakdown-text");
+    const qrImg = document.getElementById("rider-payout-qr-image");
+    const ppNumEl = document.getElementById("rider-payout-promptpay-number");
+
+    if (nameEl) nameEl.innerHTML = `<span class="material-symbols-outlined text-purple-600 text-sm">two_wheeler</span><span>${_currentRiderPayout.name}</span>`;
+    if (plateEl) plateEl.textContent = `ทะเบียน: ${_currentRiderPayout.plate}`;
+    if (phoneEl) phoneEl.textContent = _currentRiderPayout.phone;
+    if (tripsEl) tripsEl.textContent = `เที่ยววิ่งสำเร็จ: ${_currentRiderPayout.trips} เที่ยว`;
+    if (amountEl) amountEl.textContent = `฿${_currentRiderPayout.amount.toLocaleString()}`;
+    if (breakdownEl) {
+        breakdownEl.textContent = `ค่ารอบฐาน ฿${_currentRiderPayout.baseEarned.toLocaleString()} ${_currentRiderPayout.bonus > 0 ? `+ โบนัสพิเศษ ฿${_currentRiderPayout.bonus.toLocaleString()}` : ''} = ยอดโอนสุทธิ ฿${_currentRiderPayout.amount.toLocaleString()}`;
+    }
+    if (ppNumEl) ppNumEl.textContent = _currentRiderPayout.phone;
+
+    // PromptPay QR Code Failover
+    if (qrImg) {
+        const payload = generatePromptPayPayload(_currentRiderPayout.cleanPhone, _currentRiderPayout.amount);
+        const encoded = encodeURIComponent(payload);
+        const promptpayIoUrl = _currentRiderPayout.amount > 0
+            ? `https://promptpay.io/${_currentRiderPayout.cleanPhone}/${_currentRiderPayout.amount}.png`
+            : `https://promptpay.io/${_currentRiderPayout.cleanPhone}.png`;
+        const quickChartUrl = `https://quickchart.io/qr?size=250&text=${encoded}`;
+        const qrServerUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encoded}`;
+
+        const fallbackUrls = [promptpayIoUrl, quickChartUrl, qrServerUrl];
+        let urlIndex = 0;
+        function loadNextQR() {
+            if (urlIndex < fallbackUrls.length) {
+                qrImg.src = fallbackUrls[urlIndex++];
+            }
+        }
+        qrImg.onerror = function() {
+            loadNextQR();
+        };
+        loadNextQR();
+    }
+
+    // Preload existing slip if already settled
+    const targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const settledRiders = _loadRiderSettlementState(targetDateKey);
+    const existingRec = settledRiders[_currentRiderPayout.riderId] || settledRiders[_currentRiderPayout.name] || {};
+
+    _currentRiderPayoutSlipBase64 = existingRec.slipImage || null;
+    _currentRiderPayoutSlipNote = existingRec.slipNote || "";
+
+    const slipFileInput = document.getElementById("rider-payout-slip-file-input");
+    const slipPlaceholder = document.getElementById("rider-payout-slip-upload-placeholder");
+    const slipPreviewBox = document.getElementById("rider-payout-slip-preview-box");
+    const slipPreviewImg = document.getElementById("rider-payout-slip-preview-img");
+    const slipNoteInput = document.getElementById("rider-payout-slip-note-input");
+
+    if (slipFileInput) slipFileInput.value = "";
+    if (slipNoteInput) slipNoteInput.value = _currentRiderPayoutSlipNote;
+
+    if (_currentRiderPayoutSlipBase64 && slipPreviewBox && slipPreviewImg && slipPlaceholder) {
+        slipPreviewImg.src = _currentRiderPayoutSlipBase64;
+        slipPreviewBox.classList.remove("hidden");
+        slipPlaceholder.classList.add("hidden");
+    } else if (slipPreviewBox && slipPlaceholder) {
+        slipPreviewBox.classList.add("hidden");
+        slipPlaceholder.classList.remove("hidden");
+    }
+
+    modal.classList.remove("hidden");
+}
+window.openSingleRiderPayoutModal = openSingleRiderPayoutModal;
+
+function closeSingleRiderPayoutModal() {
+    const modal = document.getElementById("rider-single-payout-modal");
+    if (modal) modal.classList.add("hidden");
+}
+window.closeSingleRiderPayoutModal = closeSingleRiderPayoutModal;
+
+function copyRiderPayoutPromptPayNumber() {
+    if (!_currentRiderPayout) return;
+    const phoneNum = _currentRiderPayout.cleanPhone;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(phoneNum).then(() => {
+            showToast(`📋 คัดลอกหมายเลขพร้อมเพย์ ${phoneNum} เรียบร้อยแล้ว`);
+        }).catch(() => {
+            showToast(`📱 หมายเลขพร้อมเพย์: ${phoneNum}`);
+        });
+    } else {
+        showToast(`📱 หมายเลขพร้อมเพย์: ${phoneNum}`);
+    }
+}
+window.copyRiderPayoutPromptPayNumber = copyRiderPayoutPromptPayNumber;
+
+function confirmRiderPayoutSettled() {
+    if (!_currentRiderPayout) {
+        closeSingleRiderPayoutModal();
+        return;
+    }
+
+    const targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const settledRiders = _loadRiderSettlementState(targetDateKey);
+
+    const rKey = _currentRiderPayout.riderId || _currentRiderPayout.name;
+    const note = (document.getElementById("rider-payout-slip-note-input")?.value || "").trim();
+    const existingRec = settledRiders[rKey] || (_currentRiderPayout.name ? settledRiders[_currentRiderPayout.name] : null) || {};
+
+    const payoutRecord = {
+        isSettled: true,
+        settledAt: Date.now(),
+        settledBy: (state.activeAdmin && state.activeAdmin.name) ? `${state.activeAdmin.name} (${state.activeAdmin.role || 'Admin'})` : "เฮียส่ง (Super Admin)",
+        amount: _currentRiderPayout.amount,
+        trips: _currentRiderPayout.trips,
+        baseEarned: _currentRiderPayout.baseEarned,
+        bonus: _currentRiderPayout.bonus,
+        riderName: _currentRiderPayout.name,
+        riderId: _currentRiderPayout.riderId,
+        phone: _currentRiderPayout.phone,
+        plate: _currentRiderPayout.plate,
+        slipImage: _currentRiderPayoutSlipBase64 || existingRec.slipImage || null,
+        slipNote: note || existingRec.slipNote || ""
+    };
+
+    settledRiders[rKey] = payoutRecord;
+    if (_currentRiderPayout.riderId) settledRiders[_currentRiderPayout.riderId] = payoutRecord;
+    if (_currentRiderPayout.name) settledRiders[_currentRiderPayout.name] = payoutRecord;
+
+    _saveRiderSettlementState(targetDateKey, settledRiders);
+    closeSingleRiderPayoutModal();
+
+    const slipMsg = payoutRecord.slipImage ? " พร้อมแนบสลิปหลักฐานส่งให้ไรเดอร์แล้ว" : "";
+    showToast(`🎉 บันทึกการโอนเงินค่ารอบให้ ${_currentRiderPayout.name} (฿${_currentRiderPayout.amount.toLocaleString()})${slipMsg} สำเร็จ!`);
+
+    if (typeof renderAdminRiders === "function") renderAdminRiders();
+    if (typeof renderFleetPayoutModal === "function") renderFleetPayoutModal();
+    if (typeof renderRiderWallet === "function") renderRiderWallet();
+    if (typeof renderHubSettlement === "function") renderHubSettlement();
+    if (typeof renderHubDailyReport === "function") renderHubDailyReport(targetDateKey);
+}
+window.confirmRiderPayoutSettled = confirmRiderPayoutSettled;
+
+function openRiderDirectSlipUploadModal(riderId, amount, phone, name, plate, dateKey) {
+    if (dateKey) _activeReportDateKey = dateKey;
+    openSingleRiderPayoutModal(riderId, amount, phone, name, plate);
+}
+window.openRiderDirectSlipUploadModal = openRiderDirectSlipUploadModal;
+
+function openRiderSlipViewerModal(riderIdOrName, dateKey) {
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const settledRiders = _loadRiderSettlementState(dateKey);
+    const riders = loadCommunityRiders();
+    const rMeta = riders.find(x => x.id === riderIdOrName || x.name === riderIdOrName);
+
+    let record = settledRiders[riderIdOrName] || (rMeta ? (settledRiders[rMeta.id] || settledRiders[rMeta.name]) : null);
+    if (!record) {
+        const foundKey = Object.keys(settledRiders).find(k => {
+            const it = settledRiders[k];
+            return it && (k === riderIdOrName || it.riderId === riderIdOrName || it.riderName === riderIdOrName || (rMeta && (it.riderId === rMeta.id || it.riderName === rMeta.name)));
+        });
+        if (foundKey) record = settledRiders[foundKey];
+    }
+
+    if (!record || !record.slipImage) {
+        showToast("ℹ️ ไรเดอร์คนนี้ยังไม่ได้แนบรูปสลิปหลักฐาน");
+        if (state.currentRole === "admin" || (state.activeAdmin && state.activeAdmin.isLoggedIn)) {
+            openSingleRiderPayoutModal(riderIdOrName, record ? record.amount : 0, rMeta ? rMeta.phone : '', rMeta ? rMeta.name : riderIdOrName, rMeta ? rMeta.plate : '');
+        }
+        return;
+    }
+
+    _activeRiderSlipViewerData = {
+        riderId: record.riderId || riderIdOrName,
+        riderName: record.riderName || (rMeta ? rMeta.name : "ไรเดอร์"),
+        dateKey,
+        record
+    };
+
+    const modal = document.getElementById("rider-slip-viewer-modal");
+    if (!modal) return;
+
+    const nameEl = document.getElementById("rider-viewer-name");
+    const ownerEl = document.getElementById("rider-viewer-info");
+    const amountEl = document.getElementById("rider-viewer-amount");
+    const timeEl = document.getElementById("rider-viewer-settled-time");
+    const noteBox = document.getElementById("rider-viewer-note-box");
+    const noteEl = document.getElementById("rider-viewer-slip-note");
+    const slipImg = document.getElementById("rider-viewer-slip-image");
+    const downloadBtn = document.getElementById("rider-viewer-download-btn");
+    const adminActions = document.getElementById("rider-viewer-admin-actions");
+
+    if (nameEl) nameEl.textContent = record.riderName || "ไรเดอร์ประจำตลาด";
+    if (ownerEl) ownerEl.textContent = `ทะเบียน: ${record.plate || (rMeta ? rMeta.plate : '-')} • โทร: ${record.phone || (rMeta ? rMeta.phone : '-')}`;
+    if (amountEl) amountEl.textContent = `฿${Number(record.amount || 0).toLocaleString()}`;
+    if (timeEl) {
+        const d = record.settledAt ? new Date(record.settledAt).toLocaleString("th-TH") : dateKey;
+        timeEl.textContent = `${d} ${record.settledBy ? `(${record.settledBy})` : ''}`;
+    }
+    if (noteBox && noteEl) {
+        if (record.slipNote) {
+            noteEl.textContent = record.slipNote;
+            noteBox.classList.remove("hidden");
+        } else {
+            noteBox.classList.add("hidden");
+        }
+    }
+    if (slipImg) slipImg.src = record.slipImage;
+    if (downloadBtn) {
+        downloadBtn.href = record.slipImage;
+        downloadBtn.download = `rider_payout_slip_${dateKey}_${record.riderId || 'rider'}.jpg`;
+    }
+
+    if (adminActions) {
+        const isAdmin = state.currentRole === "admin" || (state.activeAdmin && state.activeAdmin.isLoggedIn);
+        if (isAdmin) adminActions.classList.remove("hidden");
+        else adminActions.classList.add("hidden");
+    }
+
+    modal.classList.remove("hidden");
+}
+window.openRiderSlipViewerModal = openRiderSlipViewerModal;
+
+function closeRiderSlipViewerModal() {
+    const modal = document.getElementById("rider-slip-viewer-modal");
+    if (modal) modal.classList.add("hidden");
+    _activeRiderSlipViewerData = null;
+}
+window.closeRiderSlipViewerModal = closeRiderSlipViewerModal;
+
+function handleReplaceRiderSlipUploaded(event) {
+    if (!_activeRiderSlipViewerData) return;
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const rawBase64 = e.target.result;
+        const img = new Image();
+        img.onload = function() {
+            let compressed = rawBase64;
+            try {
+                const canvas = document.createElement("canvas");
+                const maxW = 800;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxW) {
+                    h = Math.round((h * maxW) / w);
+                    w = maxW;
+                }
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, w, h);
+                compressed = canvas.toDataURL("image/jpeg", 0.80);
+            } catch(e) {}
+
+            const { riderId, riderName, dateKey } = _activeRiderSlipViewerData;
+            const settledRiders = _loadRiderSettlementState(dateKey);
+            const rKey = riderId || riderName;
+            if (settledRiders[rKey]) {
+                settledRiders[rKey].slipImage = compressed;
+                settledRiders[rKey].settledAt = Date.now();
+                if (riderId) settledRiders[riderId] = settledRiders[rKey];
+                if (riderName) settledRiders[riderName] = settledRiders[rKey];
+                _saveRiderSettlementState(dateKey, settledRiders);
+
+                const viewerImg = document.getElementById("rider-viewer-slip-image");
+                const downloadBtn = document.getElementById("rider-viewer-download-btn");
+                if (viewerImg) viewerImg.src = compressed;
+                if (downloadBtn) downloadBtn.href = compressed;
+
+                showToast("✅ เปลี่ยนรูปสลิปค่ารอบเรียบร้อยแล้ว");
+                if (typeof renderAdminRiders === "function") renderAdminRiders();
+                if (typeof renderFleetPayoutModal === "function") renderFleetPayoutModal();
+                if (typeof renderRiderWallet === "function") renderRiderWallet();
+            }
+        };
+        img.src = rawBase64;
+    };
+    reader.readAsDataURL(file);
+}
+window.handleReplaceRiderSlipUploaded = handleReplaceRiderSlipUploaded;
+
+function deleteCurrentRiderSlip() {
+    if (!_activeRiderSlipViewerData) return;
+    if (!confirm("คุณต้องการลบรูปสลิปค่ารอบนี้ใช่หรือไม่?")) return;
+
+    const { riderId, riderName, dateKey } = _activeRiderSlipViewerData;
+    const settledRiders = _loadRiderSettlementState(dateKey);
+    const rKey = riderId || riderName;
+    if (settledRiders[rKey]) {
+        delete settledRiders[rKey].slipImage;
+        if (riderId && settledRiders[riderId]) delete settledRiders[riderId].slipImage;
+        if (riderName && settledRiders[riderName]) delete settledRiders[riderName].slipImage;
+        _saveRiderSettlementState(dateKey, settledRiders);
+        closeRiderSlipViewerModal();
+        showToast("🗑️ ลบรูปสลิปค่ารอบเรียบร้อยแล้ว");
+        if (typeof renderAdminRiders === "function") renderAdminRiders();
+        if (typeof renderFleetPayoutModal === "function") renderFleetPayoutModal();
+        if (typeof renderRiderWallet === "function") renderRiderWallet();
+    }
+}
+window.deleteCurrentRiderSlip = deleteCurrentRiderSlip;
+
+function printRiderViewerSlipThermal() {
+    if (!_activeRiderSlipViewerData) return;
+    const { riderId, dateKey } = _activeRiderSlipViewerData;
+    if (typeof printThermalRiderSlipFromFleet === "function") {
+        printThermalRiderSlipFromFleet(riderId, dateKey);
+    }
+}
+window.printRiderViewerSlipThermal = printRiderViewerSlipThermal;
+
+function listenToFirebaseRiderSettlement() {
+    if (!isFirebaseReady()) return;
+    if (window._hasFirebaseRiderSettlementListener) return;
+    window._hasFirebaseRiderSettlementListener = true;
+
+    try {
+        const todayKey = getReportDateKey(Date.now());
+        db.ref(`daily_reports/${todayKey}/riderSettlement/settledRiders`).on("value", (snap) => {
+            const val = snap.val();
+            if (val && typeof val === "object") {
+                try {
+                    localStorage.setItem(`talathub_settled_riders_${todayKey}`, JSON.stringify(val));
+                } catch(e) {}
+
+                const riderName = (state.activeRider && state.activeRider.name) ? state.activeRider.name : "";
+                const rId = (state.activeRider && state.activeRider.id) ? state.activeRider.id : "";
+                const info = val[rId] || val[riderName];
+
+                if (info && info.isSettled) {
+                    if (!window._notifiedRiderSettlementTime || window._notifiedRiderSettlementTime !== info.settledAt) {
+                        window._notifiedRiderSettlementTime = info.settledAt;
+                        if (state.activeRole === "rider" || state.currentRoleView === "rider") {
+                            showToast(`🎉 ฮับได้โอนเงินค่ารอบเข้าพร้อมเพย์ของคุณแล้ว ฿${Number(info.amount || 0).toLocaleString()} เรียบร้อยแล้ว!`);
+                            try {
+                                const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+                                audio.play().catch(() => {});
+                            } catch(e) {}
+                        }
+                    }
+                }
+
+                if (typeof renderRiderWallet === "function" && (state.activeRole === "rider" || state.currentRoleView === "rider")) {
+                    renderRiderWallet();
+                }
+            }
+        });
+    } catch(e) {
+        console.warn("listenToFirebaseRiderSettlement error:", e);
+    }
+}
+window.listenToFirebaseRiderSettlement = listenToFirebaseRiderSettlement;
+
 // ── Fleet Daily Payout & Settlement Console
 function openRiderPayoutModal() {
     renderFleetPayoutModal();
@@ -22030,13 +22557,20 @@ function renderFleetPayoutModal() {
         grandTotalBonus += bonus;
         grandTotalPayout += totalPayout;
 
+        const settledRidersMap = _loadRiderSettlementState(targetDateKey);
+        const sRec = settledRidersMap[r.id] || settledRidersMap[r.name] || {};
+        const isSettled = Boolean(sRec.isSettled);
+
         return {
             ...r,
             trips,
             baseEarned,
             bonus,
-            totalPayout,
-            promptPayNum: r.promptPay || r.phone || "-"
+            totalPayout: (sRec.amount !== undefined) ? sRec.amount : totalPayout,
+            promptPayNum: r.promptPay || r.phone || "-",
+            isSettled,
+            slipImage: sRec.slipImage || null,
+            slipNote: sRec.slipNote || ""
         };
     });
 
@@ -22093,10 +22627,23 @@ function renderFleetPayoutModal() {
                             <td class="p-2.5 text-right text-sky-700 font-bold">+฿${row.bonus.toLocaleString()}</td>
                             <td class="p-2.5 text-right font-black text-emerald-700">฿${row.totalPayout.toLocaleString()}</td>
                             <td class="p-2.5 text-center">
-                                <button onclick="paySingleRiderPromptPay('${row.id}', ${row.totalPayout})" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] shadow-2xs active:scale-95 transition-all whitespace-nowrap flex items-center justify-center gap-1 mx-auto">
-                                    <span class="material-symbols-outlined text-xs">send</span>
-                                    <span>โอนทันที</span>
-                                </button>
+                                <div class="flex items-center justify-center gap-1 flex-wrap">
+                                    <button onclick="openSingleRiderPayoutModal('${row.id}', ${row.totalPayout}, '${row.promptPayNum}', '${row.name.replace(/'/g, "\\'")}', '${row.plate || '-'}', ${row.trips}, ${row.baseEarned}, ${row.bonus})" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[10.5px] shadow-xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer">
+                                        <span class="material-symbols-outlined text-xs">qr_code_2</span>
+                                        <span>${row.isSettled ? 'ดู QR ซ้ำ' : 'สแกน QR โอน'}</span>
+                                    </button>
+                                    ${row.slipImage ? `
+                                        <button onclick="openRiderSlipViewerModal('${row.id || row.name}', '${targetDateKey}')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10.5px] shadow-xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer" title="ดูสลิปโอนเงิน">
+                                            <span class="material-symbols-outlined text-xs">image</span>
+                                            <span>ดูสลิป</span>
+                                        </button>
+                                    ` : `
+                                        <button onclick="openRiderDirectSlipUploadModal('${row.id}', ${row.totalPayout}, '${row.promptPayNum}', '${row.name.replace(/'/g, "\\'")}', '${row.plate || '-'}', '${targetDateKey}')" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-lg text-[10.5px] shadow-2xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer" title="แนบสลิป">
+                                            <span class="material-symbols-outlined text-xs">attach_file</span>
+                                            <span>แนบสลิป</span>
+                                        </button>
+                                    `}
+                                </div>
                             </td>
                         </tr>
                     `).join('')}
@@ -29339,6 +29886,10 @@ function renderRiderWallet() {
     const container = document.getElementById("rider-wallet-container");
     if (!container) return;
 
+    if (typeof listenToFirebaseRiderSettlement === "function") {
+        listenToFirebaseRiderSettlement();
+    }
+
     const dateKey = getReportDateKey(Date.now());
     let report;
     try {
@@ -29346,7 +29897,10 @@ function renderRiderWallet() {
     } catch(e) {}
 
     const riderName = (state.activeRider && state.activeRider.name) ? state.activeRider.name : "ไรเดอร์ประจำชุมชน";
-    let riderRecord = report?.riderSettlement?.riders?.find(r => r.riderName === riderName) || {
+    const riders = (typeof loadCommunityRiders === "function") ? loadCommunityRiders() : [];
+    const activeRiderObj = riders.find(r => r.name === riderName || (state.activeRider && r.id === state.activeRider.id)) || {};
+
+    let riderRecord = report?.riderSettlement?.riders?.find(r => r.riderName === riderName || r.riderPhone === activeRiderObj.phone) || {
         tripsCount: state.activeOrder && state.activeOrder.status === 'delivered' ? 1 : 0,
         riderFeeEarned: state.activeOrder && state.activeOrder.status === 'delivered' ? 40 : 0,
         codCollected: 0,
@@ -29354,13 +29908,143 @@ function renderRiderWallet() {
         netCashToHub: 0
     };
 
+    const settledRiders = _loadRiderSettlementState(dateKey);
+    const settledInfo = settledRiders[activeRiderObj.id] || settledRiders[riderName] || (activeRiderObj.phone ? settledRiders[activeRiderObj.phone] : null) || {};
+    const isSettled = Boolean(settledInfo && settledInfo.isSettled);
+
     const trips = riderRecord.tripsCount || 0;
-    const feeEarned = riderRecord.riderFeeEarned || (trips * 40);
+    const feeEarned = (settledInfo && settledInfo.amount !== undefined) ? settledInfo.amount : (riderRecord.riderFeeEarned || (trips * 40));
     const cod = riderRecord.codCollected || 0;
     const refunds = riderRecord.refundHanded || 0;
     const netHub = cod - feeEarned - refunds;
 
     container.innerHTML = `
+        <!-- PROMINENT RIDER FEE STATUS CARD -->
+        ${isSettled ? `
+            <div class="bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 rounded-3xl p-4 sm:p-5 text-white shadow-lg space-y-3 border-2 border-emerald-400/90 relative overflow-hidden text-left">
+                <div class="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-emerald-500/10 pointer-events-none blur-xl"></div>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-2xl bg-emerald-500/30 border border-emerald-400/50 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                            ✅
+                        </div>
+                        <div>
+                            <div class="text-[10.5px] text-emerald-300 font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span>สถานะค่ารอบ: ฮับโอนเงินเข้าพร้อมเพย์แล้ว</span>
+                            </div>
+                            <h3 class="text-base sm:text-lg font-black text-white">🟢 ได้รับเงินค่ารอบประจำวันเรียบร้อยแล้ว</h3>
+                        </div>
+                    </div>
+                    <span class="px-3 py-1 bg-emerald-400 text-slate-950 font-black rounded-full text-xs shadow-sm flex items-center gap-1 shrink-0">
+                        <span class="material-symbols-outlined text-sm">check_circle</span>
+                        <span>โอนแล้ว</span>
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-emerald-800/60 text-xs">
+                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
+                        <div class="text-[10px] text-emerald-200">ยอดเงินค่ารอบสุทธิที่ได้รับ:</div>
+                        <div class="text-2xl font-black text-amber-300">฿${feeEarned.toLocaleString()}</div>
+                        <div class="text-[10px] text-emerald-300/80">โอนผ่าน PromptPay ไปยัง ${activeRiderObj.promptPay || activeRiderObj.phone || 'บัญชีคนขับ'}</div>
+                    </div>
+                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
+                        <div class="text-[10px] text-emerald-200">วัน-เวลาที่ฮับยืนยันการโอนเงิน:</div>
+                        <div class="text-sm font-black text-white pt-1">${settledInfo.settledAt ? new Date(settledInfo.settledAt).toLocaleString('th-TH') : dateKey}</div>
+                        <div class="text-[10.5px] text-emerald-300/90 pt-0.5">ตรวจสอบยอดเงินเข้าในแอปธนาคารของคุณได้ทันที</div>
+                    </div>
+                </div>
+
+                <!-- ATTACHED TRANSFER SLIP PROOF FROM HUB -->
+                ${settledInfo.slipImage ? `
+                    <div class="bg-black/30 border border-emerald-500/40 rounded-2xl p-3.5 space-y-2.5 backdrop-blur-sm">
+                        <div class="flex items-center justify-between">
+                            <div class="font-extrabold text-xs text-emerald-300 flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-base text-emerald-400">receipt_long</span>
+                                <span>หลักฐานสลิปการโอนเงินค่ารอบจากฮับ (Rider Fee Payout Slip)</span>
+                            </div>
+                            <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs">verified</span>
+                                <span>แนบสลิปแล้ว</span>
+                            </span>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row items-center gap-3 bg-white/5 p-2.5 rounded-xl border border-white/10">
+                            <div class="relative cursor-pointer group shrink-0" onclick="openRiderSlipViewerModal('${activeRiderObj.id || riderName}', '${dateKey}')">
+                                <img src="${settledInfo.slipImage}" alt="สลิปโอนเงินค่ารอบ" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border-2 border-emerald-400 shadow-md group-hover:scale-105 transition-all">
+                                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center transition-all">
+                                    <span class="material-symbols-outlined text-white text-xl">zoom_in</span>
+                                </div>
+                            </div>
+                            <div class="space-y-1 text-xs text-left flex-1 min-w-0">
+                                <div class="text-[11px] text-emerald-200">
+                                    ผู้รับ: <strong>${riderName}</strong> (${activeRiderObj.plate || 'รถจักรยานยนต์ส่งของ'})
+                                </div>
+                                <div class="text-[11px] text-white font-mono">
+                                    ยอดเงินโอนสุทธิ: <strong class="text-amber-300 text-sm">฿${feeEarned.toLocaleString()}</strong>
+                                </div>
+                                <div class="text-[10px] text-slate-300">
+                                    เวลาที่โอน: ${settledInfo.settledAt ? new Date(settledInfo.settledAt).toLocaleString('th-TH') : dateKey} ${settledInfo.settledBy ? `• ผู้โอน: ${settledInfo.settledBy}` : ''}
+                                </div>
+                                ${settledInfo.slipNote ? `<div class="text-[10px] text-amber-200 italic truncate">บันทึก: ${settledInfo.slipNote}</div>` : ''}
+                                <div class="pt-1 flex items-center gap-2 flex-wrap">
+                                    <button onclick="openRiderSlipViewerModal('${activeRiderObj.id || riderName}', '${dateKey}')" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer">
+                                        <span class="material-symbols-outlined text-xs">zoom_in</span>
+                                        <span>🔍 ดูรูปสลิปเต็มจอ</span>
+                                    </button>
+                                    <a href="${settledInfo.slipImage}" download="rider_slip_${dateKey}_${activeRiderObj.id || 'rider'}.jpg" class="px-3 py-1 bg-white/20 hover:bg-white/30 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                                        <span class="material-symbols-outlined text-xs">download</span>
+                                        <span>บันทึกรูปสลิป</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="bg-white/5 border border-white/10 rounded-2xl p-3 text-xs flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2 text-slate-300 text-[11px]">
+                            <span class="material-symbols-outlined text-amber-400 text-base">info</span>
+                            <span>ฮับยืนยันการโอนเงินแล้ว (กำลังรอเจ้าหน้าที่แนบรูปสลิปหลักฐานเข้าระบบ)</span>
+                        </div>
+                    </div>
+                `}
+            </div>
+        ` : `
+            <div class="bg-gradient-to-br from-amber-950 via-slate-900 to-orange-950 rounded-3xl p-4 sm:p-5 text-white shadow-lg space-y-3 border border-amber-500/60 relative overflow-hidden text-left">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-2xl shrink-0">
+                            ⏳
+                        </div>
+                        <div>
+                            <div class="text-[10.5px] text-amber-300 font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                                <span>สถานะค่ารอบ: อยู่ระหว่างรอบสรุปยอดประจำวัน</span>
+                            </div>
+                            <h3 class="text-base sm:text-lg font-black text-white">🟡 รอฮับตัดรอบและโอนค่ารอบเข้าพร้อมเพย์</h3>
+                        </div>
+                    </div>
+                    <span class="px-3 py-1 bg-amber-500/30 text-amber-300 border border-amber-400/50 font-black rounded-full text-xs flex items-center gap-1 shrink-0">
+                        <span class="material-symbols-outlined text-sm">schedule</span>
+                        <span>รอโอน</span>
+                    </span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-amber-800/60 text-xs">
+                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
+                        <div class="text-[10px] text-amber-200">ค่ารอบสะสมที่รอรับ:</div>
+                        <div class="text-2xl font-black text-amber-300">฿${feeEarned.toLocaleString()}</div>
+                        <div class="text-[10px] text-amber-300/80">รวม ${trips} รอบจัดส่ง</div>
+                    </div>
+                    <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
+                        <div class="text-[10px] text-amber-200">ขั้นตอนการรับเงิน:</div>
+                        <div class="text-[11px] text-slate-200 pt-1 leading-snug">
+                            เมื่อแอดมินหรือฝ่ายบัญชีของฮับสแกนจ่ายผ่าน QR พร้อมเพย์และแนบสลิปแล้ว สถานะหน้านี้จะเปลี่ยนเป็น <strong>"โอนแล้ว"</strong> พร้อมแสดงสลิปทันทีแบบเรียลไทม์
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `}
+
         <div class="grid grid-cols-2 gap-3">
             <div class="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-3.5 shadow-sm text-center">
                 <div class="text-[10px] text-emerald-700 font-extrabold uppercase">รายได้ค่ารอบสะสมวันนี้</div>
