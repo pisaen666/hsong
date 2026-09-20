@@ -22,7 +22,6 @@ const auth = (typeof firebase.auth === "function") ? firebase.auth() : null;
 
 // UID ของบัญชีเจ้าของ (ดูได้ในเมนู Authentication > Users ของ Firebase Console; UID ไม่ใช่ความลับ)
 // ต้องตรงกับ UID ที่ระบุในกฎ Firebase (Rules). ถ้าเว้นว่าง จะไม่มีใครล็อกอินเป็นแอดมินได้
-// ⚠️ ห้ามนำโค้ดชุดนี้ขึ้น main ก่อนใส่ UID ของโปรเจกต์จริง และเปิด Authentication ในโปรเจกต์จริงแล้ว
-const OWNER_UIDS = [];
+const OWNER_UIDS = ["hloZD0Flzyd0X8CCq6RuDV3GYjQ2", "DIhgzYpqR8c3m8SIBXvQ6h8PqsL2"];   // โปรเจกต์จริง hsong-1f342 (หลัก, สำรอง)
 
 console.log("✅ Firebase Realtime Database connected:", firebaseConfig.databaseURL);
