@@ -128,7 +128,7 @@ function loadSavedRider() {
 
 function saveRiderToStorage(rider) {
     try {
-        if (rider) localStorage.setItem("talathub_logged_in_rider", JSON.stringify(rider));
+        if (rider) localStorage.setItem("talathub_logged_in_rider", JSON.stringify(stripRiderPrivate(rider)));
         else localStorage.removeItem("talathub_logged_in_rider");
     } catch (e) { }
 }
@@ -154,6 +154,105 @@ function jsArg(value) {
     return escapeHtml(JSON.stringify(value == null ? "" : String(value)));
 }
 window.jsArg = jsArg;
+
+// ==========================================================
+// RIDER PRIVATE DATA — ข้อมูลส่วนตัวไรเดอร์เก็บที่ rider_private/<riderId> (เจ้าของอ่านได้คนเดียวตามกฎ Firebase)
+// ไม่เก็บไว้ในเครื่อง (localStorage) และไม่ส่งขึ้น rider_applications / community_riders ที่เปิดสาธารณะ
+// ==========================================================
+const RIDER_PRIVATE_KEYS = ["idCard", "address", "emergencyContact", "bankAccounts", "drivingLicense", "license"];
+const _riderPrivateCache = {};     // riderId -> ข้อมูลส่วนตัว (อยู่ในหน่วยความจำเท่านั้น)
+const _riderPrivateChecked = {};   // riderId -> เคยไปดึงจาก Firebase แล้ว (กันดึงซ้ำ)
+
+function pickRiderPrivate(rec) {
+    const out = {};
+    if (!rec || typeof rec !== "object") return out;
+    RIDER_PRIVATE_KEYS.forEach(k => {
+        if (rec[k] !== undefined && rec[k] !== null && rec[k] !== "") out[k] = rec[k];
+    });
+    return out;
+}
+
+function stripRiderPrivate(rec) {
+    if (!rec || typeof rec !== "object") return rec;
+    const copy = Object.assign({}, rec);
+    RIDER_PRIVATE_KEYS.forEach(k => { delete copy[k]; });
+    return copy;
+}
+
+function stripRiderPrivateList(list) {
+    return Array.isArray(list) ? list.map(stripRiderPrivate) : list;
+}
+
+function withRiderPrivate(rec) {
+    if (!rec || !rec.id) return rec;
+    const p = _riderPrivateCache[rec.id];
+    return p ? Object.assign({}, rec, pickRiderPrivate(p)) : rec;
+}
+
+// เขียนข้อมูลส่วนตัว: ไรเดอร์ที่สมัครสร้างใหม่ได้อย่างเดียว (กฎห้ามเขียนทับ) เจ้าของแก้ไขได้
+async function saveRiderPrivate(riderId, data) {
+    if (!riderId) return false;
+    const clean = pickRiderPrivate(data);
+    if (!Object.keys(clean).length) return true;
+    const payload = Object.assign({}, clean, { savedAt: new Date().toISOString() });
+    try {
+        if (typeof isFirebaseReady === "function" && isFirebaseReady() && db) {
+            await _withTimeout(db.ref("rider_private/" + riderId).set(payload), 8000);
+        } else {
+            const res = await fetch(`${RIDER_DB_BASE_URL}/rider_private/${encodeURIComponent(riderId)}.json`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) return false;
+        }
+        _riderPrivateCache[riderId] = clean;
+        return true;
+    } catch (e) {
+        console.warn("Save rider_private failed:", e);
+        return false;
+    }
+}
+
+// เจ้าของ: ดึงข้อมูลส่วนตัวทั้งหมดมาไว้ในหน่วยความจำ (ต้องล็อกอินเจ้าของ กฎ Firebase ไม่ให้คนอื่นอ่าน)
+async function refreshRiderPrivateCache() {
+    if (!isOwnerSignedIn() || typeof isFirebaseReady !== "function" || !isFirebaseReady() || !db) return false;
+    try {
+        const val = (await _withTimeout(db.ref("rider_private").once("value"), 8000)).val() || {};
+        Object.keys(val).forEach(id => {
+            _riderPrivateCache[id] = pickRiderPrivate(val[id]);
+            _riderPrivateChecked[id] = true;
+        });
+        return true;
+    } catch (e) {
+        console.warn("Load rider_private failed:", e);
+        return false;
+    }
+}
+
+// เจ้าของ: ดึงข้อมูลส่วนตัวของไรเดอร์คนเดียว (ใช้ตอนเปิดดูรายละเอียดใบสมัครใหม่ที่เพิ่งเข้ามา) คืน true ถ้าได้ข้อมูลใหม่
+async function ensureRiderPrivate(riderId) {
+    if (!riderId || _riderPrivateCache[riderId] || _riderPrivateChecked[riderId]) return false;
+    _riderPrivateChecked[riderId] = true;
+    if (!isOwnerSignedIn() || typeof isFirebaseReady !== "function" || !isFirebaseReady() || !db) return false;
+    try {
+        const val = (await _withTimeout(db.ref("rider_private/" + riderId).once("value"), 6000)).val();
+        if (val) {
+            _riderPrivateCache[riderId] = pickRiderPrivate(val);
+            return true;
+        }
+    } catch (e) {
+        console.warn("Load rider_private/" + riderId + " failed:", e);
+    }
+    return false;
+}
+
+function clearRiderPrivateCache() {
+    Object.keys(_riderPrivateCache).forEach(k => delete _riderPrivateCache[k]);
+    Object.keys(_riderPrivateChecked).forEach(k => delete _riderPrivateChecked[k]);
+}
+window.pickRiderPrivate = pickRiderPrivate;
+window.refreshRiderPrivateCache = refreshRiderPrivateCache;
 
 // ── Helper: sanitize phone/id เพื่อใช้เป็น Firebase key (ห้ามมี . # $ [ ] /)
 function toFirebaseKey(str) {
@@ -323,6 +422,14 @@ function applyOwnerSession(user) {
         state.activeHub = null;
     }
     if (typeof renderAuthHeaderButtons === "function") renderAuthHeaderButtons();
+    if (signedIn) {
+        // ดึงข้อมูลส่วนตัวไรเดอร์ (เจ้าของอ่านได้คนเดียว) มาไว้ในหน่วยความจำ แล้ววาดหน้าไรเดอร์ใหม่ถ้าเปิดอยู่
+        refreshRiderPrivateCache().then(ok => {
+            if (ok && state.currentRole === "admin" && _activeAdminTab === "riders" && typeof renderAdminRiders === "function") renderAdminRiders();
+        });
+    } else {
+        clearRiderPrivateCache();
+    }
     // ถ้ากำลังดูหน้าแอดมิน/ฮับอยู่ แต่ session หมดหรือถูกล็อกเอาต์ ให้กลับหน้าลูกค้า
     if (!signedIn && (state.currentRole === "admin" || state.currentRole === "hub")) {
         setActiveRoleView("customer");
@@ -351,6 +458,7 @@ function signOutOwner() {
     if (typeof auth !== "undefined" && auth) auth.signOut().catch(() => { });
     state.activeAdmin = null;
     state.activeHub = null;
+    clearRiderPrivateCache();
     saveAdminToStorage(null);
     saveHubToStorage(null);
     renderAuthHeaderButtons();
@@ -17061,6 +17169,9 @@ function switchAdminTab(tabName) {
             _adminRiderRosterView = "applications";
         }
         renderAdminRiders();
+        refreshRiderPrivateCache().then(ok => {
+            if (ok && _activeAdminTab === "riders") renderAdminRiders();
+        });
         setTimeout(() => initAdminRiderRadarMap(), 150);
     } else if (tabName === "settings") {
         renderAdminSettings();
@@ -19341,7 +19452,7 @@ function loadCommunityRiders() {
         const { riders: reconciledRiders, changed } = reconcileApprovedRiders(apps, list);
         if (changed) {
             try {
-                localStorage.setItem("talathub_community_riders", JSON.stringify(reconciledRiders));
+                localStorage.setItem("talathub_community_riders", JSON.stringify(stripRiderPrivateList(reconciledRiders)));
             } catch (e) {}
             return reconciledRiders;
         }
@@ -19355,9 +19466,9 @@ function loadCommunityRiders() {
 function saveCommunityRiders(list) {
     try {
         const cleaned = (list || []).filter(r => r && !isMockCommunityRider(r));
-        localStorage.setItem("talathub_community_riders", JSON.stringify(cleaned));
+        localStorage.setItem("talathub_community_riders", JSON.stringify(stripRiderPrivateList(cleaned)));
         if (isFirebaseReady() && db) {
-            db.ref("community_riders").set(cleaned).catch(err => {
+            db.ref("community_riders").set(stripRiderPrivateList(cleaned)).catch(err => {
                 console.warn("Firebase save community_riders failed:", err);
             });
         }
@@ -19365,7 +19476,7 @@ function saveCommunityRiders(list) {
             fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/community_riders.json", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(cleaned)
+                body: JSON.stringify(stripRiderPrivateList(cleaned))
             }).catch(() => {});
         } catch (e) {}
     } catch (e) {
@@ -19389,6 +19500,7 @@ async function cleanRiderDatabase(skipToast) {
 
         if (typeof isFirebaseReady === "function" && isFirebaseReady() && db) {
             db.ref("rider_documents").remove().catch(() => {});
+            db.ref("rider_private").remove().catch(() => {});
             db.ref("community_riders").remove().catch(() => {});
             db.ref("rider_applications").remove().catch(() => {});
             db.ref("active_rider").remove().catch(() => {});
@@ -19397,7 +19509,7 @@ async function cleanRiderDatabase(skipToast) {
             db.ref("riders").remove().catch(() => {});
         }
         try {
-            const endpoints = ["community_riders", "rider_applications", "rider_documents", "active_rider", "rider_locations", "rider_status", "riders"];
+            const endpoints = ["community_riders", "rider_applications", "rider_documents", "rider_private", "active_rider", "rider_locations", "rider_status", "riders"];
             endpoints.forEach(ep => {
                 fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/${ep}.json`, {
                     method: "DELETE"
@@ -19458,7 +19570,7 @@ function loadRiderApplications() {
                     if (a.id) a.id = normalizeRiderCode(a.id);
                     if (a.accessCode) a.accessCode = normalizeRiderCode(a.accessCode);
                     else a.accessCode = a.id;
-                    return a;
+                    return withRiderPrivate(a);
                 });
             }
         }
@@ -19476,9 +19588,9 @@ function saveRiderApplications(apps) {
             else a.accessCode = a.id;
             return a;
         });
-        localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
+        localStorage.setItem("talathub_rider_applications", JSON.stringify(stripRiderPrivateList(cleaned)));
         if (isFirebaseReady() && db) {
-            db.ref("rider_applications").set(cleaned).catch(err => {
+            db.ref("rider_applications").set(stripRiderPrivateList(cleaned)).catch(err => {
                 console.warn("Firebase save rider_applications failed:", err);
             });
         }
@@ -19486,9 +19598,19 @@ function saveRiderApplications(apps) {
             fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/rider_applications.json", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(cleaned)
+                body: JSON.stringify(stripRiderPrivateList(cleaned))
             }).catch(() => {});
         } catch (e) {}
+
+        // เจ้าของแก้ไข/อนุมัติใบสมัคร: ถ้าข้อมูลส่วนตัวเปลี่ยน (หรือยังไม่เคยย้ายไป rider_private) ให้บันทึกลงที่เก็บลับ
+        if (isOwnerSignedIn()) {
+            cleaned.forEach(a => {
+                const priv = pickRiderPrivate(a);
+                if (!Object.keys(priv).length) return;
+                const cached = pickRiderPrivate(_riderPrivateCache[a.id]);
+                if (JSON.stringify(priv) !== JSON.stringify(cached)) saveRiderPrivate(a.id, priv);
+            });
+        }
     } catch (e) {
         console.error("Error saving rider applications:", e);
     }
@@ -19514,7 +19636,7 @@ function initRiderRealtimeSync() {
                     return a;
                 });
                 if (apps.length > 0) {
-                    localStorage.setItem("talathub_rider_applications", JSON.stringify(apps));
+                    localStorage.setItem("talathub_rider_applications", JSON.stringify(stripRiderPrivateList(apps)));
                 }
             } else {
                 apps = loadRiderApplications();
@@ -19533,7 +19655,7 @@ function initRiderRealtimeSync() {
             if (changed || (reconciledRiders.length > 0 && (!ridersData || ridersData.length === 0))) {
                 saveCommunityRiders(reconciledRiders);
             } else if (riders.length > 0) {
-                localStorage.setItem("talathub_community_riders", JSON.stringify(riders));
+                localStorage.setItem("talathub_community_riders", JSON.stringify(stripRiderPrivateList(riders)));
             }
 
             updateAdminRiderBadges();
@@ -19570,7 +19692,7 @@ function initRiderRealtimeSync() {
                 if (localApps && localApps.length > 0) {
                     cleaned = localApps;
                     if (isFirebaseReady() && db) {
-                        db.ref("rider_applications").set(cleaned).catch(() => {});
+                        db.ref("rider_applications").set(stripRiderPrivateList(cleaned)).catch(() => {});
                     }
                 }
             } else {
@@ -19582,7 +19704,7 @@ function initRiderRealtimeSync() {
                         cleaned.push(la);
                     }
                 });
-                localStorage.setItem("talathub_rider_applications", JSON.stringify(cleaned));
+                localStorage.setItem("talathub_rider_applications", JSON.stringify(stripRiderPrivateList(cleaned)));
             }
 
             // Auto-reconcile with community riders
@@ -19627,11 +19749,11 @@ function initRiderRealtimeSync() {
             if (changed) {
                 cleaned = reconciledRiders;
                 if (isFirebaseReady() && db) {
-                    db.ref("community_riders").set(cleaned).catch(() => {});
+                    db.ref("community_riders").set(stripRiderPrivateList(cleaned)).catch(() => {});
                 }
             }
 
-            localStorage.setItem("talathub_community_riders", JSON.stringify(cleaned));
+            localStorage.setItem("talathub_community_riders", JSON.stringify(stripRiderPrivateList(cleaned)));
 
             if (state.currentRole === "admin" && _activeAdminTab === "riders") {
                 renderAdminRiders();
@@ -20305,11 +20427,16 @@ function _withTimeout(promise, ms) {
 
 // กันกดส่งซ้ำระหว่างรออัปโหลดรูป (ไม่งั้นเกิดใบสมัครซ้ำ) คืน null ถ้ากำลังส่งอยู่แล้ว
 const _riderRegBusy = {};
-async function saveRiderDocumentsGuarded(prefix, riderId, docs) {
+// privateData = ข้อมูลส่วนตัว (เลขบัตร ที่อยู่ บัญชี ฯลฯ) เขียนลง rider_private ก่อน ถ้าไม่สำเร็จจะไม่สร้างใบสมัคร (privateFailed)
+async function saveRiderDocumentsGuarded(prefix, riderId, docs, privateData) {
     if (_riderRegBusy[prefix]) return null;
     _riderRegBusy[prefix] = true;
-    showToast("⏳ กำลังอัปโหลดรูปเอกสาร กรุณารอสักครู่ (อย่ากดซ้ำ)...");
+    showToast("⏳ กำลังส่งข้อมูลและรูปเอกสาร กรุณารอสักครู่ (อย่ากดซ้ำ)...");
     try {
+        if (privateData) {
+            const privateOk = await saveRiderPrivate(riderId, privateData);
+            if (!privateOk) return { privateFailed: true, cloudOk: false, localOk: false };
+        }
         return await saveRiderDocuments(riderId, docs);
     } finally {
         _riderRegBusy[prefix] = false;
@@ -20378,6 +20505,12 @@ async function loadRiderDocuments(riderId) {
 function removeRiderDocuments(riderId) {
     if (!riderId) return;
     delete _riderDocsCache[riderId];
+    delete _riderPrivateCache[riderId];
+    delete _riderPrivateChecked[riderId];
+    // ข้อมูลส่วนตัวใน rider_private ลบพร้อมกัน (เฉพาะเจ้าของที่ล็อกอินอยู่ที่ลบได้ตามกฎ Firebase)
+    try {
+        if (typeof isFirebaseReady === "function" && isFirebaseReady() && db) db.ref("rider_private/" + riderId).remove().catch(() => { });
+    } catch (e) { }
     try { localStorage.removeItem("talathub_rider_docs_" + riderId); } catch (e) { }
     try {
         if (typeof isFirebaseReady === "function" && isFirebaseReady() && db) {
@@ -20391,6 +20524,7 @@ function removeRiderDocuments(riderId) {
 // ล้างแคชรูปเอกสารในเครื่อง (ถูกเรียกจาก cleanRiderDatabase ซึ่งอาจรันก่อนที่ตัวแปรแคชจะถูกสร้าง จึงห่อ try)
 function wipeAllRiderDocuments() {
     try { Object.keys(_riderDocsCache).forEach(k => delete _riderDocsCache[k]); } catch (e) { }
+    try { clearRiderPrivateCache(); } catch (e) { }
     try {
         Object.keys(localStorage)
             .filter(k => k.startsWith("talathub_rider_docs_"))
@@ -20654,8 +20788,14 @@ async function handleRiderRegisterSubmit(e) {
     };
 
     // รูปเอกสารเก็บแยกจากใบสมัคร (ต้องบันทึกสำเร็จอย่างน้อยหนึ่งที่ก่อนสร้างใบสมัคร)
-    const docResult = await saveRiderDocumentsGuarded("reg", riderCode, extras.docs);
+    const docResult = await saveRiderDocumentsGuarded("reg", riderCode, extras.docs, {
+        idCard, address, drivingLicense, emergencyContact: extras.emergencyContact, bankAccounts: extras.bankAccounts
+    });
     if (!docResult) return;
+    if (docResult.privateFailed) {
+        showToast("⚠️ ส่งข้อมูลส่วนตัวไม่สำเร็จ (อาจเคยสมัครด้วยเบอร์นี้แล้ว หรืออินเทอร์เน็ตมีปัญหา) กรุณาลองใหม่ หรือติดต่อแอดมิน");
+        return;
+    }
     if (!docResult.cloudOk && !docResult.localOk) {
         showToast("⚠️ บันทึกรูปเอกสารไม่สำเร็จ กรุณาลองอีกครั้ง");
         return;
@@ -22513,6 +22653,11 @@ function viewRiderAppDetail(appId) {
         showToast("⚠️ ไม่พบข้อมูลใบสมัคร (" + (appId || "ไม่มีรหัส") + ")");
         return;
     }
+
+    // ใบสมัครที่เพิ่งเข้ามา: ดึงข้อมูลส่วนตัวของคนนี้จากที่เก็บลับ แล้ววาดหน้ารายละเอียดใหม่ถ้าได้ข้อมูล
+    ensureRiderPrivate(app.id).then(found => {
+        if (found) viewRiderAppDetail(app.id);
+    });
 
     const modal = document.getElementById("rider-app-detail-modal");
     if (!modal) {
@@ -25863,8 +26008,15 @@ async function handleOnPageRiderRegister(e) {
     const displayName = nickname ? `${fullName} (${nickname})` : fullName;
 
     // รูปเอกสารเก็บแยกจากใบสมัคร (ต้องบันทึกสำเร็จอย่างน้อยหนึ่งที่ก่อนสร้างไรเดอร์)
-    const docResult = await saveRiderDocumentsGuarded("onpage", code, extras.docs);
+    const docResult = await saveRiderDocumentsGuarded("onpage", code, extras.docs, {
+        idCard: extras.identity.idCard, address: extras.identity.address, drivingLicense: license, license,
+        emergencyContact: extras.emergencyContact, bankAccounts: extras.bankAccounts
+    });
     if (!docResult) return;
+    if (docResult.privateFailed) {
+        showToast("⚠️ ส่งข้อมูลส่วนตัวไม่สำเร็จ (อาจเคยสมัครด้วยเบอร์นี้แล้ว หรืออินเทอร์เน็ตมีปัญหา) กรุณาลองใหม่ หรือติดต่อแอดมิน");
+        return;
+    }
     if (!docResult.cloudOk && !docResult.localOk) {
         showToast("⚠️ บันทึกรูปเอกสารไม่สำเร็จ กรุณาลองอีกครั้ง");
         return;
@@ -29579,7 +29731,7 @@ function autoSanitizeProductionData() {
             apps = JSON.parse(rawApps);
             if (Array.isArray(apps)) {
                 apps = apps.filter(a => a && !isMockRiderApplication(a));
-                localStorage.setItem("talathub_rider_applications", JSON.stringify(apps));
+                localStorage.setItem("talathub_rider_applications", JSON.stringify(stripRiderPrivateList(apps)));
             }
         }
 
@@ -29588,7 +29740,7 @@ function autoSanitizeProductionData() {
             let riders = JSON.parse(rawRiders);
             if (Array.isArray(riders)) {
                 riders = riders.filter(r => r && !isMockCommunityRider(r));
-                localStorage.setItem("talathub_community_riders", JSON.stringify(riders));
+                localStorage.setItem("talathub_community_riders", JSON.stringify(stripRiderPrivateList(riders)));
             }
         }
     } catch (e) {}

@@ -74,6 +74,37 @@
           ".validate": false
         }
       }
+    },
+    "rider_private": {
+      ".read": "auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')",
+      "$riderId": {
+        ".write": "(auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')) || !data.exists()",
+        ".validate": "newData.hasChildren()",
+        "idCard": {
+          ".validate": "newData.isString() && newData.val().length < 2000"
+        },
+        "address": {
+          ".validate": "newData.isString() && newData.val().length < 2000"
+        },
+        "drivingLicense": {
+          ".validate": "newData.isString() && newData.val().length < 2000"
+        },
+        "license": {
+          ".validate": "newData.isString() && newData.val().length < 2000"
+        },
+        "emergencyContact": {
+          ".validate": true
+        },
+        "bankAccounts": {
+          ".validate": true
+        },
+        "savedAt": {
+          ".validate": "newData.isString()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
     }
   }
 }
