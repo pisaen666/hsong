@@ -104,7 +104,7 @@ function loadSavedRider() {
         const saved = localStorage.getItem("talathub_logged_in_rider");
         if (saved) {
             const parsed = JSON.parse(saved);
-            if (parsed && (parsed.riderId === "rider_somchai" || parsed.riderId === "rider_sombat" || (parsed.name && parsed.name.includes("สมชาย")) || (typeof isMockCommunityRider === "function" && isMockCommunityRider(parsed)))) {
+            if (parsed && (parsed.riderId === "rider_somchai" || parsed.riderId === "rider_sombat" || (typeof isMockCommunityRider === "function" && isMockCommunityRider(parsed)))) {
                 localStorage.removeItem("talathub_logged_in_rider");
                 return null;
             }
@@ -19122,7 +19122,56 @@ function switchAdminRiderRosterView(viewKey) {
 window.switchAdminRiderSubTab = switchAdminRiderSubTab;
 window.switchAdminRiderRosterView = switchAdminRiderRosterView;
 
-const DEFAULT_COMMUNITY_RIDERS = [];
+const DEFAULT_COMMUNITY_RIDERS = [
+    {
+        accessCode: 'LX1536',
+        avatar: '🛵',
+        baseFee: 40,
+        codSettledToday: 0,
+        id: 'RD6735',
+        lat: 13.3072,
+        lng: 101.1233,
+        motorcycleModel: 'Honda Wave 110i',
+        name: 'สมชาย ขยันส่ง (พี่ชาย)',
+        phone: '0895551234',
+        plate: '1กข 8899 ชลบุรี',
+        promptPay: '0895551234',
+        status: 'available',
+        zone: 'ตลาดหัวกุญแจ และละแวกใกล้เคียง (ระยะ 5 กม.)'
+    },
+    {
+        accessCode: 'RD0313',
+        avatar: '🛵',
+        baseFee: 40,
+        codSettledToday: 0,
+        id: 'RD0313',
+        lat: 13.3046,
+        lng: 101.1246,
+        motorcycleModel: 'ฮอนด้า',
+        name: 'โนอาห์ (น้ำพุ)',
+        phone: '0815887777',
+        plate: '1 กข 5785',
+        promptPay: '0815887777',
+        status: 'available',
+        zone: 'ตลาดหัวกุญแจ และละแวกใกล้เคียง (ระยะ 5 กม.)'
+    },
+    {
+        accessCode: 'RD2039',
+        avatar: '🛵',
+        baseFee: 40,
+        codSettledToday: 0,
+        id: 'RD6436',
+        lat: 13.3118,
+        lng: 101.1258,
+        motorcycleModel: 'Honda',
+        name: 'Sam (Sam)',
+        phone: '0815887400',
+        plate: '4567',
+        promptPay: '0815887400',
+        status: 'available',
+        zone: 'ตลาดหัวกุญแจ และละแวกใกล้เคียง (ระยะ 5 กม.)'
+    }
+];
 
 // Mock sample IDs to remove legacy dummy data
 const MOCK_COMMUNITY_RIDER_IDS = ["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004"];
@@ -19197,6 +19246,13 @@ function loadCommunityRiders() {
                 list = parsed.filter(r => r && !isMockCommunityRider(r));
             }
         }
+        // If empty in storage, seed from default community riders
+        if (list.length === 0 && Array.isArray(DEFAULT_COMMUNITY_RIDERS) && DEFAULT_COMMUNITY_RIDERS.length > 0) {
+            list = [...DEFAULT_COMMUNITY_RIDERS];
+            try {
+                localStorage.setItem("talathub_community_riders", JSON.stringify(list));
+            } catch(e) {}
+        }
         // Auto-reconcile with approved applications so approved riders never vanish
         const apps = loadRiderApplications();
         const { riders: reconciledRiders, changed } = reconcileApprovedRiders(apps, list);
@@ -19206,11 +19262,11 @@ function loadCommunityRiders() {
             } catch (e) {}
             return reconciledRiders;
         }
-        return list;
+        return list.length > 0 ? list : [...DEFAULT_COMMUNITY_RIDERS];
     } catch (e) {
         console.error("Error loading community riders:", e);
     }
-    return [];
+    return DEFAULT_COMMUNITY_RIDERS.slice();
 }
 
 function saveCommunityRiders(list) {
@@ -20023,7 +20079,13 @@ window.checkCurrentRiderApprovalAndLogin = checkCurrentRiderApprovalAndLogin;
 
 function loginRiderById(riderId) {
     const riders = loadCommunityRiders();
-    const r = riders.find(x => x.id === riderId);
+    const clean = String(riderId || "").trim().toUpperCase();
+    const r = riders.find(x => 
+        x.id === riderId || 
+        (x.id && x.id.trim().toUpperCase() === clean) ||
+        (x.accessCode && x.accessCode.trim().toUpperCase() === clean) ||
+        (x.phone && x.phone.replace(/[-\s]/g, "") === clean.replace(/[-\s]/g, ""))
+    );
     if (!r) {
         showToast("⚠️ ไม่พบข้อมูลไรเดอร์");
         return;
@@ -25024,8 +25086,9 @@ function renderRiderLoginModalList() {
                         <div class="text-[10px] text-slate-500 font-mono">รหัส: <strong class="text-sky-700 font-bold">${code}</strong> • ทะเบียน: ${r.plate || '-'}</div>
                     </div>
                 </div>
-                <button type="button" onclick="loginRiderWithProfile(loadCommunityRiders().find(x => x.id === '${r.id}'))" class="px-3 py-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
-                    เข้าสู่ระบบ
+                <button type="button" onclick="loginRiderById('${r.id}')" class="px-3.5 py-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs">login</span>
+                    <span>เข้าสู่ระบบ</span>
                 </button>
             </div>
         `;
@@ -25146,12 +25209,18 @@ function handleRiderPhoneLoginSubmit() {
 window.handleRiderPhoneLoginSubmit = handleRiderPhoneLoginSubmit;
 
 function loginRiderWithProfile(r) {
+    if (!r) return;
     state.activeRider = {
         isLoggedIn: true,
         riderId: r.id,
+        id: r.id,
         name: r.name,
         phone: r.phone,
-        license: r.plate
+        license: r.plate || "-",
+        plate: r.plate || "-",
+        promptPay: r.promptPay || r.phone || "",
+        avatar: r.avatar || "🛵",
+        zone: r.zone || "ตลาดหัวกุญแจ และละแวกใกล้เคียง"
     };
     saveRiderToStorage(state.activeRider);
 
@@ -25161,10 +25230,16 @@ function loginRiderWithProfile(r) {
     state.activeMerchant = null;
     saveMerchantToStorage(null);
 
+    const profName = document.getElementById("rider-profile-name");
+    if (profName) profName.textContent = r.name;
+
     closeRiderLoginModal();
     setActiveRoleView("rider");
     renderAuthHeaderButtons();
     renderRiderScreen();
+    if (typeof renderRiderWallet === "function") {
+        renderRiderWallet();
+    }
     updateRiderRoleButtonUI();
     if (typeof updateRoleSelectorVisibility === "function") {
         updateRoleSelectorVisibility();
@@ -28345,7 +28420,7 @@ function autoSanitizeProductionData() {
         const savedRider = localStorage.getItem("talathub_logged_in_rider");
         if (savedRider) {
             const r = JSON.parse(savedRider);
-            if (r && (r.riderId === "rider_somchai" || r.riderId === "rider_sombat" || (r.name && r.name.includes("สมชาย")) || isMockCommunityRider(r))) {
+            if (r && (r.riderId === "rider_somchai" || r.riderId === "rider_sombat" || isMockCommunityRider(r))) {
                 localStorage.removeItem("talathub_logged_in_rider");
             }
         }
