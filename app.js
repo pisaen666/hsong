@@ -153,6 +153,12 @@ function escapeHtml(str) {
 }
 window.escapeHtml = escapeHtml;
 
+// Safe string argument for inline handlers: onclick="fn(${jsArg(value)})" (JSON literal, then HTML-attribute escaped)
+function jsArg(value) {
+    return escapeHtml(JSON.stringify(value == null ? "" : String(value)));
+}
+window.jsArg = jsArg;
+
 // ── Helper: sanitize phone/id เพื่อใช้เป็น Firebase key (ห้ามมี . # $ [ ] /)
 function toFirebaseKey(str) {
     return (str || "guest").replace(/[.#$\[\]\/]/g, "_");
@@ -4496,15 +4502,23 @@ function _saveVendorSettlementState(dateKey, stateObj) {
 }
 
 // ── Aggregation Engine: รวบรวมข้อมูลออเดอร์ ไรเดอร์ และร้านค้า ประจำวัน
+// ออเดอร์ที่ยกเลิกไม่มีเงินเข้า-ออก จึงต้องไม่ถูกนับเป็นยอดขาย ค่าส่ง หรือยอดโอนแผงค้า
+function isCancelledOrder(o) {
+    const s = String((o && o.status) || "").toLowerCase();
+    return s === "cancelled" || s === "canceled";
+}
+window.isCancelledOrder = isCancelledOrder;
+
 function aggregateDailyOperations(targetDateKey) {
     if (!targetDateKey) targetDateKey = getReportDateKey(Date.now());
 
-    // 1. ดึงออเดอร์ทั้งหมด
+    // 1. ดึงออเดอร์ทั้งหมด (แยกออเดอร์ที่ยกเลิกออกจากยอดเงิน)
     const allOrders = _collectAllOrders();
-    const dateOrders = allOrders.filter(o => {
+    const allDateOrders = allOrders.filter(o => {
         const orderDate = getReportDateKey(o.savedAt || o.createdAt || o.orderTime || Date.now());
         return orderDate === targetDateKey;
     });
+    const dateOrders = allDateOrders.filter(o => !isCancelledOrder(o));
 
     // 2. โหลดสถานะการเคลียร์เงินที่เคยบันทึกไว้
     const settledRiders = _loadRiderSettlementState(targetDateKey);
@@ -4514,6 +4528,7 @@ function aggregateDailyOperations(targetDateKey) {
     const summary = {
         dateKey: targetDateKey,
         totalOrders: dateOrders.length,
+        cancelledOrders: allDateOrders.length - dateOrders.length,
         completedOrders: 0,
         pendingOrders: 0,
         totalCustomerGMV: 0,
@@ -4545,7 +4560,8 @@ function aggregateDailyOperations(targetDateKey) {
         const expFee = Number(o.expressFee || (isExpOrder ? delFee : ((o.isExpress || o.orderType === "CUSTOMER_EXPRESS") ? 20 : 0)));
 
         summary.totalCustomerGMV += orderTotal;
-        summary.totalDeliveryFees += delFee;
+        // ค่าส่งของงานด่วนจากแผงบันทึกครั้งเดียวในช่อง Express (ไม่ซ้ำกับค่าส่ง เพื่อไม่ให้รายได้ฮับถูกนับสองเท่า)
+        summary.totalDeliveryFees += isExpOrder ? 0 : delFee;
         summary.totalExpressFees += expFee;
         summary.totalDiscounts += discount;
         summary.totalRefundCash += refundAmt;
@@ -4855,7 +4871,7 @@ function renderHubDailyReport(targetDateKey) {
                         <span class="font-black text-sm sm:text-base">มีใบสมัครร่วมทีมไรเดอร์ใหม่ ${pendingRiderApps.length} รายการ</span>
                         <span class="bg-white text-orange-700 font-black text-[10px] px-2.5 py-0.5 rounded-full shadow-xs">รอแอดมินอนุมัติ</span>
                     </div>
-                    <p class="text-xs text-white/90 mt-0.5 font-medium">ผู้สมัครล่าสุด: <strong class="text-white underline">${pendingRiderApps[0].fullName}</strong> (${pendingRiderApps[0].phone}) • สมัครเข้ามาแล้ว</p>
+                    <p class="text-xs text-white/90 mt-0.5 font-medium">ผู้สมัครล่าสุด: <strong class="text-white underline">${escapeHtml(pendingRiderApps[0].fullName)}</strong> (${escapeHtml(pendingRiderApps[0].phone)}) • สมัครเข้ามาแล้ว</p>
                 </div>
             </div>
             <button onclick="goToAdminToApproveRider('${pendingRiderApps[0].id}')" class="px-4 py-2.5 bg-white hover:bg-amber-50 text-orange-700 font-black rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer">
@@ -16947,6 +16963,7 @@ function switchAdminTab(tabName) {
         const apps = loadMerchantApplications();
         const pendingCount = apps.filter(a => a.status === "pending").length;
         if (pendingCount > 0) {
+            _adminStallSubTab = "roster";
             _adminStallRosterView = "applications";
         }
         initMerchantRealtimeSync();
@@ -16965,6 +16982,14 @@ function switchAdminTab(tabName) {
         renderAdminSettings();
     }
 }
+
+window.handleAdminButtonClick = handleAdminButtonClick;
+window.openAdminLoginModal = openAdminLoginModal;
+window.closeAdminLoginModal = closeAdminLoginModal;
+window.handleAdminLoginSubmit = handleAdminLoginSubmit;
+window.handleAdminQuickLogin = handleAdminQuickLogin;
+window.logoutAdmin = logoutAdmin;
+window.switchAdminTab = switchAdminTab;
 
 function renderAdminView() {
     const disp = document.getElementById("admin-display-name");
@@ -16989,7 +17014,7 @@ function renderAdminAnalytics() {
     const container = document.getElementById("admin-content-analytics");
     if (!container) return;
 
-    const allOrders = _collectAllOrders();
+    const allOrders = _collectAllOrders().filter(o => !isCancelledOrder(o));
     let totalGMV = 0;
     let totalDelivered = 0;
     let totalDeliveryFees = 0;
@@ -17974,7 +17999,7 @@ function renderAdminStalls() {
                                         </div>
                                         <div>
                                             <div class="flex items-center gap-2 flex-wrap">
-                                                <span class="font-black text-sm text-slate-900">${stall.stallName || 'แผงค้าใหม่'}</span>
+                                                <span class="font-black text-sm text-slate-900">${escapeHtml(stall.stallName || 'แผงค้าใหม่')}</span>
                                                 <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${stall.stallNumber || app.id}</span>
                                                 ${app.status === 'pending' ? `
                                                     <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⏳ รอการอนุมัติ</span>
@@ -17991,12 +18016,12 @@ function renderAdminStalls() {
                                                 ` : ''}
                                             </div>
                                             <div class="text-[11px] text-slate-500 flex items-center gap-2.5 flex-wrap mt-0.5 font-mono">
-                                                <a href="tel:${stall.phone}" class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
+                                                <a href="tel:${escapeHtml(stall.phone)}" class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
                                                     <span class="material-symbols-outlined text-xs">call</span>
-                                                    <span>${stall.phone || '-'}</span>
+                                                    <span>${escapeHtml(stall.phone || '-')}</span>
                                                 </a>
                                                 <span>•</span>
-                                                <span class="text-slate-500 font-sans">เจ้าของ: <strong>${stall.ownerName || '-'}</strong></span>
+                                                <span class="text-slate-500 font-sans">เจ้าของ: <strong>${escapeHtml(stall.ownerName || '-')}</strong></span>
                                             </div>
                                         </div>
                                     </div>
@@ -18525,7 +18550,7 @@ function viewMerchantAppDetail(appId) {
                         🏪
                     </div>
                     <div>
-                        <h4 class="font-black text-base text-slate-900">${stall.stallName || 'แผงค้าใหม่'}</h4>
+                        <h4 class="font-black text-base text-slate-900">${escapeHtml(stall.stallName || 'แผงค้าใหม่')}</h4>
                         <div class="text-slate-500 font-mono text-[11px]">${c1.phone || stall.phone || '-'} • LINE: ${c1.line || stall.lineId || stall.phone || '-'}</div>
                     </div>
                 </div>
@@ -18546,15 +18571,15 @@ function viewMerchantAppDetail(appId) {
                     <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">พร้อมใช้งาน</span>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-emerald-200/60">
-                    <button type="button" onclick="sendRealSmsToApplicant('${c1.phone || stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
+                    <button type="button" onclick="sendRealSmsToApplicant(${jsArg(c1.phone || stall.phone)}, ${jsArg(app.accessCode)}, ${jsArg(stall.stallName)}, 'merchant')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
                         <span class="material-symbols-outlined text-sm">sms</span>
                         <span>ส่ง SMS จริง</span>
                     </button>
-                    <button type="button" onclick="sendLineNotificationToApplicant('${c1.line || stall.lineId || stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
+                    <button type="button" onclick="sendLineNotificationToApplicant(${jsArg(c1.line || stall.lineId || stall.phone)}, ${jsArg(app.accessCode)}, ${jsArg(stall.stallName)}, 'merchant')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
                         <span>💬</span>
                         <span>ส่งแจ้ง LINE</span>
                     </button>
-                    <button type="button" onclick="copyApprovalNotificationMessage('${c1.phone || stall.phone}', '${app.accessCode}', '${stall.stallName}', 'merchant')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
+                    <button type="button" onclick="copyApprovalNotificationMessage(${jsArg(c1.phone || stall.phone)}, ${jsArg(app.accessCode)}, ${jsArg(stall.stallName)}, 'merchant')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
                         <span class="material-symbols-outlined text-sm">content_copy</span>
                         <span>คัดลอกข้อความ</span>
                     </button>
@@ -18575,7 +18600,7 @@ function viewMerchantAppDetail(appId) {
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-0.5">
                     <div>
                         <span class="text-[10px] text-slate-400">เลขแผง:</span>
-                        <div class="font-mono font-bold text-slate-800">${stall.stallNumber || '-'}</div>
+                        <div class="font-mono font-bold text-slate-800">${escapeHtml(stall.stallNumber || '-')}</div>
                     </div>
                     <div>
                         <span class="text-[10px] text-slate-400">โซนตลาด:</span>
@@ -20835,7 +20860,7 @@ function renderAdminRiders() {
                                             </div>
                                             <div>
                                                 <div class="flex items-center gap-2 flex-wrap">
-                                                    <span class="font-black text-sm text-slate-900">${app.fullName} ${app.nickname ? `(${app.nickname})` : ''}</span>
+                                                    <span class="font-black text-sm text-slate-900">${escapeHtml(app.fullName)} ${app.nickname ? `(${escapeHtml(app.nickname)})` : ''}</span>
                                                     <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${app.id}</span>
                                                     ${app.status === 'pending' ? `
                                                         <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⏳ รอการอนุมัติ</span>
@@ -20846,17 +20871,17 @@ function renderAdminRiders() {
                                                     `}
                                                 </div>
                                                 <div class="text-[11px] text-slate-500 flex items-center gap-2.5 flex-wrap mt-0.5 font-mono">
-                                                    <a href="tel:${app.phone}" class="text-sky-700 font-bold hover:underline flex items-center gap-0.5">
+                                                    <a href="tel:${escapeHtml(app.phone)}" class="text-sky-700 font-bold hover:underline flex items-center gap-0.5">
                                                         <span class="material-symbols-outlined text-xs">call</span>
-                                                        <span>${app.phone}</span>
+                                                        <span>${escapeHtml(app.phone)}</span>
                                                     </a>
                                                     <span>•</span>
                                                     <span class="text-emerald-700 font-bold flex items-center gap-0.5">
                                                         <span class="material-symbols-outlined text-xs">chat</span>
-                                                        <span>LINE: ${app.lineId || '-'}</span>
+                                                        <span>LINE: ${escapeHtml(app.lineId || '-')}</span>
                                                     </span>
                                                     <span>•</span>
-                                                    <span class="text-slate-500">เลข ปชช: ${app.idCard || '-'}</span>
+                                                    <span class="text-slate-500">เลข ปชช: ${escapeHtml(app.idCard || '-')}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -20907,14 +20932,14 @@ function renderAdminRiders() {
                                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-[11px] bg-slate-50/80 p-3 rounded-xl border border-slate-200/80">
                                         <div>
                                             <span class="text-slate-400 font-bold block">🏍️ ข้อมูลรถ & ทะเบียน:</span>
-                                            <div class="font-bold text-slate-800">${app.motorcycleModel || '-'} ${app.motorcycleColor ? `(${app.motorcycleColor})` : ''}</div>
-                                            <div class="font-mono font-black text-slate-700">ทะเบียน: ${app.plate || '-'}</div>
+                                            <div class="font-bold text-slate-800">${escapeHtml(app.motorcycleModel || '-')} ${app.motorcycleColor ? `(${escapeHtml(app.motorcycleColor)})` : ''}</div>
+                                            <div class="font-mono font-black text-slate-700">ทะเบียน: ${escapeHtml(app.plate || '-')}</div>
                                             <div class="text-[10px] text-slate-500">ใบขับขี่: ${app.drivingLicense || '-'}</div>
                                         </div>
                                         <div>
                                             <span class="text-slate-400 font-bold block">📍 โซนที่สะดวก:</span>
-                                            <div class="font-bold text-slate-800">${app.zone || 'รอบตลาดวิศิษฐ์ชัย'}</div>
-                                            <div class="text-[10px] text-slate-500 line-clamp-2">${app.address || 'บ้านบึง จ.ชลบุรี'}</div>
+                                            <div class="font-bold text-slate-800">${escapeHtml(app.zone || 'รอบตลาดวิศิษฐ์ชัย')}</div>
+                                            <div class="text-[10px] text-slate-500 line-clamp-2">${escapeHtml(app.address || 'บ้านบึง จ.ชลบุรี')}</div>
                                         </div>
                                         <div>
                                             <span class="text-slate-400 font-bold block">⏰ ช่วงเวลารับงาน & อุปกรณ์:</span>
@@ -21200,8 +21225,8 @@ function renderAdminRiders() {
                                             🛵
                                         </div>
                                         <div>
-                                            <div class="font-extrabold text-sm text-slate-900">${app.fullName} ${app.nickname ? `(${app.nickname})` : ''}</div>
-                                            <div class="text-[11px] text-slate-500 font-mono">📱 ${app.phone} • LINE: ${app.lineId || '-'}</div>
+                                            <div class="font-extrabold text-sm text-slate-900">${escapeHtml(app.fullName)} ${app.nickname ? `(${escapeHtml(app.nickname)})` : ''}</div>
+                                            <div class="text-[11px] text-slate-500 font-mono">📱 ${escapeHtml(app.phone)} • LINE: ${escapeHtml(app.lineId || '-')}</div>
                                         </div>
                                     </div>
                                     <span class="bg-amber-100 text-amber-900 border border-amber-300 font-black text-[10px] px-2 py-0.5 rounded-full shrink-0">
@@ -21216,11 +21241,11 @@ function renderAdminRiders() {
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">รถ / ทะเบียน:</span>
-                                        <span class="font-bold text-slate-800">${app.motorcycleModel || '-'} (${app.plate || '-'})</span>
+                                        <span class="font-bold text-slate-800">${escapeHtml(app.motorcycleModel || '-')} (${escapeHtml(app.plate || '-')})</span>
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">โซนที่สะดวก:</span>
-                                        <span class="font-medium text-slate-700 truncate max-w-[140px]">${app.zone || 'รอบตลาดวิศิษฐ์ชัย'}</span>
+                                        <span class="font-medium text-slate-700 truncate max-w-[140px]">${escapeHtml(app.zone || 'รอบตลาดวิศิษฐ์ชัย')}</span>
                                     </div>
                                 </div>
                             </div>
@@ -21824,8 +21849,8 @@ function viewRiderAppDetail(appId) {
                         🛵
                     </div>
                     <div>
-                        <h4 class="font-black text-base text-slate-900">${app.fullName} ${app.nickname ? `(${app.nickname})` : ''}</h4>
-                        <div class="text-slate-500 font-mono text-[11px]">${app.phone} • LINE: ${app.lineId || '-'}</div>
+                        <h4 class="font-black text-base text-slate-900">${escapeHtml(app.fullName)} ${app.nickname ? `(${escapeHtml(app.nickname)})` : ''}</h4>
+                        <div class="text-slate-500 font-mono text-[11px]">${escapeHtml(app.phone)} • LINE: ${escapeHtml(app.lineId || '-')}</div>
                     </div>
                 </div>
                 <div>${statusBadge}</div>
@@ -21844,19 +21869,19 @@ function viewRiderAppDetail(appId) {
                     <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">พร้อมใช้งาน</span>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-emerald-200/60">
-                    <button type="button" onclick="sendRealSmsToApplicant('${app.phone}', '${app.accessCode}', '${app.fullName}', 'rider')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
+                    <button type="button" onclick="sendRealSmsToApplicant(${jsArg(app.phone)}, ${jsArg(app.accessCode)}, ${jsArg(app.fullName)}, 'rider')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
                         <span class="material-symbols-outlined text-sm">sms</span>
                         <span>ส่ง SMS จริง</span>
                     </button>
-                    <button type="button" onclick="sendLineNotificationToApplicant('${app.lineId || app.phone}', '${app.accessCode}', '${app.fullName}', 'rider')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
+                    <button type="button" onclick="sendLineNotificationToApplicant(${jsArg(app.lineId || app.phone)}, ${jsArg(app.accessCode)}, ${jsArg(app.fullName)}, 'rider')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
                         <span>💬</span>
                         <span>ส่งแจ้ง LINE</span>
                     </button>
-                    <button type="button" onclick="copyApprovalNotificationMessage('${app.phone}', '${app.accessCode}', '${app.fullName}', 'rider')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
+                    <button type="button" onclick="copyApprovalNotificationMessage(${jsArg(app.phone)}, ${jsArg(app.accessCode)}, ${jsArg(app.fullName)}, 'rider')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
                         <span class="material-symbols-outlined text-sm">content_copy</span>
                         <span>คัดลอกข้อความ</span>
                     </button>
-                    <a href="tel:${app.phone}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
+                    <a href="tel:${escapeHtml(app.phone)}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
                         <span class="material-symbols-outlined text-sm">call</span>
                         <span>โทรหา</span>
                     </a>
@@ -21867,16 +21892,16 @@ function viewRiderAppDetail(appId) {
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
                     <div class="text-[10px] font-bold text-slate-400">ข้อมูลส่วนตัว & ใบอนุญาต</div>
-                    <div class="font-bold text-slate-800">เลข ปชช: <span class="font-mono text-slate-700">${app.idCard || '-'}</span></div>
+                    <div class="font-bold text-slate-800">เลข ปชช: <span class="font-mono text-slate-700">${escapeHtml(app.idCard || '-')}</span></div>
                     <div class="font-bold text-slate-800">ใบขับขี่: <span class="font-mono text-purple-700">${app.drivingLicense || '-'}</span></div>
-                    <div class="text-[11px] text-slate-600 mt-1">ที่อยู่: ${app.address || '-'}</div>
+                    <div class="text-[11px] text-slate-600 mt-1">ที่อยู่: ${escapeHtml(app.address || '-')}</div>
                 </div>
 
                 <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
                     <div class="text-[10px] font-bold text-slate-400">ยานพาหนะ & โซนวิ่ง</div>
-                    <div class="font-bold text-slate-800">รถ: ${app.motorcycleModel || '-'} ${app.motorcycleColor ? `(${app.motorcycleColor})` : ''}</div>
-                    <div class="font-bold text-slate-800 font-mono">ทะเบียน: ${app.plate || '-'}</div>
-                    <div class="text-[11px] text-slate-600 mt-1">โซนวิ่ง: ${app.zone || 'รอบตลาดวิศิษฐ์ชัย'}</div>
+                    <div class="font-bold text-slate-800">รถ: ${escapeHtml(app.motorcycleModel || '-')} ${app.motorcycleColor ? `(${escapeHtml(app.motorcycleColor)})` : ''}</div>
+                    <div class="font-bold text-slate-800 font-mono">ทะเบียน: ${escapeHtml(app.plate || '-')}</div>
+                    <div class="text-[11px] text-slate-600 mt-1">โซนวิ่ง: ${escapeHtml(app.zone || 'รอบตลาดวิศิษฐ์ชัย')}</div>
                 </div>
             </div>
 
@@ -29662,7 +29687,8 @@ function approveMerchantApplication(appId) {
         return;
     }
 
-    const code = generate6DigitAccessCode();
+    // Keep the code already issued so a repeat approval never invalidates the merchant's login
+    const code = app.accessCode || generate6DigitAccessCode();
     app.status = "approved";
     app.accessCode = code;
     app.approvedAt = new Date().toISOString();
@@ -29719,6 +29745,7 @@ function goToAdminToApproveMerchantFromSuccess() {
     setActiveRoleView("admin");
     renderAuthHeaderButtons();
     switchAdminTab("stalls");
+    _adminStallSubTab = "roster";
     _adminStallRosterView = "applications";
     _adminMerchantAppFilter = "all";
     renderAdminStalls();
