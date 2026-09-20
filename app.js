@@ -26286,8 +26286,8 @@ function handleOnPageRiderLoginSubmit() {
     const r = curRiders.find(x => 
         (x.id && x.id.toUpperCase() === clean) ||
         (x.accessCode && x.accessCode.toUpperCase() === clean) ||
-        (x.phone && x.phone.replace(/[-\s]/g, "") === clean) ||
-        (x.name && x.name.toLowerCase().includes(inputVal.toLowerCase()))
+        (x.phone && x.phone.replace(/[-\s]/g, "") === clean)
+        // ไม่ล็อกอินด้วยชื่อ: ชื่อไม่ใช่ความลับ (เดาหรือดูจากรายชื่อได้)
     );
     if (!r) {
         showToast("⚠️ ไม่พบข้อมูลไรเดอร์คนนี้ กรุณาตรวจสอบรหัส หรือกดสมัครใหม่");
@@ -26682,8 +26682,8 @@ function handleRiderPhoneLoginSubmit() {
         (x.accessCode && (x.accessCode.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.accessCode) === normRaw)) ||
         (x.pin && String(x.pin).trim().toUpperCase() === upperRaw) ||
         (x.phone && x.phone.replace(/[-\s]/g, "") === cleanRaw) ||
-        (x.id && (x.id.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.id) === normRaw)) ||
-        (x.name && x.name.toLowerCase() === raw.toLowerCase())
+        (x.id && (x.id.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.id) === normRaw))
+        // ไม่ล็อกอินด้วยชื่อ: ชื่อไม่ใช่ความลับ (เดาหรือดูจากรายชื่อได้)
     );
     if (r) {
         loginRiderWithProfile(r);
@@ -26695,8 +26695,8 @@ function handleRiderPhoneLoginSubmit() {
     const app = apps.find(x => 
         (x.accessCode && (x.accessCode.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.accessCode) === normRaw)) ||
         (x.phone && x.phone.replace(/[-\s]/g, "") === cleanRaw) ||
-        (x.id && (x.id.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.id) === normRaw)) ||
-        (x.fullName && x.fullName.toLowerCase() === raw.toLowerCase())
+        (x.id && (x.id.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.id) === normRaw))
+        // ไม่ล็อกอินด้วยชื่อ: ชื่อไม่ใช่ความลับ (เดาหรือดูจากรายชื่อได้)
     );
 
     if (app) {
