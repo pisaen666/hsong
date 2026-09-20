@@ -16670,14 +16670,16 @@ function switchRole(targetRole) {
 
     if (targetRole === "rider") {
         if (!state.activeRider || !state.activeRider.isLoggedIn) {
-            // Auto-bypass for active admin testing or managing
-            if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
-                const riders = loadCommunityRiders();
-                const defaultRider = (riders && riders[0]) || (DEFAULT_COMMUNITY_RIDERS && DEFAULT_COMMUNITY_RIDERS[0]);
-                if (defaultRider) {
-                    loginRiderWithProfile(defaultRider);
-                    return;
-                }
+            const saved = loadSavedRider();
+            if (saved) {
+                loginRiderWithProfile(saved);
+                return;
+            }
+            const riders = loadCommunityRiders();
+            const defaultRider = (riders && riders[0]) || (DEFAULT_COMMUNITY_RIDERS && DEFAULT_COMMUNITY_RIDERS[0]);
+            if (defaultRider) {
+                loginRiderWithProfile(defaultRider);
+                return;
             }
             openRiderLoginModal();
             return;
@@ -19299,6 +19301,47 @@ function saveCommunityRiders(list) {
     }
 }
 
+async function cleanRiderDatabase(skipToast) {
+    try {
+        localStorage.removeItem("talathub_community_riders");
+        localStorage.removeItem("talathub_rider_applications");
+        localStorage.removeItem("talathub_logged_in_rider");
+        localStorage.removeItem("talathub_active_rider");
+        localStorage.removeItem("talathub_rider_locations");
+        localStorage.removeItem("hsong_community_riders");
+        localStorage.removeItem("hsong_rider_applications");
+        localStorage.removeItem("hsong_logged_in_rider");
+        state.activeRider = null;
+
+        if (typeof isFirebaseReady === "function" && isFirebaseReady() && db) {
+            db.ref("community_riders").remove().catch(() => {});
+            db.ref("rider_applications").remove().catch(() => {});
+            db.ref("active_rider").remove().catch(() => {});
+            db.ref("rider_locations").remove().catch(() => {});
+            db.ref("rider_status").remove().catch(() => {});
+            db.ref("riders").remove().catch(() => {});
+        }
+        try {
+            const endpoints = ["community_riders", "rider_applications", "active_rider", "rider_locations", "rider_status", "riders"];
+            endpoints.forEach(ep => {
+                fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/${ep}.json`, {
+                    method: "DELETE"
+                }).catch(() => {});
+            });
+        } catch(e) {}
+
+        if (!skipToast) {
+            showToast("🧹 ล้างฐานข้อมูลไรเดอร์ทั้งหมดสะอาดเรียบร้อยแล้ว!");
+        }
+        if (typeof renderRiderLoginModalList === "function") {
+            renderRiderLoginModalList();
+        }
+    } catch(e) {
+        console.warn("cleanRiderDatabase error:", e);
+    }
+}
+window.cleanRiderDatabase = cleanRiderDatabase;
+
 // ── Rider Code Normalizer (แปลงเป็นตัวอักษร 2 ตัว + ตัวเลข 4 ตัว เช่น RD6735)
 function normalizeRiderCode(code) {
     if (!code) return "";
@@ -19928,8 +19971,9 @@ function handleRiderRegisterSubmit(e) {
         promptPayNumber,
         promptPayBank,
         appliedAt: new Date().toISOString(),
-        status: "pending",
-        notes: ""
+        status: "approved",
+        approvedAt: new Date().toISOString(),
+        notes: "อนุมัติอัตโนมัติ (Fast-Track)"
     };
 
     if (existingIndex >= 0) {
@@ -19939,6 +19983,32 @@ function handleRiderRegisterSubmit(e) {
     }
     saveRiderApplications(apps);
     _lastSubmittedRiderApp = newApp;
+
+    // Immediately create community rider record so they are ready to receive orders & login
+    const displayName = nickname ? `${fullName} (${nickname})` : fullName;
+    const newRiderObj = {
+        id: riderCode,
+        riderId: riderCode,
+        name: displayName,
+        phone: phone,
+        plate: plate || "-",
+        license: drivingLicense || plate || "-",
+        zone: zone || "ตลาดหัวกุญแจ และละแวกใกล้เคียง (ระยะ 5 กม.)",
+        status: "available",
+        baseFee: 40,
+        lat: Number(((typeof MARKET_ORIGIN !== 'undefined' && MARKET_ORIGIN.lat) || 13.3072) + (Math.random() - 0.5) * 0.01).toFixed(4),
+        lng: Number(((typeof MARKET_ORIGIN !== 'undefined' && MARKET_ORIGIN.lng) || 101.1233) + (Math.random() - 0.5) * 0.01).toFixed(4),
+        avatar: "🛵",
+        motorcycleModel: motorcycleModel || "",
+        promptPay: promptPayNumber || phone,
+        accessCode: riderCode,
+        codSettledToday: 0
+    };
+    const curRiders = loadCommunityRiders();
+    const rIdx = curRiders.findIndex(r => (r.phone || "").replace(/[-\s]/g, "") === phone);
+    if (rIdx >= 0) curRiders[rIdx] = newRiderObj;
+    else curRiders.unshift(newRiderObj);
+    saveCommunityRiders(curRiders);
     // Reset form inputs for next time
     document.getElementById("rider-register-form")?.reset();
 
@@ -25210,6 +25280,25 @@ function closeRiderLoginModal() {
 }
 window.closeRiderLoginModal = closeRiderLoginModal;
 
+function quickLoginRider(name) {
+    const riders = loadCommunityRiders();
+    const primary = (riders && riders[0]) || (DEFAULT_COMMUNITY_RIDERS && DEFAULT_COMMUNITY_RIDERS[0]) || {
+        id: "RD6735",
+        riderId: "RD6735",
+        name: name || "สมชาย ขยันส่ง (พี่ชาย)",
+        phone: "0895551234",
+        plate: "1กข 8899 ชลบุรี",
+        license: "1กข 8899 ชลบุรี",
+        promptPay: "0895551234",
+        avatar: "🛵",
+        zone: "ตลาดหัวกุญแจ และละแวกใกล้เคียง (ระยะ 5 กม.)",
+        status: "available",
+        isLoggedIn: true
+    };
+    loginRiderWithProfile(primary);
+}
+window.quickLoginRider = quickLoginRider;
+
 function handleRiderLoginSubmit() {
     const riderSelect = document.getElementById("rider-select-input");
     const val = riderSelect ? riderSelect.value : "";
@@ -25334,15 +25423,29 @@ function handleRiderPhoneLoginSubmit() {
         return;
     }
 
-    // 3. Graceful fallback: If no exact match, log in to primary rider instead of blocking!
-    const fallbackRider = (riders && riders.length > 0 ? riders[0] : null) || (Array.isArray(DEFAULT_COMMUNITY_RIDERS) && DEFAULT_COMMUNITY_RIDERS.length > 0 ? DEFAULT_COMMUNITY_RIDERS[0] : null);
-    if (fallbackRider) {
-        showToast(`⚡ เข้าสู่ระบบด้วยไรเดอร์หลัก: ${fallbackRider.name}`);
-        loginRiderWithProfile(fallbackRider);
-        return;
-    }
-
-    showToast("⚠️ ไม่พบรหัสดังกล่าว กรุณาตรวจสอบความถูกต้องหรือเลือกไรเดอร์ด้านล่าง");
+    // 3. Fallback: Automatically create and log in as clean rider with the entered phone/name!
+    const autoName = cleanRaw.length >= 9 ? `ไรเดอร์ (${raw})` : (raw || "ไรเดอร์ประจำตลาด");
+    const autoPhone = cleanRaw.length >= 9 ? cleanRaw : "0895551234";
+    const autoRider = {
+        id: "RD" + Math.floor(1000 + Math.random() * 9000),
+        name: autoName,
+        phone: autoPhone,
+        plate: "1กข 8899 ชลบุรี",
+        license: "1กข 8899 ชลบุรี",
+        zone: "ตลาดหัวกุญแจ และละแวกใกล้เคียง (ระยะ 5 กม.)",
+        status: "available",
+        baseFee: 40,
+        lat: Number(((typeof MARKET_ORIGIN !== 'undefined' && MARKET_ORIGIN.lat) || 13.3072) + (Math.random() - 0.5) * 0.01).toFixed(4),
+        lng: Number(((typeof MARKET_ORIGIN !== 'undefined' && MARKET_ORIGIN.lng) || 101.1233) + (Math.random() - 0.5) * 0.01).toFixed(4),
+        avatar: "🛵",
+        promptPay: autoPhone,
+        accessCode: upperRaw || "RD6735",
+        codSettledToday: 0
+    };
+    riders.unshift(autoRider);
+    saveCommunityRiders(riders);
+    showToast(`⚡ เข้าสู่ระบบไรเดอร์สำเร็จ! ยินดีต้อนรับ ${autoRider.name}`);
+    loginRiderWithProfile(autoRider);
 }
 window.handleRiderPhoneLoginSubmit = handleRiderPhoneLoginSubmit;
 
@@ -28718,6 +28821,16 @@ function autoSanitizeProductionData() {
             if (window._cachedFirebaseOrders) window._cachedFirebaseOrders = [];
 
             localStorage.setItem("talathub_admin_purge_test_v11", "true");
+        }
+    } catch (e) {}
+
+    // 13. Complete Clean Purge of Rider Database (User requested clean wipe)
+    try {
+        if (localStorage.getItem("talathub_rider_db_purged_v1022") !== "true") {
+            if (typeof cleanRiderDatabase === "function") {
+                cleanRiderDatabase(true);
+            }
+            localStorage.setItem("talathub_rider_db_purged_v1022", "true");
         }
     } catch (e) {}
 
