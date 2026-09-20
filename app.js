@@ -4579,20 +4579,24 @@ function aggregateDailyOperations(targetDateKey) {
                 const sKey = st.stallId || st.name;
                 const meta = findStallInfo(st.stallId, st.name);
                 if (!stallsMap[sKey]) {
-                    const isStallSettled = Boolean(settledVendors[sKey]?.isSettled);
+                    const sRec = settledVendors[sKey] || (meta && settledVendors[meta.stallId]) || (meta && settledVendors[meta.stallName]) || {};
+                    const isStallSettled = Boolean(sRec.isSettled);
                     stallsMap[sKey] = {
-                        stallId: st.stallId || meta.stallId,
-                        stallName: meta.stallName || st.name,
-                        stallNumber: meta.stallNumber || "แผงตลาด",
-                        zone: meta.zone || "กลาง",
-                        ownerName: meta.ownerName || "เจ้าของแผง",
-                        phone: meta.phone || "089-123-4567",
-                        promptPayPhone: (meta.phone || "0891234567").replace(/[^0-9]/g, ""),
+                        stallId: st.stallId || (meta && meta.stallId),
+                        stallName: (meta && meta.stallName) || st.name,
+                        stallNumber: (meta && meta.stallNumber) || "แผงตลาด",
+                        zone: (meta && meta.zone) || "กลาง",
+                        ownerName: (meta && meta.ownerName) || "เจ้าของแผง",
+                        phone: (meta && meta.phone) || "089-123-4567",
+                        promptPayPhone: ((meta && meta.phone) || "0891234567").replace(/[^0-9]/g, ""),
                         orderCount: 0,
                         itemsCount: 0,
                         totalAmount: 0,
                         isSettled: isStallSettled,
-                        settledAt: settledVendors[sKey]?.settledAt || null
+                        settledAt: sRec.settledAt || null,
+                        settledBy: sRec.settledBy || null,
+                        slipImage: sRec.slipImage || null,
+                        slipNote: sRec.slipNote || ""
                     };
                 }
                 stallsMap[sKey].orderCount++;
@@ -5560,6 +5564,275 @@ function generatePromptPayPayload(target, amount) {
 }
 window.generatePromptPayPayload = generatePromptPayPayload;
 
+// ── Vendor Payout Slip State & Controllers
+let _currentPayoutSlipBase64 = null;
+let _currentPayoutSlipNote = "";
+let _activeSlipViewerData = null;
+
+function handleVendorPayoutSlipSelected(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const rawBase64 = e.target.result;
+        const img = new Image();
+        img.onload = function() {
+            try {
+                const canvas = document.createElement("canvas");
+                const maxW = 800;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxW) {
+                    h = Math.round((h * maxW) / w);
+                    w = maxW;
+                }
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, w, h);
+                _currentPayoutSlipBase64 = canvas.toDataURL("image/jpeg", 0.80);
+            } catch(err) {
+                _currentPayoutSlipBase64 = rawBase64;
+            }
+
+            const slipPlaceholder = document.getElementById("payout-slip-upload-placeholder");
+            const slipPreviewBox = document.getElementById("payout-slip-preview-box");
+            const slipPreviewImg = document.getElementById("payout-slip-preview-img");
+            const slipInfoText = document.getElementById("payout-slip-info-text");
+
+            if (slipPreviewImg) slipPreviewImg.src = _currentPayoutSlipBase64;
+            if (slipInfoText) slipInfoText.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
+            if (slipPreviewBox) slipPreviewBox.classList.remove("hidden");
+            if (slipPlaceholder) slipPlaceholder.classList.add("hidden");
+
+            showToast("✅ แนบรูปสลิปเรียบร้อยแล้ว");
+        };
+        img.onerror = function() {
+            _currentPayoutSlipBase64 = rawBase64;
+            const slipPlaceholder = document.getElementById("payout-slip-upload-placeholder");
+            const slipPreviewBox = document.getElementById("payout-slip-preview-box");
+            const slipPreviewImg = document.getElementById("payout-slip-preview-img");
+            if (slipPreviewImg) slipPreviewImg.src = _currentPayoutSlipBase64;
+            if (slipPreviewBox) slipPreviewBox.classList.remove("hidden");
+            if (slipPlaceholder) slipPlaceholder.classList.add("hidden");
+            showToast("✅ แนบรูปสลิปเรียบร้อยแล้ว");
+        };
+        img.src = rawBase64;
+    };
+    reader.readAsDataURL(file);
+}
+window.handleVendorPayoutSlipSelected = handleVendorPayoutSlipSelected;
+
+function removeVendorPayoutSlip() {
+    _currentPayoutSlipBase64 = null;
+    const slipFileInput = document.getElementById("payout-slip-file-input");
+    const slipPlaceholder = document.getElementById("payout-slip-upload-placeholder");
+    const slipPreviewBox = document.getElementById("payout-slip-preview-box");
+    const slipPreviewImg = document.getElementById("payout-slip-preview-img");
+
+    if (slipFileInput) slipFileInput.value = "";
+    if (slipPreviewImg) slipPreviewImg.src = "";
+    if (slipPreviewBox) slipPreviewBox.classList.add("hidden");
+    if (slipPlaceholder) slipPlaceholder.classList.remove("hidden");
+    showToast("🗑️ ลบรูปสลิปออกแล้ว");
+}
+window.removeVendorPayoutSlip = removeVendorPayoutSlip;
+
+function openVendorDirectSlipUploadModal(stallId, stallName, amount, phone, ownerName, stallNumber, dateKey) {
+    if (dateKey) _activeReportDateKey = dateKey;
+    openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, stallNumber);
+}
+window.openVendorDirectSlipUploadModal = openVendorDirectSlipUploadModal;
+
+function openVendorSlipViewerModal(stallIdOrName, dateKey) {
+    if (!dateKey) dateKey = _activeReportDateKey || getReportDateKey(Date.now());
+    const settledVendors = _loadVendorSettlementState(dateKey);
+    const meta = (typeof findStallInfo === "function") ? findStallInfo(stallIdOrName, stallIdOrName) : null;
+    
+    let record = settledVendors[stallIdOrName] || (meta ? (settledVendors[meta.stallId] || settledVendors[meta.stallName]) : null);
+    if (!record) {
+        const foundKey = Object.keys(settledVendors).find(k => {
+            const it = settledVendors[k];
+            return it && (k === stallIdOrName || it.stallId === stallIdOrName || it.stallName === stallIdOrName || (meta && (it.stallId === meta.stallId || it.stallName === meta.stallName)));
+        });
+        if (foundKey) record = settledVendors[foundKey];
+    }
+
+    if (!record || !record.slipImage) {
+        showToast("ℹ️ แผงค้านี้ยังไม่ได้แนบรูปสลิปหลักฐาน");
+        if (state.currentRole === "admin" || (state.activeAdmin && state.activeAdmin.isLoggedIn)) {
+            openVendorPayoutModal(stallIdOrName, meta ? meta.stallName : stallIdOrName);
+        }
+        return;
+    }
+
+    _activeSlipViewerData = {
+        stallId: record.stallId || stallIdOrName,
+        stallName: record.stallName || (meta ? meta.stallName : "แผงค้า"),
+        dateKey,
+        record
+    };
+
+    const modal = document.getElementById("vendor-slip-viewer-modal");
+    if (!modal) return;
+
+    const nameEl = document.getElementById("viewer-stall-name");
+    const ownerEl = document.getElementById("viewer-owner-info");
+    const amountEl = document.getElementById("viewer-payout-amount");
+    const timeEl = document.getElementById("viewer-settled-time");
+    const noteBox = document.getElementById("viewer-note-box");
+    const noteEl = document.getElementById("viewer-slip-note");
+    const slipImg = document.getElementById("viewer-slip-image");
+    const downloadBtn = document.getElementById("viewer-download-btn");
+    const adminActions = document.getElementById("viewer-admin-actions");
+
+    if (nameEl) nameEl.textContent = record.stallName || "แผงค้าในตลาด";
+    if (ownerEl) ownerEl.textContent = `เจ้าของ: ${meta ? (meta.ownerName || meta.stallNumber) : (record.stallId || '-')}`;
+    if (amountEl) amountEl.textContent = `฿${Number(record.amount || 0).toLocaleString()}`;
+    if (timeEl) {
+        const d = record.settledAt ? new Date(record.settledAt).toLocaleString("th-TH") : dateKey;
+        timeEl.textContent = `${d} ${record.settledBy ? `(${record.settledBy})` : ''}`;
+    }
+    if (noteBox && noteEl) {
+        if (record.slipNote) {
+            noteEl.textContent = record.slipNote;
+            noteBox.classList.remove("hidden");
+        } else {
+            noteBox.classList.add("hidden");
+        }
+    }
+    if (slipImg) slipImg.src = record.slipImage;
+    if (downloadBtn) {
+        downloadBtn.href = record.slipImage;
+        downloadBtn.download = `payout_slip_${dateKey}_${record.stallId || 'stall'}.jpg`;
+    }
+
+    if (adminActions) {
+        const isAdmin = state.currentRole === "admin" || (state.activeAdmin && state.activeAdmin.isLoggedIn);
+        if (isAdmin) adminActions.classList.remove("hidden");
+        else adminActions.classList.add("hidden");
+    }
+
+    // ตรวจสอบว่าแผงค้านี้มีสลิปที่เคยแนบไว้แล้วหรือไม่
+    const dateKeyForSlip = _activeReportDateKey || getReportDateKey(Date.now());
+    const settledMapForSlip = _loadVendorSettlementState(dateKeyForSlip);
+    const existingRecForSlip = settledMapForSlip[finalStallId] || settledMapForSlip[finalStallName] || (meta ? settledMapForSlip[meta.stallId] : null);
+
+    _currentPayoutSlipBase64 = (existingRecForSlip && existingRecForSlip.slipImage) ? existingRecForSlip.slipImage : null;
+    _currentPayoutSlipNote = (existingRecForSlip && existingRecForSlip.slipNote) ? existingRecForSlip.slipNote : "";
+
+    const slipFileInput = document.getElementById("payout-slip-file-input");
+    const slipPlaceholder = document.getElementById("payout-slip-upload-placeholder");
+    const slipPreviewBox = document.getElementById("payout-slip-preview-box");
+    const slipPreviewImg = document.getElementById("payout-slip-preview-img");
+    const slipNoteInput = document.getElementById("payout-slip-note-input");
+
+    if (slipFileInput) slipFileInput.value = "";
+    if (slipNoteInput) slipNoteInput.value = _currentPayoutSlipNote;
+
+    if (_currentPayoutSlipBase64 && slipPreviewBox && slipPreviewImg && slipPlaceholder) {
+        slipPreviewImg.src = _currentPayoutSlipBase64;
+        slipPreviewBox.classList.remove("hidden");
+        slipPlaceholder.classList.add("hidden");
+    } else if (slipPreviewBox && slipPlaceholder) {
+        slipPreviewBox.classList.add("hidden");
+        slipPlaceholder.classList.remove("hidden");
+    }
+
+    modal.classList.remove("hidden");
+}
+window.openVendorSlipViewerModal = openVendorSlipViewerModal;
+
+function closeVendorSlipViewerModal() {
+    const modal = document.getElementById("vendor-slip-viewer-modal");
+    if (modal) modal.classList.add("hidden");
+    _activeSlipViewerData = null;
+}
+window.closeVendorSlipViewerModal = closeVendorSlipViewerModal;
+
+function handleReplaceSlipUploaded(event) {
+    if (!_activeSlipViewerData) return;
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const rawBase64 = e.target.result;
+        const img = new Image();
+        img.onload = function() {
+            let compressed = rawBase64;
+            try {
+                const canvas = document.createElement("canvas");
+                const maxW = 800;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxW) {
+                    h = Math.round((h * maxW) / w);
+                    w = maxW;
+                }
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, w, h);
+                compressed = canvas.toDataURL("image/jpeg", 0.80);
+            } catch(e) {}
+
+            const { stallId, stallName, dateKey } = _activeSlipViewerData;
+            const settledVendors = _loadVendorSettlementState(dateKey);
+            const sKey = stallId || stallName;
+            if (settledVendors[sKey]) {
+                settledVendors[sKey].slipImage = compressed;
+                settledVendors[sKey].settledAt = Date.now();
+                if (stallId) settledVendors[stallId] = settledVendors[sKey];
+                if (stallName) settledVendors[stallName] = settledVendors[sKey];
+                _saveVendorSettlementState(dateKey, settledVendors);
+
+                const viewerImg = document.getElementById("viewer-slip-image");
+                const downloadBtn = document.getElementById("viewer-download-btn");
+                if (viewerImg) viewerImg.src = compressed;
+                if (downloadBtn) downloadBtn.href = compressed;
+
+                showToast("✅ เปลี่ยนรูปสลิปหลักฐานเรียบร้อยแล้ว");
+                if (typeof renderAdminStalls === "function") renderAdminStalls();
+                if (typeof renderMerchantSettlement === "function") renderMerchantSettlement();
+            }
+        };
+        img.src = rawBase64;
+    };
+    reader.readAsDataURL(file);
+}
+window.handleReplaceSlipUploaded = handleReplaceSlipUploaded;
+
+function deleteCurrentVendorSlip() {
+    if (!_activeSlipViewerData) return;
+    if (!confirm("คุณต้องการลบรูปสลิปหลักฐานนี้ใช่หรือไม่?")) return;
+
+    const { stallId, stallName, dateKey } = _activeSlipViewerData;
+    const settledVendors = _loadVendorSettlementState(dateKey);
+    const sKey = stallId || stallName;
+    if (settledVendors[sKey]) {
+        delete settledVendors[sKey].slipImage;
+        if (stallId && settledVendors[stallId]) delete settledVendors[stallId].slipImage;
+        if (stallName && settledVendors[stallName]) delete settledVendors[stallName].slipImage;
+        _saveVendorSettlementState(dateKey, settledVendors);
+        closeVendorSlipViewerModal();
+        showToast("🗑️ ลบรูปสลิปเรียบร้อยแล้ว");
+        if (typeof renderAdminStalls === "function") renderAdminStalls();
+        if (typeof renderMerchantSettlement === "function") renderMerchantSettlement();
+    }
+}
+window.deleteCurrentVendorSlip = deleteCurrentVendorSlip;
+
+function printViewerSlipThermal() {
+    if (!_activeSlipViewerData) return;
+    const { stallId, dateKey } = _activeSlipViewerData;
+    if (typeof printThermalVendorSlip === "function") {
+        printThermalVendorSlip(stallId, dateKey);
+    }
+}
+window.printViewerSlipThermal = printViewerSlipThermal;
+
 // ── Modal Controllers: Vendor PromptPay Payout Modal
 function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, stallNumber, grossAmount, gpAmount, gpRate) {
     let finalStallId = stallId;
@@ -5701,9 +5974,14 @@ function confirmVendorPayoutSettled() {
     const settledVendors = _loadVendorSettlementState(dateKey);
 
     const sKey = _currentPayoutStall.stallId || _currentPayoutStall.stallName;
+    const noteInput = document.getElementById("payout-slip-note-input");
+    const noteVal = (noteInput ? noteInput.value : "").trim();
+    const existingRec = settledVendors[sKey] || (_currentPayoutStall.stallId ? settledVendors[_currentPayoutStall.stallId] : null) || {};
+
     const payoutRecord = {
         isSettled: true,
         settledAt: Date.now(),
+        settledBy: (state.activeAdmin && state.activeAdmin.name) ? `${state.activeAdmin.name} (${state.activeAdmin.role || 'Admin'})` : "เฮียส่ง (Super Admin)",
         amount: _currentPayoutStall.amount,
         grossAmount: _currentPayoutStall.grossAmount || _currentPayoutStall.amount,
         gpAmount: _currentPayoutStall.gpAmount || 0,
@@ -5711,7 +5989,9 @@ function confirmVendorPayoutSettled() {
         orderCount: _currentPayoutStall.orderCount || 0,
         stallName: _currentPayoutStall.stallName,
         stallId: _currentPayoutStall.stallId,
-        phone: _currentPayoutStall.phone
+        phone: _currentPayoutStall.phone,
+        slipImage: _currentPayoutSlipBase64 || existingRec.slipImage || null,
+        slipNote: noteVal || existingRec.slipNote || ""
     };
 
     settledVendors[sKey] = payoutRecord;
@@ -5720,12 +6000,14 @@ function confirmVendorPayoutSettled() {
 
     _saveVendorSettlementState(dateKey, settledVendors);
     closeVendorPayoutModal();
-    showToast(`🎉 บันทึกการโอนเงินให้ ${_currentPayoutStall.stallName} (฿${_currentPayoutStall.amount.toLocaleString()}) สำเร็จ!`);
+    const slipMsg = payoutRecord.slipImage ? " พร้อมแนบสลิปหลักฐานส่งให้ร้านค้าแล้ว" : "";
+    showToast(`🎉 บันทึกการโอนเงินให้ ${_currentPayoutStall.stallName} (฿${_currentPayoutStall.amount.toLocaleString()})${slipMsg} สำเร็จ!`);
     if (typeof renderHubDailyReport === "function") renderHubDailyReport(dateKey);
     if (typeof renderHubSettlement === "function") renderHubSettlement();
     if (typeof updateMerchantSettlementBadge === "function") updateMerchantSettlementBadge();
     if (typeof renderMerchantSettlement === "function") renderMerchantSettlement();
     if (typeof renderMerchantIncomingOrders === "function") renderMerchantIncomingOrders();
+    if (typeof renderAdminStalls === "function") renderAdminStalls();
 }
 
 function copyPayoutPromptPayNumber() {
@@ -13294,6 +13576,60 @@ function renderMerchantSettlement() {
                         </div>
                     </div>
 
+                    <!-- ATTACHED TRANSFER SLIP PROOF FROM HUB -->
+                    ${settledInfo.slipImage ? `
+                        <div class="bg-black/30 border border-emerald-500/40 rounded-2xl p-3.5 space-y-2.5 backdrop-blur-sm">
+                            <div class="flex items-center justify-between">
+                                <div class="font-extrabold text-xs text-emerald-300 flex items-center gap-1.5">
+                                    <span class="material-symbols-outlined text-base text-emerald-400">receipt_long</span>
+                                    <span>หลักฐานสลิปการโอนเงินจากฮับ (Transfer Receipt Proof)</span>
+                                </div>
+                                <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-xs">verified</span>
+                                    <span>แนบสลิปแล้ว</span>
+                                </span>
+                            </div>
+                            
+                            <div class="flex flex-col sm:flex-row items-center gap-3 bg-white/5 p-2.5 rounded-xl border border-white/10">
+                                <div class="relative cursor-pointer group shrink-0" onclick="openVendorSlipViewerModal('${currentStallId}', '${targetDateKey}')">
+                                    <img src="${settledInfo.slipImage}" alt="สลิปโอนเงิน" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border-2 border-emerald-400 shadow-md group-hover:scale-105 transition-all">
+                                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center transition-all">
+                                        <span class="material-symbols-outlined text-white text-xl">zoom_in</span>
+                                    </div>
+                                </div>
+                                <div class="space-y-1 text-xs text-left flex-1 min-w-0">
+                                    <div class="text-[11px] text-emerald-200">
+                                        โอนให้: <strong>${currentStallName}</strong> (${stall.stallNumber || 'แผงตลาด'})
+                                    </div>
+                                    <div class="text-[11px] text-white font-mono">
+                                        ยอดโอนสุทธิ: <strong class="text-amber-300 text-sm">฿${finalPayoutAmount.toLocaleString()}</strong>
+                                    </div>
+                                    <div class="text-[10px] text-slate-300">
+                                        เวลาที่โอน: ${formatSettledDate(settledInfo.settledAt)} ${settledInfo.settledBy ? `• ผู้โอน: ${settledInfo.settledBy}` : ''}
+                                    </div>
+                                    ${settledInfo.slipNote ? `<div class="text-[10px] text-amber-200 italic truncate">บันทึก: ${settledInfo.slipNote}</div>` : ''}
+                                    <div class="pt-1 flex items-center gap-2 flex-wrap">
+                                        <button onclick="openVendorSlipViewerModal('${currentStallId}', '${targetDateKey}')" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer">
+                                            <span class="material-symbols-outlined text-xs">zoom_in</span>
+                                            <span>🔍 ดูรูปสลิปเต็มจอ</span>
+                                        </button>
+                                        <a href="${settledInfo.slipImage}" download="slip_talathub_${targetDateKey}_${currentStallId}.jpg" class="px-3 py-1 bg-white/20 hover:bg-white/30 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                                            <span class="material-symbols-outlined text-xs">download</span>
+                                            <span>บันทึกรูปสลิป</span>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-3 text-xs flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2 text-slate-300 text-[11px]">
+                                <span class="material-symbols-outlined text-amber-400 text-base">info</span>
+                                <span>ฮับยืนยันการโอนเงินแล้ว (กำลังรอเจ้าหน้าที่แนบรูปสลิปหลักฐานเข้าระบบ)</span>
+                            </div>
+                        </div>
+                    `}
+
                     <div class="flex items-center justify-between pt-1 gap-2 flex-wrap">
                         <div class="text-[11px] text-emerald-200/90 flex items-center gap-1">
                             <span class="material-symbols-outlined text-xs">verified</span>
@@ -17871,9 +18207,21 @@ function renderAdminStalls() {
                                     </td>
                                     <td class="p-3 text-center">
                                         ${v.isSettled ? `
-                                            <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded-full text-[10px] font-black">
+                                            <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded-full text-[10px] font-black inline-flex items-center gap-1">
                                                 ✓ โอนแล้ว
                                             </span>
+                                            ${v.slipImage ? `
+                                                <div class="mt-1">
+                                                    <button type="button" onclick="openVendorSlipViewerModal('${v.stallId || v.stallName}', '${targetDateKey}')" class="bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[9.5px] font-bold inline-flex items-center gap-0.5 cursor-pointer shadow-2xs transition-all mx-auto">
+                                                        <span class="material-symbols-outlined text-[11px]">receipt_long</span>
+                                                        <span>มีสลิปหลักฐาน</span>
+                                                    </button>
+                                                </div>
+                                            ` : `
+                                                <div class="mt-1">
+                                                    <span class="text-[9.5px] text-amber-600 font-medium">รอแนบสลิป</span>
+                                                </div>
+                                            `}
                                         ` : `
                                             <span class="bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-0.5 rounded-full text-[10px] font-black">
                                                 ⏳ รอโอน
@@ -17881,11 +18229,22 @@ function renderAdminStalls() {
                                         `}
                                     </td>
                                     <td class="p-3 text-center">
-                                        <div class="flex items-center justify-center gap-1.5">
-                                            <button onclick="openVendorPayoutModal('${v.stallId}', '${v.stallName.replace(/'/g, "\\'")}', ${stallPayout}, '${v.phone}', '${v.ownerName.replace(/'/g, "\\'")}', '${v.stallNumber}', ${stallGross}, ${stallGP}, ${currentGPRate}, ${v.orderCount})" class="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                                        <div class="flex items-center justify-center gap-1.5 flex-wrap">
+                                            <button onclick="openVendorPayoutModal('${v.stallId}', '${v.stallName.replace(/'/g, "\\'")}', ${stallPayout}, '${v.phone}', '${v.ownerName.replace(/'/g, "\\'")}', '${v.stallNumber}', ${stallGross}, ${stallGP}, ${currentGPRate}, ${v.orderCount})" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
                                                 <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                                 <span>${v.isSettled ? 'ดู QR ซ้ำ' : '💸 สแกน QR โอน'}</span>
                                             </button>
+                                            ${v.slipImage ? `
+                                                <button onclick="openVendorSlipViewerModal('${v.stallId || v.stallName}', '${targetDateKey}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1" title="ดูสลิปหลักฐานการโอน">
+                                                    <span class="material-symbols-outlined text-xs">image</span>
+                                                    <span>ดูสลิปโอน</span>
+                                                </button>
+                                            ` : `
+                                                <button onclick="openVendorDirectSlipUploadModal('${v.stallId}', '${v.stallName.replace(/'/g, "\\'")}', ${stallPayout}, '${v.phone}', '${v.ownerName.replace(/'/g, "\\'")}', '${v.stallNumber}', '${targetDateKey}')" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-lg text-[11px] shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1" title="แนบสลิปโอนเงิน">
+                                                    <span class="material-symbols-outlined text-xs">attach_file</span>
+                                                    <span>แนบสลิป</span>
+                                                </button>
+                                            `}
                                         </div>
                                     </td>
                                 </tr>
