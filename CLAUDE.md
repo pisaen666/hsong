@@ -50,7 +50,7 @@ Owner is a solo beginner with low vision: reply in Thai, short sentences, plain 
 - Start throwaway servers on ports other than 3000 (e.g. 3001) from a sandbox copy (section 5) and stop them afterwards. Never stop the owner's server on port 3000.
 - Read-only Firebase access: HTTP GET and `node sync-firebase.js` (downloads only).
 - `git status / diff / log / pull`, and `git add` + `git commit` for finished work.
-- Anything at all on the test Firebase project `hsong-test` once the owner has created it (not created yet).
+- Anything at all on the test Firebase project `hsong-test` (created 2026-09-20; Spark plan, Realtime DB in asia-southeast1, Email/Password auth with 2 owner accounts). Its web config is not secret; owner UIDs are listed in `firebase-rules/hsong-test.rules.json`. Never type or ask for the owner's passwords.
 
 **Ask first, every time (ต้องถามก่อนเสมอ):**
 - Any write or delete on the production Firebase project `hsong-1f342` (PUT / POST / PATCH / DELETE, `.set()`, `.remove()`, deploys).
@@ -66,6 +66,11 @@ The production database is shared and currently open to everyone. Lesson from 20
 - Sandbox: copy `index.html app.js styles.css firebase-config.js server.js images/` and the `.png` files to a temp folder; replace the host `hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app` with `127.0.0.1:9` in `app.js`, `firebase-config.js` and `index.html`; run `PORT=3001 node server.js`; open `http://localhost:3001` (it has its own localStorage). Confirm no real host is left with `grep -c firebasedatabase.app`.
 - In the sandbox the Firebase SDK never connects but `isFirebaseReady()` is still true, so `await db.ref().set()` hangs. Any awaited Firebase write needs a timeout (see `_withTimeout` in `app.js`).
 - After anything that could touch production, confirm with a GET that no test data exists (`community_riders`, `rider_applications`, `rider_documents`).
+
+## 🔐 5b. Owner Sign-in Work (branch `feat/owner-auth`, NOT merged to main)
+- Admin (Role 5) and Hub (Role 2) now use ONE Firebase Auth email/password owner account instead of PINs (`admin6305`, `hb6305`, quick-login buttons and the hub PIN setting were removed). Code: `initOwnerAuth`, `applyOwnerSession`, `verifyOwnerPassword` in `app.js`; `auth` and `OWNER_UIDS` in `firebase-config.js`.
+- **Never merge to `main` until** (1) Email/Password auth is enabled in the PRODUCTION project `hsong-1f342`, (2) the owner accounts exist there and `OWNER_UIDS` in `firebase-config.js` holds the PRODUCTION UIDs (it is empty on purpose), (3) sign-up is disabled in Authentication > Settings > User actions, (4) the owner has logged in successfully on the test environment. Otherwise the owner is locked out of Admin and Hub.
+- Test environment with the REAL Auth SDK: copy the app to a temp folder, in `app.js` replace the host `hsong-1f342-default-rtdb...` with `hsong-test-default-rtdb.asia-southeast1.firebasedatabase.app`, set the `hsong-test` web config and test UIDs in `firebase-config.js`, run `PORT=3001 node server.js`. Claude cannot log in for the owner (no passwords); the owner tests the real login by hand. Logic can be tested with a mock `auth` object in a sandbox.
 
 ## ⚠️ 6. Known Constraints (update when resolved)
 - Firebase rules are open read/write until 2026-11-02 (`1793552400000` in `database.rules.json`, which is git-ignored). After that date the app cannot read or write. Personal data (ID numbers, addresses, driver-license photos in `rider_documents/<riderId>`) is publicly readable until Auth-based rules exist. Plan: Firebase Auth email/password for the owner (one account for hub + admin, plus a backup account), UID-based rules, tested on `hsong-test` first.

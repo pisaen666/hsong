@@ -1,0 +1,79 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "orders": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "carts": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "daily_reports": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "rider_applications": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "community_riders": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "merchant_applications": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "custom_market_stalls": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "stall_catalog_database": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "riders": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "rider_status": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "rider_locations": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "active_rider": {
+      ".read": "now < 1793552400000",
+      ".write": "now < 1793552400000"
+    },
+    "rider_documents": {
+      ".read": "auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')",
+      "$riderId": {
+        ".write": "(auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')) || !data.exists()",
+        ".validate": "newData.hasChildren(['selfie','license','registration'])",
+        "selfie": {
+          ".validate": "newData.isString() && newData.val().length < 400000"
+        },
+        "license": {
+          ".validate": "newData.isString() && newData.val().length < 400000"
+        },
+        "registration": {
+          ".validate": "newData.isString() && newData.val().length < 400000"
+        },
+        "vehicle": {
+          ".validate": "newData.isString() && newData.val().length < 400000"
+        },
+        "savedAt": {
+          ".validate": "newData.isString()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}

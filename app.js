@@ -69,11 +69,10 @@ function saveMerchantToStorage(merch) {
     } catch (e) { }
 }
 
+// ฮับและแอดมินไม่เชื่อ session ที่ค้างใน localStorage อีกต่อไป (ใครแก้ค่าในเครื่องก็เข้าได้)
+// สถานะล็อกอินมาจาก Firebase Authentication เท่านั้น (ดู initOwnerAuth)
 function loadSavedHub() {
-    try {
-        const saved = localStorage.getItem("talathub_logged_in_hub");
-        if (saved) return JSON.parse(saved);
-    } catch (e) { }
+    try { localStorage.removeItem("talathub_logged_in_hub"); } catch (e) { }
     return null;
 }
 
@@ -85,10 +84,7 @@ function saveHubToStorage(hub) {
 }
 
 function loadSavedAdmin() {
-    try {
-        const saved = localStorage.getItem("talathub_logged_in_admin");
-        if (saved) return JSON.parse(saved);
-    } catch (e) { }
+    try { localStorage.removeItem("talathub_logged_in_admin"); } catch (e) { }
     return null;
 }
 
@@ -291,25 +287,89 @@ function loadSavedMerchantExpressOrders() {
     return [];
 }
 
-// ── Hub Security & Orders Wipe Verification (Role 2: ศูนย์จัดของฮับ PIN: hb6305)
-function verifyHubOrAdminPin(pin) {
-    if (!pin) return false;
-    const clean = String(pin).trim().toLowerCase();
-    const settings = typeof loadSavedHubSettings === "function" ? loadSavedHubSettings() : {};
-    const hubPin = (settings && settings.staffPin ? String(settings.staffPin) : "hb6305").trim().toLowerCase();
-    return clean === hubPin || clean === "hb6305" || clean === "admin6305";
+// ==========================================================
+// OWNER SIGN-IN (Firebase Authentication)
+// บัญชีเดียวของเจ้าของใช้ทั้งหน้าแอดมิน (Role 5) และฮับ (Role 2) แทน PIN เดิม (admin6305 / hb6305)
+// สิทธิ์จริงในการอ่าน/เขียนข้อมูลลับถูกบังคับที่กฎ Firebase (UID ต้องตรงกับ OWNER_UIDS) ฝั่งนี้ควบคุมแค่หน้าจอ
+// ==========================================================
+function isOwnerUid(uid) {
+    return !!uid && typeof OWNER_UIDS !== "undefined" && Array.isArray(OWNER_UIDS) && OWNER_UIDS.includes(uid);
 }
-window.verifyHubOrAdminPin = verifyHubOrAdminPin;
+
+function isOwnerSignedIn() {
+    return typeof auth !== "undefined" && !!auth && !!auth.currentUser && isOwnerUid(auth.currentUser.uid);
+}
+
+// ยืนยันรหัสผ่านซ้ำก่อนทำรายการอันตราย (เช่น ล้างข้อมูล) — ตรวจกับ Firebase ไม่ใช่กับค่าในโค้ด
+async function verifyOwnerPassword(password) {
+    if (!password || !isOwnerSignedIn()) return false;
+    try {
+        const user = auth.currentUser;
+        const credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
+        await user.reauthenticateWithCredential(credential);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function applyOwnerSession(user) {
+    const signedIn = !!user && isOwnerUid(user.uid);
+    if (signedIn) {
+        state.activeAdmin = { isLoggedIn: true, name: "เฮียส่ง", role: "Super Admin", uid: user.uid, email: user.email || "", loggedInAt: Date.now() };
+        state.activeHub = { isLoggedIn: true, name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง (ฮับ)", role: "hub_admin", uid: user.uid, loggedInAt: Date.now() };
+    } else {
+        state.activeAdmin = null;
+        state.activeHub = null;
+    }
+    if (typeof renderAuthHeaderButtons === "function") renderAuthHeaderButtons();
+    // ถ้ากำลังดูหน้าแอดมิน/ฮับอยู่ แต่ session หมดหรือถูกล็อกเอาต์ ให้กลับหน้าลูกค้า
+    if (!signedIn && (state.currentRole === "admin" || state.currentRole === "hub")) {
+        setActiveRoleView("customer");
+    }
+}
+
+function initOwnerAuth() {
+    if (typeof auth === "undefined" || !auth) {
+        console.warn("Firebase Auth SDK ไม่พร้อมใช้งาน: หน้าแอดมิน/ฮับจะเข้าไม่ได้");
+        return;
+    }
+    if (typeof OWNER_UIDS === "undefined" || !OWNER_UIDS.length) {
+        console.warn("OWNER_UIDS ว่างเปล่า (firebase-config.js): จะไม่มีใครล็อกอินเป็นเจ้าของได้");
+    }
+    auth.onAuthStateChanged(user => {
+        if (user && !isOwnerUid(user.uid)) {
+            // บัญชีที่ไม่อยู่ในรายชื่อเจ้าของ (เช่น มีคนสร้างบัญชีเองผ่านอินเทอร์เน็ต) ไม่ให้ค้างสถานะล็อกอินไว้
+            auth.signOut().catch(() => { });
+            return;
+        }
+        applyOwnerSession(user);
+    });
+}
+
+function signOutOwner() {
+    if (typeof auth !== "undefined" && auth) auth.signOut().catch(() => { });
+    state.activeAdmin = null;
+    state.activeHub = null;
+    saveAdminToStorage(null);
+    saveHubToStorage(null);
+    renderAuthHeaderButtons();
+    setActiveRoleView("customer");
+}
+
+window.isOwnerSignedIn = isOwnerSignedIn;
+window.verifyOwnerPassword = verifyOwnerPassword;
 
 function openHubClearOrdersModal() {
     const modal = document.getElementById("hub-clear-orders-modal");
     if (!modal) {
         // Fallback กรณีไม่มีองค์ประกอบ Modal ใน DOM
-        const entered = prompt("⚠️ ยืนยันสิทธิ์ประจำฮับจัดส่ง\nกรุณากรอกรหัสผ่านประจำฮับ (hb6305) เพื่อยืนยันการล้างข้อมูลออเดอร์:");
-        if (entered && verifyHubOrAdminPin(entered)) {
-            executeClearAllTestData();
-        } else if (entered !== null) {
-            showToast("⚠️ รหัสผ่านประจำฮับไม่ถูกต้อง");
+        const entered = prompt("⚠️ ยืนยันสิทธิ์เจ้าของ\nกรุณากรอกรหัสผ่านบัญชีเจ้าของ (ที่ใช้ล็อกอิน) เพื่อยืนยันการล้างข้อมูลออเดอร์:");
+        if (entered) {
+            verifyOwnerPassword(entered).then(ok => {
+                if (ok) executeClearAllTestData();
+                else showToast("⚠️ รหัสผ่านไม่ถูกต้อง");
+            });
         }
         return;
     }
@@ -365,14 +425,14 @@ function toggleHubClearPasswordVisibility() {
 }
 window.toggleHubClearPasswordVisibility = toggleHubClearPasswordVisibility;
 
-function submitHubClearOrdersAuth() {
+async function submitHubClearOrdersAuth() {
     const pinInput = document.getElementById("hub-clear-orders-pin-input");
     const errEl = document.getElementById("hub-clear-orders-error");
-    const pin = pinInput ? pinInput.value.trim() : "";
+    const pin = pinInput ? pinInput.value : "";
 
-    if (!verifyHubOrAdminPin(pin)) {
+    if (!(await verifyOwnerPassword(pin))) {
         if (errEl) {
-            errEl.textContent = "⚠️ รหัสผ่านประจำฮับไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง";
+            errEl.textContent = "⚠️ รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง";
             errEl.classList.remove("hidden");
         }
         if (pinInput) {
@@ -380,7 +440,7 @@ function submitHubClearOrdersAuth() {
             pinInput.focus();
             pinInput.select();
         }
-        showToast("⚠️ รหัสผ่านประจำฮับไม่ถูกต้อง");
+        showToast("⚠️ รหัสผ่านไม่ถูกต้อง");
         return;
     }
 
@@ -6195,11 +6255,15 @@ function promptAdminAuthModal({ title, headline, description, onConfirm }) {
     const modal = document.getElementById("admin-auth-confirm-modal");
     if (!modal) {
         // Fallback if modal HTML is not present
-        const entered = prompt(`${title || "ยืนยันสิทธิ์ผู้ดูแลระบบ"}\n${description || "กรุณากรอกรหัสผ่าน Admin เพื่อยืนยัน:"}`);
-        if (entered && entered.trim().toLowerCase() === "admin6305") {
-            if (typeof onConfirm === "function") onConfirm();
-        } else if (entered !== null) {
-            showToast("⚠️ รหัสผ่านผู้ดูแลระบบไม่ถูกต้อง");
+        const entered = prompt(`${title || "ยืนยันสิทธิ์เจ้าของ"}\n${description || "กรุณากรอกรหัสผ่านบัญชีเจ้าของ (ที่ใช้ล็อกอิน) เพื่อยืนยัน:"}`);
+        if (entered) {
+            verifyOwnerPassword(entered).then(ok => {
+                if (ok) {
+                    if (typeof onConfirm === "function") onConfirm();
+                } else {
+                    showToast("⚠️ รหัสผ่านไม่ถูกต้อง");
+                }
+            });
         }
         return;
     }
@@ -6247,14 +6311,14 @@ function closeAdminAuthConfirmModal() {
 }
 window.closeAdminAuthConfirmModal = closeAdminAuthConfirmModal;
 
-function handleAdminAuthConfirmSubmit() {
+async function handleAdminAuthConfirmSubmit() {
     const pinInput = document.getElementById("admin-auth-confirm-pin-input");
     const errEl = document.getElementById("admin-auth-confirm-error");
-    const pin = pinInput ? pinInput.value.trim().toLowerCase() : "";
+    const pin = pinInput ? pinInput.value : "";
 
-    if (!pin || pin !== "admin6305") {
+    if (!(await verifyOwnerPassword(pin))) {
         if (errEl) {
-            errEl.textContent = "⚠️ รหัสผ่านแอดมินไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง";
+            errEl.textContent = "⚠️ รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง";
             errEl.classList.remove("hidden");
         }
         if (pinInput) {
@@ -6262,7 +6326,7 @@ function handleAdminAuthConfirmSubmit() {
             pinInput.focus();
             pinInput.select();
         }
-        showToast("⚠️ รหัสผ่านแอดมินไม่ถูกต้อง");
+        showToast("⚠️ รหัสผ่านไม่ถูกต้อง");
         return;
     }
 
@@ -16872,15 +16936,21 @@ function handleAdminButtonClick() {
     }
 }
 
-function openAdminLoginModal() {
+let _ownerLoginNextRole = "admin";
+
+// nextRole: หน้าที่จะเปิดต่อหลังล็อกอินสำเร็จ ("admin" หรือ "hub") — บัญชีเจ้าของบัญชีเดียวใช้ได้ทั้งสองหน้า
+function openAdminLoginModal(nextRole) {
+    _ownerLoginNextRole = nextRole === "hub" ? "hub" : "admin";
     const modal = document.getElementById("admin-login-modal");
     if (modal) {
         modal.classList.remove("hidden");
+        const emailInput = document.getElementById("admin-email-input");
         const pinInput = document.getElementById("admin-pin-input");
-        if (pinInput) {
-            pinInput.value = "";
-            setTimeout(() => pinInput.focus(), 150);
-        }
+        const errEl = document.getElementById("admin-login-error");
+        if (errEl) { errEl.textContent = ""; errEl.classList.add("hidden"); }
+        if (pinInput) pinInput.value = "";
+        try { if (emailInput && !emailInput.value) emailInput.value = localStorage.getItem("talathub_owner_email") || ""; } catch (e) { }
+        setTimeout(() => ((emailInput && !emailInput.value) ? emailInput : pinInput)?.focus(), 150);
     }
 }
 
@@ -16889,45 +16959,59 @@ function closeAdminLoginModal() {
     if (modal) modal.classList.add("hidden");
 }
 
-function handleAdminLoginSubmit() {
-    const pin = document.getElementById("admin-pin-input")?.value.trim().toLowerCase();
-    if (!pin || pin !== "admin6305") {
-        showToast("⚠️ รหัสผ่านผู้ดูแลระบบไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
-        return;
+function _ownerLoginErrorMessage(err) {
+    const code = (err && err.code) || "";
+    if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found" || code === "auth/invalid-email") {
+        return "อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง";
     }
-    state.activeAdmin = {
-        isLoggedIn: true,
-        name: "เฮียส่ง",
-        role: "Super Admin",
-        loggedInAt: Date.now()
-    };
-    saveAdminToStorage(state.activeAdmin);
-    closeAdminLoginModal();
-    renderAuthHeaderButtons();
-    switchRole("admin");
-    showToast("🎉 เข้าสู่ระบบผู้ดูแลระบบ (Admin Console) สำเร็จ!");
+    if (code === "auth/too-many-requests") return "ลองผิดหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่";
+    if (code === "auth/network-request-failed") return "เชื่อมต่ออินเทอร์เน็ตไม่ได้ กรุณาตรวจสอบสัญญาณ";
+    if (code === "auth/operation-not-allowed") return "ยังไม่ได้เปิดใช้การล็อกอินด้วยอีเมลในโปรเจกต์ Firebase";
+    return "ล็อกอินไม่สำเร็จ" + (code ? " (" + code + ")" : "");
 }
 
-function handleAdminQuickLogin() {
-    state.activeAdmin = {
-        isLoggedIn: true,
-        name: "เฮียส่ง",
-        role: "Super Admin",
-        loggedInAt: Date.now()
+async function handleAdminLoginSubmit() {
+    const emailInput = document.getElementById("admin-email-input");
+    const pinInput = document.getElementById("admin-pin-input");
+    const errEl = document.getElementById("admin-login-error");
+    const btnLabel = document.getElementById("admin-login-submit-label");
+    const email = emailInput ? emailInput.value.trim() : "";
+    const password = pinInput ? pinInput.value : "";  // ห้าม trim รหัสผ่าน
+    const showErr = (msg) => {
+        if (errEl) { errEl.textContent = "⚠️ " + msg; errEl.classList.remove("hidden"); }
+        showToast("⚠️ " + msg);
     };
-    saveAdminToStorage(state.activeAdmin);
-    closeAdminLoginModal();
-    renderAuthHeaderButtons();
-    switchRole("admin");
-    showToast("⚡ เข้าสู่ระบบผู้ดูแลระบบ (Admin) สำเร็จ!");
+    if (errEl) { errEl.textContent = ""; errEl.classList.add("hidden"); }
+
+    if (typeof auth === "undefined" || !auth) { showErr("ระบบล็อกอินยังไม่พร้อมใช้งาน กรุณารีเฟรชหน้าเว็บ"); return; }
+    if (!email || !password) { showErr("กรุณากรอกอีเมลและรหัสผ่าน"); return; }
+
+    const oldLabel = btnLabel ? btnLabel.textContent : "";
+    if (btnLabel) btnLabel.textContent = "กำลังตรวจสอบ...";
+    try {
+        const cred = await auth.signInWithEmailAndPassword(email, password);
+        const user = cred && cred.user;
+        if (!user || !isOwnerUid(user.uid)) {
+            try { await auth.signOut(); } catch (e) { }
+            showErr("บัญชีนี้ไม่มีสิทธิ์เข้าหน้าแอดมิน");
+            return;
+        }
+        try { localStorage.setItem("talathub_owner_email", email); } catch (e) { }
+        if (pinInput) pinInput.value = "";
+        applyOwnerSession(user);
+        closeAdminLoginModal();
+        switchRole(_ownerLoginNextRole);
+        showToast("🎉 เข้าสู่ระบบเจ้าของสำเร็จ!");
+    } catch (err) {
+        showErr(_ownerLoginErrorMessage(err));
+    } finally {
+        if (btnLabel) btnLabel.textContent = oldLabel || "เข้าสู่ระบบ";
+    }
 }
 
 function logoutAdmin() {
-    state.activeAdmin = null;
-    saveAdminToStorage(null);
-    renderAuthHeaderButtons();
-    switchRole("customer");
-    showToast("🚪 ออกจากระบบแอดมินเรียบร้อยแล้ว");
+    signOutOwner();
+    showToast("🚪 ออกจากระบบเจ้าของเรียบร้อยแล้ว");
 }
 
 function switchAdminTab(tabName) {
@@ -16987,7 +17071,6 @@ window.handleAdminButtonClick = handleAdminButtonClick;
 window.openAdminLoginModal = openAdminLoginModal;
 window.closeAdminLoginModal = closeAdminLoginModal;
 window.handleAdminLoginSubmit = handleAdminLoginSubmit;
-window.handleAdminQuickLogin = handleAdminQuickLogin;
 window.logoutAdmin = logoutAdmin;
 window.switchAdminTab = switchAdminTab;
 
@@ -23711,7 +23794,6 @@ function loadSavedHubSettings() {
         hubPhone: "089-123-4567",
         hubLocation: "ล็อคกลาง อาคาร 1 หน้าตลาดวิศิษฐ์ชัย",
         targetPickingTime: 12,
-        staffPin: "hb6305",
         merchantGP: 10,
         merchantOpen: "04:30",
         merchantClose: "17:30",
@@ -23756,7 +23838,6 @@ function saveAdminSettingsConfig(roleKey) {
         s.hubPhone = document.getElementById("cfg-hub-phone")?.value || s.hubPhone;
         s.hubLocation = document.getElementById("cfg-hub-location")?.value || s.hubLocation;
         s.targetPickingTime = Number(document.getElementById("cfg-picking-time")?.value || 12);
-        s.staffPin = document.getElementById("cfg-staff-pin")?.value || "hb6305";
     } else if (roleKey === "merchant") {
         const gpEl = document.getElementById("cfg-merchant-gp");
         const gpVal = gpEl ? Number(gpEl.value) : 10;
@@ -23988,10 +24069,6 @@ function renderAdminSettings() {
                             <input type="number" id="cfg-picking-time" value="${s.targetPickingTime}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
                             <span class="text-[11px] text-slate-400">เฉลี่ย 10-15 นาที สำหรับรวมสินค้าสดจากหลายแผง</span>
                         </div>
-                        <div>
-                            <label class="font-bold text-slate-700 block mb-1">รหัส PIN สำหรับเจ้าหน้าที่จัดของเข้าสู่ระบบ:</label>
-                            <input type="password" id="cfg-staff-pin" value="${s.staffPin}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
-                        </div>
                         <div class="p-3 bg-sky-50 border border-sky-200 rounded-xl flex items-center justify-between">
                             <div>
                                 <div class="font-bold text-sky-950">🔔 เสียงแจ้งเตือนระฆัง (Bell Chime):</div>
@@ -24178,67 +24255,23 @@ function renderAdminSettings() {
     `;
 }
 
-// Hub Login & Logout (Role 2: ศูนย์จัดของฮับ PIN: hb6305)
+// Hub Login & Logout (Role 2: ศูนย์จัดของฮับ) — ใช้บัญชีเจ้าของเดียวกับหน้าแอดมิน (Firebase Authentication)
 function openHubLoginModal() {
-    const modal = document.getElementById("hub-login-modal");
-    if (modal) {
-        modal.classList.remove("hidden");
-        const pinInput = document.getElementById("hub-pin-input");
-        if (pinInput) {
-            pinInput.value = "";
-            setTimeout(() => pinInput.focus(), 150);
-        }
+    if (isOwnerSignedIn()) {
+        switchRole("hub");
+        return;
     }
+    openAdminLoginModal("hub");
 }
 
 function closeHubLoginModal() {
-    const modal = document.getElementById("hub-login-modal");
-    if (modal) modal.classList.add("hidden");
-}
-
-function handleHubLoginSubmit() {
-    const pin = document.getElementById("hub-pin-input")?.value.trim().toLowerCase();
-    if (!pin || !verifyHubOrAdminPin(pin)) {
-        showToast("⚠️ รหัสผ่านประจำฮับไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
-        return;
-    }
-    state.activeHub = {
-        isLoggedIn: true,
-        name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง (ฮับ)",
-        role: "hub_admin",
-        loggedInAt: Date.now()
-    };
-    saveHubToStorage(state.activeHub);
-    closeHubLoginModal();
-    setActiveRoleView("hub");
-    renderAuthHeaderButtons();
-    renderHubPickingList();
-    renderHubSettlement();
-    showToast("🎉 เข้าสู่ระบบศูนย์จัดของฮับ (Role 2) สำเร็จ!");
-}
-
-function quickLoginHub() {
-    state.activeHub = {
-        isLoggedIn: true,
-        name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง (ฮับ)",
-        role: "hub_admin",
-        loggedInAt: Date.now()
-    };
-    saveHubToStorage(state.activeHub);
-    closeHubLoginModal();
-    setActiveRoleView("hub");
-    renderAuthHeaderButtons();
-    renderHubPickingList();
-    renderHubSettlement();
-    showToast("⚡ เข้าสู่ระบบศูนย์จัดของฮับ (Role 2) สำเร็จ!");
+    closeAdminLoginModal();
 }
 
 function logoutHub() {
-    state.activeHub = null;
-    saveHubToStorage(null);
-    setActiveRoleView("customer");
-    renderAuthHeaderButtons();
-    showToast("🚪 ออกจากระบบจัดส่งและรวมสินค้าเรียบร้อยแล้ว");
+    // บัญชีเจ้าของเป็นบัญชีเดียวกับแอดมิน: ออกจากระบบทั้งสองหน้าพร้อมกัน
+    signOutOwner();
+    showToast("🚪 ออกจากระบบเจ้าของเรียบร้อยแล้ว");
 }
 
 // ORDER NOTIFICATION & LINE INTEGRATION
@@ -26292,7 +26325,7 @@ function handleRiderPhoneLoginSubmit() {
     const riders = loadCommunityRiders();
 
     // Admin Master PIN Bypass (เช่น 6305 หรือ ADMIN)
-    if (upperRaw === "6305" || upperRaw === "HB6305" || upperRaw === "ADMIN6305" || upperRaw === "ADMIN") {
+    if (isOwnerSignedIn() && (upperRaw === "6305" || upperRaw === "HB6305" || upperRaw === "ADMIN6305" || upperRaw === "ADMIN")) {
         if (riders && riders.length > 0) {
             loginRiderWithProfile(riders[0]);
             showToast("🔑 เข้าสู่ระบบด้วย Master PIN ในฐานะไรเดอร์คนแรก");
@@ -29859,6 +29892,9 @@ function initTalatHubApp() {
     state.favorites = loadSavedFavorites();
     state.deliveryLocation = loadSavedLocation();
 
+    // สถานะล็อกอินเจ้าของ (แอดมิน/ฮับ) มาจาก Firebase Authentication เท่านั้น
+    initOwnerAuth();
+
     setActiveRoleView("customer");
     updateCustomerRoleButtonUI();
     updateRiderRoleButtonUI();
@@ -30463,8 +30499,8 @@ async function handleMerchantCodeLoginSubmit() {
         return;
     }
 
-    // Role 3 admin password support
-    if (query === "ADMIN6305") {
+    // Role 3: เจ้าของที่ล็อกอินอยู่เข้าแผงค้าแรกในระบบเพื่อดูแล/ทดสอบได้ (คำว่า ADMIN6305 ใช้ได้เฉพาะตอนล็อกอินเจ้าของแล้ว)
+    if (isOwnerSignedIn() && (query === "ADMIN6305" || query === "ADMIN")) {
         let defaultStall = (Array.isArray(MARKET_DATA) && MARKET_DATA[0]) || { stallId: "stall_chicken", name: "แผงป้าพร ไก่สดตลาดบ้านบึง" };
         state.activeMerchant = {
             isLoggedIn: true,

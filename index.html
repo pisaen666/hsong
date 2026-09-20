@@ -4807,62 +4807,6 @@
     </div>
 
     <!-- ========================================== -->
-    <!-- HUB / DISPATCH LOGIN MODAL (Role 2: ฮับจัดของ) -->
-    <!-- ========================================== -->
-    <div id="hub-login-modal"
-        class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
-        <div
-            class="bg-white rounded-3xl max-w-sm w-full shadow-2xl p-5 sm:p-6 space-y-4 text-left border border-slate-200 animate-scale-up">
-            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div class="font-extrabold text-sm text-slate-900 flex items-center gap-2">
-                    <span
-                        class="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center text-sm shadow-xs">
-                        <span class="material-symbols-outlined text-lg">inventory_2</span>
-                    </span>
-                    <div>
-                        <h3 class="font-black text-sm text-slate-900 leading-tight">เข้าสู่ระบบศูนย์จัดของฮับ</h3>
-                        <p class="text-[10px] text-slate-500">Role 2: ฝ่ายจัดเตรียมสินค้า & รวมของสดส่งไรเดอร์</p>
-                    </div>
-                </div>
-                <button onclick="closeHubLoginModal()"
-                    class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all">
-                    <span class="material-symbols-outlined text-base">close</span>
-                </button>
-            </div>
-
-            <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-950 space-y-1">
-                <div class="font-extrabold flex items-center gap-1 text-emerald-900">
-                    <span class="material-symbols-outlined text-sm text-emerald-600">lock</span>
-                    <span>พื้นที่เฉพาะเจ้าหน้าที่ศูนย์จัดของสด (ฮับ)</span>
-                </div>
-                <div class="text-[11px] text-emerald-800">จัดการใบรวมของสดแต่ละแผง, พิมพ์สลิป 80mm, ปล่อยงานไรเดอร์
-                    และคืนเงินทอนสด</div>
-            </div>
-
-            <div class="space-y-1.5">
-                <label class="font-bold text-slate-700 block text-xs">
-                    <span>รหัส PIN หรือ Password ประจำฮับ:</span>
-                </label>
-                <input type="password" id="hub-pin-input" maxlength="20" placeholder="กรอกรหัสผ่านประจำฮับ"
-                    class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-center text-lg tracking-widest text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none bg-slate-50"
-                    onkeydown="if(event.key === 'Enter') handleHubLoginSubmit()">
-            </div>
-
-            <div class="space-y-2 pt-1">
-                <button type="button" onclick="handleHubLoginSubmit()"
-                    class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer">
-                    <span class="material-symbols-outlined text-base">login</span>
-                    <span>เข้าสู่ระบบศูนย์จัดของฮับ</span>
-                </button>
-                <button type="button" onclick="quickLoginHub()"
-                    class="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold rounded-xl active:scale-95 transition-all text-[11px] flex items-center justify-center gap-1 cursor-pointer">
-                    <span>⚡ เข้าสู่ระบบฮับทันที (โหมดทดสอบ)</span>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- ========================================== -->
     <!-- HUB CLEAR ORDERS AUTH MODAL (ยืนยันรหัสผ่านเพื่อล้างออเดอร์) -->
     <!-- ========================================== -->
     <div id="hub-clear-orders-modal"
@@ -4896,9 +4840,9 @@
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="font-bold text-slate-700 block text-xs">รหัสผ่านล็อกอินฮับ (Hub Password):</label>
+                    <label class="font-bold text-slate-700 block text-xs">รหัสผ่านบัญชีเจ้าของ (ที่ใช้ล็อกอิน):</label>
                     <div class="relative">
-                        <input type="password" id="hub-clear-orders-pin-input" placeholder="กรอกรหัสผ่านประจำฮับ" maxlength="25"
+                        <input type="password" id="hub-clear-orders-pin-input" placeholder="รหัสผ่านบัญชีเจ้าของ"
                             class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-center text-lg tracking-widest text-slate-900 focus:ring-2 focus:ring-rose-500 outline-none bg-slate-50 transition-all pr-10"
                             autocomplete="off">
                         <button type="button" onclick="toggleHubClearPasswordVisibility()"
@@ -5561,21 +5505,22 @@
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="font-bold text-slate-700 block text-xs">รหัส PIN หรือ Password ผู้ดูแลระบบ (Admin):</label>
-                    <input type="password" id="admin-pin-input" placeholder="กรอกรหัสผ่านผู้ดูแลระบบ" maxlength="20"
-                        class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-center text-lg tracking-widest text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none bg-slate-50">
+                    <label class="font-bold text-slate-700 block text-sm" for="admin-email-input">อีเมลเจ้าของ:</label>
+                    <input type="email" id="admin-email-input" autocomplete="username" placeholder="เช่น name@gmail.com"
+                        class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-base text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none bg-slate-50">
+                </div>
+                <div class="space-y-1.5">
+                    <label class="font-bold text-slate-700 block text-sm" for="admin-pin-input">รหัสผ่าน:</label>
+                    <input type="password" id="admin-pin-input" autocomplete="current-password" placeholder="รหัสผ่านของบัญชีเจ้าของ"
+                        onkeydown="if(event.key === 'Enter') handleAdminLoginSubmit()"
+                        class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-base text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none bg-slate-50">
+                    <div id="admin-login-error" class="hidden text-sm font-bold text-rose-600 pt-1"></div>
                 </div>
 
                 <button type="button" onclick="handleAdminLoginSubmit()"
                     class="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer">
                     <span class="material-symbols-outlined text-base">login</span>
-                    <span>เข้าสู่ระบบ Admin</span>
-                </button>
-
-                <!-- Fast 1-click test button -->
-                <button type="button" onclick="handleAdminQuickLogin()"
-                    class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-purple-900 font-bold rounded-xl active:scale-95 transition-all text-[11px] flex items-center justify-center gap-1 cursor-pointer">
-                    <span>⚡ เข้าสู่ระบบทันที (โหมดทดสอบ)</span>
+                    <span id="admin-login-submit-label">เข้าสู่ระบบ</span>
                 </button>
             </div>
         </div>
@@ -5613,9 +5558,9 @@
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="font-bold text-slate-700 block text-xs">รหัสผ่านผู้ดูแลระบบ (Admin Password):</label>
+                    <label class="font-bold text-slate-700 block text-xs">รหัสผ่านบัญชีเจ้าของ (ที่ใช้ล็อกอิน):</label>
                     <div class="relative">
-                        <input type="password" id="admin-auth-confirm-pin-input" placeholder="กรอกรหัสผ่าน Admin" maxlength="20"
+                        <input type="password" id="admin-auth-confirm-pin-input" placeholder="รหัสผ่านบัญชีเจ้าของ"
                             class="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-center text-lg tracking-widest text-slate-900 focus:ring-2 focus:ring-rose-500 outline-none bg-slate-50 transition-all">
                     </div>
                     <div id="admin-auth-confirm-error" class="text-[11px] text-rose-600 font-bold hidden text-center pt-1"></div>
@@ -7282,6 +7227,7 @@
     <!-- Firebase SDK (compat version - ใช้ได้กับ HTML/JS ธรรมดา) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js"></script>
     <!-- App Logic -->
