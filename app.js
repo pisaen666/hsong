@@ -19302,8 +19302,10 @@ async function cleanRiderDatabase(skipToast) {
         localStorage.removeItem("hsong_logged_in_rider");
         state.activeRider = null;
         saveRiderToStorage(null);
+        wipeAllRiderDocuments();
 
         if (typeof isFirebaseReady === "function" && isFirebaseReady() && db) {
+            db.ref("rider_documents").remove().catch(() => {});
             db.ref("community_riders").remove().catch(() => {});
             db.ref("rider_applications").remove().catch(() => {});
             db.ref("active_rider").remove().catch(() => {});
@@ -19312,7 +19314,7 @@ async function cleanRiderDatabase(skipToast) {
             db.ref("riders").remove().catch(() => {});
         }
         try {
-            const endpoints = ["community_riders", "rider_applications", "active_rider", "rider_locations", "rider_status", "riders"];
+            const endpoints = ["community_riders", "rider_applications", "rider_documents", "active_rider", "rider_locations", "rider_status", "riders"];
             endpoints.forEach(ep => {
                 fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/${ep}.json`, {
                     method: "DELETE"
@@ -19684,43 +19686,6 @@ function checkCurrentRiderApprovalRealtime(ridersList) {
     }
 }
 
-function syncPromptPayWithPhone() {
-    const phoneInput = document.getElementById("reg-rider-phone");
-    const ppInput = document.getElementById("reg-rider-promptpay");
-    if (!phoneInput || !ppInput) return;
-    const phone = phoneInput.value.trim().replace(/[-\s]/g, "");
-    if (!ppInput.value || ppInput.dataset.autoFilled === "true") {
-        ppInput.value = phone;
-        ppInput.dataset.autoFilled = "true";
-    }
-}
-window.syncPromptPayWithPhone = syncPromptPayWithPhone;
-
-function fillPromptPayWith(type) {
-    const ppInput = document.getElementById("reg-rider-promptpay");
-    if (!ppInput) return;
-    if (type === "phone") {
-        const phone = document.getElementById("reg-rider-phone")?.value.trim().replace(/[-\s]/g, "");
-        if (!phone) {
-            showToast("⚠️ กรุณากรอกเบอร์โทรศัพท์ในข้อ 1 ก่อนครับ");
-            return;
-        }
-        ppInput.value = phone;
-        ppInput.dataset.autoFilled = "false";
-        showToast("⚡ นำเบอร์มือถือมาเป็นพร้อมเพย์เรียบร้อย");
-    } else if (type === "idcard") {
-        const idcard = document.getElementById("reg-rider-idcard")?.value.trim().replace(/[-\s]/g, "");
-        if (!idcard) {
-            showToast("⚠️ กรุณากรอกเลขบัตรประชาชนในข้อ 1 ก่อนครับ");
-            return;
-        }
-        ppInput.value = idcard;
-        ppInput.dataset.autoFilled = "false";
-        showToast("⚡ นำเลขบัตร ปชช. มาเป็นพร้อมเพย์เรียบร้อย");
-    }
-}
-window.fillPromptPayWith = fillPromptPayWith;
-
 function formatRiderAppDate(isoStr) {
     if (!isoStr) return "-";
     try {
@@ -19735,14 +19700,17 @@ let _lastSubmittedRiderApp = null;
 
 // ── เติมข้อมูลผู้สมัครตัวอย่างด่วน (1-Click Sample Data for Testing)
 function fillSampleRiderRegistration() {
+    // ห้ามใช้ชื่อ/เบอร์ที่ตรงกับตัวกรองไรเดอร์จำลอง (isMockCommunityRider) ไม่เช่นนั้นไรเดอร์ที่สมัครจะถูกลบทิ้งทันที
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    const randomPhone = "08" + Math.floor(10000000 + Math.random() * 90000000);
     const fn = document.getElementById("reg-rider-fullname");
-    if (fn) fn.value = "สมชาย ขยันส่ง";
+    if (fn) fn.value = "นายทดสอบ ระบบสมัคร";
     const nn = document.getElementById("reg-rider-nickname");
-    if (nn) nn.value = "พี่ชาย";
+    if (nn) nn.value = "ทดสอบ";
     const ph = document.getElementById("reg-rider-phone");
-    if (ph) ph.value = "089-555-1234";
+    if (ph) ph.value = randomPhone;
     const ln = document.getElementById("reg-rider-line");
-    if (ln) ln.value = "somchai_rider";
+    if (ln) ln.value = "test.rider" + randomNum;
     const ic = document.getElementById("reg-rider-idcard");
     if (ic) ic.value = "1100500123456";
     const addr = document.getElementById("reg-rider-address");
@@ -19773,13 +19741,7 @@ function fillSampleRiderRegistration() {
     const eq4 = document.getElementById("reg-eq-helmet");
     if (eq4) eq4.checked = true;
 
-    const pp = document.getElementById("reg-rider-promptpay");
-    if (pp) {
-        pp.value = "089-555-1234";
-        pp.dataset.autoFilled = "false";
-    }
-    const bank = document.getElementById("reg-rider-bank");
-    if (bank) bank.value = "ธ.กสิกรไทย (KBANK)";
+    fillRiderRegExtrasSample("reg");
 
     showToast("⚡ เติมข้อมูลผู้สมัครตัวอย่างเรียบร้อย! สามารถกดส่งใบสมัครได้ทันที");
 }
@@ -19852,7 +19814,637 @@ function closeRiderRegisterModal() {
 }
 window.closeRiderRegisterModal = closeRiderRegisterModal;
 
-function handleRiderRegisterSubmit(e) {
+// ==========================================================
+// RIDER REGISTRATION EXTRAS — ใช้ร่วมกันทั้งฟอร์มหน้าหลัก (prefix "onpage") และ modal (prefix "reg")
+// ผู้ติดต่อฉุกเฉิน • รูปถ่าย/เอกสาร • บัญชีรับเงินหลายบัญชี • การยินยอมข้อมูลส่วนบุคคล
+// รูปเอกสารเก็บแยกที่ rider_documents/<riderId> (ไม่ยัดไว้ใน rider_applications ที่ถูกเขียนทับทั้งก้อนทุกครั้ง)
+// ==========================================================
+const RIDER_DOC_SLOTS = [
+    { key: "selfie", label: "รูปถ่ายผู้สมัคร (หน้าตรง)", hint: "เห็นใบหน้าชัดเจน ไม่สวมแว่นดำหรือหมวก", icon: "face", required: true },
+    { key: "license", label: "ใบขับขี่ (ด้านหน้า)", hint: "เห็นชื่อ เลขที่ และวันหมดอายุชัดเจน", icon: "badge", required: true },
+    { key: "registration", label: "เล่มทะเบียนรถจริง", hint: "หน้าที่มีชื่อเจ้าของและเลขทะเบียน", icon: "menu_book", required: true },
+    { key: "vehicle", label: "รูปรถพร้อมป้ายทะเบียน", hint: "ไม่บังคับ แต่ช่วยให้อนุมัติเร็วขึ้น", icon: "two_wheeler", required: false }
+];
+const RIDER_BANK_OPTIONS = ["พร้อมเพย์ (PromptPay)", "กสิกรไทย (KBank)", "ไทยพาณิชย์ (SCB)", "กรุงเทพ (BBL)", "กรุงไทย (KTB)", "ออมสิน (GSB)", "กรุงศรี (BAY)", "ทหารไทยธนชาต (ttb)"];
+const RIDER_EMERGENCY_RELATIONS = ["บิดา / มารดา", "คู่สมรส / แฟน", "พี่น้อง", "ญาติ", "เพื่อน", "อื่น ๆ"];
+const RIDER_MAX_ACCOUNTS = 3;
+const RIDER_DB_BASE_URL = "https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app";
+const RIDER_FORM_FIELD_IDS = {
+    onpage: { fullName: "onpage-rider-fullname", phone: "onpage-rider-phone" },
+    reg: { fullName: "reg-rider-fullname", phone: "reg-rider-phone" }
+};
+const _riderRegExtra = {};
+const _riderExtraOpts = {};
+const _riderDocsCache = {};
+
+function _riderExtraState(prefix) {
+    if (!_riderRegExtra[prefix]) {
+        _riderRegExtra[prefix] = { docs: {}, accounts: [{ bank: RIDER_BANK_OPTIONS[0], accountNo: "", accountName: "" }], primary: 0 };
+    }
+    return _riderRegExtra[prefix];
+}
+
+function _isPromptPayBank(bank) {
+    return String(bank || "").startsWith("พร้อมเพย์");
+}
+
+function renderRiderRegExtras(prefix, opts) {
+    const o = opts || {};
+    let n = o.startNumber || 4;
+    const inputCls = "w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-emerald-500 outline-none";
+    const labelCls = "font-bold text-slate-700 block mb-1 text-xs sm:text-[13px]";
+    const req = `<span class="text-rose-500">*</span>`;
+    const head = (icon, title, badge) => `
+        <div class="font-extrabold text-slate-800 flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
+            <div class="flex items-center gap-1.5 text-sm">
+                <span class="material-symbols-outlined text-base text-sky-600">${icon}</span>
+                <span>${n++}. ${title}</span>
+            </div>
+            ${badge ? `<span class="text-[11px] text-sky-700 bg-white px-2 py-0.5 rounded-lg border border-sky-200 font-bold">${badge}</span>` : ""}
+        </div>`;
+
+    let html = "";
+
+    if (o.identity) {
+        html += `
+        <div class="space-y-3">
+            ${head("badge", "ข้อมูลยืนยันตัวตน & ที่อยู่")}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="${labelCls}">เลขบัตรประชาชน 13 หลัก ${req}</label>
+                    <input type="text" id="${prefix}-idcard" inputmode="numeric" maxlength="17" placeholder="x-xxxx-xxxxx-xx-x" class="${inputCls} font-mono">
+                </div>
+                <div>
+                    <label class="${labelCls}">สีรถ</label>
+                    <input type="text" id="${prefix}-color" placeholder="เช่น แดง-ดำ" class="${inputCls}">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="${labelCls}">ที่อยู่ปัจจุบัน ${req}</label>
+                    <textarea id="${prefix}-address" rows="2" placeholder="บ้านเลขที่ ซอย ตำบล อำเภอ จังหวัด" class="${inputCls}"></textarea>
+                </div>
+                <div class="sm:col-span-2">
+                    <div class="${labelCls}">ช่วงเวลาที่สะดวกรับงาน</div>
+                    <div class="flex flex-wrap gap-2">
+                        <label class="flex items-center gap-2 px-3 py-2 bg-white rounded-xl border border-slate-200 cursor-pointer text-sm font-bold"><input type="checkbox" id="${prefix}-shift-morning" class="accent-sky-600"> รอบเช้า (06:00-11:00)</label>
+                        <label class="flex items-center gap-2 px-3 py-2 bg-white rounded-xl border border-slate-200 cursor-pointer text-sm font-bold"><input type="checkbox" id="${prefix}-shift-noon" class="accent-sky-600"> รอบเที่ยง (11:00-15:00)</label>
+                        <label class="flex items-center gap-2 px-3 py-2 bg-white rounded-xl border border-slate-200 cursor-pointer text-sm font-bold"><input type="checkbox" id="${prefix}-shift-evening" class="accent-sky-600"> รอบเย็น (15:00-19:00)</label>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    html += `
+        <div class="space-y-3">
+            ${head("contact_emergency", "ผู้ติดต่อฉุกเฉิน", "เพื่อความปลอดภัย")}
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                    <label class="${labelCls}">ชื่อ - นามสกุล ${req}</label>
+                    <input type="text" id="${prefix}-emg-name" placeholder="ชื่อผู้ที่ติดต่อได้" class="${inputCls}">
+                </div>
+                <div>
+                    <label class="${labelCls}">เบอร์โทรศัพท์ ${req}</label>
+                    <input type="tel" id="${prefix}-emg-phone" inputmode="numeric" maxlength="10" placeholder="08xxxxxxxx" class="${inputCls} font-mono">
+                </div>
+                <div>
+                    <label class="${labelCls}">ความสัมพันธ์</label>
+                    <select id="${prefix}-emg-rel" class="${inputCls}">${RIDER_EMERGENCY_RELATIONS.map(r => `<option value="${r}">${r}</option>`).join("")}</select>
+                </div>
+            </div>
+        </div>`;
+
+    html += `
+        <div class="space-y-3">
+            ${head("photo_camera", "รูปถ่าย & เอกสารยืนยันตัวตน", "ไฟล์รูปไม่เกิน 15 MB")}
+            <p class="text-xs text-slate-500">ระบบจะย่อรูปให้อัตโนมัติ ถ่ายในที่สว่างและให้เห็นตัวหนังสือชัดเจน</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                ${RIDER_DOC_SLOTS.map(s => `
+                <div id="${prefix}-doc-card-${s.key}" class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
+                    <div class="flex items-start gap-2">
+                        <span class="material-symbols-outlined text-xl text-sky-600 shrink-0">${s.icon}</span>
+                        <div class="min-w-0">
+                            <div class="font-extrabold text-sm text-slate-800">${s.label} ${s.required ? req : `<span class="text-slate-400 font-bold text-xs">(ไม่บังคับ)</span>`}</div>
+                            <div class="text-xs text-slate-500">${s.hint}</div>
+                        </div>
+                    </div>
+                    <div class="rounded-xl bg-slate-50 border border-dashed border-slate-300 overflow-hidden flex items-center justify-center min-h-[110px]">
+                        <img id="${prefix}-doc-${s.key}-img" class="hidden w-full max-h-48 object-contain" alt="${s.label}">
+                        <span id="${prefix}-doc-${s.key}-empty" class="text-xs text-slate-400 font-bold py-6">ยังไม่ได้เลือกรูป</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="flex-1 text-center px-3 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-sm font-extrabold cursor-pointer active:scale-95 transition-all">
+                            <span>📷 เลือกรูป / ถ่ายรูป</span>
+                            <input type="file" accept="image/*" class="hidden" onchange="handleRiderDocUpload('${prefix}', '${s.key}', this)">
+                        </label>
+                        <button type="button" id="${prefix}-doc-${s.key}-remove" onclick="removeRiderDoc('${prefix}', '${s.key}')" class="hidden px-3 py-2.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-sm font-bold cursor-pointer">ลบรูป</button>
+                    </div>
+                    <div id="${prefix}-doc-${s.key}-status" class="text-xs font-bold text-slate-500"></div>
+                </div>`).join("")}
+            </div>
+        </div>`;
+
+    html += `
+        <div class="space-y-3">
+            ${head("payments", `บัญชีรับเงินค่ารอบ (เพิ่มได้สูงสุด ${RIDER_MAX_ACCOUNTS} บัญชี)`, "โอนค่ารอบเข้าบัญชีหลัก")}
+            <div id="${prefix}-acct-list" class="space-y-3"></div>
+        </div>`;
+
+    html += `
+        <div class="space-y-2 bg-amber-50/70 border border-amber-200 rounded-2xl p-3">
+            ${head("verified_user", "ยืนยันและยินยอม")}
+            <label class="flex items-start gap-2.5 cursor-pointer text-sm text-slate-800 font-bold leading-snug">
+                <input type="checkbox" id="${prefix}-consent" class="accent-emerald-600 w-5 h-5 mt-0.5 shrink-0">
+                <span>ข้าพเจ้ายืนยันว่าข้อมูลและเอกสารทั้งหมดเป็นความจริง ยินยอมให้ตลาดฮับวิศิษฐ์ชัยเก็บและใช้ข้อมูลส่วนบุคคลและรูปเอกสารเพื่อตรวจสอบตัวตนและจ่ายค่ารอบ และรับผิดชอบเงินสด COD ที่เก็บจากลูกค้าให้ส่งมอบตามรอบเคลียร์เงิน ${req}</span>
+            </label>
+        </div>`;
+
+    return html;
+}
+
+function renderRiderAccountRows(prefix) {
+    const st = _riderExtraState(prefix);
+    const box = document.getElementById(`${prefix}-acct-list`);
+    if (!box) return;
+    const inputCls = "w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-emerald-500 outline-none";
+    const labelCls = "font-bold text-slate-700 block mb-1 text-xs sm:text-[13px]";
+    box.innerHTML = st.accounts.map((a, i) => {
+        const isPrimary = st.primary === i;
+        return `
+        <div class="rounded-2xl border ${isPrimary ? "border-emerald-400 bg-emerald-50/60" : "border-slate-200 bg-white"} p-3 space-y-2.5">
+            <div class="flex items-center justify-between gap-2">
+                <label class="flex items-center gap-2 font-extrabold text-sm text-slate-800 cursor-pointer">
+                    <input type="radio" name="${prefix}-acct-primary" ${isPrimary ? "checked" : ""} onchange="setRiderPrimaryAccount('${prefix}', ${i})" class="accent-emerald-600 w-4 h-4">
+                    <span>บัญชีที่ ${i + 1}${isPrimary ? " (บัญชีหลัก)" : ""}</span>
+                </label>
+                ${st.accounts.length > 1 ? `<button type="button" onclick="removeRiderAccount('${prefix}', ${i})" class="text-xs font-bold text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg cursor-pointer">ลบบัญชีนี้</button>` : ""}
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                    <label class="${labelCls}">ธนาคาร / ช่องทาง ${i === 0 ? '<span class="text-rose-500">*</span>' : ""}</label>
+                    <select id="${prefix}-acct-bank-${i}" onchange="updateRiderAccount('${prefix}', ${i}, 'bank', this.value)" class="${inputCls}">
+                        ${RIDER_BANK_OPTIONS.map(b => `<option value="${b}" ${a.bank === b ? "selected" : ""}>${b}</option>`).join("")}
+                    </select>
+                </div>
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="font-bold text-slate-700 text-xs sm:text-[13px]">เลขบัญชี / เลขพร้อมเพย์ ${i === 0 ? '<span class="text-rose-500">*</span>' : ""}</label>
+                        <button type="button" onclick="fillRiderAccountWithPhone('${prefix}', ${i})" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer">⚡ ใช้เบอร์มือถือ</button>
+                    </div>
+                    <input type="text" id="${prefix}-acct-no-${i}" inputmode="numeric" maxlength="20" value="${escapeHtml(a.accountNo)}" placeholder="เฉพาะตัวเลข" oninput="updateRiderAccount('${prefix}', ${i}, 'accountNo', this.value)" class="${inputCls} font-mono">
+                </div>
+                <div>
+                    <label class="${labelCls}">ชื่อบัญชี</label>
+                    <input type="text" id="${prefix}-acct-name-${i}" value="${escapeHtml(a.accountName)}" placeholder="เว้นว่าง = ใช้ชื่อผู้สมัคร" oninput="updateRiderAccount('${prefix}', ${i}, 'accountName', this.value)" class="${inputCls}">
+                </div>
+            </div>
+        </div>`;
+    }).join("") + (st.accounts.length < RIDER_MAX_ACCOUNTS ? `
+        <button type="button" onclick="addRiderAccount('${prefix}')" class="w-full py-2.5 border-2 border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50 font-extrabold rounded-2xl text-sm cursor-pointer transition-all">+ เพิ่มบัญชีรับเงิน</button>` : "");
+}
+
+function updateRiderAccount(prefix, idx, field, value) {
+    const acc = _riderExtraState(prefix).accounts[idx];
+    if (acc) acc[field] = value;
+}
+function setRiderPrimaryAccount(prefix, idx) {
+    _riderExtraState(prefix).primary = idx;
+    renderRiderAccountRows(prefix);
+}
+function addRiderAccount(prefix) {
+    const st = _riderExtraState(prefix);
+    if (st.accounts.length >= RIDER_MAX_ACCOUNTS) return;
+    st.accounts.push({ bank: RIDER_BANK_OPTIONS[1], accountNo: "", accountName: "" });
+    renderRiderAccountRows(prefix);
+}
+function removeRiderAccount(prefix, idx) {
+    const st = _riderExtraState(prefix);
+    if (st.accounts.length <= 1) return;
+    st.accounts.splice(idx, 1);
+    if (st.primary === idx) st.primary = 0;
+    else if (st.primary > idx) st.primary--;
+    renderRiderAccountRows(prefix);
+}
+function fillRiderAccountWithPhone(prefix, idx) {
+    const phone = (document.getElementById((RIDER_FORM_FIELD_IDS[prefix] || {}).phone)?.value || "").replace(/[-\s]/g, "");
+    if (!phone) {
+        showToast("⚠️ กรุณากรอกเบอร์โทรศัพท์ในข้อ 1 ก่อนครับ");
+        return;
+    }
+    const acc = _riderExtraState(prefix).accounts[idx];
+    if (!acc) return;
+    acc.accountNo = phone;
+    const el = document.getElementById(`${prefix}-acct-no-${idx}`);
+    if (el) el.value = phone;
+}
+
+function compressDocumentImage(file, maxSide = 1100, quality = 0.72) {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+                const w = Math.max(1, Math.round(img.width * scale));
+                const h = Math.max(1, Math.round(img.height * scale));
+                const canvas = document.createElement("canvas");
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
+                let out = canvas.toDataURL("image/jpeg", quality);
+                if (out.length > 300000) out = canvas.toDataURL("image/jpeg", 0.55);
+                resolve(out);
+            } catch (e) {
+                reject(e);
+            } finally {
+                URL.revokeObjectURL(url);
+            }
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error("image decode failed"));
+        };
+        img.src = url;
+    });
+}
+
+function paintRiderDocSlot(prefix, key) {
+    const dataUrl = _riderExtraState(prefix).docs[key];
+    const img = document.getElementById(`${prefix}-doc-${key}-img`);
+    const empty = document.getElementById(`${prefix}-doc-${key}-empty`);
+    const rm = document.getElementById(`${prefix}-doc-${key}-remove`);
+    const status = document.getElementById(`${prefix}-doc-${key}-status`);
+    if (img) {
+        if (dataUrl) { img.src = dataUrl; img.classList.remove("hidden"); }
+        else { img.removeAttribute("src"); img.classList.add("hidden"); }
+    }
+    if (empty) empty.classList.toggle("hidden", !!dataUrl);
+    if (rm) rm.classList.toggle("hidden", !dataUrl);
+    if (status) {
+        status.textContent = dataUrl ? `✅ อัปโหลดแล้ว (${Math.round(dataUrl.length * 0.75 / 1024)} KB)` : "";
+        status.className = "text-xs font-bold " + (dataUrl ? "text-emerald-700" : "text-slate-500");
+    }
+}
+
+async function handleRiderDocUpload(prefix, key, inputEl) {
+    const file = inputEl && inputEl.files && inputEl.files[0];
+    if (!file) return;
+    if (!file.type || !file.type.startsWith("image/")) {
+        showToast("⚠️ กรุณาเลือกไฟล์รูปภาพเท่านั้น (JPG, PNG, WEBP)");
+        inputEl.value = "";
+        return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+        showToast("⚠️ ไฟล์ใหญ่เกิน 15 MB กรุณาเลือกรูปที่เล็กกว่านี้");
+        inputEl.value = "";
+        return;
+    }
+    try {
+        _riderExtraState(prefix).docs[key] = await compressDocumentImage(file);
+        paintRiderDocSlot(prefix, key);
+        showToast("📸 อัปโหลดและปรับขนาดรูปเรียบร้อยแล้ว");
+    } catch (err) {
+        console.warn("Rider document compress failed:", err);
+        showToast("⚠️ ไม่สามารถอ่านรูปนี้ได้ กรุณาลองเลือกรูปอื่น");
+    }
+    inputEl.value = "";
+}
+
+function removeRiderDoc(prefix, key) {
+    delete _riderExtraState(prefix).docs[key];
+    paintRiderDocSlot(prefix, key);
+}
+
+function mountRiderRegExtras(prefix, opts) {
+    const mount = document.getElementById(`${prefix}-rider-extras`);
+    if (!mount) return;
+    if (opts) _riderExtraOpts[prefix] = opts;
+    mount.innerHTML = renderRiderRegExtras(prefix, _riderExtraOpts[prefix]);
+    renderRiderAccountRows(prefix);
+    RIDER_DOC_SLOTS.forEach(s => paintRiderDocSlot(prefix, s.key));
+}
+
+function resetRiderRegExtras(prefix) {
+    delete _riderRegExtra[prefix];
+    mountRiderRegExtras(prefix);
+}
+
+// ตรวจและรวบรวมข้อมูลส่วนเสริม คืนค่า { ok:false, focusId, message } หรือ { ok:true, ... }
+function collectRiderRegExtras(prefix, opts) {
+    const o = opts || {};
+    const st = _riderExtraState(prefix);
+    const val = id => (document.getElementById(id)?.value || "").trim();
+    const fail = (focusId, message) => ({ ok: false, focusId, message });
+    const fieldIds = RIDER_FORM_FIELD_IDS[prefix] || {};
+    const fullName = val(fieldIds.fullName);
+
+    let identity = null;
+    if (o.identity) {
+        const idCard = val(`${prefix}-idcard`).replace(/[-\s]/g, "");
+        if (!/^\d{13}$/.test(idCard)) return fail(`${prefix}-idcard`, "⚠️ กรุณากรอกเลขบัตรประชาชน 13 หลักให้ถูกต้อง");
+        const address = val(`${prefix}-address`);
+        if (address.length < 10) return fail(`${prefix}-address`, "⚠️ กรุณากรอกที่อยู่ปัจจุบันให้ครบถ้วน");
+        const shifts = [];
+        if (document.getElementById(`${prefix}-shift-morning`)?.checked) shifts.push("รอบเช้า (06:00-11:00)");
+        if (document.getElementById(`${prefix}-shift-noon`)?.checked) shifts.push("รอบเที่ยง (11:00-15:00)");
+        if (document.getElementById(`${prefix}-shift-evening`)?.checked) shifts.push("รอบเย็น (15:00-19:00)");
+        identity = { idCard, address, motorcycleColor: val(`${prefix}-color`), shifts };
+    }
+
+    const emgName = val(`${prefix}-emg-name`);
+    const emgPhone = val(`${prefix}-emg-phone`).replace(/[-\s]/g, "");
+    if (!emgName) return fail(`${prefix}-emg-name`, "⚠️ กรุณากรอกชื่อผู้ติดต่อฉุกเฉิน");
+    if (!/^\d{9,10}$/.test(emgPhone)) return fail(`${prefix}-emg-phone`, "⚠️ กรุณากรอกเบอร์โทรผู้ติดต่อฉุกเฉินให้ถูกต้อง");
+    const emergencyContact = { name: emgName, phone: emgPhone, relation: val(`${prefix}-emg-rel`) || RIDER_EMERGENCY_RELATIONS[0] };
+
+    for (const slot of RIDER_DOC_SLOTS) {
+        if (slot.required && !st.docs[slot.key]) {
+            return fail(`${prefix}-doc-card-${slot.key}`, `⚠️ กรุณาอัปโหลด${slot.label}`);
+        }
+    }
+    const docFlags = {};
+    RIDER_DOC_SLOTS.forEach(s => { docFlags[s.key] = !!st.docs[s.key]; });
+
+    const rows = st.accounts.map((a, i) => ({
+        idx: i,
+        bank: a.bank,
+        accountNo: String(a.accountNo || "").replace(/[-\s]/g, ""),
+        accountName: String(a.accountName || "").trim() || fullName
+    })).filter(r => r.accountNo);
+    if (rows.length === 0) return fail(`${prefix}-acct-no-0`, "⚠️ กรุณากรอกบัญชีรับเงินค่ารอบอย่างน้อย 1 บัญชี");
+    const seen = new Set();
+    for (const r of rows) {
+        const isPP = _isPromptPayBank(r.bank);
+        const okNo = /^\d+$/.test(r.accountNo) && (isPP ? [10, 13, 15].includes(r.accountNo.length) : (r.accountNo.length >= 10 && r.accountNo.length <= 15));
+        if (!okNo) {
+            return fail(`${prefix}-acct-no-${r.idx}`, isPP
+                ? "⚠️ เลขพร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขบัตร 13 หลัก"
+                : "⚠️ เลขที่บัญชีธนาคารต้องเป็นตัวเลข 10-15 หลัก");
+        }
+        const dupKey = `${r.bank}|${r.accountNo}`;
+        if (seen.has(dupKey)) return fail(`${prefix}-acct-no-${r.idx}`, "⚠️ มีบัญชีซ้ำกัน กรุณาตรวจสอบอีกครั้ง");
+        seen.add(dupKey);
+    }
+    const primaryRow = rows.find(r => r.idx === st.primary) || rows[0];
+    const bankAccounts = rows.map(r => ({
+        type: _isPromptPayBank(r.bank) ? "promptpay" : "bank",
+        bank: r.bank,
+        accountNo: r.accountNo,
+        accountName: r.accountName,
+        isPrimary: r === primaryRow
+    }));
+    // ระบบจ่ายค่ารอบเดิมใช้ PromptPay ID เท่านั้น: ใช้บัญชีพร้อมเพย์บัญชีแรก (ให้บัญชีหลักมาก่อน)
+    const ppAccount = bankAccounts.find(a => a.isPrimary && a.type === "promptpay") || bankAccounts.find(a => a.type === "promptpay");
+
+    if (!document.getElementById(`${prefix}-consent`)?.checked) {
+        return fail(`${prefix}-consent`, "⚠️ กรุณาติ๊กยืนยันและยินยอมเงื่อนไขก่อนส่งใบสมัคร");
+    }
+
+    return {
+        ok: true,
+        identity,
+        emergencyContact,
+        docs: Object.assign({}, st.docs),
+        docFlags,
+        bankAccounts,
+        promptPayNumber: ppAccount ? ppAccount.accountNo : "",
+        promptPayBank: ppAccount ? ppAccount.bank : primaryRow.bank,
+        consentAt: new Date().toISOString()
+    };
+}
+
+// Firebase SDK ไม่ reject เมื่อออฟไลน์ (promise ค้างจนกว่าจะต่อเน็ตได้) จึงต้องกำหนดเวลาสูงสุดเอง
+function _withTimeout(promise, ms) {
+    return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))]);
+}
+
+// กันกดส่งซ้ำระหว่างรออัปโหลดรูป (ไม่งั้นเกิดใบสมัครซ้ำ) คืน null ถ้ากำลังส่งอยู่แล้ว
+const _riderRegBusy = {};
+async function saveRiderDocumentsGuarded(prefix, riderId, docs) {
+    if (_riderRegBusy[prefix]) return null;
+    _riderRegBusy[prefix] = true;
+    showToast("⏳ กำลังอัปโหลดรูปเอกสาร กรุณารอสักครู่ (อย่ากดซ้ำ)...");
+    try {
+        return await saveRiderDocuments(riderId, docs);
+    } finally {
+        _riderRegBusy[prefix] = false;
+    }
+}
+
+// ── เก็บ/โหลด/ลบ รูปเอกสารไรเดอร์ (แยกจากรายการใบสมัคร)
+async function saveRiderDocuments(riderId, docs) {
+    const payload = Object.assign({}, docs, { savedAt: new Date().toISOString() });
+    _riderDocsCache[riderId] = payload;
+    let cloudOk = false;
+    try {
+        if (typeof isFirebaseReady === "function" && isFirebaseReady() && db) {
+            await _withTimeout(db.ref("rider_documents/" + riderId).set(payload), 8000);
+            cloudOk = true;
+        } else {
+            const res = await fetch(`${RIDER_DB_BASE_URL}/rider_documents/${encodeURIComponent(riderId)}.json`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            cloudOk = res.ok;
+        }
+    } catch (e) {
+        console.warn("Save rider documents to cloud failed:", e);
+    }
+    let localOk = false;
+    if (!cloudOk) {
+        try {
+            localStorage.setItem("talathub_rider_docs_" + riderId, JSON.stringify(payload));
+            localOk = true;
+        } catch (e) {
+            console.warn("Save rider documents locally failed:", e);
+        }
+    }
+    return { cloudOk, localOk };
+}
+
+async function loadRiderDocuments(riderId) {
+    if (_riderDocsCache[riderId]) return _riderDocsCache[riderId];
+    try {
+        const raw = localStorage.getItem("talathub_rider_docs_" + riderId);
+        if (raw) {
+            _riderDocsCache[riderId] = JSON.parse(raw);
+            return _riderDocsCache[riderId];
+        }
+    } catch (e) { }
+    try {
+        let data = null;
+        if (typeof isFirebaseReady === "function" && isFirebaseReady() && db) {
+            data = (await _withTimeout(db.ref("rider_documents/" + riderId).once("value"), 6000)).val();
+        } else {
+            const res = await fetch(`${RIDER_DB_BASE_URL}/rider_documents/${encodeURIComponent(riderId)}.json`);
+            if (res.ok) data = await res.json();
+        }
+        if (data) {
+            _riderDocsCache[riderId] = data;
+            return data;
+        }
+    } catch (e) {
+        console.warn("Load rider documents failed:", e);
+    }
+    return null;
+}
+
+function removeRiderDocuments(riderId) {
+    if (!riderId) return;
+    delete _riderDocsCache[riderId];
+    try { localStorage.removeItem("talathub_rider_docs_" + riderId); } catch (e) { }
+    try {
+        if (typeof isFirebaseReady === "function" && isFirebaseReady() && db) {
+            db.ref("rider_documents/" + riderId).remove().catch(() => { });
+        } else {
+            fetch(`${RIDER_DB_BASE_URL}/rider_documents/${encodeURIComponent(riderId)}.json`, { method: "DELETE" }).catch(() => { });
+        }
+    } catch (e) { }
+}
+
+// ล้างแคชรูปเอกสารในเครื่อง (ถูกเรียกจาก cleanRiderDatabase ซึ่งอาจรันก่อนที่ตัวแปรแคชจะถูกสร้าง จึงห่อ try)
+function wipeAllRiderDocuments() {
+    try { Object.keys(_riderDocsCache).forEach(k => delete _riderDocsCache[k]); } catch (e) { }
+    try {
+        Object.keys(localStorage)
+            .filter(k => k.startsWith("talathub_rider_docs_"))
+            .forEach(k => localStorage.removeItem(k));
+    } catch (e) { }
+}
+
+// ── แสดงข้อมูลส่วนเสริมในหน้าตรวจใบสมัครของแอดมิน
+function renderRiderAppExtrasHtml(app) {
+    const safeId = String(app.id || "").replace(/[^A-Za-z0-9_-]/g, "");
+    const emg = app.emergencyContact;
+    const accounts = Array.isArray(app.bankAccounts) ? app.bankAccounts : [];
+    const hasDocs = app.docFlags && Object.values(app.docFlags).some(Boolean);
+    return `
+        ${emg ? `
+        <div class="bg-rose-50/70 border border-rose-200 p-3 rounded-xl space-y-1">
+            <div class="text-[11px] font-bold text-rose-700">ผู้ติดต่อฉุกเฉิน</div>
+            <div class="font-bold text-sm text-slate-800">${escapeHtml(emg.name)} (${escapeHtml(emg.relation || "-")})</div>
+            <a href="tel:${escapeHtml(emg.phone)}" class="font-mono text-sm font-black text-rose-700">${escapeHtml(emg.phone)}</a>
+        </div>` : ""}
+        ${accounts.length ? `
+        <div class="bg-emerald-50/70 border border-emerald-200 p-3 rounded-xl space-y-2">
+            <div class="text-[11px] font-bold text-emerald-800">บัญชีรับเงินทั้งหมด (${accounts.length} บัญชี)</div>
+            ${accounts.map(a => `
+                <div class="flex items-center justify-between gap-2 bg-white rounded-lg border ${a.isPrimary ? "border-emerald-400" : "border-slate-200"} px-2.5 py-1.5">
+                    <div class="min-w-0">
+                        <div class="text-xs font-bold text-slate-700">${escapeHtml(a.bank)} ${a.isPrimary ? '<span class="text-emerald-700">★ บัญชีหลัก</span>' : ""}</div>
+                        <div class="text-[11px] text-slate-500">ชื่อบัญชี: ${escapeHtml(a.accountName || "-")}</div>
+                    </div>
+                    <div class="font-mono font-black text-sm text-emerald-950 shrink-0">${escapeHtml(a.accountNo)}</div>
+                </div>`).join("")}
+        </div>` : ""}
+        ${hasDocs ? `
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+            <div class="text-[11px] font-bold text-slate-500">รูปถ่าย & เอกสาร (แตะรูปเพื่อขยาย)</div>
+            <div id="rider-app-docs-${safeId}" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div class="col-span-full text-xs text-slate-400 font-bold">กำลังโหลดรูปเอกสาร...</div>
+            </div>
+            ${app.consentAt ? `<div class="text-[11px] text-slate-500">✅ ยินยอมเงื่อนไขและข้อมูลส่วนบุคคลเมื่อ ${escapeHtml(formatRiderAppDate(app.consentAt))}</div>` : ""}
+        </div>` : ""}`;
+}
+
+async function hydrateRiderAppDocs(app) {
+    const safeId = String(app.id || "").replace(/[^A-Za-z0-9_-]/g, "");
+    const box = document.getElementById(`rider-app-docs-${safeId}`);
+    if (!box) return;
+    const docs = await loadRiderDocuments(app.id);
+    const el = document.getElementById(`rider-app-docs-${safeId}`);
+    if (!el) return;
+    if (!docs) {
+        el.innerHTML = `<div class="col-span-full text-xs text-rose-600 font-bold">⚠️ ไม่พบไฟล์รูปเอกสารในระบบ (อาจบันทึกไม่สำเร็จหรือถูกลบไปแล้ว)</div>`;
+        return;
+    }
+    el.innerHTML = RIDER_DOC_SLOTS.map(s => docs[s.key] ? `
+        <button type="button" onclick="openRiderDocLightbox(${jsArg(app.id)}, '${s.key}')" class="text-left rounded-xl border border-slate-200 bg-white overflow-hidden cursor-zoom-in">
+            <img src="${docs[s.key]}" alt="${s.label}" class="w-full h-24 object-cover">
+            <div class="px-1.5 py-1 text-[11px] font-bold text-slate-700 leading-tight">${s.label}</div>
+        </button>` : "").join("");
+}
+
+function openRiderDocLightbox(riderId, key) {
+    const docs = _riderDocsCache[riderId];
+    const src = docs && docs[key];
+    if (!src) return;
+    let box = document.getElementById("rider-doc-lightbox");
+    if (!box) {
+        box = document.createElement("div");
+        box.id = "rider-doc-lightbox";
+        // สไตล์ inline: คลาส Tailwind ที่เพิ่มตอนรันไม่ถูกคอมไพล์เสมอไป (z-index จึงอาจเป็น auto)
+        box.style.cssText = "position:fixed;inset:0;z-index:9999999;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;padding:16px;cursor:zoom-out";
+        box.onclick = () => { box.style.display = "none"; };
+        box.innerHTML = `<img id="rider-doc-lightbox-img" class="max-w-full max-h-full object-contain rounded-xl bg-white" alt="">`;
+        document.body.appendChild(box);
+    }
+    document.getElementById("rider-doc-lightbox-img").src = src;
+    box.style.display = "flex";
+}
+
+// ── เติมข้อมูลตัวอย่างในส่วนเสริม (ปุ่มทดสอบ 1-Click) รูปเป็นภาพจำลองที่เขียนว่า SAMPLE
+function makeSampleDocImage(label) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 480;
+    canvas.height = 300;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#e2e8f0";
+    ctx.fillRect(0, 0, 480, 300);
+    ctx.fillStyle = "#475569";
+    ctx.font = "bold 28px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("SAMPLE (ภาพทดสอบ)", 240, 135);
+    ctx.font = "20px sans-serif";
+    ctx.fillText(label, 240, 175);
+    return canvas.toDataURL("image/jpeg", 0.6);
+}
+
+function fillRiderRegExtrasSample(prefix) {
+    const st = _riderExtraState(prefix);
+    const ids = RIDER_FORM_FIELD_IDS[prefix] || {};
+    const phone = (document.getElementById(ids.phone)?.value || "").replace(/[-\s]/g, "");
+    const name = (document.getElementById(ids.fullName)?.value || "").trim();
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set(`${prefix}-idcard`, "1100500123456");
+    set(`${prefix}-address`, "12/4 ซอยเทศบาล 5 ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี");
+    set(`${prefix}-color`, "แดง-ดำ");
+    const morning = document.getElementById(`${prefix}-shift-morning`);
+    if (morning) morning.checked = true;
+    set(`${prefix}-emg-name`, "นางสมหญิง ใจดี");
+    set(`${prefix}-emg-phone`, "0812345678");
+    set(`${prefix}-emg-rel`, RIDER_EMERGENCY_RELATIONS[0]);
+    RIDER_DOC_SLOTS.forEach(s => {
+        st.docs[s.key] = makeSampleDocImage(s.label);
+        paintRiderDocSlot(prefix, s.key);
+    });
+    st.accounts = [
+        { bank: RIDER_BANK_OPTIONS[0], accountNo: phone, accountName: name },
+        { bank: RIDER_BANK_OPTIONS[1], accountNo: "1234567890", accountName: name }
+    ];
+    st.primary = 0;
+    renderRiderAccountRows(prefix);
+    const consent = document.getElementById(`${prefix}-consent`);
+    if (consent) consent.checked = true;
+}
+
+function mountAllRiderRegExtras() {
+    mountRiderRegExtras("onpage", { identity: true, startNumber: 4 });
+    mountRiderRegExtras("reg", { identity: false, startNumber: 5 });
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountAllRiderRegExtras);
+else mountAllRiderRegExtras();
+
+Object.assign(window, {
+    updateRiderAccount, setRiderPrimaryAccount, addRiderAccount, removeRiderAccount, fillRiderAccountWithPhone,
+    handleRiderDocUpload, removeRiderDoc, openRiderDocLightbox, loadRiderDocuments, saveRiderDocuments, removeRiderDocuments,
+    fillRiderRegExtrasSample, collectRiderRegExtras, resetRiderRegExtras, mountRiderRegExtras
+});
+
+async function handleRiderRegisterSubmit(e) {
     if (e && e.preventDefault) e.preventDefault();
 
     function markInvalidField(id, message) {
@@ -19895,13 +20487,6 @@ function handleRiderRegisterSubmit(e) {
     if (document.getElementById("reg-eq-strap")?.checked) equipments.push("มีสายรัดสัมภาระ");
     if (document.getElementById("reg-eq-helmet")?.checked) equipments.push("มีหมวกกันน็อก");
 
-    // PromptPay: Auto-fallback to phone if empty
-    let promptPayNumber = document.getElementById("reg-rider-promptpay")?.value.trim().replace(/[-\s]/g, "");
-    if (!promptPayNumber && phone) {
-        promptPayNumber = phone;
-    }
-    const promptPayBank = document.getElementById("reg-rider-bank")?.value || "พร้อมเพย์";
-
     // Step-by-Step validation with smooth scroll & focus
     if (!fullName) {
         markInvalidField("reg-rider-fullname", "⚠️ กรุณากรอกชื่อ - นามสกุลจริงของผู้สมัคร");
@@ -19935,9 +20520,16 @@ function handleRiderRegisterSubmit(e) {
         markInvalidField("reg-rider-license", "⚠️ กรุณากรอกเลขที่ใบอนุญาตขับขี่");
         return;
     }
-    if (!promptPayNumber) {
-        promptPayNumber = phone;
+
+    // ส่วนเสริม: ผู้ติดต่อฉุกเฉิน • รูปเอกสาร • บัญชีรับเงินหลายบัญชี • การยินยอม
+    const extras = collectRiderRegExtras("reg", { identity: false });
+    if (!extras.ok) {
+        markInvalidField(extras.focusId, extras.message);
+        return;
     }
+    // ระบบจ่ายเงินเดิมใช้ PromptPay ID: ถ้าไม่มีบัญชีพร้อมเพย์ ใช้เบอร์มือถือเหมือนเดิม
+    const promptPayNumber = extras.promptPayNumber || phone;
+    const promptPayBank = extras.promptPayBank;
 
     const apps = loadRiderApplications();
     const existingIndex = apps.findIndex(a => (a.phone || "").replace(/[-\s]/g, "") === phone);
@@ -19968,11 +20560,26 @@ function handleRiderRegisterSubmit(e) {
         equipments,
         promptPayNumber,
         promptPayBank,
+        bankAccounts: extras.bankAccounts,
+        emergencyContact: extras.emergencyContact,
+        docFlags: extras.docFlags,
+        consentAt: extras.consentAt,
         appliedAt: new Date().toISOString(),
         status: "approved",
         approvedAt: new Date().toISOString(),
         notes: "อนุมัติอัตโนมัติ (Fast-Track)"
     };
+
+    // รูปเอกสารเก็บแยกจากใบสมัคร (ต้องบันทึกสำเร็จอย่างน้อยหนึ่งที่ก่อนสร้างใบสมัคร)
+    const docResult = await saveRiderDocumentsGuarded("reg", riderCode, extras.docs);
+    if (!docResult) return;
+    if (!docResult.cloudOk && !docResult.localOk) {
+        showToast("⚠️ บันทึกรูปเอกสารไม่สำเร็จ กรุณาลองอีกครั้ง");
+        return;
+    }
+    if (!docResult.cloudOk) {
+        showToast("⚠️ รูปเอกสารถูกเก็บไว้ในเครื่องนี้เท่านั้น (ยังส่งขึ้นระบบกลางไม่ได้) กรุณาตรวจอินเทอร์เน็ต");
+    }
 
     if (existingIndex >= 0) {
         apps[existingIndex] = newApp;
@@ -19999,6 +20606,7 @@ function handleRiderRegisterSubmit(e) {
         avatar: "🛵",
         motorcycleModel: motorcycleModel || "",
         promptPay: promptPayNumber || phone,
+        bankAccounts: extras.bankAccounts,
         accessCode: riderCode,
         codSettledToday: 0
     };
@@ -20009,6 +20617,7 @@ function handleRiderRegisterSubmit(e) {
     saveCommunityRiders(curRiders);
     // Reset form inputs for next time
     document.getElementById("rider-register-form")?.reset();
+    resetRiderRegExtras("reg");
 
     // Show step 2 (Success and next step options)
     populateRiderSuccessView(newApp);
@@ -21619,6 +22228,7 @@ function deleteCommunityRider(riderId) {
     if (confirm(`คุณต้องการลบไรเดอร์ "${r.name}" ออกจากระบบใช่หรือไม่?`)) {
         const updated = riders.filter(x => x.id !== riderId);
         saveCommunityRiders(updated);
+        removeRiderDocuments(riderId);
 
         // Also clean up or remove matching application if any
         try {
@@ -21893,7 +22503,7 @@ function viewRiderAppDetail(appId) {
                 <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
                     <div class="text-[10px] font-bold text-slate-400">ข้อมูลส่วนตัว & ใบอนุญาต</div>
                     <div class="font-bold text-slate-800">เลข ปชช: <span class="font-mono text-slate-700">${escapeHtml(app.idCard || '-')}</span></div>
-                    <div class="font-bold text-slate-800">ใบขับขี่: <span class="font-mono text-purple-700">${app.drivingLicense || '-'}</span></div>
+                    <div class="font-bold text-slate-800">ใบขับขี่: <span class="font-mono text-purple-700">${escapeHtml(app.drivingLicense || '-')}</span></div>
                     <div class="text-[11px] text-slate-600 mt-1">ที่อยู่: ${escapeHtml(app.address || '-')}</div>
                 </div>
 
@@ -21908,22 +22518,25 @@ function viewRiderAppDetail(appId) {
             <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
                 <div class="text-[10px] font-bold text-slate-400">ช่วงเวลาที่สะดวก & อุปกรณ์</div>
                 <div class="flex flex-wrap gap-1.5">
-                    ${(app.shifts || []).map(s => `<span class="px-2 py-0.5 bg-sky-100 text-sky-800 rounded-lg font-bold text-[11px]">⏰ ${s}</span>`).join('')}
+                    ${(app.shifts || []).map(s => `<span class="px-2 py-0.5 bg-sky-100 text-sky-800 rounded-lg font-bold text-[11px]">⏰ ${escapeHtml(s)}</span>`).join('')}
                 </div>
                 <div class="flex flex-wrap gap-1.5 pt-1">
-                    ${(app.equipments || []).map(eq => `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px]">✓ ${eq}</span>`).join('')}
+                    ${(app.equipments || []).map(eq => `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px]">✓ ${escapeHtml(eq)}</span>`).join('')}
                 </div>
             </div>
 
             <div class="bg-emerald-50/70 border border-emerald-200 p-3 rounded-xl flex items-center justify-between">
                 <div>
-                    <div class="text-[10px] font-bold text-emerald-800">บัญชีรับเงินค่ารอบ (พร้อมเพย์)</div>
-                    <div class="font-black text-sm text-emerald-950 font-mono">${app.promptPayNumber || app.phone}</div>
-                    <div class="text-[10px] text-emerald-700">ธนาคาร: ${app.promptPayBank || 'พร้อมเพย์'}</div>
+                    <div class="text-[10px] font-bold text-emerald-800">พร้อมเพย์ที่ใช้โอนค่ารอบ</div>
+                    <div class="font-black text-sm text-emerald-950 font-mono">${escapeHtml(app.promptPayNumber || app.phone)}</div>
+                    <div class="text-[10px] text-emerald-700">ธนาคาร: ${escapeHtml(app.promptPayBank || 'พร้อมเพย์')}</div>
                 </div>
                 <span class="material-symbols-outlined text-2xl text-emerald-600">account_balance</span>
             </div>
+
+            ${renderRiderAppExtrasHtml(app)}
         `;
+        hydrateRiderAppDocs(app);
     }
 
     if (footer) {
@@ -22141,6 +22754,7 @@ function deleteRiderApplication(appId) {
         const appToDelete = apps.find(x => x.id === appId);
         const updated = apps.filter(x => x.id !== appId);
         saveRiderApplications(updated);
+        removeRiderDocuments(appId);
 
         // Also remove from active community riders if matching
         if (appToDelete) {
@@ -25088,7 +25702,6 @@ function fillOnPageRiderSampleData() {
     const elModel = document.getElementById("onpage-rider-model");
     const elPlate = document.getElementById("onpage-rider-plate");
     const elLicense = document.getElementById("onpage-rider-license");
-    const elPromptPay = document.getElementById("onpage-rider-promptpay");
 
     if (elName) elName.value = "นายสมชาย ว่องไว";
     if (elNick) elNick.value = "สมชาย";
@@ -25097,21 +25710,11 @@ function fillOnPageRiderSampleData() {
     if (elModel) elModel.value = "Honda Wave 110i (สีน้ำเงิน-ดำ)";
     if (elPlate) elPlate.value = `1กข-${randomNum} ชลบุรี`;
     if (elLicense) elLicense.value = String(Math.floor(1000000000000 + Math.random() * 9000000000000));
-    if (elPromptPay) elPromptPay.value = randomPhone;
+    fillRiderRegExtrasSample("onpage");
 
     showToast("⚡ เติมข้อมูลตัวอย่างลงในฟอร์มเรียบร้อยแล้ว! กดปุ่ม 'ยืนยันการลงทะเบียน' ได้เลย");
 }
 window.fillOnPageRiderSampleData = fillOnPageRiderSampleData;
-
-function fillOnPagePromptPayWithPhone() {
-    const phone = document.getElementById("onpage-rider-phone")?.value.trim() || "";
-    const ppInput = document.getElementById("onpage-rider-promptpay");
-    if (ppInput) {
-        ppInput.value = phone;
-        showToast("⚡ คัดลอกเบอร์มือถือไปยังช่องพร้อมเพย์เรียบร้อย");
-    }
-}
-window.fillOnPagePromptPayWithPhone = fillOnPagePromptPayWithPhone;
 
 function quickRegisterAndLoginRider() {
     const code = generate6DigitAccessCode("RD");
@@ -25166,7 +25769,7 @@ function quickRegisterAndLoginRider() {
 }
 window.quickRegisterAndLoginRider = quickRegisterAndLoginRider;
 
-function handleOnPageRiderRegister(e) {
+async function handleOnPageRiderRegister(e) {
     if (e && e.preventDefault) e.preventDefault();
 
     const fullName = document.getElementById("onpage-rider-fullname")?.value.trim();
@@ -25177,7 +25780,6 @@ function handleOnPageRiderRegister(e) {
     const plate = document.getElementById("onpage-rider-plate")?.value.trim();
     const license = document.getElementById("onpage-rider-license")?.value.trim() || plate || "-";
     const zone = document.getElementById("onpage-rider-zone")?.value || "ตลาดวิศิษฐ์ชัย และอำเภอบ้านบึง (ระยะ 5 กม.)";
-    let promptPay = document.getElementById("onpage-rider-promptpay")?.value.trim().replace(/[-\s]/g, "") || phone;
 
     if (!fullName) {
         showToast("⚠️ กรุณากรอกชื่อ - นามสกุลจริงของผู้สมัคร");
@@ -25210,8 +25812,33 @@ function handleOnPageRiderRegister(e) {
         return;
     }
 
+    // ส่วนเสริม: ยืนยันตัวตน • ผู้ติดต่อฉุกเฉิน • รูปเอกสาร • บัญชีรับเงินหลายบัญชี • การยินยอม
+    const extras = collectRiderRegExtras("onpage", { identity: true });
+    if (!extras.ok) {
+        showToast(extras.message);
+        const bad = document.getElementById(extras.focusId);
+        if (bad) {
+            bad.scrollIntoView({ behavior: "smooth", block: "center" });
+            if (bad.focus) bad.focus();
+        }
+        return;
+    }
+    // ระบบจ่ายเงินเดิมใช้ PromptPay ID: ถ้าไม่มีบัญชีพร้อมเพย์ ใช้เบอร์มือถือเหมือนเดิม
+    const promptPay = extras.promptPayNumber || phone;
+
     const code = generate6DigitAccessCode("RD");
     const displayName = nickname ? `${fullName} (${nickname})` : fullName;
+
+    // รูปเอกสารเก็บแยกจากใบสมัคร (ต้องบันทึกสำเร็จอย่างน้อยหนึ่งที่ก่อนสร้างไรเดอร์)
+    const docResult = await saveRiderDocumentsGuarded("onpage", code, extras.docs);
+    if (!docResult) return;
+    if (!docResult.cloudOk && !docResult.localOk) {
+        showToast("⚠️ บันทึกรูปเอกสารไม่สำเร็จ กรุณาลองอีกครั้ง");
+        return;
+    }
+    if (!docResult.cloudOk) {
+        showToast("⚠️ รูปเอกสารถูกเก็บไว้ในเครื่องนี้เท่านั้น (ยังส่งขึ้นระบบกลางไม่ได้) กรุณาตรวจอินเทอร์เน็ต");
+    }
 
     const newRider = {
         id: code,
@@ -25226,6 +25853,7 @@ function handleOnPageRiderRegister(e) {
         avatar: "🛵",
         motorcycleModel: model,
         promptPay: promptPay,
+        bankAccounts: extras.bankAccounts,
         accessCode: code,
         codSettledToday: 0
     };
@@ -25244,8 +25872,21 @@ function handleOnPageRiderRegister(e) {
         nickname: nickname,
         phone: phone,
         lineId: lineId,
+        idCard: extras.identity.idCard,
+        address: extras.identity.address,
+        motorcycleModel: model,
+        motorcycleColor: extras.identity.motorcycleColor,
         plate: plate,
+        vehiclePlate: plate,
+        drivingLicense: license,
         zone: zone,
+        shifts: extras.identity.shifts,
+        promptPayNumber: promptPay,
+        promptPayBank: extras.promptPayBank,
+        bankAccounts: extras.bankAccounts,
+        emergencyContact: extras.emergencyContact,
+        docFlags: extras.docFlags,
+        consentAt: extras.consentAt,
         status: "approved",
         appliedAt: new Date().toISOString(),
         approvedAt: new Date().toISOString(),
@@ -25254,6 +25895,7 @@ function handleOnPageRiderRegister(e) {
     saveRiderApplications(apps);
 
     document.getElementById("onpage-rider-reg-form")?.reset();
+    resetRiderRegExtras("onpage");
     closeRiderRegisterModal();
     closeRiderLoginModal();
     loginRiderWithProfile(newRider);

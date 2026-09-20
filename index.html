@@ -2184,8 +2184,8 @@
                                         class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none">
                                 </div>
                                 <div class="sm:col-span-2">
-                                    <label class="font-bold text-slate-700 block mb-1">เลขที่ใบขับขี่ / หรือเลขบัตรประชาชน</label>
-                                    <input type="text" id="onpage-rider-license" placeholder="ระบุเลขที่ใบขับขี่ หรือ เลขบัตร 13 หลัก"
+                                    <label class="font-bold text-slate-700 block mb-1">เลขที่ใบขับขี่</label>
+                                    <input type="text" id="onpage-rider-license" placeholder="ระบุเลขที่ใบขับขี่ (ตามบัตร)"
                                         class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none">
                                 </div>
                             </div>
@@ -2194,11 +2194,11 @@
                         <!-- 3. พื้นที่วิ่งส่ง & บัญชีพร้อมเพย์ -->
                         <div class="space-y-3">
                             <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
-                                <span class="material-symbols-outlined text-base text-sky-600">payments</span>
-                                <span>3. พื้นที่วิ่งส่ง & บัญชีรับเงินค่ารอบ (พร้อมเพย์)</span>
+                                <span class="material-symbols-outlined text-base text-sky-600">map</span>
+                                <span>3. พื้นที่วิ่งส่งประจำ</span>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div>
+                                <div class="sm:col-span-2">
                                     <label class="font-bold text-slate-700 block mb-1">พื้นที่วิ่งส่งประจำ</label>
                                     <select id="onpage-rider-zone" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none">
                                         <option value="ตลาดวิศิษฐ์ชัย และอำเภอบ้านบึง (ระยะ 5 กม.)">ตลาดวิศิษฐ์ชัย และอำเภอบ้านบึง (ระยะ 5 กม.)</option>
@@ -2206,18 +2206,11 @@
                                         <option value="ทุกพื้นที่ในเขตบ้านบึง-ชลบุรี">ทุกพื้นที่ในเขตบ้านบึง-ชลบุรี</option>
                                     </select>
                                 </div>
-                                <div>
-                                    <div class="flex items-center justify-between mb-1">
-                                        <label class="font-bold text-slate-700 block">หมายเลขพร้อมเพย์รับเงิน</label>
-                                        <button type="button" onclick="fillOnPagePromptPayWithPhone()" class="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer">
-                                            ⚡ ใช้เบอร์มือถือ
-                                        </button>
-                                    </div>
-                                    <input type="text" id="onpage-rider-promptpay" placeholder="เบอร์โทร หรือ เลขบัตร 13 หลัก"
-                                        class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none">
-                                </div>
                             </div>
                         </div>
+
+                        <!-- ส่วนเสริม (สร้างโดย app.js: mountRiderRegExtras) ยืนยันตัวตน / ผู้ติดต่อฉุกเฉิน / รูปเอกสาร / บัญชีรับเงิน / ยินยอม -->
+                        <div id="onpage-rider-extras" class="space-y-5"></div>
 
                         <!-- Action Submit Button -->
                         <div class="pt-2">
@@ -6594,8 +6587,7 @@
                                 <div>
                                     <label class="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์มือถือ (10 หลัก):
                                         <span class="text-rose-500">*</span></label>
-                                    <input type="tel" id="reg-rider-phone" required pattern="[0-9]{10}" maxlength="10"
-                                        oninput="syncPromptPayWithPhone()" placeholder="08xxxxxxxx (ใช้ล็อกอินรับงาน)"
+                                    <input type="tel" id="reg-rider-phone" required pattern="[0-9]{10}" maxlength="10" placeholder="08xxxxxxxx (ใช้ล็อกอินรับงาน)"
                                         class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
                                     <span
                                         class="text-[10px] text-slate-400">ใช้เบอร์นี้เข้าสู่ระบบรับงานหลังได้รับอนุมัติ</span>
@@ -6744,54 +6736,8 @@
                             </div>
                         </div>
 
-                        <!-- Section 5: Payout / PromptPay -->
-                        <div
-                            class="bg-gradient-to-br from-sky-50/60 to-slate-50 p-3.5 rounded-2xl border border-sky-200 space-y-3">
-                            <div
-                                class="font-extrabold text-slate-800 flex items-center justify-between border-b border-sky-200/80 pb-2">
-                                <div class="flex items-center gap-1.5">
-                                    <span class="material-symbols-outlined text-base text-sky-600">payments</span>
-                                    <span>5. บัญชีรับเงินค่ารอบ (พร้อมเพย์ PromptPay)</span>
-                                </div>
-                                <span
-                                    class="text-[11px] text-sky-700 bg-white px-2 py-0.5 rounded-lg border border-sky-200 font-bold">โอนเงินค่ารอบอัตโนมัติ</span>
-                            </div>
-
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                <div>
-                                    <div class="flex items-center justify-between mb-1">
-                                        <label class="font-bold text-slate-700 block">หมายเลขพร้อมเพย์:</label>
-                                        <div class="flex items-center gap-1">
-                                            <button type="button" onclick="fillPromptPayWith('phone')"
-                                                class="text-[10px] font-bold text-sky-700 hover:text-sky-900 bg-white hover:bg-sky-100 px-1.5 py-0.5 rounded border border-sky-200 transition-all">⚡
-                                                ใช้เบอร์มือถือ</button>
-                                            <button type="button" onclick="fillPromptPayWith('idcard')"
-                                                class="text-[10px] font-bold text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 transition-all">⚡
-                                                ใช้เลขบัตร</button>
-                                        </div>
-                                    </div>
-                                    <input type="text" id="reg-rider-promptpay"
-                                        placeholder="เบอร์โทร หรือ เลขบัตร 13 หลัก"
-                                        class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
-                                    <span class="text-[10px] text-slate-500 mt-0.5 block">💡 หากเว้นว่างไว้
-                                        ระบบจะใช้เบอร์โทรศัพท์มือถือที่ลงทะเบียนรับเงินให้อัตโนมัติ</span>
-                                </div>
-                                <div>
-                                    <label class="font-bold text-slate-700 block mb-1">ธนาคารเจ้าของบัญชี:</label>
-                                    <select id="reg-rider-bank"
-                                        class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-sky-500 outline-none">
-                                        <option value="พร้อมเพย์ e-Wallet">พร้อมเพย์ ทั่วไป (PromptPay)</option>
-                                        <option value="กสิกรไทย">กสิกรไทย (KBANK)</option>
-                                        <option value="ไทยพาณิชย์">ไทยพาณิชย์ (SCB)</option>
-                                        <option value="กรุงไทย">กรุงไทย (KTB)</option>
-                                        <option value="กรุงเทพ">กรุงเทพ (BBL)</option>
-                                        <option value="กรุงศรีอยุธยา">กรุงศรีอยุธยา (BAY)</option>
-                                        <option value="ออมสิน">ออมสิน (GSB)</option>
-                                        <option value="ทหารไทยธนชาต">ทหารไทยธนชาต (ttb)</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
+                        <!-- ส่วนเสริม (สร้างโดย app.js: mountRiderRegExtras) ผู้ติดต่อฉุกเฉิน / รูปเอกสาร / บัญชีรับเงิน / ยินยอม -->
+                        <div id="reg-rider-extras" class="space-y-4"></div>
                     </form>
                 </div>
 
