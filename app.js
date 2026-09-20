@@ -17099,7 +17099,8 @@ function renderAdminStalls() {
     const container = document.getElementById("admin-content-stalls");
     if (!container) return;
 
-    updateAdminStallsBadge();
+    try {
+        updateAdminStallsBadge();
     const merchantApps = loadMerchantApplications();
     const pendingMerchantApps = merchantApps.filter(a => a.status === "pending");
     const approvedMerchantApps = merchantApps.filter(a => a.status === "approved");
@@ -17185,6 +17186,7 @@ function renderAdminStalls() {
     const readyTasksCount = stallActiveTasks.filter(t => t.stage === 3).length;
 
     const todayStallGrossTotal = vendorSettlement.totalVendorGross || 0;
+    const todayStallSalesTotal = todayStallGrossTotal;
     const todayNetPayoutTotal = vendorSettlement.totalVendorAmount || 0;
     const unsettledVendorTotal = (vendorSettlement.totalPendingAmount !== undefined)
         ? vendorSettlement.totalPendingAmount
@@ -18057,6 +18059,19 @@ function renderAdminStalls() {
             ${subTabContentHtml}
         </div>
     `;
+    } catch (err) {
+        console.error("renderAdminStalls error:", err);
+        container.innerHTML = `
+            <div class="bg-white p-6 rounded-3xl border border-rose-200 shadow-sm text-center space-y-3">
+                <div class="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto text-xl font-black">⚠️</div>
+                <div class="font-extrabold text-slate-800 text-sm">เกิดข้อผิดพลาดในการแสดงผลหน้าจัดการร้านค้า</div>
+                <div class="text-xs text-slate-500 font-mono">${err && err.message}</div>
+                <button onclick="renderAdminStalls()" class="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
+                    🔄 ลองโหลดใหม่อีกครั้ง
+                </button>
+            </div>
+        `;
+    }
 }
 window.renderAdminStalls = renderAdminStalls;
 
