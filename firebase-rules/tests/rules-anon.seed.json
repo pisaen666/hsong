@@ -1,0 +1,38 @@
+{
+  "community_riders": {
+    "ZZSEEDR0": {
+      "id": "ZZSEEDR0",
+      "name": "เดิม",
+      "phone": "0822222222",
+      "accessCode": "ZZSEEDR0",
+      "status": "available"
+    }
+  },
+  "merchant_applications": {
+    "ZZSEEDM0": {
+      "id": "ZZSEEDM0",
+      "status": "approved",
+      "accessCode": "654321",
+      "stallData": {
+        "stallId": "ZZSEEDM0",
+        "stallName": "เดิม",
+        "phone": "0833333333"
+      }
+    }
+  },
+  "custom_market_stalls": {
+    "ZZSEEDS0": {
+      "stallId": "ZZSEEDS0",
+      "stallName": "เดิม",
+      "accessCode": "222222"
+    }
+  },
+  "stall_catalog_database": {
+    "ZZSEEDS0": [
+      {
+        "name": "หมู",
+        "price": 100
+      }
+    ]
+  }
+}

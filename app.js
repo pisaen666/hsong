@@ -412,6 +412,8 @@ async function verifyOwnerPassword(password) {
     }
 }
 
+let _legacyMigrationStarted = false;
+
 function applyOwnerSession(user) {
     const signedIn = !!user && isOwnerUid(user.uid);
     if (signedIn) {
@@ -423,6 +425,11 @@ function applyOwnerSession(user) {
     }
     if (typeof renderAuthHeaderButtons === "function") renderAuthHeaderButtons();
     if (signedIn) {
+        // ย้ายรายการแบบเก่า (คีย์ 0,1,2...) บนคลาวด์เป็นคีย์ id หนึ่งครั้งต่อการเปิดหน้า (ทำซ้ำได้ ไม่เขียนถ้าย้ายแล้ว)
+        if (!_legacyMigrationStarted && typeof migrateLegacyCloudLists === "function") {
+            _legacyMigrationStarted = true;
+            migrateLegacyCloudLists().catch(() => { _legacyMigrationStarted = false; });
+        }
         // ดึงข้อมูลส่วนตัวไรเดอร์ (เจ้าของอ่านได้คนเดียว) มาไว้ในหน่วยความจำ แล้ววาดหน้าไรเดอร์ใหม่ถ้าเปิดอยู่
         refreshRiderPrivateCache().then(ok => {
             if (ok && state.currentRole === "admin" && _activeAdminTab === "riders" && typeof renderAdminRiders === "function") renderAdminRiders();
@@ -465,8 +472,185 @@ function signOutOwner() {
     setActiveRoleView("customer");
 }
 
+// ทำรายการของเจ้าของ (อนุมัติ/ปฏิเสธ/ลบ) ต้องล็อกอินเจ้าของก่อน — กฎ Firebase บังคับซ้ำอีกชั้นหนึ่ง
+function requireOwnerAction() {
+    if (isOwnerSignedIn()) return true;
+    showToast("🔒 ต้องล็อกอินเจ้าของ (อีเมลและรหัสผ่าน) ก่อนจึงจะทำรายการนี้ได้");
+    if (typeof openAdminLoginModal === "function") openAdminLoginModal();
+    return false;
+}
+window.requireOwnerAction = requireOwnerAction;
+
 window.isOwnerSignedIn = isOwnerSignedIn;
 window.verifyOwnerPassword = verifyOwnerPassword;
+
+// =================================================================
+// เขียนรายการขึ้น Firebase "ทีละ id" (ไม่เขียนทั้งก้อน)
+// เหตุผล: กฎ Firebase แยกสิทธิ์ได้ระดับรายการ — ใครก็สมัคร (pending) ได้ แต่อนุมัติ/ลบต้องเป็นเจ้าของ
+// โหนดที่ใช้: rider_applications, community_riders, merchant_applications, custom_market_stalls, stall_catalog_database
+// =================================================================
+const _cloudBaselines = {};      // node -> { key: json } สิ่งที่รู้ว่าอยู่บนคลาวด์ตอนนี้ (ใช้หาว่ารายการไหนเปลี่ยน)
+const _cloudBaselineWaiters = {};
+
+// แปลงเป็น JSON รูปแบบเดียวกับที่ Firebase เก็บจริง (คีย์เรียงตัวอักษร ตัด null/undefined/อาร์เรย์ว่าง/ออบเจ็กต์ว่าง)
+// เพื่อเทียบว่า "รายการเปลี่ยนจริงไหม" — ไม่งั้นข้อมูลที่เท่ากันจะดูเหมือนต่างกันแล้วเขียนซ้ำทุกครั้ง
+function _canonJson(value) {
+    const norm = x => {
+        if (x === null || x === undefined) return undefined;
+        if (Array.isArray(x)) {
+            const arr = x.map(v => { const n = norm(v); return n === undefined ? null : n; });
+            return arr.some(v => v !== null) ? arr : undefined;
+        }
+        if (typeof x === "object") {
+            const out = {};
+            Object.keys(x).sort().forEach(k => { const n = norm(x[k]); if (n !== undefined) out[k] = n; });
+            return Object.keys(out).length ? out : undefined;
+        }
+        return x;
+    };
+    const n = norm(value);
+    return n === undefined ? undefined : JSON.stringify(n);
+}
+
+function _cloudSafeKey(k) {
+    return String(k).replace(/[.#$\/\[\]]/g, "_");
+}
+
+// แปลงค่าจากคลาวด์ (array แบบเก่า หรือ object แบบ id) เป็น { key: item }
+// รายการแบบเก่าคีย์ตัวเลข (0,1,2...) ถูกอ่านก่อน แล้วรายการคีย์ id ใหม่เขียนทับ (รายการใหม่กว่าเสมอ) จึงไม่เกิดรายการซ้ำระหว่างรอย้ายข้อมูล
+function cloudValToMap(val, keyFn) {
+    const map = {};
+    if (!val || typeof val !== "object") return map;
+    const entries = Array.isArray(val)
+        ? val.map((v, i) => [String(i), v])
+        : Object.entries(val);
+    const isLegacyKey = k => /^\d+$/.test(k);
+    entries.filter(([k]) => isLegacyKey(k)).concat(entries.filter(([k]) => !isLegacyKey(k))).forEach(([k, item]) => {
+        if (!item || typeof item !== "object") return;
+        const id = isLegacyKey(k) ? keyFn(item) : k;
+        if (id === undefined || id === null || id === "") return;
+        map[_cloudSafeKey(id)] = item;
+    });
+    return map;
+}
+
+function cloudValToList(val, keyFn) {
+    return Object.values(cloudValToMap(val, keyFn));
+}
+window.cloudValToList = cloudValToList;
+
+const _keyOfRiderApp = a => a && a.id && normalizeRiderCode(a.id);
+const _keyOfCommunityRider = r => r && (r.id || r.riderId || r.accessCode);
+const _keyOfMerchantApp = a => a && (a.id || (a.stallData && a.stallData.stallId));
+const _keyOfStall = s => s && s.stallId;
+
+// โหนดที่ข้อมูลในเครื่องถูกตัดข้อมูลส่วนตัวไรเดอร์ออกก่อนเขียนเสมอ — ต้องตัดฝั่งคลาวด์ตอนเทียบด้วย
+// (รายการเก่าบนคลาวด์อาจยังมีข้อมูลส่วนตัวติดอยู่ ถ้าไม่ตัดจะเห็นว่า "ต่างกัน" ทุกครั้ง; ตัวเทียบไม่ลบข้อมูลบนคลาวด์เอง)
+const _CLOUD_COMPARE_MAPPERS = {
+    rider_applications: stripRiderPrivate,
+    community_riders: stripRiderPrivate
+};
+
+// เรียกจากตัวฟัง .on("value") เพื่อบอกว่าตอนนี้คลาวด์มีอะไรอยู่ (จะได้เขียนเฉพาะที่เปลี่ยน)
+function noteCloudSnapshot(node, val, keyFn, mapper) {
+    mapper = mapper || _CLOUD_COMPARE_MAPPERS[node];
+    const map = keyFn ? cloudValToMap(val, keyFn) : ((val && typeof val === "object") ? val : {});
+    const base = {};
+    Object.keys(map).forEach(k => { base[k] = _canonJson(mapper ? mapper(map[k]) : map[k]); });
+    _cloudBaselines[node] = base;
+}
+
+function _ensureCloudBaseline(node, keyFn, mapper) {
+    if (_cloudBaselines[node]) return Promise.resolve(true);
+    if (_cloudBaselineWaiters[node]) return _cloudBaselineWaiters[node];
+    _cloudBaselineWaiters[node] = _withTimeout(db.ref(node).once("value"), 8000)
+        .then(snap => { noteCloudSnapshot(node, snap.val(), keyFn, mapper); return true; })
+        .catch(() => false)
+        .then(ok => { delete _cloudBaselineWaiters[node]; return ok; });
+    return _cloudBaselineWaiters[node];
+}
+
+// map = { key: item }  เขียนเฉพาะ key ที่เปลี่ยนไปจากที่คลาวด์มี
+//   opts.keyFn/mapper : ใช้ตอนโหลด baseline (mapper = ตัดข้อมูลส่วนตัวออกก่อนเทียบ)
+//   opts.canDelete    : ลบรายการที่หายไปหรือไม่ (ค่าเริ่มต้น = เฉพาะเจ้าของ)
+//   opts.canCreate    : สร้างรายการใหม่ได้ไหม (ค่าเริ่มต้น = true; ผู้ใช้ทั่วไปสร้าง community_riders/custom_market_stalls ไม่ได้)
+async function syncKeyedToCloud(node, map, opts) {
+    opts = opts || {};
+    try {
+        if (!(isFirebaseReady() && db)) return { written: 0, skipped: true };
+        const ready = await _ensureCloudBaseline(node, opts.keyFn, opts.mapper);
+        if (!ready) return { written: 0, skipped: true };   // ยังคุยกับคลาวด์ไม่ได้ — ข้อมูลยังอยู่ในเครื่อง
+        const base = _cloudBaselines[node];
+        const owner = isOwnerSignedIn();
+        const canDelete = opts.canDelete === undefined ? owner : opts.canDelete;
+        const canCreate = opts.canCreate === undefined ? true : opts.canCreate;
+        const jobs = [];
+        const mapper = opts.mapper || _CLOUD_COMPARE_MAPPERS[node];
+        Object.keys(map).forEach(k => {
+            const item = mapper ? mapper(map[k]) : map[k];
+            const json = _canonJson(item);
+            if (json === undefined || base[k] === json) return;
+            if (!(k in base) && !canCreate) return;
+            // parse กลับเพื่อล้างค่า undefined (Firebase โยน error ถ้าเจอ undefined) และห่อให้แต่ละรายการล้มแยกกัน
+            jobs.push(Promise.resolve().then(() => db.ref(node + "/" + k).set(JSON.parse(JSON.stringify(item)))).then(() => { base[k] = json; }));
+        });
+        if (canDelete) {
+            Object.keys(base).forEach(k => {
+                if (k in map) return;
+                jobs.push(Promise.resolve().then(() => db.ref(node + "/" + k).remove()).then(() => { delete base[k]; }));
+            });
+        }
+        const results = await Promise.allSettled(jobs);
+        const failed = results.filter(r => r.status === "rejected");
+        if (failed.length) console.warn("Firebase save " + node + ": " + failed.length + " รายการถูกปฏิเสธ", failed[0].reason);
+        return { written: results.length - failed.length, failed: failed.length };
+    } catch (e) {
+        console.warn("syncKeyedToCloud " + node + " error:", e);
+        return { written: 0, failed: 1 };
+    }
+}
+
+function syncListToCloud(node, list, keyFn, opts) {
+    const map = {};
+    (list || []).forEach(item => {
+        const id = keyFn(item);
+        if (id === undefined || id === null || id === "") return;
+        map[_cloudSafeKey(id)] = item;
+    });
+    return syncKeyedToCloud(node, map, Object.assign({ keyFn }, opts || {}));
+}
+window.syncListToCloud = syncListToCloud;
+window.syncKeyedToCloud = syncKeyedToCloud;
+
+// เจ้าของล็อกอินครั้งแรกหลังอัปเดต: ย้ายรายการแบบเก่า (คีย์ 0,1,2...) ไปเป็นคีย์ id (เขียนครั้งเดียว ไม่ทำซ้ำถ้าย้ายแล้ว)
+const _LEGACY_LIST_NODES = [
+    ["rider_applications", _keyOfRiderApp],
+    ["community_riders", _keyOfCommunityRider],
+    ["merchant_applications", _keyOfMerchantApp],
+    ["custom_market_stalls", _keyOfStall]
+];
+async function migrateLegacyCloudLists() {
+    if (!isOwnerSignedIn() || !(isFirebaseReady() && db)) return;
+    for (const [node, keyFn] of _LEGACY_LIST_NODES) {
+        try {
+            const snap = await _withTimeout(db.ref(node).once("value"), 10000);
+            const val = snap.val();
+            if (!val || typeof val !== "object") continue;
+            const entries = Array.isArray(val) ? val.map((v, i) => [String(i), v]) : Object.entries(val);
+            const legacyKeys = entries.filter(([k, v]) => /^\d+$/.test(k) && v).map(([k]) => k);
+            if (!legacyKeys.length) continue;
+            const updates = {};
+            const map = cloudValToMap(val, keyFn);
+            Object.keys(map).forEach(k => { updates[k] = map[k]; });
+            legacyKeys.forEach(k => { if (!(k in updates)) updates[k] = null; });
+            await db.ref(node).update(updates);
+            console.info("ย้ายข้อมูล " + node + " เป็นคีย์ id แล้ว (" + Object.keys(map).length + " รายการ)");
+        } catch (e) {
+            console.warn("migrateLegacyCloudLists " + node + " ไม่สำเร็จ:", e);
+        }
+    }
+}
+window.migrateLegacyCloudLists = migrateLegacyCloudLists;
 
 function openHubClearOrdersModal() {
     const modal = document.getElementById("hub-clear-orders-modal");
@@ -1045,18 +1229,8 @@ function saveMarketDataToStorage() {
         } catch (storageErr) {
             console.warn("localStorage quota exceeded for custom_market_stalls:", storageErr);
         }
-        if (isFirebaseReady() && db) {
-            db.ref("custom_market_stalls").set(customOnly).catch(err => {
-                console.warn("Firebase save custom_market_stalls failed:", err);
-            });
-        }
-        try {
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/custom_market_stalls.json", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(customOnly)
-            }).catch(() => {});
-        } catch (e) {}
+        // ผู้ใช้ทั่วไปแก้แผงที่มีอยู่ได้ (เปิด/ปิดร้าน สินค้า) แต่ "เปิดแผงใหม่" หรือลบแผงเป็นสิทธิ์เจ้าของ
+        return syncListToCloud("custom_market_stalls", customOnly, _keyOfStall, { canCreate: isOwnerSignedIn() });
     } catch (e) { }
 }
 
@@ -1068,24 +1242,7 @@ async function saveMarketDataToStorageAsync() {
         } catch (storageErr) {
             console.warn("localStorage quota exceeded for custom_market_stalls:", storageErr);
         }
-        const promises = [];
-        if (isFirebaseReady() && db) {
-            promises.push(
-                db.ref("custom_market_stalls").set(customOnly).catch(err => {
-                    console.warn("Firebase save custom_market_stalls failed:", err);
-                })
-            );
-        }
-        try {
-            promises.push(
-                fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/custom_market_stalls.json", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(customOnly)
-                }).catch(e => console.warn("REST PUT custom_market_stalls failed:", e))
-            );
-        } catch (e) {}
-        await Promise.allSettled(promises);
+        await syncListToCloud("custom_market_stalls", customOnly, _keyOfStall, { canCreate: isOwnerSignedIn() });
     } catch (e) { }
 }
 window.saveMarketDataToStorageAsync = saveMarketDataToStorageAsync;
@@ -1098,12 +1255,8 @@ function initCustomStallsRealtimeSync() {
     db.ref("custom_market_stalls").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            let rawList = [];
-            if (Array.isArray(data)) {
-                rawList = data.filter(Boolean);
-            } else if (data && typeof data === "object") {
-                rawList = Object.values(data).filter(Boolean);
-            }
+            noteCloudSnapshot("custom_market_stalls", data, _keyOfStall);
+            const rawList = cloudValToList(data, _keyOfStall);
 
             if (rawList.length > 0) {
                 try {
@@ -10715,42 +10868,15 @@ function loadSavedStallCatalogDatabase() {
 function saveStallCatalogDatabaseToStorage() {
     try {
         localStorage.setItem("talathub_stall_catalog_database", JSON.stringify(STALL_CATALOG_DATABASE));
-        if (isFirebaseReady() && db) {
-            db.ref("stall_catalog_database").set(STALL_CATALOG_DATABASE).catch(err => {
-                console.warn("Firebase save stall_catalog_database failed:", err);
-            });
-        }
-        try {
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/stall_catalog_database.json", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(STALL_CATALOG_DATABASE)
-            }).catch(() => {});
-        } catch (e) {}
+        // แผงค้าแก้สินค้าของตัวเองได้ แต่สร้างแคตตาล็อกของแผงใหม่ (ตอนอนุมัติ) เป็นสิทธิ์เจ้าของ
+        return syncKeyedToCloud("stall_catalog_database", STALL_CATALOG_DATABASE, { canCreate: isOwnerSignedIn() });
     } catch (e) {}
 }
 
 async function saveStallCatalogDatabaseToStorageAsync() {
     try {
         localStorage.setItem("talathub_stall_catalog_database", JSON.stringify(STALL_CATALOG_DATABASE));
-        const promises = [];
-        if (isFirebaseReady() && db) {
-            promises.push(
-                db.ref("stall_catalog_database").set(STALL_CATALOG_DATABASE).catch(err => {
-                    console.warn("Firebase save stall_catalog_database failed:", err);
-                })
-            );
-        }
-        try {
-            promises.push(
-                fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/stall_catalog_database.json", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(STALL_CATALOG_DATABASE)
-                }).catch(e => console.warn("REST PUT stall_catalog_database failed:", e))
-            );
-        } catch(e) {}
-        await Promise.allSettled(promises);
+        await syncKeyedToCloud("stall_catalog_database", STALL_CATALOG_DATABASE, { canCreate: isOwnerSignedIn() });
     } catch (e) {}
 }
 window.saveStallCatalogDatabaseToStorageAsync = saveStallCatalogDatabaseToStorageAsync;
@@ -10763,6 +10889,7 @@ function initCatalogDbRealtimeSync() {
     db.ref("stall_catalog_database").on("value", snapshot => {
         try {
             const data = snapshot.val();
+            noteCloudSnapshot("stall_catalog_database", data);
             if (data && typeof data === "object") {
                 Object.assign(STALL_CATALOG_DATABASE, data);
                 localStorage.setItem("talathub_stall_catalog_database", JSON.stringify(STALL_CATALOG_DATABASE));
@@ -19157,6 +19284,7 @@ function handleMerchantAppEditSubmit(e) {
 window.handleMerchantAppEditSubmit = handleMerchantAppEditSubmit;
 
 function reconsiderMerchantApplication(appId) {
+    if (!requireOwnerAction()) return;
     const apps = loadMerchantApplications();
     const app = apps.find(a => a.id === appId);
     if (!app) return;
@@ -19192,6 +19320,7 @@ function reconsiderMerchantApplication(appId) {
 window.reconsiderMerchantApplication = reconsiderMerchantApplication;
 
 function deleteMerchantApplication(appId) {
+    if (!requireOwnerAction()) return;
     if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบใบสมัครนี้?")) return;
     let apps = loadMerchantApplications();
     const appToDelete = apps.find(a => a.id === appId);
@@ -19227,6 +19356,7 @@ function deleteMerchantApplication(appId) {
 window.deleteMerchantApplication = deleteMerchantApplication;
 
 function deleteStallByAdmin(stallId) {
+    if (!requireOwnerAction()) return;
     if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบแผงค้านี้ออกจากทำเนียบแผงค้า?")) return;
 
     for (let i = MARKET_DATA.length - 1; i >= 0; i--) {
@@ -19499,24 +19629,15 @@ function saveCommunityRiders(list) {
     try {
         const cleaned = (list || []).filter(r => r && !isMockCommunityRider(r));
         localStorage.setItem("talathub_community_riders", JSON.stringify(stripRiderPrivateList(cleaned)));
-        if (isFirebaseReady() && db) {
-            db.ref("community_riders").set(stripRiderPrivateList(cleaned)).catch(err => {
-                console.warn("Firebase save community_riders failed:", err);
-            });
-        }
-        try {
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/community_riders.json", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(stripRiderPrivateList(cleaned))
-            }).catch(() => {});
-        } catch (e) {}
+        // การ "เป็นไรเดอร์" เกิดจากเจ้าของอนุมัติเท่านั้น: ผู้ใช้ทั่วไปอัปเดตข้อมูลไรเดอร์ที่มีอยู่ได้ แต่สร้าง/ลบรายการไม่ได้
+        return syncListToCloud("community_riders", stripRiderPrivateList(cleaned), _keyOfCommunityRider, { canCreate: isOwnerSignedIn() });
     } catch (e) {
         console.error("Error saving community riders:", e);
     }
 }
 
 async function cleanRiderDatabase(skipToast) {
+    if (!requireOwnerAction()) return;   // ล้างฐานข้อมูลไรเดอร์ = เจ้าของเท่านั้น
     try {
         localStorage.removeItem("talathub_community_riders");
         localStorage.removeItem("talathub_rider_applications");
@@ -19621,18 +19742,6 @@ function saveRiderApplications(apps) {
             return a;
         });
         localStorage.setItem("talathub_rider_applications", JSON.stringify(stripRiderPrivateList(cleaned)));
-        if (isFirebaseReady() && db) {
-            db.ref("rider_applications").set(stripRiderPrivateList(cleaned)).catch(err => {
-                console.warn("Firebase save rider_applications failed:", err);
-            });
-        }
-        try {
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/rider_applications.json", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(stripRiderPrivateList(cleaned))
-            }).catch(() => {});
-        } catch (e) {}
 
         // เจ้าของแก้ไข/อนุมัติใบสมัคร: ถ้าข้อมูลส่วนตัวเปลี่ยน (หรือยังไม่เคยย้ายไป rider_private) ให้บันทึกลงที่เก็บลับ
         if (isOwnerSignedIn()) {
@@ -19643,6 +19752,9 @@ function saveRiderApplications(apps) {
                 if (JSON.stringify(priv) !== JSON.stringify(cached)) saveRiderPrivate(a.id, priv);
             });
         }
+
+        // เขียนขึ้นคลาวด์เฉพาะใบสมัครที่เปลี่ยน (ทีละ id) — กฎ Firebase อนุญาตให้ผู้ใช้ทั่วไปสร้างได้เฉพาะสถานะ pending
+        return syncListToCloud("rider_applications", stripRiderPrivateList(cleaned), _keyOfRiderApp);
     } catch (e) {
         console.error("Error saving rider applications:", e);
     }
@@ -19660,7 +19772,7 @@ function initRiderRealtimeSync() {
         ]).then(([appsData, ridersData]) => {
             let apps = [];
             if (appsData) {
-                const rawApps = Array.isArray(appsData) ? appsData.filter(Boolean) : Object.values(appsData).filter(Boolean);
+                const rawApps = cloudValToList(appsData, _keyOfRiderApp);
                 apps = rawApps.filter(a => a && !isMockRiderApplication(a)).map(a => {
                     if (a.id) a.id = normalizeRiderCode(a.id);
                     if (a.accessCode) a.accessCode = normalizeRiderCode(a.accessCode);
@@ -19676,7 +19788,7 @@ function initRiderRealtimeSync() {
 
             let riders = [];
             if (ridersData) {
-                const rawRiders = Array.isArray(ridersData) ? ridersData.filter(Boolean) : Object.values(ridersData).filter(Boolean);
+                const rawRiders = cloudValToList(ridersData, _keyOfCommunityRider);
                 riders = rawRiders.filter(r => r && !isMockCommunityRider(r));
             } else {
                 riders = loadCommunityRiders();
@@ -19684,7 +19796,7 @@ function initRiderRealtimeSync() {
 
             // Auto-reconcile: If application is approved, guarantee rider is in community_riders
             const { riders: reconciledRiders, changed } = reconcileApprovedRiders(apps, riders);
-            if (changed || (reconciledRiders.length > 0 && (!ridersData || ridersData.length === 0))) {
+            if (changed || (reconciledRiders.length > 0 && !ridersData)) {
                 saveCommunityRiders(reconciledRiders);
             } else if (riders.length > 0) {
                 localStorage.setItem("talathub_community_riders", JSON.stringify(stripRiderPrivateList(riders)));
@@ -19704,12 +19816,8 @@ function initRiderRealtimeSync() {
     db.ref("rider_applications").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            let rawList = [];
-            if (Array.isArray(data)) {
-                rawList = data.filter(Boolean);
-            } else if (data && typeof data === "object") {
-                rawList = Object.values(data).filter(Boolean);
-            }
+            noteCloudSnapshot("rider_applications", data, _keyOfRiderApp);
+            const rawList = cloudValToList(data, _keyOfRiderApp);
 
             let cleaned = rawList.filter(a => a && !isMockRiderApplication(a)).map(a => {
                 if (a.id) a.id = normalizeRiderCode(a.id);
@@ -19723,9 +19831,7 @@ function initRiderRealtimeSync() {
                 const localApps = loadRiderApplications();
                 if (localApps && localApps.length > 0) {
                     cleaned = localApps;
-                    if (isFirebaseReady() && db) {
-                        db.ref("rider_applications").set(stripRiderPrivateList(cleaned)).catch(() => {});
-                    }
+                    syncListToCloud("rider_applications", stripRiderPrivateList(cleaned), _keyOfRiderApp);
                 }
             } else {
                 // Merge any pending local applications that have not reached Firebase yet
@@ -19764,25 +19870,17 @@ function initRiderRealtimeSync() {
     db.ref("community_riders").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            let rawList = [];
-            if (Array.isArray(data)) {
-                rawList = data.filter(Boolean);
-            } else if (data && typeof data === "object") {
-                rawList = Object.values(data).filter(Boolean);
-            }
+            noteCloudSnapshot("community_riders", data, _keyOfCommunityRider);
+            const rawList = cloudValToList(data, _keyOfCommunityRider);
 
             let cleaned = rawList.filter(r => r && !isMockCommunityRider(r));
-
-
 
             // Reconcile with approved applications
             const apps = loadRiderApplications();
             const { riders: reconciledRiders, changed } = reconcileApprovedRiders(apps, cleaned);
             if (changed) {
                 cleaned = reconciledRiders;
-                if (isFirebaseReady() && db) {
-                    db.ref("community_riders").set(stripRiderPrivateList(cleaned)).catch(() => {});
-                }
+                syncListToCloud("community_riders", stripRiderPrivateList(cleaned), _keyOfCommunityRider, { canCreate: isOwnerSignedIn() });
             }
 
             localStorage.setItem("talathub_community_riders", JSON.stringify(stripRiderPrivateList(cleaned)));
@@ -19807,12 +19905,8 @@ function initMerchantRealtimeSync() {
     db.ref("merchant_applications").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            let rawList = [];
-            if (Array.isArray(data)) {
-                rawList = data.filter(Boolean);
-            } else if (data && typeof data === "object") {
-                rawList = Object.values(data).filter(Boolean);
-            }
+            noteCloudSnapshot("merchant_applications", data, _keyOfMerchantApp);
+            const rawList = cloudValToList(data, _keyOfMerchantApp);
 
             localStorage.setItem("talathub_merchant_applications", JSON.stringify(rawList));
             updateAdminStallsBadge();
@@ -20693,6 +20787,23 @@ Object.assign(window, {
     fillRiderRegExtrasSample, collectRiderRegExtras, resetRiderRegExtras, mountRiderRegExtras
 });
 
+// ผู้สมัครไรเดอร์ทั่วไป = "pending" รอเจ้าของอนุมัติ (กฎ Firebase บังคับด้วย)
+// เจ้าของที่ล็อกอินอยู่ (เช่น ทดสอบปุ่ม 1-Click) อนุมัติทันทีได้ และเท่านั้นที่สร้างไรเดอร์เข้าระบบได้
+function _newRiderAppStatusFields() {
+    return isOwnerSignedIn()
+        ? { status: "approved", approvedAt: new Date().toISOString(), notes: "อนุมัติอัตโนมัติ (เจ้าของล็อกอินอยู่)" }
+        : { status: "pending" };
+}
+
+// ผู้สมัครทั่วไปสมัครซ้ำด้วยเบอร์ที่ได้รับอนุมัติแล้วไม่ได้ (จะทับใบสมัครที่อนุมัติ) — คืน true ถ้าต้องหยุด
+function _blockReapplyOverApproved(existingApp) {
+    if (!isOwnerSignedIn() && existingApp && existingApp.status === "approved") {
+        showToast("⚠️ เบอร์นี้ได้รับอนุมัติเป็นไรเดอร์แล้ว กรุณาเข้าสู่ระบบด้วยรหัสเดิม หรือติดต่อแอดมิน");
+        return true;
+    }
+    return false;
+}
+
 async function handleRiderRegisterSubmit(e) {
     if (e && e.preventDefault) e.preventDefault();
 
@@ -20814,10 +20925,10 @@ async function handleRiderRegisterSubmit(e) {
         docFlags: extras.docFlags,
         consentAt: extras.consentAt,
         appliedAt: new Date().toISOString(),
-        status: "approved",
-        approvedAt: new Date().toISOString(),
-        notes: "อนุมัติอัตโนมัติ (Fast-Track)"
+        ..._newRiderAppStatusFields()
     };
+
+    if (_blockReapplyOverApproved(existingIndex >= 0 ? apps[existingIndex] : null)) return;
 
     // รูปเอกสารเก็บแยกจากใบสมัคร (ต้องบันทึกสำเร็จอย่างน้อยหนึ่งที่ก่อนสร้างใบสมัคร)
     const docResult = await saveRiderDocumentsGuarded("reg", riderCode, extras.docs, {
@@ -20844,7 +20955,7 @@ async function handleRiderRegisterSubmit(e) {
     saveRiderApplications(apps);
     _lastSubmittedRiderApp = newApp;
 
-    // Immediately create community rider record so they are ready to receive orders & login
+    // สร้างไรเดอร์เข้าระบบทันทีเฉพาะเมื่อเจ้าของล็อกอินอยู่ — ผู้สมัครทั่วไปต้องรอเจ้าของอนุมัติ (approveRiderApplication จะสร้างให้)
     const displayName = nickname ? `${fullName} (${nickname})` : fullName;
     const newRiderObj = {
         id: riderCode,
@@ -20865,11 +20976,13 @@ async function handleRiderRegisterSubmit(e) {
         accessCode: riderCode,
         codSettledToday: 0
     };
-    const curRiders = loadCommunityRiders();
-    const rIdx = curRiders.findIndex(r => (r.phone || "").replace(/[-\s]/g, "") === phone);
-    if (rIdx >= 0) curRiders[rIdx] = newRiderObj;
-    else curRiders.unshift(newRiderObj);
-    saveCommunityRiders(curRiders);
+    if (isOwnerSignedIn()) {
+        const curRiders = loadCommunityRiders();
+        const rIdx = curRiders.findIndex(r => (r.phone || "").replace(/[-\s]/g, "") === phone);
+        if (rIdx >= 0) curRiders[rIdx] = newRiderObj;
+        else curRiders.unshift(newRiderObj);
+        saveCommunityRiders(curRiders);
+    }
     // Reset form inputs for next time
     document.getElementById("rider-register-form")?.reset();
     resetRiderRegExtras("reg");
@@ -20964,6 +21077,7 @@ window.goToAdminToApproveRiderFromSuccess = goToAdminToApproveRiderFromSuccess;
 
 // Fast-track 1-click approval for tester / admin directly from success screen
 function approveAndLoginCurrentSubmittedRider() {
+    if (!requireOwnerAction()) return;
     let app = _lastSubmittedRiderApp;
     if (!app) {
         const apps = loadRiderApplications();
@@ -21071,12 +21185,19 @@ function loginRiderById(riderId) {
 window.loginRiderById = loginRiderById;
 
 function approveAndLoginRider(appId) {
-    approveRiderApplication(appId);
-    const apps = loadRiderApplications();
     const cleanId = String(appId || "").trim();
-    const app = apps.find(x => x.id === cleanId || (x.phone || "").replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, ""));
-    if (!app) return;
-    const riders = loadCommunityRiders();
+    const findApp = () => loadRiderApplications().find(x => x.id === cleanId || (x.phone || "").replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, ""));
+    const before = findApp();
+    if (before && before.status === "approved") {
+        // อนุมัติแล้ว: ใครที่มีรหัสก็เข้าสู่ระบบได้ ไม่ต้องอนุมัติซ้ำ
+    } else {
+        // ยังไม่อนุมัติ: การอนุมัติเป็นสิทธิ์เจ้าของเท่านั้น (ไรเดอร์ที่รออยู่อนุมัติตัวเองไม่ได้)
+        if (!requireOwnerAction()) return;
+        approveRiderApplication(appId);
+    }
+    const app = findApp();
+    if (!app || app.status !== "approved") return;
+    const riders = loadCommunityRiders();   // รวมไรเดอร์ที่กู้จากใบสมัครที่อนุมัติแล้ว (reconcile) ให้อยู่ในรายการแล้ว
     const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
     const r = riders.find(x => (x.phone || "").replace(/[-\s]/g, "") === cleanPhone) ||
               riders.find(x => (x.accessCode && app.accessCode && x.accessCode === app.accessCode));
@@ -21099,6 +21220,7 @@ function toggleAdminRiderAppsHistory() {
 window.toggleAdminRiderAppsHistory = toggleAdminRiderAppsHistory;
 
 function approveRiderApplication(appId) {
+    if (!requireOwnerAction()) return;
     const apps = loadRiderApplications();
     const cleanId = String(appId || "").trim();
     const cleanNorm = typeof normalizeRiderCode === "function" ? normalizeRiderCode(cleanId) : cleanId;
@@ -21179,6 +21301,7 @@ function approveRiderApplication(appId) {
 window.approveRiderApplication = approveRiderApplication;
 
 function rejectRiderApplication(appId) {
+    if (!requireOwnerAction()) return;
     const apps = loadRiderApplications();
     const app = apps.find(x => x.id === appId);
     if (!app) return;
@@ -23014,6 +23137,7 @@ function handleRiderAppEditSubmit(e) {
 }
 
 function deleteRiderApplication(appId) {
+    if (!requireOwnerAction()) return;
     if (confirm("⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบประวัติใบสมัครนี้ออกจากระบบ?")) {
         const apps = loadRiderApplications();
         const appToDelete = apps.find(x => x.id === appId);
@@ -23057,6 +23181,7 @@ function deleteRiderApplication(appId) {
 }
 
 function reconsiderRiderApplication(appId) {
+    if (!requireOwnerAction()) return;
     const apps = loadRiderApplications();
     const app = apps.find(x => x.id === appId);
     if (!app) return;
@@ -25935,6 +26060,11 @@ function fillOnPageRiderSampleData() {
 window.fillOnPageRiderSampleData = fillOnPageRiderSampleData;
 
 function quickRegisterAndLoginRider() {
+    // ปุ่มทดสอบสร้างไรเดอร์ปลอมพร้อมอนุมัติเอง — ใช้ได้เฉพาะตอนเจ้าของล็อกอิน (กันข้อมูลทดสอบหลุดขึ้นระบบจริง)
+    if (!isOwnerSignedIn()) {
+        showToast("🔒 ปุ่มทดสอบนี้ใช้ได้เฉพาะเมื่อเจ้าของล็อกอินอยู่ ผู้สมัครจริงกรุณากรอกฟอร์มสมัครแล้วรอเจ้าของอนุมัติ");
+        return;
+    }
     const code = generate6DigitAccessCode("RD");
     const randomDigits = Math.floor(10000000 + Math.random() * 90000000);
     const phone = "08" + randomDigits;
@@ -26047,6 +26177,17 @@ async function handleOnPageRiderRegister(e) {
     const code = generate6DigitAccessCode("RD");
     const displayName = nickname ? `${fullName} (${nickname})` : fullName;
 
+    // ผู้สมัครทั่วไปส่งใบสมัครซ้ำด้วยเบอร์เดิมไม่ได้ (กันทับใบสมัครที่อนุมัติแล้ว และกันใบสมัครซ้ำ)
+    if (!isOwnerSignedIn()) {
+        const dup = loadRiderApplications().find(a => (a.phone || "").replace(/[-\s]/g, "") === phone);
+        if (dup) {
+            showToast(dup.status === "approved"
+                ? "⚠️ เบอร์นี้ได้รับอนุมัติเป็นไรเดอร์แล้ว กรุณาเข้าสู่ระบบด้วยรหัสเดิม หรือติดต่อแอดมิน"
+                : "⚠️ เบอร์นี้ส่งใบสมัครไว้แล้ว กรุณารอเจ้าของอนุมัติ หรือติดต่อแอดมิน");
+            return;
+        }
+    }
+
     // รูปเอกสารเก็บแยกจากใบสมัคร (ต้องบันทึกสำเร็จอย่างน้อยหนึ่งที่ก่อนสร้างไรเดอร์)
     const docResult = await saveRiderDocumentsGuarded("onpage", code, extras.docs, {
         idCard: extras.identity.idCard, address: extras.identity.address, drivingLicense: license, license,
@@ -26083,11 +26224,14 @@ async function handleOnPageRiderRegister(e) {
         codSettledToday: 0
     };
 
-    const curRiders = loadCommunityRiders();
-    const existingIdx = curRiders.findIndex(r => (r.phone || "").replace(/[-\s]/g, "") === phone);
-    if (existingIdx >= 0) curRiders[existingIdx] = newRider;
-    else curRiders.unshift(newRider);
-    saveCommunityRiders(curRiders);
+    // สร้างไรเดอร์เข้าระบบทันทีเฉพาะตอนเจ้าของล็อกอินอยู่ — ผู้สมัครทั่วไปรอเจ้าของอนุมัติ
+    if (isOwnerSignedIn()) {
+        const curRiders = loadCommunityRiders();
+        const existingIdx = curRiders.findIndex(r => (r.phone || "").replace(/[-\s]/g, "") === phone);
+        if (existingIdx >= 0) curRiders[existingIdx] = newRider;
+        else curRiders.unshift(newRider);
+        saveCommunityRiders(curRiders);
+    }
 
     const apps = loadRiderApplications();
     apps.unshift({
@@ -26112,10 +26256,8 @@ async function handleOnPageRiderRegister(e) {
         emergencyContact: extras.emergencyContact,
         docFlags: extras.docFlags,
         consentAt: extras.consentAt,
-        status: "approved",
         appliedAt: new Date().toISOString(),
-        approvedAt: new Date().toISOString(),
-        notes: "ลงทะเบียนผ่านหน้าเว็บ (อนุมัติอัตโนมัติ)"
+        ..._newRiderAppStatusFields()
     });
     saveRiderApplications(apps);
 
@@ -26123,6 +26265,11 @@ async function handleOnPageRiderRegister(e) {
     resetRiderRegExtras("onpage");
     closeRiderRegisterModal();
     closeRiderLoginModal();
+    if (!isOwnerSignedIn()) {
+        showToast(`✅ ส่งใบสมัครแล้ว! รหัสของคุณ: ${code} (จดไว้) — รอเจ้าของอนุมัติ แล้วใช้รหัสนี้เข้าสู่ระบบ`);
+        if (typeof switchRiderGuestTab === "function") switchRiderGuestTab("login");
+        return;
+    }
     loginRiderWithProfile(newRider);
     showToast(`🎉 ลงทะเบียนสำเร็จ! ยินดีต้อนรับ ${displayName} เข้าสู่ระบบรับงานทันที (รหัส PIN: ${code})`);
 }
@@ -26557,7 +26704,11 @@ function handleRiderPhoneLoginSubmit() {
             showToast(`❌ ใบสมัครของคุณ (${app.fullName || raw}) ไม่ผ่านการอนุมัติ กรุณาติดต่อแอดมิน`);
             return;
         }
-        // If pending, approve and log in
+        if (app.status === "pending") {
+            showToast(`⏳ ใบสมัครของคุณ (${app.fullName || raw}) ยังรอเจ้าของอนุมัติ กรุณารอสักครู่แล้วลองใหม่`);
+            return;
+        }
+        // อนุมัติแล้ว (แต่ยังไม่อยู่ในรายชื่อที่ซิงค์มา): เข้าสู่ระบบจากใบสมัคร
         approveAndLoginRider(app.id);
         return;
     }
@@ -28816,7 +28967,7 @@ async function saveMerchantStallData() {
                 const res = await fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json");
                 if (res.ok) {
                     const remote = await res.json();
-                    apps = Array.isArray(remote) ? remote.filter(Boolean) : Object.values(remote || {}).filter(Boolean);
+                    apps = cloudValToList(remote, _keyOfMerchantApp);
                 }
             } catch (e) {}
         }
@@ -29920,11 +30071,8 @@ function autoSanitizeProductionData() {
             }
             keysToDel.forEach(k => localStorage.removeItem(k));
 
-            if (typeof isFirebaseReady === "function" && isFirebaseReady()) {
-                db.ref("orders").remove().catch(() => {});
-                db.ref("daily_reports").remove().catch(() => {});
-                db.ref("riders").remove().catch(() => {});
-            }
+            // ห้ามลบข้อมูลบนคลาวด์ตรงนี้: บล็อกนี้รันบนทุกเบราว์เซอร์เครื่องใหม่ (ลูกค้าคนแรกที่เข้าเว็บก็ลบออเดอร์ทั้งระบบได้)
+            // ล้างข้อมูลคลาวด์ทำได้เฉพาะเจ้าของผ่านปุ่มล้างข้อมูลในหน้าฮับ/แอดมิน
 
             if (typeof ALL_100_STALLS !== "undefined" && Array.isArray(ALL_100_STALLS)) {
                 ALL_100_STALLS.forEach(s => s.isClosed = false);
@@ -29939,15 +30087,8 @@ function autoSanitizeProductionData() {
         }
     } catch (e) {}
 
-    // 13. Complete Clean Purge of Rider Database (User requested clean wipe)
-    try {
-        if (localStorage.getItem("talathub_rider_db_purged_v2026_real_final") !== "true") {
-            if (typeof cleanRiderDatabase === "function") {
-                cleanRiderDatabase(true);
-            }
-            localStorage.setItem("talathub_rider_db_purged_v2026_real_final", "true");
-        }
-    } catch (e) {}
+    // 13. (ยกเลิก) เคยสั่ง cleanRiderDatabase(true) อัตโนมัติบนเบราว์เซอร์เครื่องใหม่ทุกเครื่อง ซึ่งลบไรเดอร์ทั้งระบบบนคลาวด์
+    //     ตอนนี้ล้างได้เฉพาะเจ้าของ ผ่านปุ่ม cleanRiderDatabase() เท่านั้น
 
 }
 
@@ -29960,13 +30101,8 @@ async function fetchOnlineStallsStartup() {
         const remoteApps = (resApps.status === 'fulfilled' && resApps.value) || null;
         const remoteCustom = (resCustom.status === 'fulfilled' && resCustom.value) || null;
 
-        let appList = [];
-        if (Array.isArray(remoteApps)) appList = remoteApps.filter(Boolean);
-        else if (remoteApps && typeof remoteApps === 'object') appList = Object.values(remoteApps).filter(Boolean);
-
-        let customList = [];
-        if (Array.isArray(remoteCustom)) customList = remoteCustom.filter(Boolean);
-        else if (remoteCustom && typeof remoteCustom === 'object') customList = Object.values(remoteCustom).filter(Boolean);
+        const appList = cloudValToList(remoteApps, _keyOfMerchantApp);
+        const customList = cloudValToList(remoteCustom, _keyOfStall);
 
         let hasChanges = false;
 
@@ -30349,18 +30485,8 @@ function saveMerchantApplications(apps) {
         } catch (storageErr) {
             console.warn("localStorage quota exceeded for merchant_applications:", storageErr);
         }
-        if (isFirebaseReady() && db) {
-            db.ref("merchant_applications").set(apps).catch(err => {
-                console.warn("Firebase save merchant_applications failed:", err);
-            });
-        }
-        try {
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(apps)
-            }).catch(() => {});
-        } catch (e) {}
+        // เขียนเฉพาะใบสมัครที่เปลี่ยน (ทีละ id) — ผู้ใช้ทั่วไปสร้างได้เฉพาะ pending, อนุมัติ/ลบเป็นสิทธิ์เจ้าของ
+        return syncListToCloud("merchant_applications", apps, _keyOfMerchantApp);
     } catch (e) {}
 }
 window.saveMerchantApplications = saveMerchantApplications;
@@ -30372,24 +30498,7 @@ async function saveMerchantApplicationsAsync(apps) {
         } catch (storageErr) {
             console.warn("localStorage quota exceeded for merchant_applications:", storageErr);
         }
-        const promises = [];
-        if (isFirebaseReady() && db) {
-            promises.push(
-                db.ref("merchant_applications").set(apps).catch(err => {
-                    console.warn("Firebase save merchant_applications failed:", err);
-                })
-            );
-        }
-        try {
-            promises.push(
-                fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(apps)
-                }).catch(e => console.warn("REST PUT merchant_applications failed:", e))
-            );
-        } catch(e) {}
-        await Promise.allSettled(promises);
+        return await syncListToCloud("merchant_applications", apps, _keyOfMerchantApp);
     } catch (e) {
         console.warn("saveMerchantApplicationsAsync error:", e);
     }
@@ -30550,6 +30659,7 @@ function handleCheckApplicationStatusSubmit() {
 window.handleCheckApplicationStatusSubmit = handleCheckApplicationStatusSubmit;
 
 function approveMerchantApplication(appId) {
+    if (!requireOwnerAction()) return;
     const apps = loadMerchantApplications();
     const app = apps.find(a => a.id === appId);
     if (!app) {
@@ -30635,6 +30745,7 @@ function goToAdminToApproveMerchantFromSuccess() {
 window.goToAdminToApproveMerchantFromSuccess = goToAdminToApproveMerchantFromSuccess;
 
 function approveAndLoginCurrentSubmittedMerchant() {
+    if (!requireOwnerAction()) return;
     const apps = loadMerchantApplications();
     const app = _lastSubmittedMerchantApp ? apps.find(a => a.id === _lastSubmittedMerchantApp.id) : apps.find(a => a.status === "pending");
     if (!app) {
@@ -30668,6 +30779,7 @@ function checkCurrentMerchantApprovalAndLogin() {
 window.checkCurrentMerchantApprovalAndLogin = checkCurrentMerchantApprovalAndLogin;
 
 function rejectMerchantApplication(appId) {
+    if (!requireOwnerAction()) return;
     if (!confirm("คุณต้องการปฏิเสธคำขอเปิดร้านค้านี้ใช่หรือไม่?")) return;
     const apps = loadMerchantApplications();
     const app = apps.find(a => a.id === appId);
@@ -30760,9 +30872,7 @@ async function handleMerchantCodeLoginSubmit() {
                 if (res.ok) remoteData = await res.json();
             }
 
-            let remoteList = [];
-            if (Array.isArray(remoteData)) remoteList = remoteData.filter(Boolean);
-            else if (remoteData && typeof remoteData === "object") remoteList = Object.values(remoteData).filter(Boolean);
+            const remoteList = cloudValToList(remoteData, _keyOfMerchantApp);
 
             if (remoteList.length > 0) {
                 localStorage.setItem("talathub_merchant_applications", JSON.stringify(remoteList));
