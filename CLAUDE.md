@@ -37,6 +37,38 @@
 5. **MODAL Z-INDEX**:
    - All primary modals (`rider-register-modal`, `rider-login-modal`, etc.) must maintain `z-[999999]` and explicit `display: flex / none` management so they never hide behind sticky headers.
 6. **GIT WORKFLOW**:
-   - Test locally first on `http://localhost:3000`.
+   - Test in the sandbox (see section 5) or read-only on `http://localhost:3000`. Never test write flows against the live Firebase.
    - Commit with descriptive commit messages (`fix(...)`, `feat(...)`).
-   - Push to `origin main` cleanly.
+   - Push to `origin main` only when the owner asks (phrase in section 4). `main` is the live website (GitHub Pages). Never force-push.
+   - When `app.js` changes and is pushed, bump the `app.js?v=...` tag in `index.html` (GitHub Pages caches for 10 minutes).
+
+## 🤖 4. Claude Working Scope (ขอบเขตการทำงานของ Claude)
+Owner is a solo beginner with low vision: reply in Thai, short sentences, plain words, explain jargon. Owner works from two computers (home / office) synced only through GitHub; see `คู่มือสื่อสารกับ_Claude.md` and `HANDOFF_TO_CLAUDE.md`.
+
+**Do without asking (ทำเองได้เลย):**
+- Read, search and edit project files; run `node -c app.js`; run local tests.
+- Start throwaway servers on ports other than 3000 (e.g. 3001) from a sandbox copy (section 5) and stop them afterwards. Never stop the owner's server on port 3000.
+- Read-only Firebase access: HTTP GET and `node sync-firebase.js` (downloads only).
+- `git status / diff / log / pull`, and `git add` + `git commit` for finished work.
+- Anything at all on the test Firebase project `hsong-test` once the owner has created it (not created yet).
+
+**Ask first, every time (ต้องถามก่อนเสมอ):**
+- Any write or delete on the production Firebase project `hsong-1f342` (PUT / POST / PATCH / DELETE, `.set()`, `.remove()`, deploys).
+- Changing or publishing production Firebase rules.
+- `git push` to `main`, except on the owner's phrase below or an explicit request. No force-push, no history rewrites.
+- Anything that costs money (e.g. Firebase Blaze plan) and deleting owner data or files Claude did not create.
+- Claude never creates accounts or types passwords for the owner; the owner does that.
+
+**Owner phrase `แก้เสร็จแล้ว อัปขึ้นเว็บให้ทดสอบ`** = run `node -c app.js`, bump the `app.js?v=` tag, commit, push to `main`, then verify the live site (https://pisaen666.github.io/hsong/) by fetching it and comparing files with local. Do not open the live page in a browser pane: page start-up syncs to the live Firebase.
+
+## 🧪 5. Safe Testing Recipe (สำคัญ)
+The production database is shared and currently open to everyone. Lesson from 2026-09-20: rider test data leaked into the live DB because the page was reloaded while seeded test data sat in localStorage (app start-up pushes riders from localStorage to the cloud).
+- Sandbox: copy `index.html app.js styles.css firebase-config.js server.js images/` and the `.png` files to a temp folder; replace the host `hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app` with `127.0.0.1:9` in `app.js`, `firebase-config.js` and `index.html`; run `PORT=3001 node server.js`; open `http://localhost:3001` (it has its own localStorage). Confirm no real host is left with `grep -c firebasedatabase.app`.
+- In the sandbox the Firebase SDK never connects but `isFirebaseReady()` is still true, so `await db.ref().set()` hangs. Any awaited Firebase write needs a timeout (see `_withTimeout` in `app.js`).
+- After anything that could touch production, confirm with a GET that no test data exists (`community_riders`, `rider_applications`, `rider_documents`).
+
+## ⚠️ 6. Known Constraints (update when resolved)
+- Firebase rules are open read/write until 2026-11-02 (`1793552400000` in `database.rules.json`, which is git-ignored). After that date the app cannot read or write. Personal data (ID numbers, addresses, driver-license photos in `rider_documents/<riderId>`) is publicly readable until Auth-based rules exist. Plan: Firebase Auth email/password for the owner (one account for hub + admin, plus a backup account), UID-based rules, tested on `hsong-test` first.
+- Admin/hub PINs (`admin6305`, `hb6305`) and the admin "test mode" quick login are checked only in the browser and can be bypassed.
+- Both rider registration forms auto-approve; documents are collected but nobody must verify them before a rider can take jobs.
+- GP rate: docs elsewhere say 5%, code defaults to 10% (Admin can set 0 but the report silently turns it into 10%). Rider fee is hard-coded to 40 THB per trip in the report. Waiting for the owner's decision.
