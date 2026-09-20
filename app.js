@@ -16955,7 +16955,16 @@ function saveMarketStallSettingsFromForm() {
     const refundInput = document.getElementById("admin-market-refund-policy");
 
     const settings = loadMarketStallSettings();
-    if (gpInput) settings.gpRate = Number(gpInput.value) || 0;
+    if (gpInput) {
+        const gVal = Number(gpInput.value);
+        settings.gpRate = (!isNaN(gVal) && gVal >= 0) ? gVal : 0;
+        // ซิงค์ไปยัง hubSettings ด้วย เพื่อให้ทุกระบบใช้อัตรา GP เดียวกัน
+        try {
+            const hSettings = loadSavedHubSettings();
+            hSettings.merchantGP = settings.gpRate;
+            localStorage.setItem("hsong_hub_settings", JSON.stringify(hSettings));
+        } catch (e) {}
+    }
     if (openInput) settings.openHour = openInput.value || "04:00";
     if (closeInput) settings.closeHour = closeInput.value || "18:00";
     if (alertInput) settings.alertPrepMinutes = Number(alertInput.value) || 15;
@@ -16972,13 +16981,16 @@ function printA4VendorSettlementsReport(targetDateKey) {
     const report = aggregateDailyOperations(targetDateKey);
     const vendors = (report && report.vendorSettlement && report.vendorSettlement.stalls) || [];
     const printTime = new Date().toLocaleString("th-TH");
-    const totalDue = report && report.vendorSettlement ? report.vendorSettlement.totalVendorDue : 0;
-    const settledAmt = report && report.vendorSettlement ? report.vendorSettlement.settledAmount : 0;
-    const unsettledAmt = report && report.vendorSettlement ? report.vendorSettlement.unsettledAmount : 0;
+    const totalGross = report && report.vendorSettlement ? (report.vendorSettlement.totalVendorGross || 0) : 0;
+    const totalGP = report && report.vendorSettlement ? (report.vendorSettlement.totalVendorGP || 0) : 0;
+    const totalDue = report && report.vendorSettlement ? (report.vendorSettlement.totalVendorAmount || 0) : 0;
+    const settledAmt = report && report.vendorSettlement ? (report.vendorSettlement.totalSettledAmount || 0) : 0;
+    const unsettledAmt = report && report.vendorSettlement ? (report.vendorSettlement.totalPendingAmount || 0) : 0;
+    const gpRate = report && report.vendorSettlement ? (report.vendorSettlement.gpRate || 0) : 0;
 
     let rowsHtml = "";
     if (vendors.length === 0) {
-        rowsHtml = `<tr><td colspan="7" style="padding: 12px; text-align: center; color: #64748b;">ไม่มีรายการยอดขายของแผงค้าในวันที่เลือก</td></tr>`;
+        rowsHtml = `<tr><td colspan="9" style="padding: 12px; text-align: center; color: #64748b;">ไม่มีรายการยอดขายของแผงค้าในวันที่เลือก</td></tr>`;
     } else {
         rowsHtml = vendors.map((v, idx) => `
             <tr>
@@ -16986,7 +16998,9 @@ function printA4VendorSettlementsReport(targetDateKey) {
                 <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${v.stallNumber || '-'} (${v.zone || '-'})</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${v.stallName}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${v.orderCount} ออเดอร์</td>
-                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold; text-align: right; color: #047857;">฿${Number(v.totalAmount || 0).toLocaleString()}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: right; color: #475569;">฿${Number(v.totalAmount || 0).toLocaleString()}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: right; color: #b91c1c;">${(v.gpAmount || 0) > 0 ? `-฿${Number(v.gpAmount || 0).toLocaleString()}` : '฿0'}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold; text-align: right; color: #047857;">฿${Number(v.payoutAmount !== undefined ? v.payoutAmount : v.totalAmount).toLocaleString()}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${v.phone || '-'}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: ${v.isSettled ? '#047857' : '#d97706'};">
                     ${v.isSettled ? 'โอนแล้ว ✓' : 'รอโอน'}
@@ -17001,7 +17015,7 @@ function printA4VendorSettlementsReport(targetDateKey) {
             <div class="a4-meta">ประจำวันที่: ${targetDateKey} • พิมพ์เมื่อ: ${printTime}</div>
         </div>
         <div style="display: flex; justify-content: space-between; margin: 12px 0; font-size: 11px; background: #f8fafc; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px;">
-            <div>ยอดจำหน่ายรวม: <strong>฿${totalDue.toLocaleString()}</strong> (${vendors.length} แผง)</div>
+            <div>ยอดจำหน่ายรวม: <strong>฿${totalGross.toLocaleString()}</strong> (หัก GP ${gpRate}% -฿${totalGP.toLocaleString()} = โอนสุทธิ <strong>฿${totalDue.toLocaleString()}</strong>)</div>
             <div>โอนแล้ว: <strong style="color: #047857;">฿${settledAmt.toLocaleString()}</strong></div>
             <div>คงค้างรอโอน: <strong style="color: #d97706;">฿${unsettledAmt.toLocaleString()}</strong></div>
         </div>
@@ -17012,7 +17026,9 @@ function printA4VendorSettlementsReport(targetDateKey) {
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">เลขแผง/โซน</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">ชื่อแผงค้า</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">จำนวนออเดอร์</th>
-                    <th style="padding: 6px; border: 1px solid #cbd5e1;">ยอดเงินสุทธิ (0% GP)</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">ยอดขายรวม</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">หัก GP (${gpRate}%)</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">ยอดโอนสุทธิ</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">พร้อมเพย์</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">สถานะโอนเงิน</th>
                 </tr>
@@ -17168,11 +17184,11 @@ function renderAdminStalls() {
     const preparingTasksCount = stallActiveTasks.filter(t => t.stage === 2).length;
     const readyTasksCount = stallActiveTasks.filter(t => t.stage === 3).length;
 
-    let todayStallSalesTotal = vendorSettlement.totalVendorDue || 0;
-    if (!todayStallSalesTotal) {
-        todayStallSalesTotal = stallActiveTasks.reduce((sum, t) => sum + t.taskTotal, 0);
-    }
-    const unsettledVendorTotal = vendorSettlement.unsettledAmount || (todayStallSalesTotal - (vendorSettlement.settledAmount || 0));
+    const todayStallGrossTotal = vendorSettlement.totalVendorGross || 0;
+    const todayNetPayoutTotal = vendorSettlement.totalVendorAmount || 0;
+    const unsettledVendorTotal = (vendorSettlement.totalPendingAmount !== undefined)
+        ? vendorSettlement.totalPendingAmount
+        : Math.max(0, todayNetPayoutTotal - (vendorSettlement.totalSettledAmount || 0));
 
     // Stalls filtering for Tab 2 (Roster)
     let filteredStalls = ALL_100_STALLS;
@@ -17734,18 +17750,19 @@ function renderAdminStalls() {
         const vendorList = vendorSettlement.stalls || [];
         const settledCount = vendorList.filter(v => v.isSettled).length;
         const unsettledCount = vendorList.length - settledCount;
+        const currentGPRate = vendorSettlement.gpRate !== undefined ? vendorSettlement.gpRate : 10;
 
         subTabContentHtml = `
             <!-- Financial Summary KPIs (3 Cards) -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                 <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
                     <div class="text-[11px] font-bold text-slate-500 flex items-center justify-between">
-                        <span>ยอดขายรวมที่ต้องโอนวันนี้</span>
+                        <span>ยอดโอนสุทธิที่ต้องโอนวันนี้</span>
                         <span class="material-symbols-outlined text-base text-purple-600">account_balance_wallet</span>
                     </div>
-                    <div class="text-xl sm:text-2xl font-black text-slate-800">฿${(vendorSettlement.totalVendorDue || 0).toLocaleString()}</div>
+                    <div class="text-xl sm:text-2xl font-black text-slate-800">฿${(vendorSettlement.totalVendorAmount || 0).toLocaleString()}</div>
                     <div class="text-[10px] sm:text-[11px] text-slate-500">
-                        รวมทั้งหมด ${vendorList.length} แผงค้า (0% GP)
+                        ยอดขายรวม ฿${(vendorSettlement.totalVendorGross || 0).toLocaleString()} • หัก GP (${currentGPRate}%) -฿${(vendorSettlement.totalVendorGP || 0).toLocaleString()}
                     </div>
                 </div>
 
@@ -17754,7 +17771,7 @@ function renderAdminStalls() {
                         <span>โอนเงินสำเร็จแล้ว</span>
                         <span class="material-symbols-outlined text-base text-emerald-600">task_alt</span>
                     </div>
-                    <div class="text-xl sm:text-2xl font-black text-emerald-700">฿${(vendorSettlement.settledAmount || 0).toLocaleString()}</div>
+                    <div class="text-xl sm:text-2xl font-black text-emerald-700">฿${(vendorSettlement.totalSettledAmount || 0).toLocaleString()}</div>
                     <div class="text-[10px] sm:text-[11px] text-emerald-600 font-bold">
                         ✓ โอนแล้ว ${settledCount} แผงค้า
                     </div>
@@ -17779,6 +17796,9 @@ function renderAdminStalls() {
                         <span class="material-symbols-outlined text-sm text-purple-600">calendar_month</span>
                         <span>รอบบัญชีประจำวันที่: <strong>${targetDateKey}</strong></span>
                     </span>
+                    <span class="bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        GP ร้านค้า: ${currentGPRate}%
+                    </span>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
                     <button onclick="printA4VendorSettlementsReport('${targetDateKey}')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
@@ -17797,7 +17817,9 @@ function renderAdminStalls() {
                                 <th class="p-3">เลขแผง / โซน</th>
                                 <th class="p-3">ชื่อแผงค้า / เจ้าของ</th>
                                 <th class="p-3 text-center">ออเดอร์</th>
-                                <th class="p-3 text-right">ยอดเงินสุทธิ (0% GP)</th>
+                                <th class="p-3 text-right">ยอดขายรวม</th>
+                                <th class="p-3 text-right">หัก GP (${currentGPRate}%)</th>
+                                <th class="p-3 text-right">ยอดโอนสุทธิ</th>
                                 <th class="p-3">บัญชีพร้อมเพย์</th>
                                 <th class="p-3 text-center">สถานะการโอน</th>
                                 <th class="p-3 text-center">การจัดการ</th>
@@ -17806,7 +17828,7 @@ function renderAdminStalls() {
                         <tbody class="divide-y divide-slate-100">
                             ${vendorList.length === 0 ? `
                                 <tr>
-                                    <td colspan="7" class="p-8 text-center text-slate-400">
+                                    <td colspan="9" class="p-8 text-center text-slate-400">
                                         <div class="space-y-2">
                                             <span class="material-symbols-outlined text-3xl text-slate-300">payments</span>
                                             <div>ยังไม่มียอดขายของแผงค้าในวันที่เลือก (${targetDateKey})</div>
@@ -17816,7 +17838,11 @@ function renderAdminStalls() {
                                         </div>
                                     </td>
                                 </tr>
-                            ` : vendorList.map(v => `
+                            ` : vendorList.map(v => {
+                                const stallPayout = Number(v.payoutAmount !== undefined ? v.payoutAmount : v.totalAmount);
+                                const stallGross = Number(v.totalAmount || 0);
+                                const stallGP = Number(v.gpAmount || 0);
+                                return `
                                 <tr class="hover:bg-slate-50 transition-colors">
                                     <td class="p-3 font-mono font-bold text-slate-700">
                                         <span class="bg-slate-100 px-2 py-0.5 rounded">${v.stallNumber || 'แผง'}</span>
@@ -17829,8 +17855,14 @@ function renderAdminStalls() {
                                     <td class="p-3 text-center font-bold text-slate-700">
                                         ${v.orderCount} งาน
                                     </td>
+                                    <td class="p-3 text-right font-medium text-slate-600">
+                                        ฿${stallGross.toLocaleString()}
+                                    </td>
+                                    <td class="p-3 text-right font-bold text-orange-600">
+                                        ${stallGP > 0 ? `-฿${stallGP.toLocaleString()}` : '฿0'}
+                                    </td>
                                     <td class="p-3 text-right font-mono font-black text-emerald-700 text-sm">
-                                        ฿${Number(v.totalAmount || 0).toLocaleString()}
+                                        ฿${stallPayout.toLocaleString()}
                                     </td>
                                     <td class="p-3 font-mono text-slate-600">
                                         ${v.phone || '-'}
@@ -17848,14 +17880,14 @@ function renderAdminStalls() {
                                     </td>
                                     <td class="p-3 text-center">
                                         <div class="flex items-center justify-center gap-1.5">
-                                            <button onclick="openVendorPayoutModal('${v.stallId}', '${v.stallName.replace(/'/g, "\\'")}', ${v.totalAmount}, '${v.phone}', '${v.ownerName}', '${v.stallNumber}', ${v.totalAmount}, 0, 0, ${v.orderCount})" class="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                                            <button onclick="openVendorPayoutModal('${v.stallId}', '${v.stallName.replace(/'/g, "\\'")}', ${stallPayout}, '${v.phone}', '${v.ownerName.replace(/'/g, "\\'")}', '${v.stallNumber}', ${stallGross}, ${stallGP}, ${currentGPRate}, ${v.orderCount})" class="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
                                                 <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                                 <span>${v.isSettled ? 'ดู QR ซ้ำ' : '💸 สแกน QR โอน'}</span>
                                             </button>
                                         </div>
                                     </td>
                                 </tr>
-                            `).join('')}
+                            `; }).join('')}
                         </tbody>
                     </table>
                 </div>
@@ -17883,10 +17915,10 @@ function renderAdminStalls() {
                         <div class="space-y-1">
                             <label class="font-bold text-slate-700 flex items-center justify-between">
                                 <span>ค่าธรรมเนียม GP ตลาด (% GP)</span>
-                                <span class="text-emerald-600 font-bold">ปัจจุบัน 0% เพื่อชุมชน</span>
+                                <span class="text-purple-700 font-bold">ปัจจุบัน ${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || 10)}%</span>
                             </label>
-                            <input id="admin-market-gp-input" type="number" min="0" max="30" value="${marketSettings.gpRate || 0}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
-                            <p class="text-[10.5px] text-slate-400">ระบบตลาดสดไม่หัก GP ผู้ค้าชุมชน ช่วยให้ราคาของสดเท่าหน้าร้านจริง</p>
+                            <input id="admin-market-gp-input" type="number" min="0" max="30" value="${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || 10)}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            <p class="text-[10.5px] text-slate-400">อัตราค่าธรรมเนียมส่วนแบ่งยอดขายร้านค้า (GP) คำนวณหักอัตโนมัติก่อนโอนเคลียร์เงินรอบวัน</p>
                         </div>
 
                         <div class="grid grid-cols-2 gap-2.5">
