@@ -691,12 +691,28 @@ window.riderSecretLogin = riderSecretLogin;
 async function submitRiderSecretLogin(numberInputId, secretInputId) {
     const numEl = document.getElementById(numberInputId);
     const secEl = document.getElementById(secretInputId);
-    const res = await riderSecretLogin(numEl ? numEl.value : "", secEl ? secEl.value : "");
+    // ข้อความผิดพลาดแสดงเป็นกล่องแดงใต้ปุ่ม (ค้างอยู่จนกว่าจะลองใหม่) — toast หายเร็วและอยู่ล่างจอ ผู้ใช้มักไม่เห็น
+    const errEl = document.getElementById(numberInputId === "onpage-rider-number-input" ? "onpage-rider-login-error" : "rider-login-modal-error");
+    const showLoginError = msg => {
+        if (!errEl) return;
+        errEl.textContent = msg || "";
+        errEl.classList.toggle("hidden", !msg);
+        if (msg && errEl.scrollIntoView) errEl.scrollIntoView({ block: "center", behavior: "smooth" });
+    };
+    showLoginError("");
+    let res;
+    try {
+        res = await riderSecretLogin(numEl ? numEl.value : "", secEl ? secEl.value : "");
+    } catch (e) {
+        res = { ok: false, code: "error", message: "⚠️ เข้าสู่ระบบไม่สำเร็จ กรุณาลองอีกครั้ง (" + (e && e.message ? e.message : "ข้อผิดพลาดไม่ทราบสาเหตุ") + ")" };
+    }
     if (!res.ok) {
+        showLoginError(res.message);
         showToast(res.message);
         if (res.code === "bad" && secEl) { secEl.value = ""; secEl.focus(); }
         return;
     }
+    showLoginError("");
     if (secEl) secEl.value = "";
     loginRiderWithProfile(res.rider);
     showToast("🎉 เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ " + (res.rider.name || "ไรเดอร์"));

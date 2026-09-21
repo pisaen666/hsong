@@ -2254,6 +2254,7 @@
                                 <span class="material-symbols-outlined text-sm font-bold">login</span>
                                 <span>เข้าสู่ระบบรับงาน</span>
                             </button>
+                            <div id="onpage-rider-login-error" role="alert" aria-live="assertive" class="hidden w-full px-3 py-2.5 rounded-xl border-2 border-rose-300 bg-rose-50 text-rose-800 font-black text-sm text-center leading-snug"></div>
                         </div>
                     </div>
 
@@ -6952,6 +6953,7 @@
                     <span class="material-symbols-outlined text-sm font-bold">login</span>
                     <span>เข้าสู่ระบบรับงาน (Role 4)</span>
                 </button>
+                <div id="rider-login-modal-error" role="alert" aria-live="assertive" class="hidden w-full px-3 py-2.5 rounded-xl border-2 border-rose-300 bg-rose-50 text-rose-800 font-black text-sm text-center leading-snug"></div>
             </div>
 
             <!-- Method 2: Quick Rider One-Click List (เครื่องมือเจ้าของเท่านั้น) -->
@@ -7242,7 +7244,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.30_xss_guard"></script>
+    <script src="app.js?v=10.31_login_error_msg"></script>
 </body>
 
 </html>

@@ -37,13 +37,18 @@ const ctx = {
     loginRiderWithProfile: r => { loggedIn = r; },
     closeRiderLoginModal: () => { }, closeRiderRegisterModal: () => { }, closeStatusCheckModal: () => { },
     switchRole: () => { }, switchRiderGuestTab: () => { },
-    document: { getElementById: () => null }
+    document: { getElementById: id => els[id] || null }
+};
+const mkEl = () => ({ value: "", textContent: "", hidden: true, classList: { toggle(c, on) { this._h = on; }, _h: true }, focus() { }, scrollIntoView() { } });
+const els = {
+    "onpage-rider-number-input": mkEl(), "onpage-rider-secret-input": mkEl(), "onpage-rider-login-error": mkEl(),
+    "rider-login-number-input": mkEl(), "rider-login-secret-input": mkEl(), "rider-login-modal-error": mkEl()
 };
 vm.createContext(ctx);
 vm.runInContext([
     fn("normalizeRiderCode"),
     between("const RIDER_SECRET_ALPHABET", "window.riderSecretLogin = riderSecretLogin;"),
-    fn("loginRiderById"), fn("quickLoginRider"), fn("handleRiderLoginSubmit"),
+    fn("loginRiderById"), fn("quickLoginRider"), fn("handleRiderLoginSubmit"), "async " + fn("submitRiderSecretLogin"),
     "function requireOwnerAction() { if (isOwnerSignedIn()) return true; showToast('owner-required'); return false; }"
 ].join("\n"), ctx);
 const run = js => vm.runInContext(js, ctx);
@@ -111,6 +116,26 @@ const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) fail++;
     for (let i = 0; i < 3; i++) await login("RD1111", "AAAA-AAAA");
     await login("RD1111", cred.secret);
     ok(!("talathub_rider_login_fail" in store), "ใส่รหัสถูกแล้วตัวนับความผิดถูกล้าง");
+
+    console.log("== ข้อความผิดพลาดต้องแสดงเป็นกล่องใต้ปุ่ม (ไม่ใช่แค่ toast ที่หายเร็ว)");
+    delete store["talathub_rider_login_fail"];
+    for (const [numId, secId, errId] of [["onpage-rider-number-input", "onpage-rider-secret-input", "onpage-rider-login-error"], ["rider-login-number-input", "rider-login-secret-input", "rider-login-modal-error"]]) {
+        els[numId].value = "RD1111"; els[secId].value = "AAAA-AAAA"; els[errId].textContent = "";
+        ctx._a = numId; ctx._b = secId;
+        await run("submitRiderSecretLogin(_a, _b)");
+        ok(/ไม่ถูกต้อง|ไม่ตรง|ผิด/.test(els[errId].textContent) && els[errId].classList._h === false, errId + ": รหัสผิด → กล่องแดงแสดงข้อความ");
+        els[numId].value = "RD1111"; els[secId].value = cred.secret;
+        loggedIn = null;
+        await run("submitRiderSecretLogin(_a, _b)");
+        ok(loggedIn && els[errId].textContent === "" && els[errId].classList._h === true, errId + ": รหัสถูก → เข้าได้ และกล่องแดงถูกซ่อน");
+    }
+    delete store["talathub_rider_login_fail"];
+    for (let i = 0; i < 5; i++) await login("RD1111", "AAAA-AAAA");
+    els["onpage-rider-number-input"].value = "RD1111"; els["onpage-rider-secret-input"].value = cred.secret;
+    ctx._a = "onpage-rider-number-input"; ctx._b = "onpage-rider-secret-input";
+    await run("submitRiderSecretLogin(_a, _b)");
+    ok(/รอ|ล็อก|นาที|ลองใหม่/.test(els["onpage-rider-login-error"].textContent), "ถูกล็อกชั่วคราว → กล่องแดงบอกให้รอ (ไม่นิ่งเงียบ)");
+    delete store["talathub_rider_login_fail"];
 
     console.log("== ทางเข้าที่ไม่ใช้รหัสต้องเป็นของเจ้าของเท่านั้น");
     owner = false;
