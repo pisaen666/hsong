@@ -156,6 +156,88 @@ function jsArg(value) {
 window.jsArg = jsArg;
 
 // ==========================================================
+// UNTRUSTED DATA GUARD — ตัวกรองข้อมูลที่มาจากภายนอก (Firebase / REST / API ของบุคคลที่สาม)
+// ใครก็เขียนข้อมูลบางส่วนลงฐานข้อมูลได้ (ใบสมัคร ออเดอร์ ตะกร้า ฯลฯ) ถ้าใส่โค้ดแทนชื่อแล้วหน้าเว็บเอาชื่อไปแสดงตรง ๆ
+// โค้ดนั้นจะรันในเครื่องของคนที่เปิดดู (รวมถึงเจ้าของตอนล็อกอินแอดมิน) — จึงล้างตัวอักษรอันตรายที่ "ประตูเข้า" ทางเดียว
+//   ตัวอักษร  < > " ' ` \  ถูกแทนด้วยตัวที่หน้าตาคล้ายกันแต่ไม่ใช่โค้ด (＜ ＞ ” ’ ˋ ＼)
+//   "&#..." / "&quot;" ที่พิมพ์มาเอง (เบราว์เซอร์จะแปลงกลับเป็นเครื่องหมายคำพูดในแอตทริบิวต์) ถูกทำให้เป็น ＆
+//   ค่าที่ขึ้นต้น javascript: / vbscript: / data:text/html ถูกนำหน้าด้วย blocked-
+// ใช้กับ: snapshot.val()/exportVal() ของ Firebase SDK, ผลลัพธ์ .json() ของ fetch และค่า JSON ที่อ่านจาก localStorage ทุกครั้ง (ตัวเลข/URL/รูปแบบ base64 ไม่ถูกแตะ)
+// ข้อมูลที่ระบบเขียนเอง (ไม่มีอักขระเหล่านี้) จะเหมือนเดิมทุกตัวอักษร และยังเป็นแค่ชั้นเสริม: จุดแสดงผลสำคัญยังควรใช้ escapeHtml/jsArg
+// ==========================================================
+const _NEUTRAL_CHARS = { "<": "＜", ">": "＞", '"': "”", "'": "’", "`": "ˋ", "\\": "＼" };
+function neutralizeUntrustedString(s) {
+    if (typeof s !== "string" || s.length === 0) return s;
+    let out = s.replace(/[<>"'`\\]/g, c => _NEUTRAL_CHARS[c]).replace(/&(?=#|quot|apos|lt|gt|amp)/gi, "＆");
+    const head = out.slice(0, 40).replace(/[\u0000-\u0020]/g, "").toLowerCase();
+    if (/^(javascript:|vbscript:|data:text\/html)/.test(head)) out = "blocked-" + out;
+    return out;
+}
+function neutralizeUntrustedDeep(v, _depth) {
+    const depth = _depth || 0;
+    if (typeof v === "string") return neutralizeUntrustedString(v);
+    if (v === null || typeof v !== "object" || depth > 40) return v;
+    if (Array.isArray(v)) return v.map(x => neutralizeUntrustedDeep(x, depth + 1));
+    const out = {};
+    Object.keys(v).forEach(k => { out[neutralizeUntrustedString(k)] = neutralizeUntrustedDeep(v[k], depth + 1); });
+    return out;
+}
+window.neutralizeUntrustedString = neutralizeUntrustedString;
+window.neutralizeUntrustedDeep = neutralizeUntrustedDeep;
+
+(function installUntrustedDataGuard() {
+    window.__untrustedGuard = { snapshot: false, fetch: false, storage: false };
+    try {
+        const Snap = window.firebase && firebase.database && firebase.database.DataSnapshot;
+        if (Snap && Snap.prototype) {
+            ["val", "exportVal"].forEach(m => {
+                const orig = Snap.prototype[m];
+                if (typeof orig !== "function" || orig._untrustedGuard) return;
+                const guarded = function () { return neutralizeUntrustedDeep(orig.apply(this, arguments)); };
+                guarded._untrustedGuard = true;
+                Snap.prototype[m] = guarded;
+            });
+            window.__untrustedGuard.snapshot = true;
+        }
+    } catch (e) { console.warn("untrusted-data guard (snapshot) not installed:", e); }
+    try {
+        const origFetch = window.fetch;
+        if (typeof origFetch === "function" && !origFetch._untrustedGuard) {
+            const guardedFetch = function () {
+                return origFetch.apply(this, arguments).then(res => {
+                    try {
+                        const origJson = res.json;
+                        res.json = function () { return origJson.apply(this, arguments).then(v => neutralizeUntrustedDeep(v)); };
+                    } catch (e) { }
+                    return res;
+                });
+            };
+            guardedFetch._untrustedGuard = true;
+            window.fetch = guardedFetch;
+            window.__untrustedGuard.fetch = true;
+        }
+    } catch (e) { console.warn("untrusted-data guard (fetch) not installed:", e); }
+    // ข้อมูลที่เครื่องนี้เก็บไว้ (localStorage) ตั้งแต่ก่อนมีตัวกรอง อาจมีของอันตรายค้างอยู่: ล้างตอนอ่านด้วย (เฉพาะค่า JSON ที่มีตัวอักษรน่าสงสัย จึงไม่กระทบความเร็ว)
+    try {
+        const StoreProto = window.Storage && Storage.prototype;
+        const origGet = StoreProto && StoreProto.getItem;
+        if (typeof origGet === "function" && !origGet._untrustedGuard) {
+            const SUSPICIOUS = /[<>'`\\]|&(?:#|quot|apos|lt|gt|amp)|(?:javascript|vbscript)\s*:|data:text\/html/i;
+            const guardedGet = function () {
+                const v = origGet.apply(this, arguments);
+                if (typeof v !== "string" || v.length < 2) return v;
+                const c = v.charCodeAt(0);
+                if ((c !== 123 && c !== 91) || !SUSPICIOUS.test(v)) return v;   // ต้องเป็น JSON แบบ { หรือ [ และมีตัวน่าสงสัยเท่านั้น
+                try { return JSON.stringify(neutralizeUntrustedDeep(JSON.parse(v))); } catch (e) { return v; }
+            };
+            guardedGet._untrustedGuard = true;
+            StoreProto.getItem = guardedGet;
+            window.__untrustedGuard.storage = true;
+        }
+    } catch (e) { console.warn("untrusted-data guard (storage) not installed:", e); }
+})();
+
+// ==========================================================
 // RIDER PRIVATE DATA — ข้อมูลส่วนตัวไรเดอร์เก็บที่ rider_private/<riderId> (เจ้าของอ่านได้คนเดียวตามกฎ Firebase)
 // ไม่เก็บไว้ในเครื่อง (localStorage) และไม่ส่งขึ้น rider_applications / community_riders ที่เปิดสาธารณะ
 // ==========================================================
@@ -3288,8 +3370,8 @@ function renderLocationSearchResults(results) {
                         <span class="material-symbols-outlined text-base">${iconName}</span>
                     </span>
                     <div class="min-w-0 flex-1">
-                        <div class="font-extrabold text-slate-900 group-hover:text-emerald-950 text-xs truncate">${item.shortTitle || item.title}</div>
-                        <div class="text-[10px] text-slate-500 truncate">${item.subdistrict || 'อ.บ้านบึง จ.ชลบุรี'}</div>
+                        <div class="font-extrabold text-slate-900 group-hover:text-emerald-950 text-xs truncate">${escapeHtml(item.shortTitle) || escapeHtml(item.title)}</div>
+                        <div class="text-[10px] text-slate-500 truncate">${escapeHtml(item.subdistrict) || 'อ.บ้านบึง จ.ชลบุรี'}</div>
                     </div>
                 </div>
                 <div class="text-right shrink-0">
@@ -4688,8 +4770,8 @@ function renderHubMonitorBoard() {
                 <div class="flex items-center gap-2">
                     <span class="text-emerald-500 font-black text-sm">✅</span>
                     <div>
-                        <span class="font-bold text-slate-700">${o.orderId}</span>
-                        <span class="text-slate-400 ml-1">${o.customerName || o.customerPhone || "ลูกค้า"}</span>
+                        <span class="font-bold text-slate-700">${escapeHtml(o.orderId)}</span>
+                        <span class="text-slate-400 ml-1">${escapeHtml(o.customerName) || escapeHtml(o.customerPhone) || "ลูกค้า"}</span>
                     </div>
                 </div>
                 <span class="text-emerald-600 font-black">฿${o.grandTotal || o.total || 0}</span>
@@ -4790,15 +4872,15 @@ function _renderOrderCard(order, now) {
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full ${cfg.dot} shrink-0"></span>
-                <span class="font-extrabold text-slate-800">${order.orderId}</span>
-                <span class="text-slate-500">${order.customerName || order.customerPhone || "ลูกค้า"}</span>
+                <span class="font-extrabold text-slate-800">${escapeHtml(order.orderId)}</span>
+                <span class="text-slate-500">${escapeHtml(order.customerName) || escapeHtml(order.customerPhone) || "ลูกค้า"}</span>
             </div>
-            <span class="border px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.color}">${cfg.icon} ${cfg.label}</span>
+            <span class="border px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.color}">${cfg.icon} ${escapeHtml(cfg.label)}</span>
         </div>
 
         <div class="flex items-center justify-between text-slate-500">
-            <span>฿${order.grandTotal || order.total || 0} • ${order.address || "ที่อยู่ยังไม่ระบุ"}</span>
-            ${order.riderName ? `<span class="text-sky-600 font-bold">🛵 ${order.riderName}</span>` : ""}
+            <span>฿${order.grandTotal || order.total || 0} • ${escapeHtml(order.address) || "ที่อยู่ยังไม่ระบุ"}</span>
+            ${order.riderName ? `<span class="text-sky-600 font-bold">🛵 ${escapeHtml(order.riderName)}</span>` : ""}
         </div>
 
         ${isDispatched ? `
@@ -4807,12 +4889,12 @@ function _renderOrderCard(order, now) {
                 ${isStuck ? `🚨 ไม่มีไรเดอร์รับงาน! (${minutesAgo} นาทีแล้ว)` : `⏳ รอไรเดอร์รับงาน (${minutesAgo} นาที)`}
             </span>
             <div class="flex gap-1.5">
-                <button onclick="callRiderPhone(event, '${order.riderPhone || ''}')"
+                <button onclick="callRiderPhone(event, ${jsArg(order.riderPhone || '')})"
                     class="bg-sky-600 hover:bg-sky-700 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all flex items-center gap-1">
                     <span class="material-symbols-outlined text-xs">call</span>
                     <span>โทร</span>
                 </button>
-                <button onclick="reassignRiderForOrder('${order.orderId}')"
+                <button onclick="reassignRiderForOrder(${jsArg(order.orderId)})"
                     class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all flex items-center gap-1">
                     <span class="material-symbols-outlined text-xs">swap_horiz</span>
                     <span>Assign</span>
@@ -4824,7 +4906,7 @@ function _renderOrderCard(order, now) {
         <div class="flex items-center gap-1.5 text-sky-600 font-bold bg-sky-50 border border-sky-200 rounded-xl px-3 py-2">
             <span class="material-symbols-outlined text-sm animate-bounce">near_me</span>
             <span>ไรเดอร์กำลังเดินทางไปส่ง</span>
-            ${order.riderPhone ? `<button onclick="callRiderPhone(event, '${order.riderPhone}')" class="ml-auto bg-sky-600 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all text-[10px]">📞 โทรสอบถาม</button>` : ""}
+            ${order.riderPhone ? `<button onclick="callRiderPhone(event, ${jsArg(order.riderPhone)})" class="ml-auto bg-sky-600 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all text-[10px]">📞 โทรสอบถาม</button>` : ""}
         </div>` : ""}
     </div>`;
 }
@@ -4835,15 +4917,15 @@ function _renderStuckOrderCard(order, now) {
     return `
     <div class="flex items-center justify-between bg-white border border-rose-200 rounded-xl px-3 py-2">
         <div>
-            <span class="font-extrabold text-rose-800">${order.orderId}</span>
+            <span class="font-extrabold text-rose-800">${escapeHtml(order.orderId)}</span>
             <span class="text-rose-600 ml-1">(${minutesAgo} นาทีที่แล้ว)</span>
         </div>
         <div class="flex gap-1.5">
-            <button onclick="callRiderPhone(event, '${order.riderPhone || ''}')"
+            <button onclick="callRiderPhone(event, ${jsArg(order.riderPhone || '')})"
                 class="bg-sky-600 text-white font-bold px-2 py-1 rounded-lg text-[10px] active:scale-95 transition-all">
                 📞 โทร
             </button>
-            <button onclick="reassignRiderForOrder('${order.orderId}')"
+            <button onclick="reassignRiderForOrder(${jsArg(order.orderId)})"
                 class="bg-amber-500 text-white font-bold px-2 py-1 rounded-lg text-[10px] active:scale-95 transition-all">
                 🔁 Assign
             </button>
@@ -5358,7 +5440,7 @@ function renderHubDailyReport(targetDateKey) {
                     <p class="text-xs text-white/90 mt-0.5 font-medium">ผู้สมัครล่าสุด: <strong class="text-white underline">${escapeHtml(pendingRiderApps[0].fullName)}</strong> (${escapeHtml(pendingRiderApps[0].phone)}) • สมัครเข้ามาแล้ว</p>
                 </div>
             </div>
-            <button onclick="goToAdminToApproveRider('${pendingRiderApps[0].id}')" class="px-4 py-2.5 bg-white hover:bg-amber-50 text-orange-700 font-black rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer">
+            <button onclick="goToAdminToApproveRider(${jsArg(pendingRiderApps[0].id)})" class="px-4 py-2.5 bg-white hover:bg-amber-50 text-orange-700 font-black rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer">
                 <span class="material-symbols-outlined text-base font-bold">check_circle</span>
                 <span>ดูใบสมัครและกดอนุมัติทันที 🚀</span>
             </button>
@@ -5388,11 +5470,11 @@ function renderHubDailyReport(targetDateKey) {
 
             <!-- Action buttons -->
             <div class="flex items-center gap-1.5 flex-wrap">
-                <button onclick="renderHubDailyReport('${targetDateKey}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs">
+                <button onclick="renderHubDailyReport(${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs">
                     <span class="material-symbols-outlined text-sm">refresh</span>
                     <span>รีเฟรช</span>
                 </button>
-                <button onclick="exportDailyReportCSV('${targetDateKey}')" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs">
+                <button onclick="exportDailyReportCSV(${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs">
                     <span class="material-symbols-outlined text-sm">download</span>
                     <span>ส่งออก CSV</span>
                 </button>
@@ -5400,7 +5482,7 @@ function renderHubDailyReport(targetDateKey) {
                     <span class="material-symbols-outlined text-sm">print</span>
                     <span>พิมพ์รายงาน A4</span>
                 </button>
-                <button onclick="clearDailyOrdersAndReport('${targetDateKey}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="เคลียร์เฉพาะข้อมูลออเดอร์และรายงานของวันที่ ${thaiDateText} (ต้องใช้รหัสผ่าน Admin)">
+                <button onclick="clearDailyOrdersAndReport(${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="เคลียร์เฉพาะข้อมูลออเดอร์และรายงานของวันที่ ${thaiDateText} (ต้องใช้รหัสผ่าน Admin)">
                     <span class="material-symbols-outlined text-sm text-amber-700">event_busy</span>
                     <span>${isToday ? 'เคลียร์เฉพาะวันนี้' : 'เคลียร์เฉพาะวันที่เลือก (' + thaiDateText + ')'}</span>
                 </button>
@@ -5711,8 +5793,8 @@ function renderHubDailyReport(targetDateKey) {
                     ${report.riderSettlement.riders.map(r => `
                     <tr class="hover:bg-slate-50/70 transition-colors">
                         <td class="p-2.5">
-                            <div class="font-extrabold text-slate-800 text-xs">${r.riderName}</div>
-                            <div class="text-[10px] text-slate-400 font-mono">${r.riderPhone}</div>
+                            <div class="font-extrabold text-slate-800 text-xs">${escapeHtml(r.riderName)}</div>
+                            <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(r.riderPhone)}</div>
                         </td>
                         <td class="p-2.5 text-center font-bold text-slate-700">${r.tripsCount} เที่ยว</td>
                         <td class="p-2.5 text-right font-bold text-sky-700">฿${r.riderFeeEarned.toLocaleString()}</td>
@@ -5756,7 +5838,7 @@ function renderHubDailyReport(targetDateKey) {
                             </button>
                         </td>
                         <td class="p-2.5 text-center">
-                            <button onclick="printThermalRiderSlip('${r.riderName.replace(/'/g, "\\'")}', '${targetDateKey}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์สลิปเครื่องพิมพ์ความร้อน 80x80">
+                            <button onclick="printThermalRiderSlip(${jsArg(r.riderName)}, ${jsArg(targetDateKey)})" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์สลิปเครื่องพิมพ์ความร้อน 80x80">
                                 <span class="material-symbols-outlined text-xs">receipt</span>
                                 <span>พิมพ์สลิป</span>
                             </button>
@@ -5767,7 +5849,7 @@ function renderHubDailyReport(targetDateKey) {
         </div>`}
         <!-- ปุ่มพิมพ์สรุปกระดาษ A4 ตรงกลางด้านล่างหมวด 2 -->
         <div class="pt-3 border-t border-slate-100 flex justify-center">
-            <button onclick="printA4RidersSummary('${targetDateKey}')" class="px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
+            <button onclick="printA4RidersSummary(${jsArg(targetDateKey)})" class="px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
                 <span class="material-symbols-outlined text-sm">print</span>
                 <span>📄 พิมพ์สรุปเคลียร์เงินไรเดอร์ทั้งหมด (กระดาษ A4)</span>
             </button>
@@ -5790,7 +5872,7 @@ function renderHubDailyReport(targetDateKey) {
                     <span class="font-black text-rose-600 text-sm ml-1">฿${report.vendorSettlement.totalPendingAmount.toLocaleString()}</span>
                 </div>
                 ${report.vendorSettlement.pendingCount > 0 ? `
-                <button onclick="settleAllVendors('${targetDateKey}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 text-white font-extrabold rounded-xl text-[10px] shadow-2xs active:scale-95 transition-all flex items-center gap-1">
+                <button onclick="settleAllVendors(${jsArg(targetDateKey)})" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 text-white font-extrabold rounded-xl text-[10px] shadow-2xs active:scale-95 transition-all flex items-center gap-1">
                     <span class="material-symbols-outlined text-xs">done_all</span>
                     <span>โอนเคลียร์ทุกแผงที่เหลือ</span>
                 </button>` : ''}
@@ -5821,13 +5903,13 @@ function renderHubDailyReport(targetDateKey) {
                     ${report.vendorSettlement.stalls.map(s => `
                     <tr class="hover:bg-slate-50/70 transition-colors">
                         <td class="p-2.5">
-                            <div class="font-extrabold text-slate-800 text-xs">${s.stallName}</div>
-                            <span class="text-[9px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.2 rounded">${s.stallNumber} (โซน ${s.zone})</span>
+                            <div class="font-extrabold text-slate-800 text-xs">${escapeHtml(s.stallName)}</div>
+                            <span class="text-[9px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.2 rounded">${escapeHtml(s.stallNumber)} (โซน ${escapeHtml(s.zone)})</span>
                         </td>
                         <td class="p-2.5">
-                            <div class="font-bold text-slate-700">${s.ownerName}</div>
+                            <div class="font-bold text-slate-700">${escapeHtml(s.ownerName)}</div>
                             <div class="text-[10px] text-emerald-700 font-mono font-bold flex items-center gap-1">
-                                <span>📱 ${s.phone}</span>
+                                <span>📱 ${escapeHtml(s.phone)}</span>
                             </div>
                         </td>
                         <td class="p-2.5 text-center">
@@ -5855,13 +5937,13 @@ function renderHubDailyReport(targetDateKey) {
                             </span>`}
                         </td>
                         <td class="p-2.5 text-center">
-                            <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', ${(s.payoutAmount !== undefined ? s.payoutAmount : s.totalAmount)}, '${s.phone}', '${s.ownerName.replace(/'/g, "\\'")}', '${s.stallNumber}', ${s.totalAmount}, ${s.gpAmount || 0}, ${s.gpRate || 10})" class="px-2.5 py-1.5 ${s.isSettled ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'} font-bold rounded-xl text-[10px] active:scale-95 transition-all flex items-center gap-1 mx-auto">
+                            <button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, ${(s.payoutAmount !== undefined ? s.payoutAmount : s.totalAmount)}, ${jsArg(s.phone)}, ${jsArg(s.ownerName)}, ${jsArg(s.stallNumber)}, ${s.totalAmount}, ${s.gpAmount || 0}, ${s.gpRate || 10})" class="px-2.5 py-1.5 ${s.isSettled ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'} font-bold rounded-xl text-[10px] active:scale-95 transition-all flex items-center gap-1 mx-auto">
                                 <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                 <span>${s.isSettled ? 'ดู QR / โอนซ้ำ' : '💳 โอนพร้อมเพย์'}</span>
                             </button>
                         </td>
                         <td class="p-2.5 text-center">
-                            <button onclick="printThermalVendorSlip('${s.stallId}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์สลิปเครื่องพิมพ์ความร้อน 80x80">
+                            <button onclick="printThermalVendorSlip(${jsArg(s.stallId)}, ${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์สลิปเครื่องพิมพ์ความร้อน 80x80">
                                 <span class="material-symbols-outlined text-xs">receipt</span>
                                 <span>พิมพ์สลิป</span>
                             </button>
@@ -5872,7 +5954,7 @@ function renderHubDailyReport(targetDateKey) {
         </div>`}
         <!-- ปุ่มพิมพ์สรุปกระดาษ A4 ตรงกลางด้านล่างหมวด 3 -->
         <div class="pt-3 border-t border-slate-100 flex justify-center">
-            <button onclick="printA4VendorsSummary('${targetDateKey}')" class="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-700 hover:to-orange-800 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
+            <button onclick="printA4VendorsSummary(${jsArg(targetDateKey)})" class="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-700 hover:to-orange-800 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
                 <span class="material-symbols-outlined text-sm">print</span>
                 <span>📄 พิมพ์สรุปยอดเคลียร์เงินแผงค้าทั้งหมด (กระดาษ A4)</span>
             </button>
@@ -5912,9 +5994,9 @@ function renderHubDailyReport(targetDateKey) {
             </div>
             <div class="flex items-center gap-1.5 flex-wrap shrink-0">
                 ${pendingVerifyOrders.slice(0, 3).map(p => `
-                    <button onclick="openOrderSlipVerificationModal('${p.orderId}')" class="px-3 py-1.5 bg-white hover:bg-orange-50 text-orange-950 font-black rounded-xl text-[11px] shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button onclick="openOrderSlipVerificationModal(${jsArg(p.orderId)})" class="px-3 py-1.5 bg-white hover:bg-orange-50 text-orange-950 font-black rounded-xl text-[11px] shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-xs text-orange-600">receipt_long</span>
-                        <span>ตรวจ ${p.orderId} (฿${p.payAmountExact !== undefined && p.payAmountExact !== null ? Number(p.payAmountExact).toFixed(2) : (p.grandTotal || p.total || 0).toLocaleString()})</span>
+                        <span>ตรวจ ${escapeHtml(p.orderId)} (฿${p.payAmountExact !== undefined && p.payAmountExact !== null ? Number(p.payAmountExact).toFixed(2) : (p.grandTotal || p.total || 0).toLocaleString()})</span>
                     </button>
                 `).join("")}
             </div>
@@ -5952,12 +6034,12 @@ function renderHubDailyReport(targetDateKey) {
                         return `
                         <tr class="hover:bg-slate-50/70 transition-colors">
                             <td class="p-2.5">
-                                <div class="font-mono font-black text-slate-900 text-xs">${o.orderId}</div>
+                                <div class="font-mono font-black text-slate-900 text-xs">${escapeHtml(o.orderId)}</div>
                                 <div class="text-[10px] text-slate-400">${timeStr} น.</div>
                             </td>
                             <td class="p-2.5">
-                                <div class="font-bold text-slate-800">${o.customerName || "ลูกค้าทั่วไป"}</div>
-                                <div class="text-[10px] text-slate-500 font-mono">${o.customerPhone || "-"}</div>
+                                <div class="font-bold text-slate-800">${escapeHtml(o.customerName) || "ลูกค้าทั่วไป"}</div>
+                                <div class="text-[10px] text-slate-500 font-mono">${escapeHtml(o.customerPhone) || "-"}</div>
                             </td>
                             <td class="p-2.5">
                                 <div class="font-bold text-slate-700">${payChannelLabel}</div>
@@ -5970,7 +6052,7 @@ function renderHubDailyReport(targetDateKey) {
                                             <span>เงินเข้าแล้ว</span>
                                         </span>
                                     ` : `
-                                        <button onclick="openOrderSlipVerificationModal('${o.orderId}')" class="inline-flex items-center gap-0.5 text-[9.5px] bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.2 rounded-full border border-amber-300 animate-pulse cursor-pointer">
+                                        <button onclick="openOrderSlipVerificationModal(${jsArg(o.orderId)})" class="inline-flex items-center gap-0.5 text-[9.5px] bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.2 rounded-full border border-amber-300 animate-pulse cursor-pointer">
                                             <span class="material-symbols-outlined text-[10px]">hourglass_top</span>
                                             <span>รอยืนยันเงิน</span>
                                         </button>
@@ -5982,30 +6064,30 @@ function renderHubDailyReport(targetDateKey) {
                                 ${o.payAmountExact ? '<div class="text-[8.5px] font-bold text-amber-600">(เศษสตางค์)</div>' : `<div class="text-[9px] text-slate-400">(ค่าส่ง ฿${o.deliveryFee || 20})</div>`}
                             </td>
                             <td class="p-2.5">
-                                <div class="font-bold text-sky-700">${o.riderName || "ยังไม่ได้ assign"}</div>
+                                <div class="font-bold text-sky-700">${escapeHtml(o.riderName) || "ยังไม่ได้ assign"}</div>
                             </td>
                             <td class="p-2.5 text-center">
                                 <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.color}">
-                                    ${cfg.icon} ${cfg.label}
+                                    ${cfg.icon} ${escapeHtml(cfg.label)}
                                 </span>
                             </td>
                             <td class="p-2.5 text-center">
                                 <div class="flex items-center justify-center gap-1.5 flex-wrap">
                                     ${o.paymentType !== 'cod' ? `
-                                        <button onclick="openOrderSlipVerificationModal('${o.orderId}')" class="px-2 py-1.5 ${isPaymentVerified ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black animate-pulse'} font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ตรวจสอบสลิปและยืนยันยอดเงิน">
+                                        <button onclick="openOrderSlipVerificationModal(${jsArg(o.orderId)})" class="px-2 py-1.5 ${isPaymentVerified ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black animate-pulse'} font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ตรวจสอบสลิปและยืนยันยอดเงิน">
                                             <span class="material-symbols-outlined text-xs">${isPaymentVerified ? 'check_circle' : 'receipt_long'}</span>
                                             <span>${isPaymentVerified ? 'ดูสลิป' : 'ตรวจสลิป'}</span>
                                         </button>
                                     ` : ''}
-                                    <button onclick="printThermalOrderSlip('${o.orderId}', '${targetDateKey}')" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเสร็จ/ใบส่งของเครื่องพิมพ์ความร้อน 80x80">
+                                    <button onclick="printThermalOrderSlip(${jsArg(o.orderId)}, ${jsArg(targetDateKey)})" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเสร็จ/ใบส่งของเครื่องพิมพ์ความร้อน 80x80">
                                         <span class="material-symbols-outlined text-xs">print</span>
                                         <span>สลิป</span>
                                     </button>
-                                    <button onclick="openOrderLineNoticeModal('${o.orderId}')" class="px-2 py-1.5 bg-[#06C755]/15 hover:bg-[#06C755]/25 text-[#04883b] border border-[#06C755]/40 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ส่งข้อมูลสรุปออเดอร์ให้ลูกค้าทาง LINE">
+                                    <button onclick="openOrderLineNoticeModal(${jsArg(o.orderId)})" class="px-2 py-1.5 bg-[#06C755]/15 hover:bg-[#06C755]/25 text-[#04883b] border border-[#06C755]/40 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ส่งข้อมูลสรุปออเดอร์ให้ลูกค้าทาง LINE">
                                         <span class="text-xs">💬</span>
                                         <span>LINE</span>
                                     </button>
-                                    <button onclick="deleteSingleOrder('${o.orderId}', '${targetDateKey}')" class="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ลบออเดอร์นี้ออกจากระบบ (ต้องใช้รหัสผ่าน Admin)">
+                                    <button onclick="deleteSingleOrder(${jsArg(o.orderId)}, ${jsArg(targetDateKey)})" class="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ลบออเดอร์นี้ออกจากระบบ (ต้องใช้รหัสผ่าน Admin)">
                                         <span class="material-symbols-outlined text-xs">delete</span>
                                         <span>ลบ</span>
                                     </button>
@@ -6018,7 +6100,7 @@ function renderHubDailyReport(targetDateKey) {
         </div>`}
         <!-- ปุ่มพิมพ์สมุดบัญชีออเดอร์กระดาษ A4 ตรงกลางด้านล่างหมวด 4 -->
         <div class="pt-3 border-t border-slate-100 flex justify-center">
-            <button onclick="printA4OrdersAuditLedger('${targetDateKey}')" class="px-4 py-2 bg-gradient-to-r from-slate-700 to-slate-900 hover:from-slate-800 hover:to-black text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
+            <button onclick="printA4OrdersAuditLedger(${jsArg(targetDateKey)})" class="px-4 py-2 bg-gradient-to-r from-slate-700 to-slate-900 hover:from-slate-800 hover:to-black text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
                 <span class="material-symbols-outlined text-sm">print</span>
                 <span>📄 พิมพ์สมุดบัญชีออเดอร์ประจำวันทั้งหมด (กระดาษ A4)</span>
             </button>
@@ -7117,7 +7199,7 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
         <html lang="th">
         <head>
             <meta charset="utf-8">
-            <title>${title}</title>
+            <title>${escapeHtml(title)}</title>
             <style>
                 * { box-sizing: border-box; }
                 @page {
@@ -7308,8 +7390,8 @@ function printThermalRiderSlip(riderIdentifier, dateKey) {
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
         <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
-        <div class="slip-row"><span class="slip-label">ไรเดอร์:</span><span class="slip-value">${r.riderName}</span></div>
-        <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${r.riderPhone}</span></div>
+        <div class="slip-row"><span class="slip-label">ไรเดอร์:</span><span class="slip-value">${escapeHtml(r.riderName)}</span></div>
+        <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${escapeHtml(r.riderPhone)}</span></div>
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">1. จำนวนเที่ยวส่งสำเร็จ:</span><span class="slip-value">${r.tripsCount} เที่ยว</span></div>
         <div class="slip-row"><span class="slip-label">2. ค่ารอบสะสม (+฿40/เที่ยว):</span><span class="slip-value">+฿${r.riderFeeEarned.toLocaleString()}</span></div>
@@ -7327,7 +7409,7 @@ function printThermalRiderSlip(riderIdentifier, dateKey) {
         <div class="sig-container">
             <div class="sig-col">
                 <div class="sig-line"></div>
-                <div class="sig-name">( ${r.riderName} )</div>
+                <div class="sig-name">( ${escapeHtml(r.riderName)} )</div>
                 <div class="sig-role">ไรเดอร์ผู้ส่งมอบเงิน</div>
             </div>
             <div class="sig-col">
@@ -7382,16 +7464,16 @@ function printThermalRiderSlipFromFleet(riderId) {
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
         <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
-        <div class="slip-row"><span class="slip-label">รหัสไรเดอร์:</span><span class="slip-value font-mono font-bold">${rider.id}</span></div>
-        <div class="slip-row"><span class="slip-label">ชื่อไรเดอร์:</span><span class="slip-value font-bold">${rider.name}</span></div>
-        <div class="slip-row"><span class="slip-label">เบอร์โทรศัพท์:</span><span class="slip-value font-mono">${rider.phone}</span></div>
-        <div class="slip-row"><span class="slip-label">ทะเบียนรถ:</span><span class="slip-value font-mono font-bold">${rider.plate || '-'}</span></div>
-        <div class="slip-row"><span class="slip-label">รุ่นจักรยานยนต์:</span><span class="slip-value">${rider.motorcycleModel || '-'}</span></div>
-        <div class="slip-row"><span class="slip-label">พร้อมเพย์:</span><span class="slip-value font-mono">${rider.promptPay || rider.phone || '-'}</span></div>
+        <div class="slip-row"><span class="slip-label">รหัสไรเดอร์:</span><span class="slip-value font-mono font-bold">${escapeHtml(rider.id)}</span></div>
+        <div class="slip-row"><span class="slip-label">ชื่อไรเดอร์:</span><span class="slip-value font-bold">${escapeHtml(rider.name)}</span></div>
+        <div class="slip-row"><span class="slip-label">เบอร์โทรศัพท์:</span><span class="slip-value font-mono">${escapeHtml(rider.phone)}</span></div>
+        <div class="slip-row"><span class="slip-label">ทะเบียนรถ:</span><span class="slip-value font-mono font-bold">${escapeHtml(rider.plate) || '-'}</span></div>
+        <div class="slip-row"><span class="slip-label">รุ่นจักรยานยนต์:</span><span class="slip-value">${escapeHtml(rider.motorcycleModel) || '-'}</span></div>
+        <div class="slip-row"><span class="slip-label">พร้อมเพย์:</span><span class="slip-value font-mono">${escapeHtml(rider.promptPay) || escapeHtml(rider.phone) || '-'}</span></div>
         <div class="slip-row"><span class="slip-label">สถานะปัจจุบัน:</span><span class="slip-value font-bold">${rider.status === 'available' ? '🟢 พร้อมรับงาน' : rider.status === 'on_delivery' ? '🟡 กำลังส่งของ' : '🔴 พักรอบ'}</span></div>
         <div class="settle-box" style="background: #f0fdf4; border-color: #86efac; margin-top: 6px;">
             <div class="settle-title" style="color: #166534;">รหัสเข้าสู่ระบบไรเดอร์ (PIN)</div>
-            <div class="settle-amount" style="font-family: monospace; font-size: 18px; letter-spacing: 2px;">${rider.accessCode || rider.pin || rider.id.slice(-6).toUpperCase()}</div>
+            <div class="settle-amount" style="font-family: monospace; font-size: 18px; letter-spacing: 2px;">${escapeHtml(rider.accessCode) || escapeHtml(rider.pin) || rider.id.slice(-6).toUpperCase()}</div>
             <div class="settle-sub">ใช้รหัส 6 หลักนี้เพื่อ Login เข้า Role 4 ไรเดอร์</div>
         </div>
         <div class="divider-dashed" style="margin-top: 8px;"></div>
@@ -7436,10 +7518,10 @@ function printThermalVendorSlip(stallId, dateKey) {
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
         <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
-        <div class="slip-row"><span class="slip-label">แผงค้า:</span><span class="slip-value">${s.stallName}</span></div>
-        <div class="slip-row"><span class="slip-label">ตำแหน่ง:</span><span class="slip-value">${s.stallNumber} (โซน ${s.zone})</span></div>
-        <div class="slip-row"><span class="slip-label">เจ้าของแผง:</span><span class="slip-value">${s.ownerName}</span></div>
-        <div class="slip-row"><span class="slip-label">เบอร์พร้อมเพย์:</span><span class="slip-value">${s.phone}</span></div>
+        <div class="slip-row"><span class="slip-label">แผงค้า:</span><span class="slip-value">${escapeHtml(s.stallName)}</span></div>
+        <div class="slip-row"><span class="slip-label">ตำแหน่ง:</span><span class="slip-value">${escapeHtml(s.stallNumber)} (โซน ${escapeHtml(s.zone)})</span></div>
+        <div class="slip-row"><span class="slip-label">เจ้าของแผง:</span><span class="slip-value">${escapeHtml(s.ownerName)}</span></div>
+        <div class="slip-row"><span class="slip-label">เบอร์พร้อมเพย์:</span><span class="slip-value">${escapeHtml(s.phone)}</span></div>
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">จำนวนออเดอร์ที่เข้ารับ:</span><span class="slip-value">${s.orderCount} บิล</span></div>
         <div class="slip-row"><span class="slip-label">จำนวนสินค้าที่ขายได้จริง:</span><span class="slip-value">${s.itemsCount} ชิ้น</span></div>
@@ -7448,7 +7530,7 @@ function printThermalVendorSlip(stallId, dateKey) {
         <div class="settle-box">
             <div class="settle-title">ยอดเงินโอนสุทธิให้แผงค้า</div>
             <div class="settle-amount">฿${(s.payoutAmount !== undefined ? s.payoutAmount : Math.max(0, s.totalAmount - (s.gpAmount || 0))).toLocaleString()}</div>
-            <div class="settle-sub">โอนผ่าน PromptPay: ${s.phone}</div>
+            <div class="settle-sub">โอนผ่าน PromptPay: ${escapeHtml(s.phone)}</div>
         </div>
         <div class="slip-row" style="margin-top: 4px;">
             <span class="slip-label">สถานะการโอน:</span>
@@ -7457,7 +7539,7 @@ function printThermalVendorSlip(stallId, dateKey) {
         <div class="sig-container">
             <div class="sig-col">
                 <div class="sig-line"></div>
-                <div class="sig-name">( ${s.ownerName || 'เจ้าของแผงค้า'} )</div>
+                <div class="sig-name">( ${escapeHtml(s.ownerName) || 'เจ้าของแผงค้า'} )</div>
                 <div class="sig-role">ผู้รับเงิน / เจ้าของแผง</div>
             </div>
             <div class="sig-col">
@@ -7523,10 +7605,10 @@ function printThermalOrderSlip(orderId, dateKey) {
             return `
                 <div style="margin: 2.5px 0; font-size: 10px;">
                     <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                        <span style="max-width: 72%; word-break: break-word;">• ${it.name} x${itQty}</span>
+                        <span style="max-width: 72%; word-break: break-word;">• ${escapeHtml(it.name)} x${itQty}</span>
                         <span style="font-weight: bold;">฿${sub.toLocaleString()}</span>
                     </div>
-                    ${it.stallName ? `<div style="font-size: 8.5px; color: #555; padding-left: 8px;">(${it.stallName})</div>` : ''}
+                    ${it.stallName ? `<div style="font-size: 8.5px; color: #555; padding-left: 8px;">(${escapeHtml(it.stallName)})</div>` : ''}
                 </div>
             `;
         }).join("");
@@ -7549,15 +7631,15 @@ function printThermalOrderSlip(orderId, dateKey) {
             <div class="doc-badge">[ ใบเสร็จรับเงิน & ใบส่งของ ]</div>
         </div>
         <div class="divider-dashed"></div>
-        <div class="slip-row"><span class="slip-label">เลขที่บิล:</span><span class="slip-value" style="font-size: 11px;">${o.orderId}</span></div>
+        <div class="slip-row"><span class="slip-label">เลขที่บิล:</span><span class="slip-value" style="font-size: 11px;">${escapeHtml(o.orderId)}</span></div>
         <div class="slip-row"><span class="slip-label">วันที่-เวลา:</span><span class="slip-value">${thaiDate} (${orderTimeStr} น.)</span></div>
-        <div class="slip-row"><span class="slip-label">ผู้รับสินค้า:</span><span class="slip-value">${o.customerName || 'ลูกค้าทั่วไป'}</span></div>
-        <div class="slip-row"><span class="slip-label">โทรศัพท์:</span><span class="slip-value">${o.customerPhone || '-'}</span></div>
+        <div class="slip-row"><span class="slip-label">ผู้รับสินค้า:</span><span class="slip-value">${escapeHtml(o.customerName) || 'ลูกค้าทั่วไป'}</span></div>
+        <div class="slip-row"><span class="slip-label">โทรศัพท์:</span><span class="slip-value">${escapeHtml(o.customerPhone) || '-'}</span></div>
         <div style="margin: 3px 0; font-size: 10px; line-height: 1.3;">
-            <span style="color: #333;">ที่อยู่จัดส่ง: </span><strong>${o.address || 'ที่อยู่จัดส่งในเขตบริการ'}</strong>
+            <span style="color: #333;">ที่อยู่จัดส่ง: </span><strong>${escapeHtml(o.address) || 'ที่อยู่จัดส่งในเขตบริการ'}</strong>
         </div>
-        ${o.landmark ? `<div style="margin: 2px 0 3px; font-size: 9.5px; color: #444;">จุดสังเกต: ${o.landmark}</div>` : ''}
-        <div class="slip-row"><span class="slip-label">ไรเดอร์นำส่ง:</span><span class="slip-value">${o.riderName || 'ไรเดอร์ส่งของ'}</span></div>
+        ${o.landmark ? `<div style="margin: 2px 0 3px; font-size: 9.5px; color: #444;">จุดสังเกต: ${escapeHtml(o.landmark)}</div>` : ''}
+        <div class="slip-row"><span class="slip-label">ไรเดอร์นำส่ง:</span><span class="slip-value">${escapeHtml(o.riderName) || 'ไรเดอร์ส่งของ'}</span></div>
         <div class="divider-dashed"></div>
         <div style="font-weight: bold; margin-bottom: 3px; font-size: 10.5px;">รายการสินค้าที่จัดส่ง:</div>
         ${itemsHtml}
@@ -7605,7 +7687,7 @@ function printStallPickingSlip(orderId, stallIndex) {
         const picked = it.picked ? ' <span style="color:#059669; font-weight:bold;">✓</span>' : '';
         return `
             <div style="margin: 3.5px 0; font-size: 10.5px; display: flex; justify-content: space-between; align-items: baseline;">
-                <span style="max-width: 75%;">• ${it.name} x${it.qty || 1}${picked}${oos}</span>
+                <span style="max-width: 75%;">• ${escapeHtml(it.name)} x${it.qty || 1}${picked}${oos}</span>
                 <span style="font-weight: bold;">฿${pr}</span>
             </div>
         `;
@@ -7622,10 +7704,10 @@ function printStallPickingSlip(orderId, stallIndex) {
             </div>
         </div>
         <div class="divider-dashed"></div>
-        <div class="slip-row"><span class="slip-label">แผงค้า:</span><span class="slip-value" style="font-size: 11.5px; font-weight: bold; color: #047857;">${stall.name} (${stall.tag || stall.stallNumber || 'แผงค้า'})</span></div>
-        <div class="slip-row"><span class="slip-label">เลขที่ออเดอร์:</span><span class="slip-value" style="font-size: 11px; font-weight: bold;">${o.orderId}</span></div>
+        <div class="slip-row"><span class="slip-label">แผงค้า:</span><span class="slip-value" style="font-size: 11.5px; font-weight: bold; color: #047857;">${escapeHtml(stall.name)} (${escapeHtml(stall.tag) || escapeHtml(stall.stallNumber) || 'แผงค้า'})</span></div>
+        <div class="slip-row"><span class="slip-label">เลขที่ออเดอร์:</span><span class="slip-value" style="font-size: 11px; font-weight: bold;">${escapeHtml(o.orderId)}</span></div>
         <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${thaiDate} ${timeStr} น.</span></div>
-        <div class="slip-row"><span class="slip-label">ลูกค้าปลายทาง:</span><span class="slip-value">${o.customerName || 'ลูกค้า'}</span></div>
+        <div class="slip-row"><span class="slip-label">ลูกค้าปลายทาง:</span><span class="slip-value">${escapeHtml(o.customerName) || 'ลูกค้า'}</span></div>
         <div class="divider-dashed"></div>
         <div style="font-weight: bold; margin-bottom: 4px; font-size: 11px; color: #111;">รายการของสดที่ต้องหยิบ:</div>
         ${itemsHtml}
@@ -7656,8 +7738,8 @@ function printA4RidersSummary(dateKey) {
         tableRows += `
             <tr>
                 <td class="text-center">${idx + 1}</td>
-                <td><strong>${r.riderName}</strong></td>
-                <td class="text-center">${r.riderPhone}</td>
+                <td><strong>${escapeHtml(r.riderName)}</strong></td>
+                <td class="text-center">${escapeHtml(r.riderPhone)}</td>
                 <td class="text-center">${r.tripsCount}</td>
                 <td class="text-right font-bold">฿${r.riderFeeEarned.toLocaleString()}</td>
                 <td class="text-right font-bold">฿${r.codCollected.toLocaleString()}</td>
@@ -7759,10 +7841,10 @@ function printA4VendorsSummary(dateKey) {
         tableRows += `
             <tr>
                 <td class="text-center">${idx + 1}</td>
-                <td><strong>${s.stallName}</strong></td>
-                <td class="text-center">${s.stallNumber} (โซน ${s.zone})</td>
-                <td>${s.ownerName}</td>
-                <td class="text-center">${s.phone}</td>
+                <td><strong>${escapeHtml(s.stallName)}</strong></td>
+                <td class="text-center">${escapeHtml(s.stallNumber)} (โซน ${escapeHtml(s.zone)})</td>
+                <td>${escapeHtml(s.ownerName)}</td>
+                <td class="text-center">${escapeHtml(s.phone)}</td>
                 <td class="text-center">${s.itemsCount} ชิ้น</td>
                 <td class="text-center">${s.orderCount} บิล</td>
                 <td class="text-right font-medium">฿${s.totalAmount.toLocaleString()}</td>
@@ -7873,14 +7955,14 @@ function printA4OrdersAuditLedger(dateKey) {
         tableRows += `
             <tr>
                 <td class="text-center">${idx + 1}</td>
-                <td><strong>${o.orderId}</strong></td>
+                <td><strong>${escapeHtml(o.orderId)}</strong></td>
                 <td class="text-center">${timeStr} น.</td>
-                <td>${o.customerName || 'ลูกค้าทั่วไป'}</td>
-                <td class="text-center">${o.customerPhone || '-'}</td>
+                <td>${escapeHtml(o.customerName) || 'ลูกค้าทั่วไป'}</td>
+                <td class="text-center">${escapeHtml(o.customerPhone) || '-'}</td>
                 <td class="text-center">${pLabel} <span style="font-size: 8.5px; color: ${o.paymentVerified ? '#047857' : '#b45309'};">${verifyA4}</span></td>
                 <td class="text-right font-bold">${exactAmtA4}</td>
                 <td class="text-center">${o.deliveryFee ? `฿${o.deliveryFee}` : '฿20'}</td>
-                <td>${o.riderName || '-'}</td>
+                <td>${escapeHtml(o.riderName) || '-'}</td>
                 <td class="text-center font-bold">${statusLabel}</td>
             </tr>
         `;
@@ -8046,7 +8128,7 @@ function printDailyReport(dateKey) {
             <tbody>
                 ${report.riderSettlement.riders.map(r => `
                     <tr>
-                        <td><strong>${r.riderName}</strong> (${r.riderPhone})</td>
+                        <td><strong>${escapeHtml(r.riderName)}</strong> (${escapeHtml(r.riderPhone)})</td>
                         <td class="text-center">${r.tripsCount}</td>
                         <td class="text-right">฿${r.riderFeeEarned.toLocaleString()}</td>
                         <td class="text-right">฿${r.codCollected.toLocaleString()}</td>
@@ -8071,8 +8153,8 @@ function printDailyReport(dateKey) {
             <tbody>
                 ${report.vendorSettlement.stalls.map(s => `
                     <tr>
-                        <td><strong>${s.stallName}</strong> (${s.stallNumber})</td>
-                        <td>${s.ownerName} (${s.phone})</td>
+                        <td><strong>${escapeHtml(s.stallName)}</strong> (${escapeHtml(s.stallNumber)})</td>
+                        <td>${escapeHtml(s.ownerName)} (${escapeHtml(s.phone)})</td>
                         <td class="text-center">${s.itemsCount} ชิ้น</td>
                         <td class="text-right font-bold" style="color: #047857;">฿${s.totalAmount.toLocaleString()}</td>
                         <td class="text-center font-bold">${s.isSettled ? '✅ โอนแล้ว' : '⏳ รอโอน'}</td>
@@ -8455,7 +8537,7 @@ function renderPeriodAnalysisModalContent() {
                 <td class="py-2 px-2.5 border-b border-slate-100">
                     <div class="flex items-center gap-1">
                         <span class="w-2 h-2 rounded-full ${d.orders > 0 ? 'bg-emerald-500' : 'bg-slate-300'}"></span>
-                        <span>${d.thaiDate} (${d.dayName})</span>
+                        <span>${d.thaiDate} (${escapeHtml(d.dayName)})</span>
                         ${isCurrentDay ? '<span class="text-[9px] bg-emerald-100 text-emerald-800 px-1 rounded font-black">วันนี้</span>' : ''}
                     </div>
                 </td>
@@ -8469,7 +8551,7 @@ function renderPeriodAnalysisModalContent() {
                     ฿${d.hubNetMargin.toLocaleString()}
                 </td>
                 <td class="py-2 px-2 text-center border-b border-slate-100">
-                    <button onclick="changeReportDate('${d.dateKey}'); closePeriodAnalysisModal();" class="px-2 py-1 bg-white hover:bg-emerald-600 hover:text-white text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-bold active:scale-95 transition-all shadow-2xs flex items-center gap-0.5 mx-auto cursor-pointer" title="เปิดดูรายงานประจำวันนี้">
+                    <button onclick="changeReportDate(${jsArg(d.dateKey)}); closePeriodAnalysisModal();" class="px-2 py-1 bg-white hover:bg-emerald-600 hover:text-white text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-bold active:scale-95 transition-all shadow-2xs flex items-center gap-0.5 mx-auto cursor-pointer" title="เปิดดูรายงานประจำวันนี้">
                         <span class="material-symbols-outlined text-[12px]">visibility</span>
                         <span>ดูวันนี้</span>
                     </button>
@@ -8491,8 +8573,8 @@ function renderPeriodAnalysisModalContent() {
                             ${idx + 1}
                         </span>
                         <div class="truncate">
-                            <div class="font-bold text-slate-800 truncate">${s.stallName}</div>
-                            <div class="text-[10px] text-slate-500">${s.stallNumber || 'แผงตลาด'} • ${s.orderCount} ออเดอร์ (${s.itemsCount} ชิ้น)</div>
+                            <div class="font-bold text-slate-800 truncate">${escapeHtml(s.stallName)}</div>
+                            <div class="text-[10px] text-slate-500">${escapeHtml(s.stallNumber) || 'แผงตลาด'} • ${s.orderCount} ออเดอร์ (${s.itemsCount} ชิ้น)</div>
                         </div>
                     </div>
                     <div class="text-right shrink-0 ml-2">
@@ -8517,8 +8599,8 @@ function renderPeriodAnalysisModalContent() {
                             ${idx + 1}
                         </span>
                         <div class="truncate">
-                            <div class="font-bold text-slate-800 truncate">${r.riderName}</div>
-                            <div class="text-[10px] text-slate-500">${r.riderPhone} • วิ่งส่ง ${r.tripsCount} เที่ยว</div>
+                            <div class="font-bold text-slate-800 truncate">${escapeHtml(r.riderName)}</div>
+                            <div class="text-[10px] text-slate-500">${escapeHtml(r.riderPhone)} • วิ่งส่ง ${r.tripsCount} เที่ยว</div>
                         </div>
                     </div>
                     <div class="text-right shrink-0 ml-2">
@@ -8551,7 +8633,7 @@ function renderPeriodAnalysisModalContent() {
                             </button>
                         </div>
                     </div>
-                    <p class="text-xs text-indigo-200/90 mt-0.5 font-medium">${data.periodTitle} • <span class="text-white font-bold">${data.periodSubtitle}</span></p>
+                    <p class="text-xs text-indigo-200/90 mt-0.5 font-medium">${escapeHtml(data.periodTitle)} • <span class="text-white font-bold">${escapeHtml(data.periodSubtitle)}</span></p>
                 </div>
             </div>
 
@@ -8898,7 +8980,7 @@ function printPeriodAnalysis() {
     data.dailyBreakdown.forEach(d => {
         dailyRowsHtml += `
             <tr>
-                <td>${d.thaiDate} (${d.dayName})</td>
+                <td>${d.thaiDate} (${escapeHtml(d.dayName)})</td>
                 <td class="text-center">${d.orders}</td>
                 <td class="text-right">฿${d.gmv.toLocaleString()}</td>
                 <td class="text-right">฿${d.delFee.toLocaleString()}</td>
@@ -8913,7 +8995,7 @@ function printPeriodAnalysis() {
     data.stallsRanked.slice(0, 10).forEach((s, idx) => {
         stallsRowsHtml += `
             <tr>
-                <td>${idx + 1}. ${s.stallName} (${s.stallNumber || 'แผงค้า'})</td>
+                <td>${idx + 1}. ${escapeHtml(s.stallName)} (${escapeHtml(s.stallNumber) || 'แผงค้า'})</td>
                 <td class="text-center">${s.orderCount}</td>
                 <td class="text-right">฿${s.totalAmount.toLocaleString()}</td>
                 <td class="text-right font-bold">฿${s.payoutAmount.toLocaleString()}</td>
@@ -8925,7 +9007,7 @@ function printPeriodAnalysis() {
         <div class="a4-header">
             <div class="a4-title">รายงานวิเคราะห์ผลการดำเนินงาน${modeLabel}</div>
             <div class="a4-meta">
-                ตลาดสดฮับวิศิษฐ์ชัย • ${data.periodTitle} (${data.periodSubtitle}) • พิมพ์เมื่อ: ${printTime}
+                ตลาดสดฮับวิศิษฐ์ชัย • ${escapeHtml(data.periodTitle)} (${escapeHtml(data.periodSubtitle)}) • พิมพ์เมื่อ: ${printTime}
             </div>
         </div>
 
@@ -9024,15 +9106,15 @@ function printA4RiderApplication(appId) {
         <div class="a4-header">
             <div class="a4-title">ใบสมัครและประวัติไรเดอร์ร่วมทีม (Rider Profile & Application)</div>
             <div class="a4-meta">
-                ตลาดสดฮับวิศิษฐ์ชัย • รหัสใบสมัคร: ${app.id} • วันที่ยื่น: ${thaiDate}
+                ตลาดสดฮับวิศิษฐ์ชัย • รหัสใบสมัคร: ${escapeHtml(app.id)} • วันที่ยื่น: ${thaiDate}
             </div>
         </div>
 
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <span style="font-size: 16px; font-weight: bold; color: #1e293b;">${app.fullName} ${app.nickname ? `(${app.nickname})` : ''}</span>
-                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เบอร์โทรศัพท์: <strong>${app.phone}</strong> | LINE ID: <strong>${app.lineId || '-'}</strong></div>
+                    <span style="font-size: 16px; font-weight: bold; color: #1e293b;">${escapeHtml(app.fullName)} ${app.nickname ? `(${app.nickname})` : ''}</span>
+                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เบอร์โทรศัพท์: <strong>${escapeHtml(app.phone)}</strong> | LINE ID: <strong>${escapeHtml(app.lineId) || '-'}</strong></div>
                 </div>
                 <div style="text-align: right;">
                     <span style="display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; background: ${app.status === 'approved' ? '#dcfce7; color: #166534;' : '#fef3c7; color: #92400e;'}">
@@ -9051,19 +9133,19 @@ function printA4RiderApplication(appId) {
             <tbody>
                 <tr>
                     <td style="width: 35%; font-weight: bold;">ชื่อ-นามสกุล (ชื่อเล่น):</td>
-                    <td>${app.fullName} ${app.nickname ? `(${app.nickname})` : ''}</td>
+                    <td>${escapeHtml(app.fullName)} ${app.nickname ? `(${app.nickname})` : ''}</td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">หมายเลขบัตรประจำตัวประชาชน:</td>
-                    <td>${app.idCard || '-'}</td>
+                    <td>${escapeHtml(app.idCard) || '-'}</td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">ที่อยู่พักอาศัยปัจจุบัน:</td>
-                    <td>${app.address || 'อำเภอบ้านบึง จังหวัดชลบุรี'}</td>
+                    <td>${escapeHtml(app.address) || 'อำเภอบ้านบึง จังหวัดชลบุรี'}</td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">โซนพื้นที่ที่สะดวกจัดส่ง:</td>
-                    <td>${app.zone || 'รอบตลาดสดวิศิษฐ์ชัย ชุมชนหนองชาก และอำเภอบ้านบึง'}</td>
+                    <td>${escapeHtml(app.zone) || 'รอบตลาดสดวิศิษฐ์ชัย ชุมชนหนองชาก และอำเภอบ้านบึง'}</td>
                 </tr>
             </tbody>
         </table>
@@ -9077,15 +9159,15 @@ function printA4RiderApplication(appId) {
             <tbody>
                 <tr>
                     <td style="width: 35%; font-weight: bold;">รุ่นรถจักรยานยนต์ / สี:</td>
-                    <td>${app.motorcycleModel || '-'} ${app.motorcycleColor ? `(สี ${app.motorcycleColor})` : ''}</td>
+                    <td>${escapeHtml(app.motorcycleModel) || '-'} ${app.motorcycleColor ? `(สี ${app.motorcycleColor})` : ''}</td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">หมายเลขทะเบียนรถ:</td>
-                    <td><strong>${app.plate || '-'}</strong></td>
+                    <td><strong>${escapeHtml(app.plate) || '-'}</strong></td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">ใบอนุญาตขับขี่รถจักรยานยนต์:</td>
-                    <td>${app.drivingLicense || 'มีใบอนุญาตขับขี่ถูกต้อง'}</td>
+                    <td>${escapeHtml(app.drivingLicense) || 'มีใบอนุญาตขับขี่ถูกต้อง'}</td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">อุปกรณ์ประจำตัวสำหรับวิ่งงาน:</td>
@@ -9107,7 +9189,7 @@ function printA4RiderApplication(appId) {
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">บัญชีพร้อมเพย์รับเงินค่ารอบ (0% GP):</td>
-                    <td><strong>${app.promptPayNumber || app.phone || '-'}</strong> (${app.promptPayBank || 'พร้อมเพย์'})</td>
+                    <td><strong>${escapeHtml(app.promptPayNumber) || escapeHtml(app.phone) || '-'}</strong> (${escapeHtml(app.promptPayBank) || 'พร้อมเพย์'})</td>
                 </tr>
             </tbody>
         </table>
@@ -9120,7 +9202,7 @@ function printA4RiderApplication(appId) {
             <div style="display: flex; justify-content: space-between; margin-top: 30px; padding: 0 35px; font-size: 11px;">
                 <div style="text-align: center;">
                     <div>ลงชื่อ............................................................</div>
-                    <div style="margin-top: 4px;">(${app.fullName})</div>
+                    <div style="margin-top: 4px;">(${escapeHtml(app.fullName)})</div>
                     <div style="color: #64748b; font-size: 10px;">ผู้สมัคร</div>
                 </div>
                 <div style="text-align: center;">
@@ -9146,12 +9228,12 @@ function printA4RiderRosterDirectory() {
         tableRows += `
             <tr>
                 <td class="text-center">${idx + 1}</td>
-                <td><strong>${r.name}</strong> ${r.rating ? `(⭐${r.rating})` : ''}</td>
-                <td class="text-center">${r.phone}</td>
-                <td class="text-center font-bold font-mono">${r.plate || '-'}</td>
-                <td>${r.motorcycleModel || '-'}</td>
-                <td>${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}</td>
-                <td class="text-center font-mono">${r.promptPay || r.phone || '-'}</td>
+                <td><strong>${escapeHtml(r.name)}</strong> ${r.rating ? `(⭐${r.rating})` : ''}</td>
+                <td class="text-center">${escapeHtml(r.phone)}</td>
+                <td class="text-center font-bold font-mono">${escapeHtml(r.plate) || '-'}</td>
+                <td>${escapeHtml(r.motorcycleModel) || '-'}</td>
+                <td>${escapeHtml(r.zone) || 'รอบตลาดวิศิษฐ์ชัย'}</td>
+                <td class="text-center font-mono">${escapeHtml(r.promptPay) || escapeHtml(r.phone) || '-'}</td>
                 <td class="text-center font-bold">
                     ${r.status === 'available' ? '🟢 พร้อมรับงาน' : r.status === 'on_delivery' ? '🟡 กำลังส่งของ' : '🔴 พักรอบ'}
                 </td>
@@ -9651,7 +9733,7 @@ function renderCatalog() {
         container.innerHTML = `
             <div class="text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
                 <span class="material-symbols-outlined text-4xl mb-1 text-slate-300">manage_search</span>
-                <p class="text-xs font-bold text-slate-700">ไม่พบสินค้า "${state.searchQuery}" ในตลาดสด</p>
+                <p class="text-xs font-bold text-slate-700">ไม่พบสินค้า "${escapeHtml(state.searchQuery)}" ในตลาดสด</p>
                 <p class="text-[11px] text-slate-400 mt-1">ลองค้นหาด้วยคำง่ายๆ เช่น อกไก่, ซี่โครงหมู, ผักกาดขาว, กุ้งสด</p>
                 <div class="flex flex-wrap items-center justify-center gap-1.5 mt-3.5">
                     <button onclick="handleQuickSearch('อกไก่')" class="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold hover:bg-emerald-100">🍗 อกไก่</button>
@@ -9676,7 +9758,7 @@ function renderCatalog() {
                         <span class="material-symbols-outlined text-emerald-700 text-lg">check_circle</span>
                         <div>
                             <span class="font-bold">ผลการค้นหา: </span>
-                            <span class="font-extrabold text-emerald-800">"${state.searchQuery}"</span>
+                            <span class="font-extrabold text-emerald-800">"${escapeHtml(state.searchQuery)}"</span>
                             <span class="text-slate-500 text-[11px] block sm:inline"> (พบใน ${filteredStalls.length} ร้านค้า พร้อมกดสั่งซื้อได้ทันที)</span>
                         </div>
                     </div>
@@ -9692,7 +9774,7 @@ function renderCatalog() {
                     <div class="flex items-center gap-2">
                         <span class="material-symbols-outlined text-amber-600 text-lg">lightbulb</span>
                         <div>
-                            <span class="font-bold">ไม่พบชื่อตรงตัว "${state.searchQuery}"</span>
+                            <span class="font-bold">ไม่พบชื่อตรงตัว "${escapeHtml(state.searchQuery)}"</span>
                             <span class="text-amber-800 text-[11px] block">เราพบ <strong>สินค้าใกล้เคียงที่เกี่ยวข้อง</strong> จาก ${filteredStalls.length} ร้านค้าให้คุณเลือก:</span>
                         </div>
                     </div>
@@ -9764,38 +9846,38 @@ function renderCatalog() {
                 <div class="bg-gradient-to-b from-slate-50/90 to-white border-b border-slate-200/70">
                     
                     <!-- 🌟 HERO BANNER CAROUSEL (สลับ 1-3 ภาพหน้าร้านค้า & ภาพเจ้าของร้าน รวม ${totalBannerSlides} สไลด์) -->
-                    <div id="stall-banner-container-${stall.stallId}" class="relative h-44 sm:h-52 w-full overflow-hidden bg-slate-950 group select-none">
+                    <div id="stall-banner-container-${escapeHtml(stall.stallId)}" class="relative h-44 sm:h-52 w-full overflow-hidden bg-slate-950 group select-none">
                         <!-- Slides Track -->
-                        <div id="stall-carousel-track-${stall.stallId}" class="flex transition-transform duration-500 ease-out h-full w-full">
+                        <div id="stall-carousel-track-${escapeHtml(stall.stallId)}" class="flex transition-transform duration-500 ease-out h-full w-full">
                             ${stallPhotosList.map((photoUrl, pIdx) => `
                                 <!-- Slide ${pIdx + 1}: ภาพแผงค้า/หน้าร้าน ${pIdx + 1} -->
-                                <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
-                                    <img src="${photoUrl}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
-                                    <img src="${photoUrl}" alt="ภาพร้านค้า ${stall.stallName} (รูปที่ ${pIdx + 1})" class="relative w-full h-full object-cover object-center">
+                                <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide(${jsArg(stall.stallId)}, event)">
+                                    <img src="${escapeHtml(photoUrl)}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
+                                    <img src="${escapeHtml(photoUrl)}" alt="ภาพร้านค้า ${escapeHtml(stall.stallName)} (รูปที่ ${pIdx + 1})" class="relative w-full h-full object-cover object-center">
                                     <div class="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none"></div>
                                 </div>
                             `).join('')}
 
                             <!-- Slide ${ownerSlideIdx + 1}: ภาพเจ้าของแผงค้า (Composite Owner Template & Name Badge) -->
-                            <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
-                                <img id="stall-owner-banner-blur-${stall.stallId}" src="${ownerBannerUrl || ownerImg}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
-                                <img id="stall-owner-banner-img-${stall.stallId}" src="${ownerBannerUrl || ownerImg}" alt="ภาพเจ้าของร้าน ${ownerNm}" class="relative w-full h-full object-contain sm:object-cover object-center">
+                            <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide(${jsArg(stall.stallId)}, event)">
+                                <img id="stall-owner-banner-blur-${escapeHtml(stall.stallId)}" src="${escapeHtml(ownerBannerUrl) || escapeHtml(ownerImg)}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
+                                <img id="stall-owner-banner-img-${escapeHtml(stall.stallId)}" src="${escapeHtml(ownerBannerUrl) || escapeHtml(ownerImg)}" alt="ภาพเจ้าของร้าน ${escapeHtml(ownerNm)}" class="relative w-full h-full object-contain sm:object-cover object-center">
                                 <div class="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none"></div>
                             </div>
                         </div>
 
                         <!-- 1. ปุ่มเลื่อนภาพไปข้างหน้าถอยหลัง (Prev & Next Chevrons) -->
-                        <button type="button" onclick="prevStallBannerSlide('${stall.stallId}', event)" class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md" title="รูปก่อนหน้า">
+                        <button type="button" onclick="prevStallBannerSlide(${jsArg(stall.stallId)}, event)" class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md" title="รูปก่อนหน้า">
                             <span class="material-symbols-outlined text-base">chevron_left</span>
                         </button>
-                        <button type="button" onclick="nextStallBannerSlide('${stall.stallId}', event)" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md" title="รูปถัดไป">
+                        <button type="button" onclick="nextStallBannerSlide(${jsArg(stall.stallId)}, event)" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md" title="รูปถัดไป">
                             <span class="material-symbols-outlined text-base">chevron_right</span>
                         </button>
 
                         <!-- Indicator Dots -->
-                        <div id="stall-dots-${stall.stallId}" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 pointer-events-auto bg-black/40 px-2 py-0.5 rounded-full backdrop-blur-xs">
+                        <div id="stall-dots-${escapeHtml(stall.stallId)}" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 pointer-events-auto bg-black/40 px-2 py-0.5 rounded-full backdrop-blur-xs">
                             ${Array.from({ length: totalBannerSlides }).map((_, dIdx) => `
-                                <button type="button" onclick="goToStallBannerSlide('${stall.stallId}', ${dIdx}, event)" class="stall-banner-dot ${dIdx === 0 ? 'w-4 h-1.5 rounded-full bg-emerald-400' : 'w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white'} transition-all cursor-pointer" title="สไลด์ที่ ${dIdx + 1}"></button>
+                                <button type="button" onclick="goToStallBannerSlide(${jsArg(stall.stallId)}, ${dIdx}, event)" class="stall-banner-dot ${dIdx === 0 ? 'w-4 h-1.5 rounded-full bg-emerald-400' : 'w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white'} transition-all cursor-pointer" title="สไลด์ที่ ${dIdx + 1}"></button>
                             `).join('')}
                         </div>
 
@@ -9807,11 +9889,11 @@ function renderCatalog() {
                             <!-- Shop Name + ปุ่มบันทึกเป็นร้านโปรดวางต่อกับชื่อร้าน -->
                             <div class="flex items-center gap-2 flex-wrap">
                                 <h3 class="font-extrabold text-[16px] text-slate-900 leading-snug flex items-center gap-1.5">
-                                    <span>${stall.stallName}</span>
+                                    <span>${escapeHtml(stall.stallName)}</span>
                                     ${stall.isHub ? `<span class="bg-orange-100 text-orange-700 text-[9px] font-bold px-1.5 py-0.2 rounded border border-orange-200">Hub กลาง</span>` : ''}
                                 </h3>
                                 <!-- ปุ่มบันทึกเป็นร้านโปรด (ยังไม่บันทึก=สีส้ม, บันทึกแล้ว=สีเขียว วางต่อกับชื่อร้าน) -->
-                                <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="pointer-events-auto text-[11px] font-black px-3 py-1 rounded-full shadow-xs transition-all flex items-center gap-1 active:scale-95 ${isFav ? 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500 shadow-emerald-950/20' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-xs'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
+                                <button type="button" onclick="toggleFavoriteStall(${jsArg(stall.stallId)})" class="pointer-events-auto text-[11px] font-black px-3 py-1 rounded-full shadow-xs transition-all flex items-center gap-1 active:scale-95 ${isFav ? 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500 shadow-emerald-950/20' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-xs'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
                                     <span class="material-symbols-outlined text-[14px] ${isFav ? 'text-yellow-300' : 'text-white'} font-bold">star</span>
                                     <span>${isFav ? 'ร้านโปรดแล้ว ⭐' : 'บันทึกเป็นร้านโปรด'}</span>
                                 </button>
@@ -9819,12 +9901,12 @@ function renderCatalog() {
 
                             <!-- เจ้าของแผงค้า (ปุ่มสลับรูป) -->
                             <div class="flex items-center gap-2 text-[11px] text-slate-600">
-                                <button type="button" onclick="toggleOwnerBannerSlide('${stall.stallId}', ${ownerSlideIdx}, event)" class="inline-flex items-center gap-1.5 hover:text-emerald-700 transition-colors group/owner text-left bg-slate-100/90 hover:bg-emerald-50 px-2 py-0.5 rounded-lg border border-slate-200/80 cursor-pointer" title="แตะเพื่อสลับดูรูปเจ้าของร้านบนแบนเนอร์">
+                                <button type="button" onclick="toggleOwnerBannerSlide(${jsArg(stall.stallId)}, ${ownerSlideIdx}, event)" class="inline-flex items-center gap-1.5 hover:text-emerald-700 transition-colors group/owner text-left bg-slate-100/90 hover:bg-emerald-50 px-2 py-0.5 rounded-lg border border-slate-200/80 cursor-pointer" title="แตะเพื่อสลับดูรูปเจ้าของร้านบนแบนเนอร์">
                                     <span class="relative w-5 h-5 rounded-full ring-1 ring-emerald-500 overflow-hidden shrink-0 inline-block align-middle bg-white">
-                                        <img src="${ownerImg}" alt="${ownerNm}" class="w-full h-full object-cover">
+                                        <img src="${escapeHtml(ownerImg)}" alt="${escapeHtml(ownerNm)}" class="w-full h-full object-cover">
                                     </span>
                                     <span class="font-bold text-slate-700 group-hover/owner:text-emerald-700 flex items-center gap-0.5">
-                                        <span>${ownerNm}</span>
+                                        <span>${escapeHtml(ownerNm)}</span>
                                         <span class="material-symbols-outlined text-[13px] text-emerald-600 font-bold" title="ยืนยันตัวตนแล้ว">verified</span>
                                     </span>
                                     <span class="text-[9px] text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded font-bold">สลับรูป ↺</span>
@@ -9873,7 +9955,7 @@ function renderCatalog() {
                         สินค้าสดแนะนำ (${stallProducts.length} รายการ)
                     </span>
                     ${hasExtraCatalog ? `
-                        <button onclick="openStallCatalogModal('${stall.stallId}')" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-1 rounded-xl border border-emerald-300/80 flex items-center gap-1 transition-all active:scale-95 shadow-xs">
+                        <button onclick="openStallCatalogModal(${jsArg(stall.stallId)})" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-1 rounded-xl border border-emerald-300/80 flex items-center gap-1 transition-all active:scale-95 shadow-xs">
                             <span class="material-symbols-outlined text-xs text-emerald-600">list_alt</span>
                             <span>ดูเพิ่มเติม (${extraItemsCount} รายการ)</span>
                             <span class="material-symbols-outlined text-xs">chevron_right</span>
@@ -9887,7 +9969,7 @@ function renderCatalog() {
                         <div class="py-6 px-4 bg-slate-50/90 border border-dashed border-emerald-300/80 rounded-2xl text-center space-y-2">
                             <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-lg font-bold">🏪</div>
                             <p class="text-xs font-bold text-slate-800">แผงค้าใหม่กำลังเตรียมรายการสินค้าลงระบบ</p>
-                            <p class="text-[11px] text-slate-500">สามารถโทรติดต่อสอบถามหรือสั่งซื้อตรงได้ที่ <a href="tel:${phoneNum}" class="text-emerald-700 font-black underline">${phoneNum}</a></p>
+                            <p class="text-[11px] text-slate-500">สามารถโทรติดต่อสอบถามหรือสั่งซื้อตรงได้ที่ <a href="tel:${escapeHtml(phoneNum)}" class="text-emerald-700 font-black underline">${escapeHtml(phoneNum)}</a></p>
                             ${(state.activeMerchant && state.activeMerchant.stallId === stall.stallId) ? `
                                 <div class="pt-1">
                                     <button onclick="openActiveStallEditor()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm inline-flex items-center gap-1 cursor-pointer active:scale-95 transition-all">
@@ -9922,8 +10004,8 @@ function renderCatalog() {
 
                                     <!-- 2. ชื่อรายการสินค้า -->
                                     <div class="flex-1 min-w-0 flex items-center gap-1.5 pl-1 leading-none">
-                                        <span class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug" title="${product.name}">
-                                            ${product.name}
+                                        <span class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug" title="${escapeHtml(product.name)}">
+                                            ${escapeHtml(product.name)}
                                         </span>
                                         ${product.badge ? `
                                             <span class="text-[8px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200 px-1 py-0.2 rounded shrink-0 hidden sm:inline-block leading-none">
@@ -9936,7 +10018,7 @@ function renderCatalog() {
                                     <div class="flex items-center gap-1.5 shrink-0">
                                         <!-- 3. หน่วย -->
                                         <span class="w-9 text-center text-[10px] sm:text-[11px] font-bold text-slate-500 bg-slate-100/90 px-1 py-0.5 rounded shrink-0 whitespace-nowrap leading-none">
-                                            ${product.unit || 'กก.'}
+                                            ${escapeHtml(product.unit) || 'กก.'}
                                         </span>
 
                                         <!-- 4. ราคา -->
@@ -9950,13 +10032,13 @@ function renderCatalog() {
                                         ${qtyInCart > 0 ? `
                                             <!-- เมื่อหยิบใส่แล้ว: แสดงปุ่มปรับจำนวนสีเขียวขนาดกะทัดรัด -->
                                             <div class="flex items-center gap-0.5 bg-emerald-600 text-white rounded-lg px-1 py-0.5 text-[10px] shadow-sm ring-1 ring-emerald-400 h-6">
-                                                <button type="button" onclick="changeCartQty('${product.id}', -1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="ลดจำนวน">-</button>
+                                                <button type="button" onclick="changeCartQty(${jsArg(product.id)}, -1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="ลดจำนวน">-</button>
                                                 <span class="px-0.5 text-[10px] font-black min-w-[8px] text-center leading-none">${qtyInCart}</span>
-                                                <button type="button" onclick="changeCartQty('${product.id}', 1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
+                                                <button type="button" onclick="changeCartQty(${jsArg(product.id)}, 1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
                                             </div>
                                         ` : `
                                             <!-- ปุ่มสัญลักษณ์ตะกร้าสีส้มขนาดกะทัดรัด -->
-                                            <button type="button" onclick="addToCart('${stall.stallId}', '${product.id}')" class="w-6 h-6 rounded-lg bg-orange-500 hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer shrink-0" title="เพิ่ม ${product.name} ลงตะกร้า">
+                                            <button type="button" onclick="addToCart(${jsArg(stall.stallId)}, ${jsArg(product.id)})" class="w-6 h-6 rounded-lg bg-orange-500 hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer shrink-0" title="เพิ่ม ${escapeHtml(product.name)} ลงตะกร้า">
                                                 <span class="material-symbols-outlined text-[15px] font-bold">shopping_cart</span>
                                             </button>
                                         `}
@@ -9970,7 +10052,7 @@ function renderCatalog() {
                 ${hasExtraCatalog ? `
                     <!-- Bottom Full-Width "ดูเพิ่มเติม" Action Button (แสดงเฉพาะเมื่อมีสินค้าเพิ่มเติมในข้อ 4) -->
                     <div class="px-3.5 pt-1">
-                        <button onclick="openStallCatalogModal('${stall.stallId}')" class="w-full py-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/70 hover:from-emerald-100 hover:to-teal-100 border border-emerald-300/80 rounded-xl text-emerald-900 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs hover:shadow transition-all active:scale-[0.99]">
+                        <button onclick="openStallCatalogModal(${jsArg(stall.stallId)})" class="w-full py-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/70 hover:from-emerald-100 hover:to-teal-100 border border-emerald-300/80 rounded-xl text-emerald-900 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs hover:shadow transition-all active:scale-[0.99]">
                             <span class="material-symbols-outlined text-base text-emerald-700">menu_book</span>
                             <span>ดูเพิ่มเติม: ตารางรายการสินค้าทั้งหมดของแผงนี้ (${extraItemsCount} รายการ)</span>
                             <span class="material-symbols-outlined text-sm text-emerald-600">chevron_right</span>
@@ -10041,9 +10123,9 @@ function renderFavoriteStallsBar() {
         const shortName = (stall.stallName || "").replace("แผง", "").replace("ร้าน", "").trim();
 
         html += `
-            <button onclick="filterBySingleStall('${stall.stallId}')" class="${colorClass} ${activeRing} border px-2.5 py-1 rounded-xl whitespace-nowrap text-[11px] flex items-center gap-1 shadow-xs shrink-0 active:scale-95 transition-all cursor-pointer" title="${stall.stallName}">
+            <button onclick="filterBySingleStall(${jsArg(stall.stallId)})" class="${colorClass} ${activeRing} border px-2.5 py-1 rounded-xl whitespace-nowrap text-[11px] flex items-center gap-1 shadow-xs shrink-0 active:scale-95 transition-all cursor-pointer" title="${escapeHtml(stall.stallName)}">
                 <span>${emoji}</span>
-                <span>${stall.stallNumber || ''} (${shortName})</span>
+                <span>${escapeHtml(stall.stallNumber) || ''} (${shortName})</span>
             </button>
         `;
     });
@@ -10149,7 +10231,7 @@ function filterByCategory(category) {
 
         subs.forEach(sName => {
             subHtml += `
-                <button type="button" onclick="selectSubCategory('${sName.replace(/'/g, "\\'")}')"
+                <button type="button" onclick="selectSubCategory(${jsArg(sName)})"
                     class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200/90 shrink-0 hover:bg-slate-50 transition-all cursor-pointer">
                     <span>${sName}</span>
                 </button>
@@ -10217,7 +10299,7 @@ function selectSubCategory(subCat) {
 
         micros.forEach(mName => {
             microHtml += `
-                <button type="button" onclick="selectMicroCategory('${mName.replace(/'/g, "\\'")}')"
+                <button type="button" onclick="selectMicroCategory(${jsArg(mName)})"
                     class="microcat-pill px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200/90 shrink-0 hover:bg-teal-50 hover:text-teal-800 transition-all cursor-pointer">
                     <span>${mName}</span>
                 </button>
@@ -10610,10 +10692,10 @@ function renderSubCategoryProductView() {
             <div class="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white rounded-2xl p-3 sm:p-3.5 shadow-md flex items-center justify-between flex-wrap gap-2">
                 <div>
                     <div class="flex items-center gap-1.5 text-[11px] text-emerald-200 font-medium flex-wrap">
-                        <button type="button" onclick="filterByCategory('${mainCat.replace(/'/g, "\\'")}')" class="hover:underline text-emerald-200">${mainCat}</button>
+                        <button type="button" onclick="filterByCategory(${jsArg(mainCat)})" class="hover:underline text-emerald-200">${mainCat}</button>
                         ${subCatDisplayTitle ? `
                             <span class="material-symbols-outlined text-xs">chevron_right</span>
-                            <button type="button" onclick="selectSubCategory('${subCat.replace(/'/g, "\\'")}')" class="hover:underline text-white font-bold">${subCatDisplayTitle}</button>
+                            <button type="button" onclick="selectSubCategory(${jsArg(subCat)})" class="hover:underline text-white font-bold">${subCatDisplayTitle}</button>
                         ` : ''}
                         ${microCatDisplayTitle ? `
                             <span class="material-symbols-outlined text-xs">chevron_right</span>
@@ -10639,7 +10721,7 @@ function renderSubCategoryProductView() {
             <div class="relative flex items-center">
                 <span class="material-symbols-outlined absolute left-3 text-emerald-700 text-base">search</span>
                 <input type="text"
-                    value="${state.subCategorySearchQuery || ''}"
+                    value="${escapeHtml(state.subCategorySearchQuery) || ''}"
                     oninput="handleSubCategorySearch(this.value)"
                     placeholder="ค้นหาใน ${microCatDisplayTitle || subCatDisplayTitle} (เช่น อกไก่, น่อง, โครงไก่)..."
                     class="w-full pl-9 pr-8 py-2 rounded-xl bg-white text-slate-800 placeholder-slate-400 text-xs font-bold border border-emerald-600/30 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-xs transition-all">
@@ -10701,17 +10783,17 @@ function renderSubCategoryProductView() {
 
                 <!-- 2. ชื่อรายการสินค้า + ป้าย + ร้านค้า -->
                 <div class="flex-1 min-w-0 flex items-center gap-1.5 pl-1.5 leading-none">
-                    <span class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug" title="${item.name}">
-                        ${item.name}
+                    <span class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug" title="${escapeHtml(item.name)}">
+                        ${escapeHtml(item.name)}
                     </span>
                     ${item.badge ? `
                         <span class="text-[8px] sm:text-[9px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.2 rounded shrink-0 leading-none">
                             ${item.badge}
                         </span>
                     ` : ''}
-                    <button type="button" onclick="filterBySingleStall('${item.stallId}')" class="text-[9px] sm:text-[10px] text-slate-400 hover:text-emerald-700 font-medium shrink-0 flex items-center gap-0.5 truncate transition-colors" title="${item.stallName}">
+                    <button type="button" onclick="filterBySingleStall(${jsArg(item.stallId)})" class="text-[9px] sm:text-[10px] text-slate-400 hover:text-emerald-700 font-medium shrink-0 flex items-center gap-0.5 truncate transition-colors" title="${escapeHtml(item.stallName)}">
                         <span>${isStallFav ? '⭐' : '🏪'}</span>
-                        <span class="underline decoration-slate-200">${item.stallNumber || ''} ${stallShort}</span>
+                        <span class="underline decoration-slate-200">${escapeHtml(item.stallNumber) || ''} ${stallShort}</span>
                     </button>
                     ${item.sourceTier === 2 ? `
                         <span class="text-[8px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1 py-0.2 rounded shrink-0 hidden sm:inline-block leading-none">
@@ -10724,7 +10806,7 @@ function renderSubCategoryProductView() {
                 <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
                     <!-- 3. หน่วย -->
                     <span class="w-10 text-center text-[10px] sm:text-[11px] font-bold text-slate-500 bg-slate-100/90 px-1 py-0.5 rounded-lg shrink-0 whitespace-nowrap leading-none">
-                        ${item.unit || 'กก.'}
+                        ${escapeHtml(item.unit) || 'กก.'}
                     </span>
 
                     <!-- 4. ราคา -->
@@ -10739,12 +10821,12 @@ function renderSubCategoryProductView() {
                         <span class="text-[9px] text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">พัก</span>
                     ` : qtyInCart > 0 ? `
                         <div class="flex items-center gap-0.5 bg-emerald-600 text-white rounded-lg px-1 py-0.5 text-[10px] shadow-sm ring-1 ring-emerald-400 h-6">
-                            <button type="button" onclick="changeCartQty('${item.id}', -1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="ลดจำนวน">-</button>
+                            <button type="button" onclick="changeCartQty(${jsArg(item.id)}, -1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="ลดจำนวน">-</button>
                             <span class="px-0.5 text-[10px] font-black min-w-[8px] text-center leading-none">${qtyInCart}</span>
-                            <button type="button" onclick="changeCartQty('${item.id}', 1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
+                            <button type="button" onclick="changeCartQty(${jsArg(item.id)}, 1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
                         </div>
                     ` : `
-                        <button type="button" onclick="addToCartFromModal('${item.stallId}', '${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price}, '${item.unit || 'กก.'}')" class="w-7 h-7 rounded-lg bg-orange-500 hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer shrink-0" title="เพิ่ม ${item.name} ลงตะกร้า">
+                        <button type="button" onclick="addToCartFromModal(${jsArg(item.stallId)}, ${jsArg(item.id)}, ${jsArg(item.name)}, ${item.price}, ${jsArg(item.unit || 'กก.')})" class="w-7 h-7 rounded-lg bg-orange-500 hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer shrink-0" title="เพิ่ม ${escapeHtml(item.name)} ลงตะกร้า">
                             <span class="material-symbols-outlined text-[16px] font-bold">shopping_cart</span>
                         </button>
                     `}
@@ -10997,17 +11079,17 @@ function renderDirectoryList() {
     stalls.forEach(stall => {
         const isHub = stall.isHub;
         html += `
-            <div onclick="filterBySingleStall('${stall.stallId}')" class="p-2.5 rounded-xl border ${isHub ? 'border-orange-300 bg-orange-50/60' : 'border-slate-200 bg-slate-50 hover:bg-emerald-50/50'} flex items-center justify-between cursor-pointer transition-colors text-xs">
+            <div onclick="filterBySingleStall(${jsArg(stall.stallId)})" class="p-2.5 rounded-xl border ${isHub ? 'border-orange-300 bg-orange-50/60' : 'border-slate-200 bg-slate-50 hover:bg-emerald-50/50'} flex items-center justify-between cursor-pointer transition-colors text-xs">
                 <div class="flex items-center gap-2">
                     <span class="font-bold text-[10px] px-1.5 py-0.5 rounded ${stall.badgeColor}">
-                        ${stall.stallNumber}
+                        ${escapeHtml(stall.stallNumber)}
                     </span>
                     <div>
                         <div class="font-bold text-slate-800 flex items-center gap-1">
-                            <span>${stall.stallName}</span>
+                            <span>${escapeHtml(stall.stallName)}</span>
                             ${isHub ? '<span class="text-[9px] bg-orange-500 text-white px-1 rounded font-bold">Hub ร้านเรา</span>' : ''}
                         </div>
-                        <div class="text-[10px] text-slate-400">${stall.stallTag} • โซน ${stall.zone}</div>
+                        <div class="text-[10px] text-slate-400">${escapeHtml(stall.stallTag)} • โซน ${escapeHtml(stall.zone)}</div>
                     </div>
                 </div>
                 <span class="material-symbols-outlined text-sm text-slate-400">chevron_right</span>
@@ -11186,8 +11268,8 @@ function renderStallCatalogModal() {
         catalog.forEach(group => {
             const isAct = currentModalCategory === group.groupName;
             pillsHtml += `
-                <button onclick="filterModalStallCategory('${group.groupName}')" class="px-3 py-1 rounded-xl whitespace-nowrap font-bold shrink-0 transition-all ${isAct ? 'bg-emerald-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'}">
-                    ${group.groupName} (${group.items.length})
+                <button onclick="filterModalStallCategory(${jsArg(group.groupName)})" class="px-3 py-1 rounded-xl whitespace-nowrap font-bold shrink-0 transition-all ${isAct ? 'bg-emerald-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'}">
+                    ${escapeHtml(group.groupName)} (${group.items.length})
                 </button>
             `;
         });
@@ -11246,7 +11328,7 @@ function renderStallCatalogModal() {
                     <!-- Group Category Title -->
                     <div class="bg-slate-100/80 px-3.5 py-2 border-b border-slate-200 flex items-center justify-between">
                         <span class="font-extrabold text-xs text-slate-800 flex items-center gap-1">
-                            <span>${group.groupName}</span>
+                            <span>${escapeHtml(group.groupName)}</span>
                         </span>
                         <span class="text-[10px] text-slate-500 font-bold bg-white px-2 py-0.5 rounded-full border border-slate-200">
                             ${group.items.length} รายการ
@@ -11267,10 +11349,10 @@ function renderStallCatalogModal() {
                                         <span class="text-[10px] font-bold text-slate-400 w-4 shrink-0 pt-0.5">${idx + 1}.</span>
                                         <div>
                                             <div class="font-bold text-xs text-slate-900 leading-snug flex items-center gap-1.5 flex-wrap">
-                                                <span>${item.name}</span>
-                                                ${qty > 0 ? `<span class="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-1.5 py-0.2 rounded">ในตะกร้า ${qty} ${item.unit}</span>` : ''}
+                                                <span>${escapeHtml(item.name)}</span>
+                                                ${qty > 0 ? `<span class="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-1.5 py-0.2 rounded">ในตะกร้า ${qty} ${escapeHtml(item.unit)}</span>` : ''}
                                             </div>
-                                            <div class="text-[10px] text-slate-500 mt-0.5 leading-tight">${item.spec}</div>
+                                            <div class="text-[10px] text-slate-500 mt-0.5 leading-tight">${escapeHtml(item.spec)}</div>
                                         </div>
                                     </div>
 
@@ -11278,19 +11360,19 @@ function renderStallCatalogModal() {
                                     <div class="flex items-center gap-3 shrink-0">
                                         <div class="text-right">
                                             <div class="font-extrabold text-sm text-orange-600">฿${item.price}</div>
-                                            <div class="text-[9px] text-slate-400">/${item.unit}</div>
+                                            <div class="text-[9px] text-slate-400">/${escapeHtml(item.unit)}</div>
                                         </div>
 
                                         <!-- Cart Counter / Add Button -->
                                         <div>
                                             ${qty > 0 ? `
                                                 <div class="flex items-center gap-1 bg-emerald-700 text-white rounded-xl p-1 text-xs shadow-xs">
-                                                    <button onclick="changeCartQty('${item.id}', -1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-800 rounded-lg font-bold transition-colors">-</button>
+                                                    <button onclick="changeCartQty(${jsArg(item.id)}, -1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-800 rounded-lg font-bold transition-colors">-</button>
                                                     <span class="px-1.5 text-xs font-bold">${qty}</span>
-                                                    <button onclick="changeCartQty('${item.id}', 1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-800 rounded-lg font-bold transition-colors">+</button>
+                                                    <button onclick="changeCartQty(${jsArg(item.id)}, 1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-800 rounded-lg font-bold transition-colors">+</button>
                                                 </div>
                                             ` : `
-                                                <button onclick="addToCartFromModal('${currentModalStallId}', '${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price}, '${item.unit}')" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-sm transition-all">
+                                                <button onclick="addToCartFromModal(${jsArg(currentModalStallId)}, ${jsArg(item.id)}, ${jsArg(item.name)}, ${item.price}, ${jsArg(item.unit)})" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-sm transition-all">
                                                     <span class="material-symbols-outlined text-sm">add_shopping_cart</span>
                                                     <span>ใส่ตะกร้า</span>
                                                 </button>
@@ -11656,9 +11738,9 @@ function renderCheckoutPage() {
                 <div class="flex items-center justify-between pb-2 border-b border-slate-100">
                     <span class="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
                         <span class="${badgeStyle} text-[10px] font-black px-2 py-0.5 rounded-md border">
-                            ${stallGroup.stallNumber}
+                            ${escapeHtml(stallGroup.stallNumber)}
                         </span>
-                        <span>${stallGroup.stallName}</span>
+                        <span>${escapeHtml(stallGroup.stallName)}</span>
                     </span>
                     <span class="text-[10px] text-slate-400 font-medium">${stallGroup.items.length} รายการ</span>
                 </div>
@@ -11672,18 +11754,18 @@ function renderCheckoutPage() {
                         return `
                         <div class="flex items-center justify-between text-xs pt-2 first:pt-0">
                             <div class="flex-1 pr-2">
-                                <div class="font-extrabold text-slate-800 leading-snug">${item.name}</div>
-                                <div class="text-[10px] text-slate-400 mt-0.5">฿${itemPrice} / ${item.unit || 'หน่วย'}</div>
+                                <div class="font-extrabold text-slate-800 leading-snug">${escapeHtml(item.name)}</div>
+                                <div class="text-[10px] text-slate-400 mt-0.5">฿${itemPrice} / ${escapeHtml(item.unit) || 'หน่วย'}</div>
                             </div>
                             <div class="flex items-center gap-2.5 shrink-0">
                                 <!-- Minus/Plus Qty Buttons with Active Animations -->
                                 <div class="flex items-center gap-1 bg-slate-100 rounded-xl p-0.5 border border-slate-200 shadow-2xs">
-                                    <button type="button" onclick="changeCartQty('${pId}', -1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform cursor-pointer" title="ลดจำนวน">-</button>
+                                    <button type="button" onclick="changeCartQty(${jsArg(pId)}, -1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform cursor-pointer" title="ลดจำนวน">-</button>
                                     <span class="px-1.5 text-xs font-black text-slate-900 min-w-[14px] text-center">${itemQty}</span>
-                                    <button type="button" onclick="changeCartQty('${pId}', 1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
+                                    <button type="button" onclick="changeCartQty(${jsArg(pId)}, 1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
                                 </div>
                                 <span class="font-black text-slate-900 w-12 text-right text-xs">฿${itemTotal}</span>
-                                <button type="button" onclick="removeSingleCartItem('${pId}')" class="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer" title="ลบรายการนี้ออกจากตะกร้า">
+                                <button type="button" onclick="removeSingleCartItem(${jsArg(pId)})" class="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer" title="ลบรายการนี้ออกจากตะกร้า">
                                     <span class="material-symbols-outlined text-sm">delete_outline</span>
                                 </button>
                             </div>
@@ -12535,7 +12617,7 @@ function renderTrackingScreen() {
                     <div class="flex items-center justify-between text-xs py-0.5 ${isOOS ? 'text-rose-700 bg-rose-50/50 px-2 py-1 rounded-lg' : 'text-slate-700'}">
                         <div class="flex items-center gap-1.5">
                             <span class="text-xs ${isOOS ? 'text-rose-500 font-bold' : 'text-emerald-600'}">${isOOS ? '✕' : '✓'}</span>
-                            <span class="${isOOS ? 'line-through text-slate-400 font-medium' : 'font-semibold'}">${item.name}</span>
+                            <span class="${isOOS ? 'line-through text-slate-400 font-medium' : 'font-semibold'}">${escapeHtml(item.name)}</span>
                             ${isOOS ? '<span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.2 rounded font-black">ของหมด • คืนเงินสดใส่ซอง</span>' : ''}
                         </div>
                         <span class="font-bold ${isOOS ? 'text-rose-600' : 'text-slate-800'} text-xs">
@@ -12555,7 +12637,7 @@ function renderTrackingScreen() {
                             ${isReady ? '✓' : '⏳'}
                         </div>
                         <div>
-                            <div class="font-extrabold text-slate-800 text-xs leading-tight">${stall.name}</div>
+                            <div class="font-extrabold text-slate-800 text-xs leading-tight">${escapeHtml(stall.name)}</div>
                             <div class="text-[10px] text-slate-400 mt-0.5 font-medium">จำนวน ${stall.itemsCount} รายการ ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length} คืน ฿${oosItems.reduce((s,i)=>s+(i.actualPrice||i.price),0)})</span>` : ''}</div>
                         </div>
                     </div>
@@ -13241,7 +13323,7 @@ function openRatingModal() {
         if (order && order.stalls && order.stalls.length > 0) {
             container.innerHTML = order.stalls.map((s, idx) => `
                 <div class="flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs">
-                    <span class="font-bold text-slate-800 text-[11px] truncate max-w-[150px]">🏪 ${s.name}</span>
+                    <span class="font-bold text-slate-800 text-[11px] truncate max-w-[150px]">🏪 ${escapeHtml(s.name)}</span>
                     <div class="flex items-center gap-1.5 shrink-0">
                         <div class="flex items-center text-amber-400 cursor-pointer" id="stall-stars-${idx}">
                             <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating(${idx}, 1)">star</span>
@@ -13423,7 +13505,7 @@ function openCustomerWalletModal() {
             container.innerHTML = `
                 <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-2">
                     <div class="flex items-center justify-between text-[11px]">
-                        <span class="font-extrabold text-slate-800" id="wallet-recent-order-id">ออเดอร์ ${lastOrder.orderId}</span>
+                        <span class="font-extrabold text-slate-800" id="wallet-recent-order-id">ออเดอร์ ${escapeHtml(lastOrder.orderId)}</span>
                         <span class="font-black text-orange-600">฿${total} (${itemCount} รายการ)</span>
                     </div>
                     <div class="text-[10px] text-slate-500 leading-tight">
@@ -13619,9 +13701,9 @@ function openReceiptModal() {
                 itemsHtml += `
                     <div class="flex justify-between py-1.5 ${isOOS ? 'bg-rose-50/80 px-2 rounded-lg border border-rose-200' : ''}">
                         <div>
-                            <div class="font-bold ${isOOS ? 'text-rose-800 line-through' : 'text-slate-800'} text-xs">${item.name}</div>
+                            <div class="font-bold ${isOOS ? 'text-rose-800 line-through' : 'text-slate-800'} text-xs">${escapeHtml(item.name)}</div>
                             <div class="text-[10px] ${isOOS ? 'text-rose-600 font-bold' : 'text-slate-400'}">
-                                ${stall.name} • ${isOOS ? '⚠️ สินค้าหมด (คืนเงินสดใส่ซอง)' : `x${item.qty || 1}`}
+                                ${escapeHtml(stall.name)} • ${isOOS ? '⚠️ สินค้าหมด (คืนเงินสดใส่ซอง)' : `x${item.qty || 1}`}
                             </div>
                         </div>
                         <span class="font-bold ${isOOS ? 'text-rose-600' : 'text-slate-800'} text-xs">
@@ -14026,10 +14108,10 @@ function renderMerchantSettlement() {
                         <span class="text-[11px] font-semibold text-slate-500 hidden sm:inline">(${thaiDateText})</span>
                     </div>
                     <div class="flex items-center gap-1.5">
-                        <button onclick="changeMerchantSettlementDate('${getReportDateKey(Date.now())}')" class="px-2.5 py-1 rounded-xl text-xs font-bold ${isToday ? 'bg-orange-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} transition-all cursor-pointer">
+                        <button onclick="changeMerchantSettlementDate(${jsArg(getReportDateKey(Date.now()))})" class="px-2.5 py-1 rounded-xl text-xs font-bold ${isToday ? 'bg-orange-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} transition-all cursor-pointer">
                             วันนี้
                         </button>
-                        <button onclick="changeMerchantSettlementDate('${getReportDateKey(Date.now() - 86400000)}')" class="px-2.5 py-1 rounded-xl text-xs font-bold ${targetDateKey === getReportDateKey(Date.now() - 86400000) ? 'bg-orange-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} transition-all cursor-pointer">
+                        <button onclick="changeMerchantSettlementDate(${jsArg(getReportDateKey(Date.now() - 86400000))})" class="px-2.5 py-1 rounded-xl text-xs font-bold ${targetDateKey === getReportDateKey(Date.now() - 86400000) ? 'bg-orange-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} transition-all cursor-pointer">
                             เมื่อวาน
                         </button>
                         <button onclick="renderMerchantSettlement(); showToast('🔄 อัปเดตข้อมูลการโอนเงินล่าสุดเรียบร้อย');" class="p-1 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-all cursor-pointer" title="รีเฟรชสถานะ">
@@ -14065,7 +14147,7 @@ function renderMerchantSettlement() {
                         <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
                             <div class="text-[10px] text-emerald-200">ยอดเงินสุทธิที่ฮับโอนเข้าบัญชี:</div>
                             <div class="text-2xl font-black text-amber-300">฿${finalPayoutAmount.toLocaleString()}</div>
-                            <div class="text-[10px] text-emerald-300/80">โอนผ่าน PromptPay ไปยัง ${bank.accountNo}</div>
+                            <div class="text-[10px] text-emerald-300/80">โอนผ่าน PromptPay ไปยัง ${escapeHtml(bank.accountNo)}</div>
                         </div>
                         <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
                             <div class="text-[10px] text-emerald-200">วัน-เวลาที่ฮับยืนยันการโอนเงิน:</div>
@@ -14089,15 +14171,15 @@ function renderMerchantSettlement() {
                             </div>
                             
                             <div class="flex flex-col sm:flex-row items-center gap-3 bg-white/5 p-2.5 rounded-xl border border-white/10">
-                                <div class="relative cursor-pointer group shrink-0" onclick="openVendorSlipViewerModal('${currentStallId}', '${targetDateKey}')">
-                                    <img src="${settledInfo.slipImage}" alt="สลิปโอนเงิน" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border-2 border-emerald-400 shadow-md group-hover:scale-105 transition-all">
+                                <div class="relative cursor-pointer group shrink-0" onclick="openVendorSlipViewerModal(${jsArg(currentStallId)}, ${jsArg(targetDateKey)})">
+                                    <img src="${escapeHtml(settledInfo.slipImage)}" alt="สลิปโอนเงิน" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border-2 border-emerald-400 shadow-md group-hover:scale-105 transition-all">
                                     <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center transition-all">
                                         <span class="material-symbols-outlined text-white text-xl">zoom_in</span>
                                     </div>
                                 </div>
                                 <div class="space-y-1 text-xs text-left flex-1 min-w-0">
                                     <div class="text-[11px] text-emerald-200">
-                                        โอนให้: <strong>${currentStallName}</strong> (${stall.stallNumber || 'แผงตลาด'})
+                                        โอนให้: <strong>${currentStallName}</strong> (${escapeHtml(stall.stallNumber) || 'แผงตลาด'})
                                     </div>
                                     <div class="text-[11px] text-white font-mono">
                                         ยอดโอนสุทธิ: <strong class="text-amber-300 text-sm">฿${finalPayoutAmount.toLocaleString()}</strong>
@@ -14105,13 +14187,13 @@ function renderMerchantSettlement() {
                                     <div class="text-[10px] text-slate-300">
                                         เวลาที่โอน: ${formatSettledDate(settledInfo.settledAt)} ${settledInfo.settledBy ? `• ผู้โอน: ${settledInfo.settledBy}` : ''}
                                     </div>
-                                    ${settledInfo.slipNote ? `<div class="text-[10px] text-amber-200 italic truncate">บันทึก: ${settledInfo.slipNote}</div>` : ''}
+                                    ${settledInfo.slipNote ? `<div class="text-[10px] text-amber-200 italic truncate">บันทึก: ${escapeHtml(settledInfo.slipNote)}</div>` : ''}
                                     <div class="pt-1 flex items-center gap-2 flex-wrap">
-                                        <button onclick="openVendorSlipViewerModal('${currentStallId}', '${targetDateKey}')" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer">
+                                        <button onclick="openVendorSlipViewerModal(${jsArg(currentStallId)}, ${jsArg(targetDateKey)})" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer">
                                             <span class="material-symbols-outlined text-xs">zoom_in</span>
                                             <span>🔍 ดูรูปสลิปเต็มจอ</span>
                                         </button>
-                                        <a href="${settledInfo.slipImage}" download="slip_talathub_${targetDateKey}_${currentStallId}.jpg" class="px-3 py-1 bg-white/20 hover:bg-white/30 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                                        <a href="${escapeHtml(settledInfo.slipImage)}" download="slip_talathub_${targetDateKey}_${currentStallId}.jpg" class="px-3 py-1 bg-white/20 hover:bg-white/30 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
                                             <span class="material-symbols-outlined text-xs">download</span>
                                             <span>บันทึกรูปสลิป</span>
                                         </a>
@@ -14133,7 +14215,7 @@ function renderMerchantSettlement() {
                             <span class="material-symbols-outlined text-xs">verified</span>
                             <span>ยืนยันโดยฝ่ายการเงินและบัญชีประจำฮับ</span>
                         </div>
-                        <button onclick="printThermalVendorSlip('${currentStallId}', '${targetDateKey}')" class="px-3.5 py-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/20 rounded-xl font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                        <button onclick="printThermalVendorSlip(${jsArg(currentStallId)}, ${jsArg(targetDateKey)})" class="px-3.5 py-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/20 rounded-xl font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-sm">receipt</span>
                             <span>📄 พิมพ์สลิปเคลียร์เงินแผงค้า (80mm)</span>
                         </button>
@@ -14230,15 +14312,15 @@ function renderMerchantSettlement() {
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                             <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                 <div class="text-[10px] text-slate-400">ธนาคาร:</div>
-                                <div class="font-black text-slate-800">${bank.bankName}</div>
+                                <div class="font-black text-slate-800">${escapeHtml(bank.bankName)}</div>
                             </div>
                             <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                 <div class="text-[10px] text-slate-400">เลขที่บัญชี / เบอร์พร้อมเพย์:</div>
-                                <div class="font-mono font-black text-emerald-700 text-sm">${bank.accountNo}</div>
+                                <div class="font-mono font-black text-emerald-700 text-sm">${escapeHtml(bank.accountNo)}</div>
                             </div>
                             <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                 <div class="text-[10px] text-slate-400">ชื่อบัญชี:</div>
-                                <div class="font-bold text-slate-800">${bank.accountName}</div>
+                                <div class="font-bold text-slate-800">${escapeHtml(bank.accountName)}</div>
                             </div>
                         </div>
                     </div>
@@ -14253,15 +14335,15 @@ function renderMerchantSettlement() {
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                             <div class="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/60">
                                 <div class="text-[10px] text-slate-400">ธนาคาร:</div>
-                                <div class="font-black text-slate-800">${bank2.bankName || '-'}</div>
+                                <div class="font-black text-slate-800">${escapeHtml(bank2.bankName) || '-'}</div>
                             </div>
                             <div class="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/60">
                                 <div class="text-[10px] text-slate-400">เลขที่บัญชี / เบอร์พร้อมเพย์:</div>
-                                <div class="font-mono font-black text-amber-900 text-sm">${bank2.accountNo || '-'}</div>
+                                <div class="font-mono font-black text-amber-900 text-sm">${escapeHtml(bank2.accountNo) || '-'}</div>
                             </div>
                             <div class="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/60">
                                 <div class="text-[10px] text-slate-400">ชื่อบัญชี:</div>
-                                <div class="font-bold text-slate-800">${bank2.accountName || '-'}</div>
+                                <div class="font-bold text-slate-800">${escapeHtml(bank2.accountName) || '-'}</div>
                             </div>
                         </div>
                     </div>
@@ -14287,7 +14369,7 @@ function renderMerchantSettlement() {
                             <div class="flex items-center justify-between pt-2.5 text-xs">
                                 <div class="space-y-0.5">
                                     <div class="flex items-center gap-2">
-                                        <span class="font-mono font-black bg-slate-100 px-2 py-0.5 rounded text-slate-800">${b.orderId}</span>
+                                        <span class="font-mono font-black bg-slate-100 px-2 py-0.5 rounded text-slate-800">${escapeHtml(b.orderId)}</span>
                                         <span class="text-[10px] text-slate-400">${b.time}</span>
                                     </div>
                                     <div class="text-[10px] text-slate-500">
@@ -14544,8 +14626,8 @@ function renderMerchantIncomingOrders() {
                         🏪
                     </div>
                     <div>
-                        <div class="text-[11px] text-amber-100 font-bold">แผงค้าของฉัน • ${stall ? (stall.stallNumber || 'แผงค้า') : 'แผงค้า'} (${stall ? (stall.zone || 'ตลาดสด') : 'ตลาดสด'})</div>
-                        <h3 class="text-base sm:text-lg font-black leading-tight">${stall ? stall.stallName : 'แผงค้า'}</h3>
+                        <div class="text-[11px] text-amber-100 font-bold">แผงค้าของฉัน • ${stall ? (escapeHtml(stall.stallNumber) || 'แผงค้า') : 'แผงค้า'} (${stall ? (escapeHtml(stall.zone) || 'ตลาดสด') : 'ตลาดสด'})</div>
+                        <h3 class="text-base sm:text-lg font-black leading-tight">${stall ? escapeHtml(stall.stallName) : 'แผงค้า'}</h3>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -14553,7 +14635,7 @@ function renderMerchantIncomingOrders() {
                         <span class="material-symbols-outlined text-sm">edit</span>
                         <span>แก้ไขข้อมูลร้าน</span>
                     </button>
-                    <button onclick="switchRole('customer'); goToMarketScreen(); if (typeof filterBySingleStall === 'function') filterBySingleStall('${stall ? stall.stallId : ''}');" class="px-3 py-1.5 bg-black/20 hover:bg-black/30 text-white rounded-xl font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                    <button onclick="switchRole('customer'); goToMarketScreen(); if (typeof filterBySingleStall === 'function') filterBySingleStall(${jsArg(stall ? stall.stallId : '')});" class="px-3 py-1.5 bg-black/20 hover:bg-black/30 text-white rounded-xl font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">storefront</span>
                         <span>ดูหน้าร้านในตลาด</span>
                     </button>
@@ -14578,7 +14660,7 @@ function renderMerchantIncomingOrders() {
                             <span>เปิดรับออเดอร์ปกติ</span>
                         </div>
                     </div>
-                    <span class="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-mono font-bold">${stall ? (stall.stallNumber || '-') : '-'}</span>
+                    <span class="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-mono font-bold">${stall ? (escapeHtml(stall.stallNumber) || '-') : '-'}</span>
                 </div>
             </div>
         </div>
@@ -14596,7 +14678,7 @@ function renderMerchantIncomingOrders() {
                         <span class="bg-white text-emerald-900 text-[10px] font-black px-2 py-0.2 rounded-full">โอนแล้ว ✓</span>
                     </div>
                     <div class="text-[10.5px] text-emerald-100">
-                        ยอดเงินโอน <strong>฿${Number(settledInfo.amount || totalSales).toLocaleString()}</strong> (${formatSettledDate(settledInfo.settledAt)}) เข้าบัญชี ${stall ? (stall.accountNo || stall.bankAccountNo || stall.phone || '') : ''}
+                        ยอดเงินโอน <strong>฿${Number(settledInfo.amount || totalSales).toLocaleString()}</strong> (${formatSettledDate(settledInfo.settledAt)}) เข้าบัญชี ${stall ? (escapeHtml(stall.accountNo) || escapeHtml(stall.bankAccountNo) || escapeHtml(stall.phone) || '') : ''}
                     </div>
                 </div>
             </div>
@@ -14633,13 +14715,13 @@ function renderMerchantIncomingOrders() {
                 ${[{key:'today',label:'📅 วันนี้'},{key:'yesterday',label:'🗓️ เมื่อวาน'},{key:'week',label:'📆 รายสัปดาห์'},{key:'month',label:'📊 รายเดือน'}].map(btn => {
                     const isActive = currentPeriod === btn.key;
                     return `<button
-                        onclick="setMerchantOrderFilter('${btn.key}')"
+                        onclick="setMerchantOrderFilter(${jsArg(btn.key)})"
                         class="px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer active:scale-95 ${
                             isActive
                             ? 'bg-orange-500 text-white shadow-sm'
                             : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                         }">
-                        ${btn.label}
+                        ${escapeHtml(btn.label)}
                     </button>`;
                 }).join('')}
             </div>
@@ -14680,7 +14762,7 @@ function renderMerchantIncomingOrders() {
                 <div class="bg-white rounded-2xl border ${isStallReady ? 'border-emerald-400/80 shadow-md ring-1 ring-emerald-400/40' : 'border-slate-200/80 shadow-xs'} p-3.5 sm:p-4 space-y-3 hover:shadow-md transition-all">
                     <div class="flex items-center justify-between pb-2 border-b border-slate-100">
                         <div class="flex items-center gap-2">
-                            <span class="font-mono font-black text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">${o.orderId}</span>
+                            <span class="font-mono font-black text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">${escapeHtml(o.orderId)}</span>
                             <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900 border border-${statusColor}-200">${statusText}</span>
                             ${isStallReady ? '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-2xs">✓ แม่ค้าเตรียมเสร็จแล้ว</span>' : ''}
                         </div>
@@ -14702,13 +14784,13 @@ function renderMerchantIncomingOrders() {
                                     <div class="flex items-center justify-between pt-1.5 text-xs ${isOos ? 'opacity-60 line-through' : ''}">
                                         <div class="font-bold text-slate-800 flex items-center gap-1.5">
                                             <span class="${isOos ? 'text-rose-500' : 'text-emerald-600'} font-black">${isOos ? '✕' : '✓'}</span>
-                                            <span>${it.name || 'สินค้า'}</span>
+                                            <span>${escapeHtml(it.name) || 'สินค้า'}</span>
                                             <span class="text-slate-400 font-normal">x${it.qty || 1}</span>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <div class="font-mono font-bold text-slate-700">฿${(it.price || 0).toLocaleString()}</div>
                                             ${o.status !== 'delivered' ? `
-                                                <button type="button" onclick="merchantToggleItemOutOfStock('${o.orderId}', '${currentStallId}', ${itIdx})" class="px-1.5 py-0.5 ${isOos ? 'bg-slate-200 text-slate-700' : 'bg-rose-50 text-rose-700 border border-rose-200'} rounded text-[10px] font-bold hover:opacity-80 active:scale-95 transition-all" title="${isOos ? 'กู้คืนสินค้า' : 'แจ้งสินค้าหมด คืนเงินสดใส่ซอง'}">
+                                                <button type="button" onclick="merchantToggleItemOutOfStock(${jsArg(o.orderId)}, ${jsArg(currentStallId)}, ${itIdx})" class="px-1.5 py-0.5 ${isOos ? 'bg-slate-200 text-slate-700' : 'bg-rose-50 text-rose-700 border border-rose-200'} rounded text-[10px] font-bold hover:opacity-80 active:scale-95 transition-all" title="${isOos ? 'กู้คืนสินค้า' : 'แจ้งสินค้าหมด คืนเงินสดใส่ซอง'}">
                                                     ${isOos ? 'กู้คืน' : 'แจ้งหมด'}
                                                 </button>
                                             ` : ''}
@@ -14721,10 +14803,10 @@ function renderMerchantIncomingOrders() {
 
                     <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex-wrap gap-2">
                         <div>
-                            <span>ลูกค้า: <strong>${o.customerName}</strong> (${o.customerPhone})</span>
+                            <span>ลูกค้า: <strong>${escapeHtml(o.customerName)}</strong> (${escapeHtml(o.customerPhone)})</span>
                         </div>
                         <div class="text-slate-400 text-[10px]">
-                            <span>จุดส่ง: ${o.deliveryAddress}</span>
+                            <span>จุดส่ง: ${escapeHtml(o.deliveryAddress)}</span>
                         </div>
                     </div>
 
@@ -14732,7 +14814,7 @@ function renderMerchantIncomingOrders() {
                     <div class="flex items-center justify-between pt-2 border-t border-slate-100 gap-2 flex-wrap">
                         <div class="flex items-center gap-1.5">
                             ${!isStallReady && o.status !== 'delivered' ? `
-                                <button type="button" onclick="merchantMarkStallReady('${o.orderId}', '${currentStallId}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer">
+                                <button type="button" onclick="merchantMarkStallReady(${jsArg(o.orderId)}, ${jsArg(currentStallId)})" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer">
                                     <span class="material-symbols-outlined text-sm">done_all</span>
                                     <span>✓ รับออเดอร์ & เตรียมของเสร็จแล้ว</span>
                                 </button>
@@ -14744,7 +14826,7 @@ function renderMerchantIncomingOrders() {
                             `}
                         </div>
                         <div class="flex items-center gap-1.5">
-                            <button type="button" onclick="merchantPrintStallSlip('${o.orderId}', '${currentStallId}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเตรียมของหน้าเขียง 80mm">
+                            <button type="button" onclick="merchantPrintStallSlip(${jsArg(o.orderId)}, ${jsArg(currentStallId)})" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเตรียมของหน้าเขียง 80mm">
                                 <span class="material-symbols-outlined text-xs">print</span>
                                 <span>🖨️ สลิปหน้าเขียง 80mm</span>
                             </button>
@@ -14870,7 +14952,7 @@ function renderMerchantView() {
         let html = "";
         MARKET_DATA.forEach(s => {
             const isSel = s.stallId === stall.stallId ? "selected" : "";
-            html += `<option value="${s.stallId}" ${isSel}>${s.stallName} (${s.stallNumber || 'แผงค้า'} • โซน ${s.zone || 'A'})</option>`;
+            html += `<option value="${escapeHtml(s.stallId)}" ${isSel}>${escapeHtml(s.stallName)} (${escapeHtml(s.stallNumber) || 'แผงค้า'} • โซน ${escapeHtml(s.zone) || 'A'})</option>`;
         });
         selectEl.innerHTML = html;
     }
@@ -15556,9 +15638,9 @@ function renderMerchantActiveDeliveries() {
                     const isSel = o.orderId === order.orderId;
                     const stIcon = o.status === 'delivered' ? '✅' : (o.status === 'delivering' ? '📦' : (o.status === 'cancelled' ? '🚫' : '🛵'));
                     return `
-                        <button type="button" onclick="selectMerchantExpressOrder('${o.orderId}')" class="px-2.5 py-1 rounded-full text-[10px] font-extrabold shrink-0 transition-all cursor-pointer flex items-center gap-1 ${isSel ? 'bg-orange-500 text-white shadow-md ring-2 ring-orange-300/60' : 'bg-white/10 text-slate-300 hover:bg-white/20'}">
+                        <button type="button" onclick="selectMerchantExpressOrder(${jsArg(o.orderId)})" class="px-2.5 py-1 rounded-full text-[10px] font-extrabold shrink-0 transition-all cursor-pointer flex items-center gap-1 ${isSel ? 'bg-orange-500 text-white shadow-md ring-2 ring-orange-300/60' : 'bg-white/10 text-slate-300 hover:bg-white/20'}">
                             <span>${stIcon}</span>
-                            <span>${o.orderId} (${o.customerName || 'ลูกค้า'})</span>
+                            <span>${escapeHtml(o.orderId)} (${escapeHtml(o.customerName) || 'ลูกค้า'})</span>
                         </button>
                     `;
                 }).join('')}
@@ -15585,10 +15667,10 @@ function renderMerchantActiveDeliveries() {
                     <span class="w-8 h-8 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-md">⚡</span>
                     <div>
                         <div class="flex items-center gap-1.5">
-                            <span class="text-[10px] bg-white/20 text-orange-200 font-mono px-2 py-0.5 rounded-full">${order.orderId}</span>
+                            <span class="text-[10px] bg-white/20 text-orange-200 font-mono px-2 py-0.5 rounded-full">${escapeHtml(order.orderId)}</span>
                             <span class="text-[10px] text-slate-300">${order.time || 'เมื่อสักครู่'}</span>
                         </div>
-                        <h4 class="font-extrabold text-sm text-white mt-0.5">งานส่งของแผงคุณ (${order.originStall?.stallName || 'แผงค้า'})</h4>
+                        <h4 class="font-extrabold text-sm text-white mt-0.5">งานส่งของแผงคุณ (${escapeHtml(order.originStall?.stallName) || 'แผงค้า'})</h4>
                     </div>
                 </div>
                 <span class="text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${statusClass}">
@@ -15654,10 +15736,10 @@ function renderMerchantActiveDeliveries() {
                     </div>
                     <div class="text-right">
                         <div class="text-[10px] text-slate-400">ผู้รับ:</div>
-                        <div class="font-bold text-emerald-300 text-xs">${order.customerName || 'ลูกค้า'} (${order.customerPhone || '-'})</div>
+                        <div class="font-bold text-emerald-300 text-xs">${escapeHtml(order.customerName) || 'ลูกค้า'} (${escapeHtml(order.customerPhone) || '-'})</div>
                     </div>
                 </div>
-                <div class="text-[10px] text-slate-300 truncate">📍 ที่อยู่จัดส่ง: ${order.address}</div>
+                <div class="text-[10px] text-slate-300 truncate">📍 ที่อยู่จัดส่ง: ${escapeHtml(order.address)}</div>
                 <div class="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-white/10">
                     <span>ระยะทาง ~${distDisplay} กม. • ค่าส่ง ฿${order.deliveryFee || 20}</span>
                     <span class="text-emerald-400 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -15676,15 +15758,15 @@ function renderMerchantActiveDeliveries() {
                 <div class="flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2.5 min-w-0">
                         <div class="w-10 h-10 rounded-full bg-emerald-700 text-white font-black flex items-center justify-center text-lg shrink-0 shadow-md">
-                            ${rider.avatar || '🛵'}
+                            ${escapeHtml(rider.avatar) || '🛵'}
                         </div>
                         <div class="truncate">
-                            <div class="font-black text-white text-xs truncate">${rider.name}</div>
-                            <div class="text-[10px] text-slate-300">ทะเบียน: ${rider.plate || 'รถตลาดวิศิษฐ์ชัย'} • เบอร์โทร: ${rider.phone || '-'}</div>
+                            <div class="font-black text-white text-xs truncate">${escapeHtml(rider.name)}</div>
+                            <div class="text-[10px] text-slate-300">ทะเบียน: ${escapeHtml(rider.plate) || 'รถตลาดวิศิษฐ์ชัย'} • เบอร์โทร: ${escapeHtml(rider.phone) || '-'}</div>
                         </div>
                     </div>
                     ${order.status === "delivered" ? `
-                        <button type="button" onclick="viewMerchantDeliveryProof('${order.orderId}')" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer shrink-0">
+                        <button type="button" onclick="viewMerchantDeliveryProof(${jsArg(order.orderId)})" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer shrink-0">
                             <span class="material-symbols-outlined text-sm">photo_camera</span>
                             <span>ดูรูปหลักฐาน</span>
                         </button>
@@ -15695,32 +15777,32 @@ function renderMerchantActiveDeliveries() {
             <!-- Main Action Bar: Call Rider, Call Customer, Chat, Radar, Slip + Share to LINE -->
             <div class="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-1 text-xs">
                 <!-- 1. โทรหาลูกค้าผู้รับ -->
-                <button type="button" onclick="callCustomerFromMerchant('${order.orderId}')" class="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="โทรหาลูกค้าผู้รับพัสดุ">
+                <button type="button" onclick="callCustomerFromMerchant(${jsArg(order.orderId)})" class="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="โทรหาลูกค้าผู้รับพัสดุ">
                     <span class="material-symbols-outlined text-sm">phone_forwarded</span>
                     <span>โทรหาผู้รับ</span>
                 </button>
                 <!-- 2. โทรหาไรเดอร์ -->
-                <button type="button" onclick="callRiderFromMerchant('${order.orderId}')" class="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
+                <button type="button" onclick="callRiderFromMerchant(${jsArg(order.orderId)})" class="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">call</span>
                     <span>โทรหาไรเดอร์</span>
                 </button>
                 <!-- 3. แชร์ LINE ให้ลูกค้า -->
-                <button type="button" onclick="shareMerchantTrackingToLine('${order.orderId}')" class="p-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-black flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="ส่งลิงก์ติดตามไรเดอร์ให้ลูกค้าทาง LINE">
+                <button type="button" onclick="shareMerchantTrackingToLine(${jsArg(order.orderId)})" class="p-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-black flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="ส่งลิงก์ติดตามไรเดอร์ให้ลูกค้าทาง LINE">
                     <span class="material-symbols-outlined text-sm">send</span>
                     <span>แชร์ LINE</span>
                 </button>
                 <!-- 4. แชทไรเดอร์ -->
-                <button type="button" onclick="openMerchantRiderChat('${order.orderId}')" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
+                <button type="button" onclick="openMerchantRiderChat(${jsArg(order.orderId)})" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">chat</span>
                     <span>แชทไรเดอร์</span>
                 </button>
                 <!-- 5. ดูเรดาร์สด -->
-                <button type="button" onclick="viewOrderOnRadar('${order.orderId}')" class="p-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
+                <button type="button" onclick="viewOrderOnRadar(${jsArg(order.orderId)})" class="p-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">radar</span>
                     <span>ดูเรดาร์สด</span>
                 </button>
                 <!-- 6. สลิป 80mm -->
-                <button type="button" onclick="printMerchantExpressSlip('${order.orderId}')" class="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all text-[11px] cursor-pointer">
+                <button type="button" onclick="printMerchantExpressSlip(${jsArg(order.orderId)})" class="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">print</span>
                     <span>สลิป 80mm</span>
                 </button>
@@ -15730,7 +15812,7 @@ function renderMerchantActiveDeliveries() {
             <div class="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                 <div>
                     ${(order.status === "waiting_rider" || order.status === "assigned") ? `
-                        <button type="button" onclick="cancelMerchantExpressOrder('${order.orderId}')" class="text-[11px] text-rose-300 hover:text-rose-100 hover:underline flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                        <button type="button" onclick="cancelMerchantExpressOrder(${jsArg(order.orderId)})" class="text-[11px] text-rose-300 hover:text-rose-100 hover:underline flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-sm">cancel</span>
                             <span>ขอยกเลิกคำขอเรียกไรเดอร์</span>
                         </button>
@@ -15796,7 +15878,7 @@ function shareMerchantTrackingToLine(orderId) {
                     <span class="w-8 h-8 rounded-xl bg-[#06C755] text-white flex items-center justify-center font-bold text-base shadow-sm">💬</span>
                     <div>
                         <h3 class="font-extrabold text-sm text-slate-900">แชร์สถานะให้ลูกค้าทาง LINE</h3>
-                        <div class="text-[10px] text-slate-500 font-mono">รหัสงาน: ${order.orderId}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">รหัสงาน: ${escapeHtml(order.orderId)}</div>
                     </div>
                 </div>
                 <button type="button" onclick="document.getElementById('merchant-share-line-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold">✕</button>
@@ -15805,11 +15887,11 @@ function shareMerchantTrackingToLine(orderId) {
             <!-- Customer Card -->
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 space-y-1">
                 <div class="flex items-center justify-between font-bold">
-                    <span class="text-slate-800">👤 คุณ${order.customerName || 'ลูกค้า'}</span>
-                    <span class="text-emerald-600 font-mono text-[11px]">${order.customerPhone || '-'}</span>
+                    <span class="text-slate-800">👤 คุณ${escapeHtml(order.customerName) || 'ลูกค้า'}</span>
+                    <span class="text-emerald-600 font-mono text-[11px]">${escapeHtml(order.customerPhone) || '-'}</span>
                 </div>
-                <div class="text-[11px] text-slate-500 truncate">📍 ${order.address}</div>
-                <div class="text-[10px] text-slate-400">🛵 ไรเดอร์: ${rider.name} (${rider.phone || '-'})</div>
+                <div class="text-[11px] text-slate-500 truncate">📍 ${escapeHtml(order.address)}</div>
+                <div class="text-[10px] text-slate-400">🛵 ไรเดอร์: ${escapeHtml(rider.name)} (${escapeHtml(rider.phone) || '-'})</div>
             </div>
 
             <!-- Pre-formatted text box -->
@@ -15826,7 +15908,7 @@ function shareMerchantTrackingToLine(orderId) {
 
             <!-- Action buttons -->
             <div class="space-y-2 pt-1">
-                <button type="button" onclick="if(isMobileDevice()){ window.open('${lineUrl}','_blank'); } else { document.getElementById('merchant-share-line-modal').classList.add('hidden'); showLinePcModal('แชร์สถานะให้ลูกค้าทาง LINE', document.getElementById('merchant-share-textarea').value); }" class="w-full py-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
+                <button type="button" onclick="if(isMobileDevice()){ window.open(${jsArg(lineUrl)},'_blank'); } else { document.getElementById('merchant-share-line-modal').classList.add('hidden'); showLinePcModal('แชร์สถานะให้ลูกค้าทาง LINE', document.getElementById('merchant-share-textarea').value); }" class="w-full py-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
                     <span class="material-symbols-outlined text-base">send</span>
                     <span>เปิด LINE เพื่อส่งให้ลูกค้าทันที</span>
                 </button>
@@ -15903,18 +15985,18 @@ function viewMerchantDeliveryProof(orderId) {
                 <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80" alt="หลักฐานการจัดส่ง" class="w-full h-full object-cover">
                 <div class="absolute bottom-2 left-2 right-2 bg-black/70 backdrop-blur-md rounded-xl p-2 text-white text-[10px] space-y-0.5">
                     <div class="font-bold flex items-center justify-between">
-                        <span>${order.orderId} • ส่งมอบแล้ว</span>
+                        <span>${escapeHtml(order.orderId)} • ส่งมอบแล้ว</span>
                         <span class="text-emerald-400">✓ ยืนยัน GPS</span>
                     </div>
-                    <div class="text-slate-300 truncate">📍 ${order.address}</div>
+                    <div class="text-slate-300 truncate">📍 ${escapeHtml(order.address)}</div>
                 </div>
             </div>
             <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-xs space-y-1">
                 <div class="font-bold text-emerald-900 flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm text-emerald-600">verified</span>
-                    <span>ผู้รับของ: คุณ${order.customerName || 'ลูกค้า'}</span>
+                    <span>ผู้รับของ: คุณ${escapeHtml(order.customerName) || 'ลูกค้า'}</span>
                 </div>
-                <div class="text-[11px] text-slate-600">ไรเดอร์ผู้จัดส่ง: ${rider.name} (${rider.plate || '-'})</div>
+                <div class="text-[11px] text-slate-600">ไรเดอร์ผู้จัดส่ง: ${escapeHtml(rider.name)} (${escapeHtml(rider.plate) || '-'})</div>
                 <div class="text-[10px] text-slate-500">เวลาจัดส่งเสร็จสิ้น: ${order.deliveredAt || order.time || 'วันนี้'}</div>
             </div>
             <button type="button" onclick="document.getElementById('merchant-proof-modal').classList.add('hidden')" class="w-full py-2.5 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
@@ -15987,18 +16069,18 @@ function callRiderFromMerchant(param) {
                 </div>
                 <div>
                     <h3 class="font-extrabold text-base text-slate-900">โทรติดต่อไรเดอร์ผู้จัดส่ง</h3>
-                    <p class="text-slate-500 text-[11px] mt-0.5">${rider ? rider.name : 'ไรเดอร์ประจำตลาด'} (${rider ? (rider.plate || 'รถจัดส่ง') : 'รถจัดส่ง'})</p>
+                    <p class="text-slate-500 text-[11px] mt-0.5">${rider ? escapeHtml(rider.name) : 'ไรเดอร์ประจำตลาด'} (${rider ? (escapeHtml(rider.plate) || 'รถจัดส่ง') : 'รถจัดส่ง'})</p>
                 </div>
                 <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
                     <div class="text-[10px] text-emerald-800 font-bold">เบอร์โทรศัพท์ไรเดอร์:</div>
-                    <div class="text-xl font-black text-emerald-700 tracking-wider font-mono mt-0.5">${phone}</div>
+                    <div class="text-xl font-black text-emerald-700 tracking-wider font-mono mt-0.5">${escapeHtml(phone)}</div>
                 </div>
                 <div class="space-y-2 pt-1">
                     <a href="tel:${cleanPhone}" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
                         <span class="material-symbols-outlined text-base">call</span>
                         <span>แตะเพื่อโทรออกทันที</span>
                     </a>
-                    <button type="button" onclick="navigator.clipboard.writeText('${phone}'); showToast('📋 คัดลอกเบอร์ ${phone} สำเร็จ!');" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs">
+                    <button type="button" onclick="navigator.clipboard.writeText(${jsArg(phone)}); showToast('📋 คัดลอกเบอร์ ${phone} สำเร็จ!');" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs">
                         คัดลอกเบอร์โทร
                     </button>
                     <button type="button" onclick="document.getElementById('merchant-call-rider-modal').classList.add('hidden')" class="w-full py-2 text-slate-400 hover:text-slate-600 font-medium text-xs">
@@ -16089,8 +16171,8 @@ function openMerchantRiderChat(orderId) {
             <button type="button" onclick="sendQuickRiderMessage('📦 ของสดแพ็คเสร็จแล้ว มารับหน้าร้านได้เลยครับ')" class="shrink-0 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold border border-emerald-200 transition-colors active:scale-95">
                 📦 แพ็คเสร็จแล้ว มารับได้เลย
             </button>
-            <button type="button" onclick="sendQuickRiderMessage('🏪 ร้านอยู่โซน ${order.originStall?.zone || 'A'} แผง ${order.originStall?.stallNumber || 'แผงค้า'} ครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
-                🏪 พิกัดแผง ${order.originStall?.stallNumber || 'แผงค้า'}
+            <button type="button" onclick="sendQuickRiderMessage('🏪 ร้านอยู่โซน ${order.originStall?.zone || 'A'} แผง ${escapeHtml(order.originStall?.stallNumber) || 'แผงค้า'} ครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
+                🏪 พิกัดแผง ${escapeHtml(order.originStall?.stallNumber) || 'แผงค้า'}
             </button>
             <button type="button" onclick="sendQuickRiderMessage('📞 ลูกค้าฝากแจ้งว่าช่วยโทรหาก่อนถึง 5 นาทีครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
                 📞 โทรหาลูกค้าก่อนถึง 5 นาที
@@ -16107,13 +16189,13 @@ function openMerchantRiderChat(orderId) {
         chatMessages.innerHTML = `
             <div class="text-center my-3">
                 <span class="bg-slate-200/70 text-slate-600 text-[10px] px-2.5 py-1 rounded-full">
-                    เชื่อมต่อห้องแชทตรงกับไรเดอร์สำหรับงาน ${order.orderId}
+                    เชื่อมต่อห้องแชทตรงกับไรเดอร์สำหรับงาน ${escapeHtml(order.orderId)}
                 </span>
             </div>
             <div class="flex items-start gap-2 max-w-[85%] animate-fade-in">
                 <div class="w-7 h-7 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs shrink-0 shadow">🛵</div>
                 <div class="bg-white p-2.5 rounded-2xl rounded-tl-xs shadow-xs border border-slate-100 text-xs text-slate-800">
-                    สวัสดีครับแผงค้า ${order.originStall?.stallName || ''}! กำลังเตรียมเข้าไปรับของที่แผงนะครับ มีโน้ตอะไรแจ้งเพิ่มเติมพิมพ์บอกตรงนี้ได้เลยครับ 🙏
+                    สวัสดีครับแผงค้า ${escapeHtml(order.originStall?.stallName) || ''}! กำลังเตรียมเข้าไปรับของที่แผงนะครับ มีโน้ตอะไรแจ้งเพิ่มเติมพิมพ์บอกตรงนี้ได้เลยครับ 🙏
                 </div>
             </div>
         `;
@@ -16184,7 +16266,7 @@ function viewOrderOnRadar(orderId) {
                     <div>
                         <div class="font-extrabold text-sm flex items-center gap-1.5">
                             <span>เรดาร์สด GPS ติดตามไรเดอร์</span>
-                            <span class="text-[10px] bg-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full font-mono font-bold">${order.orderId}</span>
+                            <span class="text-[10px] bg-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full font-mono font-bold">${escapeHtml(order.orderId)}</span>
                         </div>
                         <div class="text-[10px] text-slate-300">ติดตามพิกัดการจัดส่งของสดแบบเรียลไทม์</div>
                     </div>
@@ -16196,7 +16278,7 @@ function viewOrderOnRadar(orderId) {
             <div class="bg-black/40 px-3 py-2 border-b border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs shrink-0">
                 <div class="bg-white/5 p-1.5 rounded-xl">
                     <div class="text-[9px] text-slate-400">ไรเดอร์ผู้ส่ง</div>
-                    <div class="font-bold text-emerald-300 truncate text-[11px]">🛵 ${rider.name}</div>
+                    <div class="font-bold text-emerald-300 truncate text-[11px]">🛵 ${escapeHtml(rider.name)}</div>
                 </div>
                 <div class="bg-white/5 p-1.5 rounded-xl">
                     <div class="text-[9px] text-slate-400">สถานะงาน</div>
@@ -16219,10 +16301,10 @@ function viewOrderOnRadar(orderId) {
                 <div class="absolute bottom-3 left-3 right-3 z-20 bg-black/75 backdrop-blur-md rounded-2xl p-2.5 border border-white/15 text-[11px] flex items-center justify-between gap-2 shadow-lg">
                     <div class="flex items-center gap-2 truncate min-w-0">
                         <span class="w-6 h-6 rounded-lg bg-orange-500 text-white flex items-center justify-center font-bold text-xs shrink-0">🏪</span>
-                        <span class="truncate font-bold">${origin.stallName || 'แผงค้า'}</span>
+                        <span class="truncate font-bold">${escapeHtml(origin.stallName) || 'แผงค้า'}</span>
                         <span class="text-slate-400">➔</span>
                         <span class="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0">📍</span>
-                        <span class="truncate font-bold text-emerald-300">${order.customerName || 'ลูกค้า'}</span>
+                        <span class="truncate font-bold text-emerald-300">${escapeHtml(order.customerName) || 'ลูกค้า'}</span>
                     </div>
                     <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold shrink-0">~${distDisplay} กม.</span>
                 </div>
@@ -16231,11 +16313,11 @@ function viewOrderOnRadar(orderId) {
             <!-- Actions Footer -->
             <div class="p-3 bg-slate-800/95 border-t border-white/10 flex items-center justify-between gap-2 shrink-0">
                 <div class="flex items-center gap-2">
-                    <button type="button" onclick="callRiderFromMerchant('${order.orderId}')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="callRiderFromMerchant(${jsArg(order.orderId)})" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">call</span>
                         <span>โทรหาไรเดอร์</span>
                     </button>
-                    <button type="button" onclick="closeMerchantRadarModal(); openMerchantRiderChat('${order.orderId}')" class="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="closeMerchantRadarModal(); openMerchantRiderChat(${jsArg(order.orderId)})" class="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">chat</span>
                         <span>แชทไรเดอร์</span>
                     </button>
@@ -16281,7 +16363,7 @@ function viewOrderOnRadar(orderId) {
             iconSize: [34, 34],
             iconAnchor: [17, 17]
         });
-        L.marker([startLat, startLng], { icon: stallIcon }).addTo(map).bindPopup(`<b>🏪 ${origin.stallName || 'แผงค้า'}</b><br>จุดรับของสด`);
+        L.marker([startLat, startLng], { icon: stallIcon }).addTo(map).bindPopup(`<b>🏪 ${escapeHtml(origin.stallName) || 'แผงค้า'}</b><br>จุดรับของสด`);
 
         // Destination Pin
         const destIcon = L.divIcon({
@@ -16290,7 +16372,7 @@ function viewOrderOnRadar(orderId) {
             iconSize: [34, 34],
             iconAnchor: [17, 17]
         });
-        L.marker([destLat, destLng], { icon: destIcon }).addTo(map).bindPopup(`<b>📍 บ้านคุณ${order.customerName || 'ลูกค้า'}</b><br>${order.address}`);
+        L.marker([destLat, destLng], { icon: destIcon }).addTo(map).bindPopup(`<b>📍 บ้านคุณ${escapeHtml(order.customerName) || 'ลูกค้า'}</b><br>${escapeHtml(order.address)}`);
 
         // Rider Position (moving along the route)
         let riderProgress = order.status === 'delivered' ? 1.0 : (order.status === 'delivering' ? 0.65 : (order.status === 'assigned' ? 0.25 : 0.05));
@@ -16306,7 +16388,7 @@ function viewOrderOnRadar(orderId) {
             iconSize: [40, 40],
             iconAnchor: [20, 20]
         });
-        L.marker([riderLat, riderLng], { icon: riderIcon }).addTo(map).bindPopup(`<b>🛵 ${rider.name}</b><br>สถานะ: ${statusDesc}`);
+        L.marker([riderLat, riderLng], { icon: riderIcon }).addTo(map).bindPopup(`<b>🛵 ${escapeHtml(rider.name)}</b><br>สถานะ: ${statusDesc}`);
 
         // Route Polyline
         const routeCoords = [
@@ -16365,14 +16447,14 @@ function callContactDirect(phone, name, subtitle) {
             </div>
             <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-2.5">
                 <div class="text-[10px] text-emerald-800 font-bold">หมายเลขโทรศัพท์:</div>
-                <div class="text-lg font-black text-emerald-700 tracking-wider font-mono mt-0.5">${phone}</div>
+                <div class="text-lg font-black text-emerald-700 tracking-wider font-mono mt-0.5">${escapeHtml(phone)}</div>
             </div>
             <div class="space-y-2 pt-1">
                 <a href="tel:${clean}" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
                     <span class="material-symbols-outlined text-sm">call</span>
                     <span>แตะเพื่อโทรออกทันที</span>
                 </a>
-                <button type="button" onclick="navigator.clipboard.writeText('${phone}'); showToast('📋 คัดลอกเบอร์ ${phone} สำเร็จ!');" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs cursor-pointer">
+                <button type="button" onclick="navigator.clipboard.writeText(${jsArg(phone)}); showToast('📋 คัดลอกเบอร์ ${phone} สำเร็จ!');" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs cursor-pointer">
                     คัดลอกเบอร์โทร
                 </button>
                 <button type="button" onclick="document.getElementById('hub-call-contact-modal').classList.add('hidden')" class="w-full py-1 text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer">
@@ -16418,17 +16500,17 @@ function openAssignRiderModal(orderId) {
             <div class="p-3 rounded-2xl border ${isCurrent ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-200 bg-white hover:border-emerald-300'} flex items-center justify-between gap-3 transition-all">
                 <div class="flex items-center gap-2.5 min-w-0">
                     <div class="w-10 h-10 rounded-full bg-emerald-700 text-white font-bold flex items-center justify-center text-lg shrink-0 shadow-sm">
-                        ${r.avatar || '🛵'}
+                        ${escapeHtml(r.avatar) || '🛵'}
                     </div>
                     <div class="truncate">
                         <div class="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 truncate">
-                            <span>${r.name}</span>
+                            <span>${escapeHtml(r.name)}</span>
                             ${isCurrent ? '<span class="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded-full font-bold">กำลังรับงานนี้</span>' : ''}
                         </div>
-                        <div class="text-[10px] text-slate-500">ทะเบียน: ${r.plate || '-'} • โทร: ${r.phone || '-'}</div>
+                        <div class="text-[10px] text-slate-500">ทะเบียน: ${escapeHtml(r.plate) || '-'} • โทร: ${escapeHtml(r.phone) || '-'}</div>
                     </div>
                 </div>
-                <button type="button" onclick="selectAndAssignRider('${targetOrder.orderId}', '${encodeURIComponent(JSON.stringify(r))}')" class="px-3 py-1.5 ${isCurrent ? 'bg-slate-200 text-slate-600' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} rounded-xl text-xs font-bold shrink-0 active:scale-95 transition-all shadow-xs cursor-pointer">
+                <button type="button" onclick="selectAndAssignRider(${jsArg(targetOrder.orderId)}, ${jsArg(encodeURIComponent(JSON.stringify(r)))})" class="px-3 py-1.5 ${isCurrent ? 'bg-slate-200 text-slate-600' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} rounded-xl text-xs font-bold shrink-0 active:scale-95 transition-all shadow-xs cursor-pointer">
                     ${isCurrent ? 'จ่ายงานอยู่' : 'เลือกคนนี้ 🚀'}
                 </button>
             </div>
@@ -16442,7 +16524,7 @@ function openAssignRiderModal(orderId) {
                     <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">🛵</span>
                     <div>
                         <h3 class="font-extrabold text-sm text-slate-900">จัดสรรงานให้ไรเดอร์ในระบบ</h3>
-                        <div class="text-[10px] text-slate-500 font-mono">รหัสงาน: ${targetOrder.orderId}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">รหัสงาน: ${escapeHtml(targetOrder.orderId)}</div>
                     </div>
                 </div>
                 <button type="button" onclick="closeAssignRiderModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold cursor-pointer">✕</button>
@@ -16450,10 +16532,10 @@ function openAssignRiderModal(orderId) {
 
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 shrink-0 space-y-1 text-[11px]">
                 <div class="flex items-center justify-between font-bold text-slate-800">
-                    <span>🏪 รับที่: ${targetOrder.originStall?.stallName || 'แผงค้า'}</span>
-                    <span class="text-emerald-700">➔ 📍 ส่ง: ${targetOrder.customerName || 'ลูกค้า'}</span>
+                    <span>🏪 รับที่: ${escapeHtml(targetOrder.originStall?.stallName) || 'แผงค้า'}</span>
+                    <span class="text-emerald-700">➔ 📍 ส่ง: ${escapeHtml(targetOrder.customerName) || 'ลูกค้า'}</span>
                 </div>
-                <div class="text-[10px] text-slate-500 truncate">${targetOrder.address}</div>
+                <div class="text-[10px] text-slate-500 truncate">${escapeHtml(targetOrder.address)}</div>
             </div>
 
             <div class="text-[11px] font-bold text-slate-700 shrink-0 flex items-center justify-between">
@@ -16641,7 +16723,7 @@ function printMerchantExpressSlip(orderId) {
     <html>
     <head>
         <meta charset="utf-8">
-        <title>ใบส่งของด่วน 80mm - ${order.orderId}</title>
+        <title>ใบส่งของด่วน 80mm - ${escapeHtml(order.orderId)}</title>
         <style>
             @page { size: 80mm auto; margin: 0; }
             body { font-family: 'Sarabun', 'Tahoma', sans-serif; width: 72mm; margin: 0 auto; padding: 4mm 0; font-size: 11px; line-height: 1.35; color: #000; background: #fff; page-break-inside: avoid; }
@@ -16664,7 +16746,7 @@ function printMerchantExpressSlip(orderId) {
         <div class="text-center">
             <div class="title">⚡ ใบส่งของสดด่วน (Express)</div>
             <div>ศูนย์กระจายสินค้าตลาดวิศิษฐ์ชัย อ.บ้านบึง</div>
-            <div class="badge"># ${order.orderId}</div>
+            <div class="badge"># ${escapeHtml(order.orderId)}</div>
             <div style="font-size:10px; color:#555;">วันที่ ${dateStr} • เวลา ${order.time || ''}</div>
         </div>
 
@@ -16673,16 +16755,16 @@ function printMerchantExpressSlip(orderId) {
         <!-- 1. จุดรับของ (แผงค้า) -->
         <div class="box">
             <div class="font-bold">🏪 จุดรับของ (แผงค้าผู้ส่ง):</div>
-            <div>${origin.stallName || 'แผงค้า'} (${origin.stallNumber || 'แผงทั่วไป'})</div>
-            <div>ผู้ส่ง: ${origin.ownerName || 'เจ้าของแผง'} (โทร ${origin.ownerPhone || '-'})</div>
+            <div>${escapeHtml(origin.stallName) || 'แผงค้า'} (${escapeHtml(origin.stallNumber) || 'แผงทั่วไป'})</div>
+            <div>ผู้ส่ง: ${escapeHtml(origin.ownerName) || 'เจ้าของแผง'} (โทร ${escapeHtml(origin.ownerPhone) || '-'})</div>
         </div>
 
         <!-- 2. จุดส่งของ (ลูกค้า) -->
         <div class="box">
             <div class="font-bold">📍 จุดส่งของ (ลูกค้าปลายทาง):</div>
-            <div>ผู้รับ: คุณ${order.customerName || 'ลูกค้า'}</div>
-            <div>โทร: ${order.customerPhone || '-'}</div>
-            <div style="font-size:10px;">${order.address}</div>
+            <div>ผู้รับ: คุณ${escapeHtml(order.customerName) || 'ลูกค้า'}</div>
+            <div>โทร: ${escapeHtml(order.customerPhone) || '-'}</div>
+            <div style="font-size:10px;">${escapeHtml(order.address)}</div>
         </div>
 
         <div class="divider"></div>
@@ -16718,11 +16800,11 @@ function printMerchantExpressSlip(orderId) {
         <!-- ไรเดอร์ -->
         <div class="row">
             <span class="label">ไรเดอร์ผู้จัดส่ง:</span>
-            <span class="value">${rider.name}</span>
+            <span class="value">${escapeHtml(rider.name)}</span>
         </div>
         <div class="row">
             <span class="label">เบอร์โทร / ทะเบียน:</span>
-            <span class="value">${rider.phone} (${rider.plate})</span>
+            <span class="value">${escapeHtml(rider.phone)} (${escapeHtml(rider.plate)})</span>
         </div>
 
         <div class="divider"></div>
@@ -17570,7 +17652,7 @@ function renderAdminAnalytics() {
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl">
                         <div class="text-xs font-bold text-blue-900">📱 พร้อมเพย์ (PromptPay)</div>
-                        <div class="text-lg font-black text-blue-950 mt-1">${paymentCounts.promptpay} ออเดอร์</div>
+                        <div class="text-lg font-black text-blue-950 mt-1">${escapeHtml(paymentCounts.promptpay)} ออเดอร์</div>
                     </div>
                     <div class="p-3 bg-purple-50 border border-purple-200 rounded-xl">
                         <div class="text-xs font-bold text-purple-900">🏦 โอนผ่านธนาคาร (SCB)</div>
@@ -17876,13 +17958,13 @@ function printA4VendorSettlementsReport(targetDateKey) {
         rowsHtml = vendors.map((v, idx) => `
             <tr>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
-                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${v.stallNumber || '-'} (${v.zone || '-'})</td>
-                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${v.stallName}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(v.stallNumber) || '-'} (${escapeHtml(v.zone) || '-'})</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(v.stallName)}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${v.orderCount} ออเดอร์</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: right; color: #475569;">฿${Number(v.totalAmount || 0).toLocaleString()}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: right; color: #b91c1c;">${(v.gpAmount || 0) > 0 ? `-฿${Number(v.gpAmount || 0).toLocaleString()}` : '฿0'}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold; text-align: right; color: #047857;">฿${Number(v.payoutAmount !== undefined ? v.payoutAmount : v.totalAmount).toLocaleString()}</td>
-                <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${v.phone || '-'}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${escapeHtml(v.phone) || '-'}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: ${v.isSettled ? '#047857' : '#d97706'};">
                     ${v.isSettled ? 'โอนแล้ว ✓' : 'รอโอน'}
                 </td>
@@ -18199,7 +18281,7 @@ function renderAdminStalls() {
                         ทั้งหมด (${ALL_100_STALLS.length})
                     </button>
                     <button onclick="filterAdminStallsByStatus('active_orders')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminStallStatusFilter === 'active_orders' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
-                        🔴 มีออเดอร์ค้างทำ (${stallsWithOrdersIds.size})
+                        🔴 มีออเดอร์ค้างทำ (${escapeHtml(stallsWithOrdersIds.size)})
                     </button>
                     <button onclick="filterAdminStallsByStatus('open')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminStallStatusFilter === 'open' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
                         🟢 เปิดร้าน (${openStallsCount})
@@ -18241,16 +18323,16 @@ function renderAdminStalls() {
                                     </div>
                                     <div>
                                         <div class="flex items-center gap-1.5 flex-wrap">
-                                            <span class="font-black text-sm text-slate-900">${task.stallName}</span>
-                                            <span class="bg-slate-100 text-slate-700 text-[10px] font-mono px-2 py-0.5 rounded-md font-bold">${task.stallNumber}</span>
-                                            <span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded-md">โซน ${task.zone}</span>
+                                            <span class="font-black text-sm text-slate-900">${escapeHtml(task.stallName)}</span>
+                                            <span class="bg-slate-100 text-slate-700 text-[10px] font-mono px-2 py-0.5 rounded-md font-bold">${escapeHtml(task.stallNumber)}</span>
+                                            <span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded-md">โซน ${escapeHtml(task.zone)}</span>
                                         </div>
                                         <div class="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap mt-0.5">
-                                            <span>เจ้าของ: <strong>${task.ownerName}</strong></span>
+                                            <span>เจ้าของ: <strong>${escapeHtml(task.ownerName)}</strong></span>
                                             <span>•</span>
-                                            <a href="tel:${task.phone}" class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
+                                            <a href="tel:${escapeHtml(task.phone)}" class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
                                                 <span class="material-symbols-outlined text-xs">call</span>
-                                                <span>${task.phone}</span>
+                                                <span>${escapeHtml(task.phone)}</span>
                                             </a>
                                         </div>
                                     </div>
@@ -18266,7 +18348,7 @@ function renderAdminStalls() {
                             <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-2">
                                 <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                                     <span>ขั้นตอนการจัดการออเดอร์แผงค้า (Order Pipeline):</span>
-                                    <span class="font-mono text-slate-500 font-black">#${task.orderId}</span>
+                                    <span class="font-mono text-slate-500 font-black">#${escapeHtml(task.orderId)}</span>
                                 </div>
                                 <div class="grid grid-cols-4 gap-1 text-center text-[10.5px]">
                                     <div class="p-1.5 rounded-lg font-bold ${task.stage >= 1 ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-white text-slate-400 border border-slate-200'}">
@@ -18295,7 +18377,7 @@ function renderAdminStalls() {
                                         <div class="p-1.5 flex items-center justify-between">
                                             <div class="flex items-center gap-1.5">
                                                 <span class="text-emerald-600 font-black">✓</span>
-                                                <span class="font-bold text-slate-800">${it.name || 'สินค้า'}</span>
+                                                <span class="font-bold text-slate-800">${escapeHtml(it.name) || 'สินค้า'}</span>
                                                 <span class="text-slate-400 font-normal">x${it.qty || 1}</span>
                                             </div>
                                             <div class="font-mono font-bold text-slate-700">฿${Number(it.price || 0).toLocaleString()}</div>
@@ -18306,15 +18388,15 @@ function renderAdminStalls() {
 
                             <!-- Customer & Address Summary -->
                             <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex-wrap gap-2">
-                                <div>ลูกค้า: <strong>${task.customerName}</strong> (${task.customerPhone})</div>
-                                <div class="text-slate-400 text-[10px]">ปลายทาง: ${task.deliveryAddress}</div>
+                                <div>ลูกค้า: <strong>${escapeHtml(task.customerName)}</strong> (${escapeHtml(task.customerPhone)})</div>
+                                <div class="text-slate-400 text-[10px]">ปลายทาง: ${escapeHtml(task.deliveryAddress)}</div>
                             </div>
 
                             <!-- Card Action Buttons -->
                             <div class="flex items-center justify-between pt-2 border-t border-slate-100 gap-2 flex-wrap">
                                 <div class="flex items-center gap-1.5">
                                     ${!task.isReady && task.stage <= 2 ? `
-                                        <button onclick="adminMarkStallReady('${task.orderId}', '${task.stallId}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                                        <button onclick="adminMarkStallReady(${jsArg(task.orderId)}, ${jsArg(task.stallId)})" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
                                             <span class="material-symbols-outlined text-sm font-bold">check_circle</span>
                                             <span>✓ ช่วยยืนยันเตรียมเสร็จ</span>
                                         </button>
@@ -18324,13 +18406,13 @@ function renderAdminStalls() {
                                             <span>เตรียมเสร็จแล้ว รอไรเดอร์มารับ</span>
                                         </span>
                                     `}
-                                    <button onclick="loginAsMerchantStall('${task.stallId}')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าร้านนี้">
+                                    <button onclick="loginAsMerchantStall(${jsArg(task.stallId)})" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าร้านนี้">
                                         <span class="material-symbols-outlined text-xs">store</span>
                                         <span>เข้าร้าน</span>
                                     </button>
                                 </div>
                                 <div class="flex items-center gap-1.5">
-                                    <button onclick="printStallOrderThermalSlip('${task.orderId}', '${task.stallId}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสั่งของสด 80mm">
+                                    <button onclick="printStallOrderThermalSlip(${jsArg(task.orderId)}, ${jsArg(task.stallId)})" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสั่งของสด 80mm">
                                         <span class="material-symbols-outlined text-xs">print</span>
                                         <span>สลิป 80mm</span>
                                     </button>
@@ -18372,12 +18454,12 @@ function renderAdminStalls() {
                                             ${zoneStalls.slice(0, 20).map(s => {
                                                 const hasOrder = stallsWithOrdersIds.has(s.stallId);
                                                 return `
-                                                    <button onclick="handleAdminStallSearch('${s.stallNumber}')" title="${s.stallNumber}: ${s.stallName} (${hasOrder ? 'มีออเดอร์ค้างทำ!' : (s.isClosed ? 'พักร้าน' : 'เปิดปกติ')})" class="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold transition-all active:scale-95 cursor-pointer ${
+                                                    <button onclick="handleAdminStallSearch(${jsArg(s.stallNumber)})" title="${escapeHtml(s.stallNumber)}: ${escapeHtml(s.stallName)} (${hasOrder ? 'มีออเดอร์ค้างทำ!' : (s.isClosed ? 'พักร้าน' : 'เปิดปกติ')})" class="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold transition-all active:scale-95 cursor-pointer ${
                                                         hasOrder
                                                         ? 'bg-amber-400 text-slate-950 font-black animate-pulse border border-amber-500 shadow-2xs'
                                                         : (s.isClosed ? 'bg-slate-200 text-slate-400 opacity-60' : 'bg-white hover:bg-emerald-50 text-slate-700 border border-slate-200')
                                                     }">
-                                                        ${s.stallNumber}
+                                                        ${escapeHtml(s.stallNumber)}
                                                     </button>
                                                 `;
                                             }).join('')}
@@ -18405,11 +18487,11 @@ function renderAdminStalls() {
                                 ${urgentItemsList.map(it => `
                                     <div class="p-2 bg-amber-50/60 rounded-xl border border-amber-200/80 flex items-center justify-between">
                                         <div>
-                                            <span class="font-bold text-slate-800">${it.name}</span>
+                                            <span class="font-bold text-slate-800">${escapeHtml(it.name)}</span>
                                             <span class="text-slate-500 font-normal"> x${it.qty}</span>
                                         </div>
                                         <div class="text-[10px] font-bold text-amber-900 bg-white px-2 py-0.5 rounded-lg border border-amber-200">
-                                            ${it.stallNumber} (${it.stallName})
+                                            ${escapeHtml(it.stallNumber)} (${escapeHtml(it.stallName)})
                                         </div>
                                     </div>
                                 `).join('')}
@@ -18480,9 +18562,9 @@ function renderAdminStalls() {
                         </div>
                     ` : displayedApps.map(app => {
                         const stall = app.stallData || {};
-                        const productsList = (stall.products || []).slice(0, 3).map(p => `<span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold">✓ ${p.name || 'สินค้า'} ฿${p.price || 0}</span>`).join('');
+                        const productsList = (stall.products || []).slice(0, 3).map(p => `<span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold">✓ ${escapeHtml(p.name) || 'สินค้า'} ฿${p.price || 0}</span>`).join('');
                         return `
-                            <div id="merchant-app-card-${app.id}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
+                            <div id="merchant-app-card-${escapeHtml(app.id)}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
                                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
                                     <div class="flex items-start gap-3">
                                         <div class="w-11 h-11 rounded-2xl bg-gradient-to-br ${app.status === 'pending' ? 'from-amber-400 to-orange-500' : app.status === 'approved' ? 'from-emerald-500 to-teal-600' : 'from-rose-400 to-red-600'} text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
@@ -18491,7 +18573,7 @@ function renderAdminStalls() {
                                         <div>
                                             <div class="flex items-center gap-2 flex-wrap">
                                                 <span class="font-black text-sm text-slate-900">${escapeHtml(stall.stallName || 'แผงค้าใหม่')}</span>
-                                                <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${stall.stallNumber || app.id}</span>
+                                                <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${escapeHtml(stall.stallNumber) || escapeHtml(app.id)}</span>
                                                 ${app.status === 'pending' ? `
                                                     <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⏳ รอการอนุมัติ</span>
                                                 ` : app.status === 'approved' ? `
@@ -18502,7 +18584,7 @@ function renderAdminStalls() {
                                                 ${app.accessCode ? `
                                                     <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 text-[10px] font-mono font-black px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
                                                         <span>🔑 รหัส:</span>
-                                                        <span class="tracking-widest">${app.accessCode}</span>
+                                                        <span class="tracking-widest">${escapeHtml(app.accessCode)}</span>
                                                     </span>
                                                 ` : ''}
                                             </div>
@@ -18518,24 +18600,24 @@ function renderAdminStalls() {
                                     </div>
 
                                     <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
-                                        <button onclick="printA4MerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
+                                        <button onclick="printA4MerchantApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
                                             <span class="material-symbols-outlined text-xs">print</span>
                                             <span>พิมพ์ A4</span>
                                         </button>
-                                        <button onclick="viewMerchantAppDetail('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                        <button onclick="viewMerchantAppDetail(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                                             <span class="material-symbols-outlined text-xs">visibility</span>
                                             <span>ดูรายละเอียด</span>
                                         </button>
-                                        <button onclick="loginAsMerchantStall('${stall.stallId}')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้">
+                                        <button onclick="loginAsMerchantStall(${jsArg(stall.stallId)})" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้">
                                             <span class="material-symbols-outlined text-xs">store</span>
                                             <span>สลับเข้าร้าน</span>
                                         </button>
                                         ${app.status === 'pending' ? `
-                                            <button onclick="approveMerchantApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                            <button onclick="approveMerchantApplication(${jsArg(app.id)})" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                                                 <span class="material-symbols-outlined text-xs font-bold">check_circle</span>
                                                 <span>อนุมัติ</span>
                                             </button>
-                                            <button onclick="rejectMerchantApplication('${app.id}')" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all cursor-pointer">
+                                            <button onclick="rejectMerchantApplication(${jsArg(app.id)})" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all cursor-pointer">
                                                 ✕ ปฏิเสธ
                                             </button>
                                         ` : ''}
@@ -18580,37 +18662,37 @@ function renderAdminStalls() {
                                     ${filteredStalls.slice(0, 80).map(s => `
                                         <tr class="hover:bg-slate-50 transition-colors">
                                             <td class="p-3 font-mono font-bold text-slate-700">
-                                                <span class="bg-slate-100 px-2 py-0.5 rounded">${s.stallNumber || 'แผงตลาด'}</span>
-                                                <span class="text-[10px] text-slate-400 ml-1">โซน ${s.zone || '-'}</span>
+                                                <span class="bg-slate-100 px-2 py-0.5 rounded">${escapeHtml(s.stallNumber) || 'แผงตลาด'}</span>
+                                                <span class="text-[10px] text-slate-400 ml-1">โซน ${escapeHtml(s.zone) || '-'}</span>
                                             </td>
                                             <td class="p-3">
-                                                <div class="font-extrabold text-slate-900">${s.stallName}</div>
-                                                <div class="text-[10px] text-slate-400">${s.stallTag || s.category || ''}</div>
+                                                <div class="font-extrabold text-slate-900">${escapeHtml(s.stallName)}</div>
+                                                <div class="text-[10px] text-slate-400">${escapeHtml(s.stallTag) || escapeHtml(s.category) || ''}</div>
                                             </td>
-                                            <td class="p-3 text-slate-700 font-medium">${s.ownerName || 'เจ้าของแผง'}</td>
-                                            <td class="p-3 font-mono font-bold text-emerald-700">📱 ${s.phone || '-'}</td>
+                                            <td class="p-3 text-slate-700 font-medium">${escapeHtml(s.ownerName) || 'เจ้าของแผง'}</td>
+                                            <td class="p-3 font-mono font-bold text-emerald-700">📱 ${escapeHtml(s.phone) || '-'}</td>
                                             <td class="p-3">
                                                 ${s.accessCode ? `
-                                                    <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-lg font-mono font-bold text-xs tracking-wider inline-flex items-center gap-1 cursor-pointer" onclick="navigator.clipboard.writeText('${s.accessCode}'); showToast('📋 คัดลอกรหัส ${s.accessCode} แล้ว');" title="คลิกเพื่อคัดลอกรหัส">
+                                                    <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-lg font-mono font-bold text-xs tracking-wider inline-flex items-center gap-1 cursor-pointer" onclick="navigator.clipboard.writeText(${jsArg(s.accessCode)}); showToast('📋 คัดลอกรหัส ${escapeHtml(s.accessCode)} แล้ว');" title="คลิกเพื่อคัดลอกรหัส">
                                                         <span>🔑</span>
-                                                        <span>${s.accessCode}</span>
+                                                        <span>${escapeHtml(s.accessCode)}</span>
                                                     </span>
                                                 ` : '<span class="text-slate-400 text-[11px] italic">- ไม่มีรหัส -</span>'}
                                             </td>
                                             <td class="p-3 text-center">
-                                                <button onclick="toggleStallOpenStatusByAdmin('${s.stallId}')" class="px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer ${s.isClosed ? 'bg-slate-100 text-slate-500 border border-slate-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}">
+                                                <button onclick="toggleStallOpenStatusByAdmin(${jsArg(s.stallId)})" class="px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer ${s.isClosed ? 'bg-slate-100 text-slate-500 border border-slate-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}">
                                                     ${s.isClosed ? '⚪ พักร้าน' : '🟢 เปิดร้าน'}
                                                 </button>
                                             </td>
                                             <td class="p-3 text-center">
                                                 <div class="flex items-center justify-center gap-1">
-                                                    <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', 500, '${s.phone || '089-123-4567'}', '${s.ownerName || 'เจ้าของแผง'}', '${s.stallNumber || 'แผงตลาด'}')" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
+                                                    <button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, 500, ${jsArg(s.phone || '089-123-4567')}, ${jsArg(s.ownerName || 'เจ้าของแผง')}, ${jsArg(s.stallNumber || 'แผงตลาด')})" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
                                                         QR โอน
                                                     </button>
-                                                    <button onclick="loginAsMerchantStall('${s.stallId}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
+                                                    <button onclick="loginAsMerchantStall(${jsArg(s.stallId)})" class="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
                                                         เข้าร้าน
                                                     </button>
-                                                    <button onclick="deleteStallByAdmin('${s.stallId}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer" title="ลบแผงค้านี้">
+                                                    <button onclick="deleteStallByAdmin(${jsArg(s.stallId)})" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer" title="ลบแผงค้านี้">
                                                         ลบร้าน
                                                     </button>
                                                 </div>
@@ -18684,7 +18766,7 @@ function renderAdminStalls() {
                     </span>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
-                    <button onclick="printA4VendorSettlementsReport('${targetDateKey}')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
+                    <button onclick="printA4VendorSettlementsReport(${jsArg(targetDateKey)})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">print</span>
                         <span>📄 พิมพ์สรุปส่งฝ่ายบัญชี A4</span>
                     </button>
@@ -18728,12 +18810,12 @@ function renderAdminStalls() {
                                 return `
                                 <tr class="hover:bg-slate-50 transition-colors">
                                     <td class="p-3 font-mono font-bold text-slate-700">
-                                        <span class="bg-slate-100 px-2 py-0.5 rounded">${v.stallNumber || 'แผง'}</span>
-                                        <span class="text-[10px] text-slate-400 ml-1">โซน ${v.zone || '-'}</span>
+                                        <span class="bg-slate-100 px-2 py-0.5 rounded">${escapeHtml(v.stallNumber) || 'แผง'}</span>
+                                        <span class="text-[10px] text-slate-400 ml-1">โซน ${escapeHtml(v.zone) || '-'}</span>
                                     </td>
                                     <td class="p-3">
-                                        <div class="font-extrabold text-slate-900">${v.stallName}</div>
-                                        <div class="text-[10px] text-slate-400">เจ้าของ: ${v.ownerName || '-'}</div>
+                                        <div class="font-extrabold text-slate-900">${escapeHtml(v.stallName)}</div>
+                                        <div class="text-[10px] text-slate-400">เจ้าของ: ${escapeHtml(v.ownerName) || '-'}</div>
                                     </td>
                                     <td class="p-3 text-center font-bold text-slate-700">
                                         ${v.orderCount} งาน
@@ -18748,7 +18830,7 @@ function renderAdminStalls() {
                                         ฿${stallPayout.toLocaleString()}
                                     </td>
                                     <td class="p-3 font-mono text-slate-600">
-                                        ${v.phone || '-'}
+                                        ${escapeHtml(v.phone) || '-'}
                                     </td>
                                     <td class="p-3 text-center">
                                         ${v.isSettled ? `
@@ -18757,7 +18839,7 @@ function renderAdminStalls() {
                                             </span>
                                             ${v.slipImage ? `
                                                 <div class="mt-1">
-                                                    <button type="button" onclick="openVendorSlipViewerModal('${v.stallId || v.stallName}', '${targetDateKey}')" class="bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[9.5px] font-bold inline-flex items-center gap-0.5 cursor-pointer shadow-2xs transition-all mx-auto">
+                                                    <button type="button" onclick="openVendorSlipViewerModal(${jsArg(v.stallId || v.stallName)}, ${jsArg(targetDateKey)})" class="bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[9.5px] font-bold inline-flex items-center gap-0.5 cursor-pointer shadow-2xs transition-all mx-auto">
                                                         <span class="material-symbols-outlined text-[11px]">receipt_long</span>
                                                         <span>มีสลิปหลักฐาน</span>
                                                     </button>
@@ -18775,17 +18857,17 @@ function renderAdminStalls() {
                                     </td>
                                     <td class="p-3 text-center">
                                         <div class="flex items-center justify-center gap-1.5 flex-wrap">
-                                            <button onclick="openVendorPayoutModal('${v.stallId}', '${v.stallName.replace(/'/g, "\\'")}', ${stallPayout}, '${v.phone}', '${v.ownerName.replace(/'/g, "\\'")}', '${v.stallNumber}', ${stallGross}, ${stallGP}, ${currentGPRate}, ${v.orderCount})" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                                            <button onclick="openVendorPayoutModal(${jsArg(v.stallId)}, ${jsArg(v.stallName)}, ${stallPayout}, ${jsArg(v.phone)}, ${jsArg(v.ownerName)}, ${jsArg(v.stallNumber)}, ${stallGross}, ${stallGP}, ${currentGPRate}, ${v.orderCount})" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
                                                 <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                                 <span>${v.isSettled ? 'ดู QR ซ้ำ' : '💸 สแกน QR โอน'}</span>
                                             </button>
                                             ${v.slipImage ? `
-                                                <button onclick="openVendorSlipViewerModal('${v.stallId || v.stallName}', '${targetDateKey}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1" title="ดูสลิปหลักฐานการโอน">
+                                                <button onclick="openVendorSlipViewerModal(${jsArg(v.stallId || v.stallName)}, ${jsArg(targetDateKey)})" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1" title="ดูสลิปหลักฐานการโอน">
                                                     <span class="material-symbols-outlined text-xs">image</span>
                                                     <span>ดูสลิปโอน</span>
                                                 </button>
                                             ` : `
-                                                <button onclick="openVendorDirectSlipUploadModal('${v.stallId}', '${v.stallName.replace(/'/g, "\\'")}', ${stallPayout}, '${v.phone}', '${v.ownerName.replace(/'/g, "\\'")}', '${v.stallNumber}', '${targetDateKey}')" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-lg text-[11px] shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1" title="แนบสลิปโอนเงิน">
+                                                <button onclick="openVendorDirectSlipUploadModal(${jsArg(v.stallId)}, ${jsArg(v.stallName)}, ${stallPayout}, ${jsArg(v.phone)}, ${jsArg(v.ownerName)}, ${jsArg(v.stallNumber)}, ${jsArg(targetDateKey)})" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-lg text-[11px] shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1" title="แนบสลิปโอนเงิน">
                                                     <span class="material-symbols-outlined text-xs">attach_file</span>
                                                     <span>แนบสลิป</span>
                                                 </button>
@@ -18969,7 +19051,7 @@ function renderAdminStalls() {
             <div class="bg-white p-6 rounded-3xl border border-rose-200 shadow-sm text-center space-y-3">
                 <div class="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto text-xl font-black">⚠️</div>
                 <div class="font-extrabold text-slate-800 text-sm">เกิดข้อผิดพลาดในการแสดงผลหน้าจัดการร้านค้า</div>
-                <div class="text-xs text-slate-500 font-mono">${err && err.message}</div>
+                <div class="text-xs text-slate-500 font-mono">${err && escapeHtml(err.message)}</div>
                 <button onclick="renderAdminStalls()" class="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
                     🔄 ลองโหลดใหม่อีกครั้ง
                 </button>
@@ -19042,7 +19124,7 @@ function viewMerchantAppDetail(appId) {
                     </div>
                     <div>
                         <h4 class="font-black text-base text-slate-900">${escapeHtml(stall.stallName || 'แผงค้าใหม่')}</h4>
-                        <div class="text-slate-500 font-mono text-[11px]">${c1.phone || stall.phone || '-'} • LINE: ${c1.line || stall.lineId || stall.phone || '-'}</div>
+                        <div class="text-slate-500 font-mono text-[11px]">${escapeHtml(c1.phone) || escapeHtml(stall.phone) || '-'} • LINE: ${c1.line || escapeHtml(stall.lineId) || escapeHtml(stall.phone) || '-'}</div>
                     </div>
                 </div>
                 <div>${statusBadge}</div>
@@ -19056,7 +19138,7 @@ function viewMerchantAppDetail(appId) {
                         <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">🔑</span>
                         <div>
                             <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">รหัสผ่าน 6 หลักสำหรับเข้าสู่ระบบ (ACCESS CODE)</div>
-                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${app.accessCode || '-'}</div>
+                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${escapeHtml(app.accessCode) || '-'}</div>
                         </div>
                     </div>
                     <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">พร้อมใช้งาน</span>
@@ -19074,7 +19156,7 @@ function viewMerchantAppDetail(appId) {
                         <span class="material-symbols-outlined text-sm">content_copy</span>
                         <span>คัดลอกข้อความ</span>
                     </button>
-                    <a href="tel:${c1.phone || stall.phone}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
+                    <a href="tel:${escapeHtml(c1.phone) || escapeHtml(stall.phone)}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
                         <span class="material-symbols-outlined text-sm">call</span>
                         <span>โทรหา</span>
                     </a>
@@ -19095,16 +19177,16 @@ function viewMerchantAppDetail(appId) {
                     </div>
                     <div>
                         <span class="text-[10px] text-slate-400">โซนตลาด:</span>
-                        <div class="font-bold text-purple-700">${stall.zone ? 'โซน ' + stall.zone : '-'}</div>
+                        <div class="font-bold text-purple-700">${stall.zone ? 'โซน ' + escapeHtml(stall.zone) : '-'}</div>
                     </div>
                     <div>
                         <span class="text-[10px] text-slate-400">หมวดหมู่สินค้า:</span>
-                        <div class="font-bold text-slate-700">${stall.category || stall.stallTag || 'ของสด'}</div>
+                        <div class="font-bold text-slate-700">${escapeHtml(stall.category) || escapeHtml(stall.stallTag) || 'ของสด'}</div>
                     </div>
                 </div>
                 ${stall.highlight ? `
                 <div class="pt-1 text-[11px] text-slate-600 border-t border-slate-200/60 mt-1">
-                    <span class="font-bold text-slate-500">จุดเด่น:</span> ${stall.highlight}
+                    <span class="font-bold text-slate-500">จุดเด่น:</span> ${escapeHtml(stall.highlight)}
                 </div>
                 ` : ''}
             </div>
@@ -19125,9 +19207,9 @@ function viewMerchantAppDetail(appId) {
                             <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                             <span>ผู้ติดต่อที่ 1 (หลัก)</span>
                         </div>
-                        <div><span class="text-slate-400 text-[10px]">ชื่อ-นามสกุล:</span> <strong class="text-slate-800">${c1.name || stall.ownerName || '-'}</strong></div>
-                        <div><span class="text-slate-400 text-[10px]">เบอร์โทร:</span> <a href="tel:${c1.phone || stall.phone || ''}" class="font-mono font-bold text-blue-700 hover:underline">📱 ${c1.phone || stall.phone || '-'}</a></div>
-                        <div><span class="text-slate-400 text-[10px]">LINE ID:</span> <span class="font-mono text-slate-700">${c1.line || stall.lineId || stall.phone || '-'}</span></div>
+                        <div><span class="text-slate-400 text-[10px]">ชื่อ-นามสกุล:</span> <strong class="text-slate-800">${escapeHtml(c1.name) || escapeHtml(stall.ownerName) || '-'}</strong></div>
+                        <div><span class="text-slate-400 text-[10px]">เบอร์โทร:</span> <a href="tel:${escapeHtml(c1.phone) || escapeHtml(stall.phone) || ''}" class="font-mono font-bold text-blue-700 hover:underline">📱 ${escapeHtml(c1.phone) || escapeHtml(stall.phone) || '-'}</a></div>
+                        <div><span class="text-slate-400 text-[10px]">LINE ID:</span> <span class="font-mono text-slate-700">${c1.line || escapeHtml(stall.lineId) || escapeHtml(stall.phone) || '-'}</span></div>
                     </div>
 
                     <!-- Contact 2 -->
@@ -19137,8 +19219,8 @@ function viewMerchantAppDetail(appId) {
                             <span>ผู้ติดต่อที่ 2 (สำรอง)</span>
                         </div>
                         ${hasContact2 ? `
-                        <div><span class="text-slate-400 text-[10px]">ชื่อ-นามสกุล:</span> <strong class="text-slate-800">${c2.name || '-'}</strong></div>
-                        <div><span class="text-slate-400 text-[10px]">เบอร์โทร:</span> ${c2.phone ? `<a href="tel:${c2.phone}" class="font-mono font-bold text-blue-700 hover:underline">📱 ${c2.phone}</a>` : '<span class="text-slate-400">-</span>'}</div>
+                        <div><span class="text-slate-400 text-[10px]">ชื่อ-นามสกุล:</span> <strong class="text-slate-800">${escapeHtml(c2.name) || '-'}</strong></div>
+                        <div><span class="text-slate-400 text-[10px]">เบอร์โทร:</span> ${c2.phone ? `<a href="tel:${escapeHtml(c2.phone)}" class="font-mono font-bold text-blue-700 hover:underline">📱 ${escapeHtml(c2.phone)}</a>` : '<span class="text-slate-400">-</span>'}</div>
                         <div><span class="text-slate-400 text-[10px]">LINE ID:</span> <span class="font-mono text-slate-700">${c2.line || '-'}</span></div>
                         ` : `
                         <div class="py-2 text-center text-slate-400 text-[11px] italic">
@@ -19157,7 +19239,7 @@ function viewMerchantAppDetail(appId) {
                 </div>
                 <div class="flex flex-wrap gap-1.5">
                     ${(stall.products || []).length > 0 ? (stall.products || []).map(p => `
-                        <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px]">✓ ${p.name || 'สินค้า'} (฿${p.price || 0}${p.unit ? `/${p.unit}` : ''})</span>
+                        <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px]">✓ ${escapeHtml(p.name) || 'สินค้า'} (฿${p.price || 0}${p.unit ? `/${p.unit}` : ''})</span>
                     `).join('') : '<span class="text-slate-400 text-xs italic">- ยังไม่ได้บันทึกสินค้า -</span>'}
                 </div>
             </div>
@@ -19179,15 +19261,15 @@ function viewMerchantAppDetail(appId) {
                                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                                 <span>บัญชีหลักที่ 1</span>
                             </span>
-                            <span class="bg-emerald-200 text-emerald-900 text-[9px] font-black px-1.5 py-0.2 rounded">${bank1.bankName || 'ธนาคาร'}</span>
+                            <span class="bg-emerald-200 text-emerald-900 text-[9px] font-black px-1.5 py-0.2 rounded">${escapeHtml(bank1.bankName) || 'ธนาคาร'}</span>
                         </div>
                         <div class="pt-0.5">
                             <span class="text-[10px] text-emerald-800">เลขที่บัญชี:</span>
-                            <div class="font-mono font-black text-sm text-emerald-950">${bank1.accountNo || '-'}</div>
+                            <div class="font-mono font-black text-sm text-emerald-950">${escapeHtml(bank1.accountNo) || '-'}</div>
                         </div>
                         <div>
                             <span class="text-[10px] text-emerald-800">ชื่อบัญชี:</span>
-                            <strong class="text-slate-800 text-xs">${bank1.accountName || '-'}</strong>
+                            <strong class="text-slate-800 text-xs">${escapeHtml(bank1.accountName) || '-'}</strong>
                         </div>
                     </div>
 
@@ -19199,17 +19281,17 @@ function viewMerchantAppDetail(appId) {
                                 <span>บัญชีสำรองที่ 2</span>
                             </span>
                             ${hasBank2 && bank2.bankName ? `
-                            <span class="bg-amber-200 text-amber-900 text-[9px] font-black px-1.5 py-0.2 rounded">${bank2.bankName}</span>
+                            <span class="bg-amber-200 text-amber-900 text-[9px] font-black px-1.5 py-0.2 rounded">${escapeHtml(bank2.bankName)}</span>
                             ` : ''}
                         </div>
                         ${hasBank2 ? `
                         <div class="pt-0.5">
                             <span class="text-[10px] text-amber-800">เลขที่บัญชี:</span>
-                            <div class="font-mono font-black text-sm text-amber-950">${bank2.accountNo || '-'}</div>
+                            <div class="font-mono font-black text-sm text-amber-950">${escapeHtml(bank2.accountNo) || '-'}</div>
                         </div>
                         <div>
                             <span class="text-[10px] text-amber-800">ชื่อบัญชี:</span>
-                            <strong class="text-slate-800 text-xs">${bank2.accountName || '-'}</strong>
+                            <strong class="text-slate-800 text-xs">${escapeHtml(bank2.accountName) || '-'}</strong>
                         </div>
                         ` : `
                         <div class="py-2 text-center text-slate-400 text-[11px] italic">
@@ -19225,37 +19307,37 @@ function viewMerchantAppDetail(appId) {
     if (footer) {
         footer.innerHTML = `
             <div class="flex items-center gap-1.5 flex-wrap">
-                <button type="button" onclick="openEditMerchantAppModal('${app.id}'); closeMerchantAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลแผงค้านี้">
+                <button type="button" onclick="openEditMerchantAppModal(${jsArg(app.id)}); closeMerchantAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลแผงค้านี้">
                     <span class="material-symbols-outlined text-sm">edit</span>
                     <span>แก้ไขข้อมูล</span>
                 </button>
                 ${app.status === 'rejected' ? `
-                    <button type="button" onclick="reconsiderMerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button type="button" onclick="reconsiderMerchantApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>พิจารณาใหม่</span>
                     </button>
                 ` : app.status === 'approved' ? `
-                    <button type="button" onclick="reconsiderMerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button type="button" onclick="reconsiderMerchantApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>ย้อนกลับไปรอพิจารณา</span>
                     </button>
                 ` : ''}
-                <button type="button" onclick="deleteMerchantApplication('${app.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
+                <button type="button" onclick="deleteMerchantApplication(${jsArg(app.id)})" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
                     <span class="material-symbols-outlined text-base">delete</span>
                 </button>
             </div>
 
             <div class="flex items-center gap-1.5 flex-wrap">
                 ${app.status === 'pending' ? `
-                    <button type="button" onclick="rejectMerchantApplication('${app.id}')" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="rejectMerchantApplication(${jsArg(app.id)})" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
                         ปฏิเสธ
                     </button>
-                    <button type="button" onclick="approveMerchantApplication('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสร้างรหัสผ่าน 6 หลัก">
+                    <button type="button" onclick="approveMerchantApplication(${jsArg(app.id)})" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสร้างรหัสผ่าน 6 หลัก">
                         <span class="material-symbols-outlined text-sm font-bold">check_circle</span>
                         <span>อนุมัติ & รหัส 6 หลัก</span>
                     </button>
                 ` : `
-                    <button type="button" onclick="closeMerchantAppDetailModal(); loginAsMerchantStall('${stall.stallId}');" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้ทันที">
+                    <button type="button" onclick="closeMerchantAppDetailModal(); loginAsMerchantStall(${jsArg(stall.stallId)});" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้ทันที">
                         <span class="material-symbols-outlined text-sm font-bold">store</span>
                         <span>เข้าสู่ระบบร้านค้านี้ทันที 🚀</span>
                     </button>
@@ -19564,19 +19646,19 @@ function printA4MerchantApplication(appId) {
         <div class="a4-header">
             <div class="a4-title">ใบสมัครและทะเบียนประวัติแผงค้า (Merchant Application & Profile)</div>
             <div class="a4-meta">
-                ตลาดสดฮับวิศิษฐ์ชัย • รหัสใบสมัคร: ${app.id} • วันที่ยื่น: ${thaiDate}
+                ตลาดสดฮับวิศิษฐ์ชัย • รหัสใบสมัคร: ${escapeHtml(app.id)} • วันที่ยื่น: ${thaiDate}
             </div>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
-            <div style="font-size: 16px; font-weight: bold; color: #1e293b;">${stall.stallName || 'แผงค้าใหม่'} (เลขแผง: ${stall.stallNumber || '-'})</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เจ้าของแผง: <strong>${stall.ownerName || '-'}</strong> | เบอร์โทรศัพท์: <strong>${stall.phone || '-'}</strong> | LINE: <strong>${stall.lineId || stall.phone || '-'}</strong></div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">โซน: <strong>โซน ${stall.zone || '-'}</strong> | หมวดหมู่: <strong>${stall.category || stall.stallTag || 'ของสด'}</strong> | สถานะ: <strong>${statusThai}</strong></div>
-            ${app.accessCode ? `<div style="font-size: 12px; color: #047857; font-weight: bold; margin-top: 4px;">รหัสผ่าน 6 หลักเข้าสู่ระบบ (ACCESS CODE): ${app.accessCode}</div>` : ''}
+            <div style="font-size: 16px; font-weight: bold; color: #1e293b;">${escapeHtml(stall.stallName) || 'แผงค้าใหม่'} (เลขแผง: ${escapeHtml(stall.stallNumber) || '-'})</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เจ้าของแผง: <strong>${escapeHtml(stall.ownerName) || '-'}</strong> | เบอร์โทรศัพท์: <strong>${escapeHtml(stall.phone) || '-'}</strong> | LINE: <strong>${escapeHtml(stall.lineId) || escapeHtml(stall.phone) || '-'}</strong></div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">โซน: <strong>โซน ${escapeHtml(stall.zone) || '-'}</strong> | หมวดหมู่: <strong>${escapeHtml(stall.category) || escapeHtml(stall.stallTag) || 'ของสด'}</strong> | สถานะ: <strong>${statusThai}</strong></div>
+            ${app.accessCode ? `<div style="font-size: 12px; color: #047857; font-weight: bold; margin-top: 4px;">รหัสผ่าน 6 หลักเข้าสู่ระบบ (ACCESS CODE): ${escapeHtml(app.accessCode)}</div>` : ''}
         </div>
         <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
             <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; color: #334155;">จุดเด่นและรายละเอียดร้านค้า</div>
-            <div style="font-size: 11px; color: #475569;">${stall.highlight || '-'}</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">${stall.description || stall.story || '-'}</div>
+            <div style="font-size: 11px; color: #475569;">${escapeHtml(stall.highlight) || '-'}</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">${escapeHtml(stall.description) || escapeHtml(stall.story) || '-'}</div>
         </div>
         <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
             <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; color: #334155;">รายการสินค้าตัวอย่าง & เมนู</div>
@@ -19584,7 +19666,7 @@ function printA4MerchantApplication(appId) {
         </div>
         <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
             <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; color: #334155;">ข้อมูลการรับเงินเคลียร์ยอด (พร้อมเพย์)</div>
-            <div style="font-size: 11px; color: #475569;">เบอร์พร้อมเพย์: <strong>${stall.promptPayNumber || stall.phone || '-'}</strong> | ธนาคาร: <strong>${stall.promptPayBank || 'พร้อมเพย์'}</strong></div>
+            <div style="font-size: 11px; color: #475569;">เบอร์พร้อมเพย์: <strong>${escapeHtml(stall.promptPayNumber) || escapeHtml(stall.phone) || '-'}</strong> | ธนาคาร: <strong>${escapeHtml(stall.promptPayBank) || 'พร้อมเพย์'}</strong></div>
         </div>
         <div style="margin-top: 40px; display: flex; justify-content: space-between;">
             <div style="text-align: center; width: 200px;">
@@ -19608,12 +19690,12 @@ function printA4MerchantDirectory() {
     let rowsHtml = stalls.slice(0, 100).map((s, idx) => `
         <tr>
             <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${s.stallNumber || '-'}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${s.stallName}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1;">โซน ${s.zone || '-'}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1;">${s.ownerName || '-'}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${s.phone || '-'}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #047857;">${s.accessCode || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(s.stallNumber) || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(s.stallName)}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1;">โซน ${escapeHtml(s.zone) || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1;">${escapeHtml(s.ownerName) || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${escapeHtml(s.phone) || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #047857;">${escapeHtml(s.accessCode) || '-'}</td>
         </tr>
     `).join('');
 
@@ -20421,26 +20503,26 @@ function renderRiderRegExtras(prefix, opts) {
             <p class="text-xs text-slate-500">ระบบจะย่อรูปให้อัตโนมัติ ถ่ายในที่สว่างและให้เห็นตัวหนังสือชัดเจน</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 ${RIDER_DOC_SLOTS.map(s => `
-                <div id="${prefix}-doc-card-${s.key}" class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
+                <div id="${prefix}-doc-card-${escapeHtml(s.key)}" class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
                     <div class="flex items-start gap-2">
                         <span class="material-symbols-outlined text-xl text-sky-600 shrink-0">${s.icon}</span>
                         <div class="min-w-0">
-                            <div class="font-extrabold text-sm text-slate-800">${s.label} ${s.required ? req : `<span class="text-slate-400 font-bold text-xs">(ไม่บังคับ)</span>`}</div>
+                            <div class="font-extrabold text-sm text-slate-800">${escapeHtml(s.label)} ${s.required ? req : `<span class="text-slate-400 font-bold text-xs">(ไม่บังคับ)</span>`}</div>
                             <div class="text-xs text-slate-500">${s.hint}</div>
                         </div>
                     </div>
                     <div class="rounded-xl bg-slate-50 border border-dashed border-slate-300 overflow-hidden flex items-center justify-center min-h-[110px]">
-                        <img id="${prefix}-doc-${s.key}-img" class="hidden w-full max-h-48 object-contain" alt="${s.label}">
-                        <span id="${prefix}-doc-${s.key}-empty" class="text-xs text-slate-400 font-bold py-6">ยังไม่ได้เลือกรูป</span>
+                        <img id="${prefix}-doc-${escapeHtml(s.key)}-img" class="hidden w-full max-h-48 object-contain" alt="${escapeHtml(s.label)}">
+                        <span id="${prefix}-doc-${escapeHtml(s.key)}-empty" class="text-xs text-slate-400 font-bold py-6">ยังไม่ได้เลือกรูป</span>
                     </div>
                     <div class="flex items-center gap-2">
                         <label class="flex-1 text-center px-3 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-sm font-extrabold cursor-pointer active:scale-95 transition-all">
                             <span>📷 เลือกรูป / ถ่ายรูป</span>
-                            <input type="file" accept="image/*" class="hidden" onchange="handleRiderDocUpload('${prefix}', '${s.key}', this)">
+                            <input type="file" accept="image/*" class="hidden" onchange="handleRiderDocUpload(${jsArg(prefix)}, ${jsArg(s.key)}, this)">
                         </label>
-                        <button type="button" id="${prefix}-doc-${s.key}-remove" onclick="removeRiderDoc('${prefix}', '${s.key}')" class="hidden px-3 py-2.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-sm font-bold cursor-pointer">ลบรูป</button>
+                        <button type="button" id="${prefix}-doc-${escapeHtml(s.key)}-remove" onclick="removeRiderDoc(${jsArg(prefix)}, ${jsArg(s.key)})" class="hidden px-3 py-2.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-sm font-bold cursor-pointer">ลบรูป</button>
                     </div>
-                    <div id="${prefix}-doc-${s.key}-status" class="text-xs font-bold text-slate-500"></div>
+                    <div id="${prefix}-doc-${escapeHtml(s.key)}-status" class="text-xs font-bold text-slate-500"></div>
                 </div>`).join("")}
             </div>
         </div>`;
@@ -20475,33 +20557,33 @@ function renderRiderAccountRows(prefix) {
         <div class="rounded-2xl border ${isPrimary ? "border-emerald-400 bg-emerald-50/60" : "border-slate-200 bg-white"} p-3 space-y-2.5">
             <div class="flex items-center justify-between gap-2">
                 <label class="flex items-center gap-2 font-extrabold text-sm text-slate-800 cursor-pointer">
-                    <input type="radio" name="${prefix}-acct-primary" ${isPrimary ? "checked" : ""} onchange="setRiderPrimaryAccount('${prefix}', ${i})" class="accent-emerald-600 w-4 h-4">
+                    <input type="radio" name="${prefix}-acct-primary" ${isPrimary ? "checked" : ""} onchange="setRiderPrimaryAccount(${jsArg(prefix)}, ${i})" class="accent-emerald-600 w-4 h-4">
                     <span>บัญชีที่ ${i + 1}${isPrimary ? " (บัญชีหลัก)" : ""}</span>
                 </label>
-                ${st.accounts.length > 1 ? `<button type="button" onclick="removeRiderAccount('${prefix}', ${i})" class="text-xs font-bold text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg cursor-pointer">ลบบัญชีนี้</button>` : ""}
+                ${st.accounts.length > 1 ? `<button type="button" onclick="removeRiderAccount(${jsArg(prefix)}, ${i})" class="text-xs font-bold text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg cursor-pointer">ลบบัญชีนี้</button>` : ""}
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                     <label class="${labelCls}">ธนาคาร / ช่องทาง ${i === 0 ? '<span class="text-rose-500">*</span>' : ""}</label>
-                    <select id="${prefix}-acct-bank-${i}" onchange="updateRiderAccount('${prefix}', ${i}, 'bank', this.value)" class="${inputCls}">
+                    <select id="${prefix}-acct-bank-${i}" onchange="updateRiderAccount(${jsArg(prefix)}, ${i}, 'bank', this.value)" class="${inputCls}">
                         ${RIDER_BANK_OPTIONS.map(b => `<option value="${b}" ${a.bank === b ? "selected" : ""}>${b}</option>`).join("")}
                     </select>
                 </div>
                 <div>
                     <div class="flex items-center justify-between mb-1">
                         <label class="font-bold text-slate-700 text-xs sm:text-[13px]">เลขบัญชี / เลขพร้อมเพย์ ${i === 0 ? '<span class="text-rose-500">*</span>' : ""}</label>
-                        <button type="button" onclick="fillRiderAccountWithPhone('${prefix}', ${i})" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer">⚡ ใช้เบอร์มือถือ</button>
+                        <button type="button" onclick="fillRiderAccountWithPhone(${jsArg(prefix)}, ${i})" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer">⚡ ใช้เบอร์มือถือ</button>
                     </div>
-                    <input type="text" id="${prefix}-acct-no-${i}" inputmode="numeric" maxlength="20" value="${escapeHtml(a.accountNo)}" placeholder="เฉพาะตัวเลข" oninput="updateRiderAccount('${prefix}', ${i}, 'accountNo', this.value)" class="${inputCls} font-mono">
+                    <input type="text" id="${prefix}-acct-no-${i}" inputmode="numeric" maxlength="20" value="${escapeHtml(a.accountNo)}" placeholder="เฉพาะตัวเลข" oninput="updateRiderAccount(${jsArg(prefix)}, ${i}, 'accountNo', this.value)" class="${inputCls} font-mono">
                 </div>
                 <div>
                     <label class="${labelCls}">ชื่อบัญชี</label>
-                    <input type="text" id="${prefix}-acct-name-${i}" value="${escapeHtml(a.accountName)}" placeholder="เว้นว่าง = ใช้ชื่อผู้สมัคร" oninput="updateRiderAccount('${prefix}', ${i}, 'accountName', this.value)" class="${inputCls}">
+                    <input type="text" id="${prefix}-acct-name-${i}" value="${escapeHtml(a.accountName)}" placeholder="เว้นว่าง = ใช้ชื่อผู้สมัคร" oninput="updateRiderAccount(${jsArg(prefix)}, ${i}, 'accountName', this.value)" class="${inputCls}">
                 </div>
             </div>
         </div>`;
     }).join("") + (st.accounts.length < RIDER_MAX_ACCOUNTS ? `
-        <button type="button" onclick="addRiderAccount('${prefix}')" class="w-full py-2.5 border-2 border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50 font-extrabold rounded-2xl text-sm cursor-pointer transition-all">+ เพิ่มบัญชีรับเงิน</button>` : "");
+        <button type="button" onclick="addRiderAccount(${jsArg(prefix)})" class="w-full py-2.5 border-2 border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50 font-extrabold rounded-2xl text-sm cursor-pointer transition-all">+ เพิ่มบัญชีรับเงิน</button>` : "");
 }
 
 function updateRiderAccount(prefix, idx, field, value) {
@@ -20876,9 +20958,9 @@ async function hydrateRiderAppDocs(app) {
         return;
     }
     el.innerHTML = RIDER_DOC_SLOTS.map(s => docs[s.key] ? `
-        <button type="button" onclick="openRiderDocLightbox(${jsArg(app.id)}, '${s.key}')" class="text-left rounded-xl border border-slate-200 bg-white overflow-hidden cursor-zoom-in">
-            <img src="${docs[s.key]}" alt="${s.label}" class="w-full h-24 object-cover">
-            <div class="px-1.5 py-1 text-[11px] font-bold text-slate-700 leading-tight">${s.label}</div>
+        <button type="button" onclick="openRiderDocLightbox(${jsArg(app.id)}, ${jsArg(s.key)})" class="text-left rounded-xl border border-slate-200 bg-white overflow-hidden cursor-zoom-in">
+            <img src="${docs[s.key]}" alt="${escapeHtml(s.label)}" class="w-full h-24 object-cover">
+            <div class="px-1.5 py-1 text-[11px] font-bold text-slate-700 leading-tight">${escapeHtml(s.label)}</div>
         </button>` : "").join("");
 }
 
@@ -21735,27 +21817,27 @@ function renderAdminRiders() {
                             <div class="flex items-start justify-between gap-3">
                                 <div class="flex items-center gap-3">
                                     <div class="w-12 h-12 rounded-2xl bg-gradient-to-br ${r.status === 'available' ? 'from-emerald-100 to-emerald-200 text-emerald-800' : r.status === 'on_delivery' ? 'from-amber-100 to-amber-200 text-amber-800' : 'from-slate-100 to-slate-200 text-slate-600'} flex items-center justify-center text-2xl font-bold shadow-xs shrink-0">
-                                        ${r.avatar || '🛵'}
+                                        ${escapeHtml(r.avatar) || '🛵'}
                                     </div>
                                     <div class="min-w-0">
                                         <div class="font-extrabold text-sm sm:text-base text-slate-900 truncate flex items-center gap-1.5 flex-wrap">
-                                            <span>${r.name}</span>
+                                            <span>${escapeHtml(r.name)}</span>
                                             <span class="bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded-md text-[10px] font-extrabold">⭐ ${r.rating || '4.9'}</span>
-                                            ${r.motorcycleModel ? `<span class="bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.2 rounded-md text-[10px] font-bold">🏍️ ${r.motorcycleModel}</span>` : ''}
+                                            ${r.motorcycleModel ? `<span class="bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.2 rounded-md text-[10px] font-bold">🏍️ ${escapeHtml(r.motorcycleModel)}</span>` : ''}
                                         </div>
                                         <div class="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap font-mono mt-0.5">
-                                            <span class="bg-slate-100 px-1.5 py-0.5 rounded font-bold text-slate-700">${r.plate || '-'}</span>
+                                            <span class="bg-slate-100 px-1.5 py-0.5 rounded font-bold text-slate-700">${escapeHtml(r.plate) || '-'}</span>
                                             <span>•</span>
-                                            <a href="tel:${r.phone}" class="text-purple-700 font-bold hover:underline flex items-center gap-0.5">
-                                                <span>📱 ${r.phone}</span>
+                                            <a href="tel:${escapeHtml(r.phone)}" class="text-purple-700 font-bold hover:underline flex items-center gap-0.5">
+                                                <span>📱 ${escapeHtml(r.phone)}</span>
                                             </a>
                                             <span>•</span>
-                                            <span class="text-emerald-700 font-bold">💳 ${r.promptPay || r.phone || '-'}</span>
+                                            <span class="text-emerald-700 font-bold">💳 ${escapeHtml(r.promptPay) || escapeHtml(r.phone) || '-'}</span>
                                             <span>•</span>
-                                            <span class="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded font-bold font-mono text-[10px]">🔑 PIN: ${r.accessCode || r.pin || r.id.slice(-6).toUpperCase()}</span>
+                                            <span class="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded font-bold font-mono text-[10px]">🔑 PIN: ${escapeHtml(r.accessCode) || escapeHtml(r.pin) || r.id.slice(-6).toUpperCase()}</span>
                                         </div>
                                         <div class="text-[11px] text-slate-400 mt-0.5">
-                                            📍 ${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}
+                                            📍 ${escapeHtml(r.zone) || 'รอบตลาดวิศิษฐ์ชัย'}
                                         </div>
                                     </div>
                                 </div>
@@ -21773,13 +21855,13 @@ function renderAdminRiders() {
                                     </span>
                                     
                                     <div class="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[10px]">
-                                        <button onclick="setRiderStatus('${r.id}', 'available')" title="เปลี่ยนเป็นพร้อมรับงาน" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'available' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
+                                        <button onclick="setRiderStatus(${jsArg(r.id)}, 'available')" title="เปลี่ยนเป็นพร้อมรับงาน" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'available' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
                                             พร้อม
                                         </button>
-                                        <button onclick="setRiderStatus('${r.id}', 'on_delivery')" title="เปลี่ยนเป็นกำลังส่งของ" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'on_delivery' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
+                                        <button onclick="setRiderStatus(${jsArg(r.id)}, 'on_delivery')" title="เปลี่ยนเป็นกำลังส่งของ" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'on_delivery' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
                                             ส่งของ
                                         </button>
-                                        <button onclick="setRiderStatus('${r.id}', 'offline')" title="เปลี่ยนเป็นพักรอบ" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'offline' ? 'bg-slate-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
+                                        <button onclick="setRiderStatus(${jsArg(r.id)}, 'offline')" title="เปลี่ยนเป็นพักรอบ" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'offline' ? 'bg-slate-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
                                             พัก
                                         </button>
                                     </div>
@@ -21809,7 +21891,7 @@ function renderAdminRiders() {
                                         <span class="material-symbols-outlined text-rose-600 text-sm">warning</span>
                                         <span>เงินสดในมือเกินเกณฑ์ ฿${settings.maxCodLimit.toLocaleString()}! ต้องนำส่งฮับทันที</span>
                                     </div>
-                                    <button onclick="settleRiderCod('${r.id}')" class="px-2 py-0.5 bg-rose-600 text-white font-bold rounded-lg text-[10px] hover:bg-rose-700 whitespace-nowrap">
+                                    <button onclick="settleRiderCod(${jsArg(r.id)})" class="px-2 py-0.5 bg-rose-600 text-white font-bold rounded-lg text-[10px] hover:bg-rose-700 whitespace-nowrap">
                                         รับเคลียร์เงิน
                                     </button>
                                 </div>
@@ -21818,30 +21900,30 @@ function renderAdminRiders() {
                             <!-- Card Action Buttons -->
                             <div class="flex items-center justify-between pt-1 border-t border-slate-100 text-xs flex-wrap gap-2">
                                 <div class="flex items-center gap-1.5 flex-wrap">
-                                    <button onclick="dispatchOrderToRider('${r.id}')" class="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-extrabold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-xs" title="จ่ายออเดอร์ของสดให้ไรเดอร์คนนี้ทันที">
+                                    <button onclick="dispatchOrderToRider(${jsArg(r.id)})" class="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-extrabold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-xs" title="จ่ายออเดอร์ของสดให้ไรเดอร์คนนี้ทันที">
                                         <span class="material-symbols-outlined text-xs font-bold">send</span>
                                         <span>📦 จ่ายงานด่วน</span>
                                     </button>
-                                    <button onclick="loginRiderById('${r.id}')" class="px-2.5 py-1 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="เข้าสู่ระบบเป็นไรเดอร์คนนี้เพื่อรับงานทันที">
+                                    <button onclick="loginRiderById(${jsArg(r.id)})" class="px-2.5 py-1 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="เข้าสู่ระบบเป็นไรเดอร์คนนี้เพื่อรับงานทันที">
                                         <span class="material-symbols-outlined text-xs">two_wheeler</span>
                                         <span>เข้าสู่ระบบรับงาน</span>
                                     </button>
-                                    <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="พิมพ์สลิปสรุปยอด 80x80">
+                                    <button onclick="printThermalRiderSlipFromFleet(${jsArg(r.id)})" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="พิมพ์สลิปสรุปยอด 80x80">
                                         <span class="material-symbols-outlined text-xs text-sky-700">receipt_long</span>
                                         <span>สลิป 80mm</span>
                                     </button>
-                                    <button onclick="settleRiderCod('${r.id}')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="บันทึกการส่งมอบเงินสด COD เข้าฮับ">
+                                    <button onclick="settleRiderCod(${jsArg(r.id)})" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="บันทึกการส่งมอบเงินสด COD เข้าฮับ">
                                         <span class="material-symbols-outlined text-xs text-emerald-700">account_balance_wallet</span>
                                         <span>เคลียร์ COD</span>
                                     </button>
                                 </div>
 
                                 <div class="flex items-center gap-1">
-                                    <button onclick="openEditRiderModal('${r.id}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all" title="แก้ไขข้อมูลไรเดอร์">
+                                    <button onclick="openEditRiderModal(${jsArg(r.id)})" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all" title="แก้ไขข้อมูลไรเดอร์">
                                         <span class="material-symbols-outlined text-xs">edit</span>
                                         <span>แก้ไข</span>
                                     </button>
-                                    <button onclick="deleteCommunityRider('${r.id}')" class="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg active:scale-95 transition-all" title="ลบไรเดอร์">
+                                    <button onclick="deleteCommunityRider(${jsArg(r.id)})" class="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg active:scale-95 transition-all" title="ลบไรเดอร์">
                                         <span class="material-symbols-outlined text-base">delete</span>
                                     </button>
                                 </div>
@@ -21954,11 +22036,11 @@ function renderAdminRiders() {
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="flex items-center gap-2.5">
                                         <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-100 to-indigo-100 text-purple-800 flex items-center justify-center text-xl font-black shadow-2xs shrink-0">
-                                            ${r.avatar || '🛵'}
+                                            ${escapeHtml(r.avatar) || '🛵'}
                                         </div>
                                         <div>
-                                            <div class="font-extrabold text-sm text-slate-900">${r.name}</div>
-                                            <div class="text-[11px] text-slate-500 font-mono">📱 ${r.phone}</div>
+                                            <div class="font-extrabold text-sm text-slate-900">${escapeHtml(r.name)}</div>
+                                            <div class="text-[11px] text-slate-500 font-mono">📱 ${escapeHtml(r.phone)}</div>
                                         </div>
                                     </div>
                                     <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full ${r.status === 'available' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : r.status === 'on_delivery' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-600'}">
@@ -21969,19 +22051,19 @@ function renderAdminRiders() {
                                 <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[11px] space-y-1">
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">ทะเบียนรถ:</span>
-                                        <span class="font-mono font-black text-slate-800">${r.plate || '-'}</span>
+                                        <span class="font-mono font-black text-slate-800">${escapeHtml(r.plate) || '-'}</span>
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">รุ่นจักรยานยนต์:</span>
-                                        <span class="font-bold text-slate-700">${r.motorcycleModel || '-'}</span>
+                                        <span class="font-bold text-slate-700">${escapeHtml(r.motorcycleModel) || '-'}</span>
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">พร้อมเพย์:</span>
-                                        <span class="font-mono font-bold text-emerald-700">${r.promptPay || r.phone || '-'}</span>
+                                        <span class="font-mono font-bold text-emerald-700">${escapeHtml(r.promptPay) || escapeHtml(r.phone) || '-'}</span>
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">โซนที่สะดวก:</span>
-                                        <span class="font-medium text-slate-600 truncate max-w-[150px]">${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}</span>
+                                        <span class="font-medium text-slate-600 truncate max-w-[150px]">${escapeHtml(r.zone) || 'รอบตลาดวิศิษฐ์ชัย'}</span>
                                     </div>
                                     <div class="flex justify-between items-center pt-1.5 border-t border-slate-200/80 mt-1">
                                         <span class="text-purple-900 font-bold flex items-center gap-1 text-[11px]">
@@ -21989,22 +22071,22 @@ function renderAdminRiders() {
                                             <span>รหัสเข้าสู่ระบบ (PIN):</span>
                                         </span>
                                         <span class="font-mono font-black text-xs text-purple-950 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md tracking-wider shadow-2xs">
-                                            ${r.accessCode || r.pin || r.id.slice(-6).toUpperCase()}
+                                            ${escapeHtml(r.accessCode) || escapeHtml(r.pin) || r.id.slice(-6).toUpperCase()}
                                         </span>
                                     </div>
                                 </div>
 
                                 <div class="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
-                                    <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1" title="พิมพ์สลิป 80mm">
+                                    <button onclick="printThermalRiderSlipFromFleet(${jsArg(r.id)})" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1" title="พิมพ์สลิป 80mm">
                                         <span class="material-symbols-outlined text-xs">receipt_long</span>
                                         <span>สลิป 80mm</span>
                                     </button>
                                     <div class="flex items-center gap-1">
-                                        <button onclick="openEditRiderModal('${r.id}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1">
+                                        <button onclick="openEditRiderModal(${jsArg(r.id)})" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1">
                                             <span class="material-symbols-outlined text-xs">edit</span>
                                             <span>แก้ไข</span>
                                         </button>
-                                        <button onclick="deleteCommunityRider('${r.id}')" class="p-1 text-rose-500 hover:bg-rose-50 rounded-lg" title="ลบไรเดอร์">
+                                        <button onclick="deleteCommunityRider(${jsArg(r.id)})" class="p-1 text-rose-500 hover:bg-rose-50 rounded-lg" title="ลบไรเดอร์">
                                             <span class="material-symbols-outlined text-base">delete</span>
                                         </button>
                                     </div>
@@ -22041,7 +22123,7 @@ function renderAdminRiders() {
                     ` : `
                         <div class="space-y-3">
                             ${displayedApps.map(app => `
-                                <div id="rider-app-card-${app.id}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
+                                <div id="rider-app-card-${escapeHtml(app.id)}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
                                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
                                         <div class="flex items-start gap-3">
                                             <div class="w-11 h-11 rounded-2xl bg-gradient-to-br ${app.status === 'pending' ? 'from-amber-400 to-orange-500' : app.status === 'approved' ? 'from-emerald-500 to-teal-600' : 'from-rose-400 to-red-600'} text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
@@ -22050,7 +22132,7 @@ function renderAdminRiders() {
                                             <div>
                                                 <div class="flex items-center gap-2 flex-wrap">
                                                     <span class="font-black text-sm text-slate-900">${escapeHtml(app.fullName)} ${app.nickname ? `(${escapeHtml(app.nickname)})` : ''}</span>
-                                                    <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${app.id}</span>
+                                                    <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${escapeHtml(app.id)}</span>
                                                     ${app.status === 'pending' ? `
                                                         <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⏳ รอการอนุมัติ</span>
                                                     ` : app.status === 'approved' ? `
@@ -22076,47 +22158,47 @@ function renderAdminRiders() {
                                         </div>
 
                                         <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
-                                            <button onclick="printA4RiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
+                                            <button onclick="printA4RiderApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
                                                 <span class="material-symbols-outlined text-xs">print</span>
                                                 <span>พิมพ์ A4</span>
                                             </button>
-                                            <button onclick="viewRiderAppDetail('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                            <button onclick="viewRiderAppDetail(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                                                 <span class="material-symbols-outlined text-xs">visibility</span>
                                                 <span>ดูรายละเอียด</span>
                                             </button>
 
                                             ${app.status === 'pending' ? `
-                                                <button onclick="approveRiderApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                                <button onclick="approveRiderApplication(${jsArg(app.id)})" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                                                     <span class="material-symbols-outlined text-xs font-bold">check_circle</span>
                                                     <span>อนุมัติ</span>
                                                 </button>
-                                                <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                                <button onclick="approveAndLoginRider(${jsArg(app.id)})" class="px-3 py-1.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                                                     <span class="material-symbols-outlined text-xs font-bold">sports_motorsports</span>
                                                     <span>อนุมัติ & รับงานทันที 🚀</span>
                                                 </button>
-                                                <button onclick="rejectRiderApplication('${app.id}')" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all">
+                                                <button onclick="rejectRiderApplication(${jsArg(app.id)})" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all">
                                                     <span>ปฏิเสธ</span>
                                                 </button>
                                             ` : app.status === 'approved' ? `
-                                                <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
+                                                <button onclick="approveAndLoginRider(${jsArg(app.id)})" class="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
                                                     <span class="material-symbols-outlined text-xs">two_wheeler</span>
                                                     <span>สลับเข้ารับงาน</span>
                                                 </button>
-                                                <button onclick="resetRiderLoginSecret('${app.id}')" class="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all" title="สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์คนนี้">
+                                                <button onclick="resetRiderLoginSecret(${jsArg(app.id)})" class="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all" title="สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์คนนี้">
                                                     <span class="material-symbols-outlined text-xs">key</span>
                                                     <span>รหัสเข้าระบบ</span>
                                                 </button>
-                                                <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all">
+                                                <button onclick="reconsiderRiderApplication(${jsArg(app.id)})" class="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all">
                                                     <span class="material-symbols-outlined text-xs">replay</span>
                                                     <span>รอพิจารณา</span>
                                                 </button>
                                             ` : `
-                                                <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
+                                                <button onclick="reconsiderRiderApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
                                                     <span class="material-symbols-outlined text-xs">replay</span>
                                                     <span>พิจารณาใหม่</span>
                                                 </button>
                                             `}
-                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="ลบประวัติ">
+                                            <button onclick="deleteRiderApplication(${jsArg(app.id)})" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="ลบประวัติ">
                                                 <span class="material-symbols-outlined text-sm">delete</span>
                                             </button>
                                         </div>
@@ -22127,7 +22209,7 @@ function renderAdminRiders() {
                                             <span class="text-slate-400 font-bold block">🏍️ ข้อมูลรถ & ทะเบียน:</span>
                                             <div class="font-bold text-slate-800">${escapeHtml(app.motorcycleModel || '-')} ${app.motorcycleColor ? `(${escapeHtml(app.motorcycleColor)})` : ''}</div>
                                             <div class="font-mono font-black text-slate-700">ทะเบียน: ${escapeHtml(app.plate || '-')}</div>
-                                            <div class="text-[10px] text-slate-500">ใบขับขี่: ${app.drivingLicense || '-'}</div>
+                                            <div class="text-[10px] text-slate-500">ใบขับขี่: ${escapeHtml(app.drivingLicense) || '-'}</div>
                                         </div>
                                         <div>
                                             <span class="text-slate-400 font-bold block">📍 โซนที่สะดวก:</span>
@@ -22143,8 +22225,8 @@ function renderAdminRiders() {
                                         </div>
                                         <div>
                                             <span class="text-slate-400 font-bold block">💵 บัญชีรับเงินค่ารอบ:</span>
-                                            <div class="font-mono font-black text-emerald-800 text-xs">${app.promptPayNumber || '-'}</div>
-                                            <div class="text-[10px] text-slate-600">ธนาคาร: ${app.promptPayBank || 'พร้อมเพย์'}</div>
+                                            <div class="font-mono font-black text-emerald-800 text-xs">${escapeHtml(app.promptPayNumber) || '-'}</div>
+                                            <div class="text-[10px] text-slate-600">ธนาคาร: ${escapeHtml(app.promptPayBank) || 'พร้อมเพย์'}</div>
                                             <div class="text-[9px] text-slate-400 mt-1">ส่งเมื่อ: ${formatRiderAppDate(app.appliedAt)}</div>
                                         </div>
                                     </div>
@@ -22175,7 +22257,7 @@ function renderAdminRiders() {
                     </div>
 
                     <div class="flex items-center gap-2 flex-wrap">
-                        <button onclick="printA4RidersSummary('${targetDateKey}')" class="px-3 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold rounded-xl text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer" title="พิมพ์ใบสรุปค่ารอบไรเดอร์ A4 ส่งฝ่ายบัญชี">
+                        <button onclick="printA4RidersSummary(${jsArg(targetDateKey)})" class="px-3 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold rounded-xl text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer" title="พิมพ์ใบสรุปค่ารอบไรเดอร์ A4 ส่งฝ่ายบัญชี">
                             <span class="material-symbols-outlined text-sm">description</span>
                             <span>📄 พิมพ์สรุป A4 (ส่งบัญชี)</span>
                         </button>
@@ -22212,15 +22294,15 @@ function renderAdminRiders() {
                         <div class="p-4 rounded-2xl border ${r.isCodExceeded ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 bg-slate-50/50'} flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all hover:bg-white hover:shadow-xs">
                             <div class="flex items-center gap-3">
                                 <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-black text-base shrink-0">
-                                    ${r.avatar || '🛵'}
+                                    ${escapeHtml(r.avatar) || '🛵'}
                                 </div>
                                 <div>
                                     <div class="font-extrabold text-sm text-slate-900 flex items-center gap-1.5">
-                                        <span>${r.name}</span>
-                                        <span class="font-mono text-slate-400 text-xs">(${r.plate || '-'})</span>
+                                        <span>${escapeHtml(r.name)}</span>
+                                        <span class="font-mono text-slate-400 text-xs">(${escapeHtml(r.plate) || '-'})</span>
                                     </div>
                                     <div class="text-[11px] text-slate-500 font-mono mt-0.5">
-                                        📱 ${r.phone} • 💳 พร้อมเพย์: ${r.promptPay || r.phone || '-'}
+                                        📱 ${escapeHtml(r.phone)} • 💳 พร้อมเพย์: ${escapeHtml(r.promptPay) || escapeHtml(r.phone) || '-'}
                                     </div>
                                 </div>
                             </div>
@@ -22246,7 +22328,7 @@ function renderAdminRiders() {
                                         </span>
                                         ${r.slipImage ? `
                                             <div class="mt-1">
-                                                <button type="button" onclick="openRiderSlipViewerModal('${r.id || r.name}', '${targetDateKey}')" class="bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[9px] font-bold inline-flex items-center gap-0.5 cursor-pointer shadow-2xs transition-all mx-auto">
+                                                <button type="button" onclick="openRiderSlipViewerModal(${jsArg(r.id || r.name)}, ${jsArg(targetDateKey)})" class="bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[9px] font-bold inline-flex items-center gap-0.5 cursor-pointer shadow-2xs transition-all mx-auto">
                                                     <span class="material-symbols-outlined text-[11px]">receipt_long</span>
                                                     <span>มีสลิปหลักฐาน</span>
                                                 </button>
@@ -22265,27 +22347,27 @@ function renderAdminRiders() {
                             </div>
 
                             <div class="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
-                                <button onclick="openSingleRiderPayoutModal('${r.id}', ${r.totalPayout}, '${r.promptPay || r.phone}', '${r.name.replace(/'/g, "\\'")}', '${r.plate || '-'}', ${r.trips}, ${r.baseEarned}, ${r.bonus})" class="px-2.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="โอนค่ารอบให้ไรเดอร์ผ่านพร้อมเพย์">
+                                <button onclick="openSingleRiderPayoutModal(${jsArg(r.id)}, ${r.totalPayout}, ${jsArg(r.promptPay || r.phone)}, ${jsArg(r.name)}, ${jsArg(r.plate || '-')}, ${r.trips}, ${r.baseEarned}, ${r.bonus})" class="px-2.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="โอนค่ารอบให้ไรเดอร์ผ่านพร้อมเพย์">
                                     <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                     <span>${r.isSettled ? 'ดู QR ซ้ำ' : '💸 สแกน QR โอน'}</span>
                                 </button>
                                 ${r.slipImage ? `
-                                    <button onclick="openRiderSlipViewerModal('${r.id || r.name}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="ดูสลิปหลักฐานการโอนค่ารอบ">
+                                    <button onclick="openRiderSlipViewerModal(${jsArg(r.id || r.name)}, ${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="ดูสลิปหลักฐานการโอนค่ารอบ">
                                         <span class="material-symbols-outlined text-xs">image</span>
                                         <span>ดูสลิปโอน</span>
                                     </button>
                                 ` : `
-                                    <button onclick="openRiderDirectSlipUploadModal('${r.id}', ${r.totalPayout}, '${r.promptPay || r.phone}', '${r.name.replace(/'/g, "\\'")}', '${r.plate || '-'}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-xl text-xs flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="แนบสลิปโอนค่ารอบ">
+                                    <button onclick="openRiderDirectSlipUploadModal(${jsArg(r.id)}, ${r.totalPayout}, ${jsArg(r.promptPay || r.phone)}, ${jsArg(r.name)}, ${jsArg(r.plate || '-')}, ${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-xl text-xs flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="แนบสลิปโอนค่ารอบ">
                                         <span class="material-symbols-outlined text-xs">attach_file</span>
                                         <span>แนบสลิป</span>
                                     </button>
                                 `}
-                                <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์สลิปสรุปยอดความร้อน 80mm ให้ไรเดอร์">
+                                <button onclick="printThermalRiderSlipFromFleet(${jsArg(r.id)})" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์สลิปสรุปยอดความร้อน 80mm ให้ไรเดอร์">
                                     <span class="material-symbols-outlined text-xs text-sky-700">receipt_long</span>
                                     <span>🧾 สลิป 80mm</span>
                                 </button>
                                 ${r.inHandCod > 0 ? `
-                                    <button onclick="settleRiderCod('${r.id}')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-xl text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer" title="รับมอบเงินสด COD จากไรเดอร์เข้าฮับ">
+                                    <button onclick="settleRiderCod(${jsArg(r.id)})" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-xl text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer" title="รับมอบเงินสด COD จากไรเดอร์เข้าฮับ">
                                         <span class="material-symbols-outlined text-xs">payments</span>
                                         <span>💵 เคลียร์ COD</span>
                                     </button>
@@ -22410,7 +22492,7 @@ function renderAdminRiders() {
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     ${pendingApps.map(app => `
-                        <div class="bg-white rounded-2xl p-4 border border-amber-200 shadow-xs hover:shadow-md transition-all space-y-3 text-xs flex flex-col justify-between" id="rider-app-card-${app.id}">
+                        <div class="bg-white rounded-2xl p-4 border border-amber-200 shadow-xs hover:shadow-md transition-all space-y-3 text-xs flex flex-col justify-between" id="rider-app-card-${escapeHtml(app.id)}">
                             <div class="space-y-2.5">
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="flex items-center gap-2.5">
@@ -22430,7 +22512,7 @@ function renderAdminRiders() {
                                 <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[11px] space-y-1">
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">รหัสใบสมัคร:</span>
-                                        <span class="font-mono font-bold text-slate-800">${app.id}</span>
+                                        <span class="font-mono font-bold text-slate-800">${escapeHtml(app.id)}</span>
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">รถ / ทะเบียน:</span>
@@ -22445,21 +22527,21 @@ function renderAdminRiders() {
 
                             <div class="space-y-1.5 pt-2 border-t border-slate-100">
                                 <div class="grid grid-cols-2 gap-1.5">
-                                    <button type="button" onclick="approveRiderApplication('${app.id}')" class="py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer" title="อนุมัติและสร้างรหัสผ่าน 6 หลัก">
+                                    <button type="button" onclick="approveRiderApplication(${jsArg(app.id)})" class="py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer" title="อนุมัติและสร้างรหัสผ่าน 6 หลัก">
                                         <span class="material-symbols-outlined text-sm">check_circle</span>
                                         <span>อนุมัติ & สร้างรหัส</span>
                                     </button>
-                                    <button type="button" onclick="approveAndLoginRider('${app.id}')" class="py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
+                                    <button type="button" onclick="approveAndLoginRider(${jsArg(app.id)})" class="py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
                                         <span class="material-symbols-outlined text-sm">sports_motorsports</span>
                                         <span>อนุมัติ & รับงาน 🚀</span>
                                     </button>
                                 </div>
                                 <div class="flex items-center gap-1.5">
-                                    <button type="button" onclick="viewRiderAppDetail('${app.id}')" class="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                                    <button type="button" onclick="viewRiderAppDetail(${jsArg(app.id)})" class="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
                                         <span class="material-symbols-outlined text-xs">visibility</span>
                                         <span>ดูใบสมัครฉบับเต็ม</span>
                                     </button>
-                                    <button type="button" onclick="rejectRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[11px] active:scale-95 transition-all cursor-pointer">
+                                    <button type="button" onclick="rejectRiderApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[11px] active:scale-95 transition-all cursor-pointer">
                                         ปฏิเสธ
                                     </button>
                                 </div>
@@ -22655,9 +22737,9 @@ function printThermalRiderSlipFromFleet(riderId) {
             <div class="divider-dashed"></div>
             <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
             <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
-            <div class="slip-row"><span class="slip-label">ไรเดอร์:</span><span class="slip-value">${r.name}</span></div>
-            <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${r.phone}</span></div>
-            <div class="slip-row"><span class="slip-label">ทะเบียน:</span><span class="slip-value">${r.plate || '-'}</span></div>
+            <div class="slip-row"><span class="slip-label">ไรเดอร์:</span><span class="slip-value">${escapeHtml(r.name)}</span></div>
+            <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${escapeHtml(r.phone)}</span></div>
+            <div class="slip-row"><span class="slip-label">ทะเบียน:</span><span class="slip-value">${escapeHtml(r.plate) || '-'}</span></div>
             <div class="slip-row"><span class="slip-label">สถานะ:</span><span class="slip-value">${r.status === 'available' ? '🟢 พร้อมรับงาน' : r.status === 'on_delivery' ? '🟡 กำลังส่งของ' : '🔴 พักรอบ'}</span></div>
             <div class="divider-dashed"></div>
             <div class="slip-row"><span class="slip-label">จำนวนเที่ยวส่งวันนี้:</span><span class="slip-value">0 เที่ยว</span></div>
@@ -22926,7 +23008,7 @@ function initAdminRiderRadarMap() {
                 className: "custom-rider-marker",
                 html: `
                     <div style="background: ${bgColor}; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; border: 2.5px solid #fff; box-shadow: 0 3px 8px rgba(0,0,0,0.3); position: relative;">
-                        ${r.avatar || '🛵'}
+                        ${escapeHtml(r.avatar) || '🛵'}
                         ${r.status === 'on_delivery' ? '<span style="position: absolute; top:-2px; right:-2px; width: 9px; height: 9px; background: #ef4444; border-radius: 50%; border: 1.5px solid #fff;"></span>' : ''}
                     </div>
                 `,
@@ -22938,13 +23020,13 @@ function initAdminRiderRadarMap() {
             const marker = L.marker([rLat, rLng], { icon: riderIcon }).addTo(_adminRiderRadarMap);
             marker.bindPopup(`
                 <div style="font-family: 'Prompt', sans-serif; font-size: 11px; line-height: 1.5; min-width: 160px;">
-                    <div style="font-weight: 800; font-size: 12px; color: #0f172a;">${r.avatar || '🛵'} ${r.name}</div>
-                    <div style="color: #64748b; font-family: monospace;">ทะเบียน: ${r.plate || '-'} ${r.motorcycleModel ? `• ${r.motorcycleModel}` : ''}</div>
+                    <div style="font-weight: 800; font-size: 12px; color: #0f172a;">${escapeHtml(r.avatar) || '🛵'} ${escapeHtml(r.name)}</div>
+                    <div style="color: #64748b; font-family: monospace;">ทะเบียน: ${escapeHtml(r.plate) || '-'} ${r.motorcycleModel ? `• ${r.motorcycleModel}` : ''}</div>
                     <div style="font-weight: bold; margin-top: 2px;">สถานะ: ${statusText}</div>
                     <div style="color: #b45309; font-weight: bold;">เงินสด COD: ฿${inHandCod.toLocaleString()}</div>
                     <div style="margin-top: 6px;">
-                        <a href="tel:${r.phone}" style="background: #059669; color: white; padding: 3px 8px; border-radius: 6px; font-weight: bold; text-decoration: none; display: inline-block; font-size: 10px;">
-                            📞 โทร ${r.phone}
+                        <a href="tel:${escapeHtml(r.phone)}" style="background: #059669; color: white; padding: 3px 8px; border-radius: 6px; font-weight: bold; text-decoration: none; display: inline-block; font-size: 10px;">
+                            📞 โทร ${escapeHtml(r.phone)}
                         </a>
                     </div>
                 </div>
@@ -22979,7 +23061,7 @@ function initAdminRiderRadarMap() {
                     .bindPopup(`
                         <div style="font-family: 'Prompt', sans-serif; font-size: 11px;">
                             <b style="color: #b91c1c;">🏠 ปลายทางส่งของสด</b><br>
-                            ไรเดอร์: ${r.name}<br>
+                            ไรเดอร์: ${escapeHtml(r.name)}<br>
                             <span style="color: #64748b;">กำลังเดินทางจัดส่ง</span>
                         </div>
                     `);
@@ -23062,7 +23144,7 @@ function viewRiderAppDetail(appId) {
                         <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">🔑</span>
                         <div>
                             <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">เลขไรเดอร์ (ใช้คู่กับรหัสผ่านเข้าระบบ)</div>
-                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${app.accessCode || '-'}</div>
+                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${escapeHtml(app.accessCode) || '-'}</div>
                             <div class="text-[10px] text-emerald-800 pt-0.5">${app.loginHash ? '🔒 ตั้งรหัสผ่านแล้ว (ระบบเก็บเฉพาะค่าเข้ารหัส ดูรหัสเดิมไม่ได้)' : '⚠️ ยังไม่มีรหัสผ่านเข้าระบบ — กดสร้างรหัสใหม่'}</div>
                         </div>
                     </div>
@@ -23124,45 +23206,45 @@ function viewRiderAppDetail(appId) {
     if (footer) {
         footer.innerHTML = `
             <div class="flex items-center gap-1.5 flex-wrap">
-                <button type="button" onclick="openEditRiderAppModal('${app.id}'); closeRiderAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลใบสมัครนี้">
+                <button type="button" onclick="openEditRiderAppModal(${jsArg(app.id)}); closeRiderAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลใบสมัครนี้">
                     <span class="material-symbols-outlined text-sm">edit</span>
                     <span>แก้ไขข้อมูล</span>
                 </button>
                 ${app.status === 'rejected' ? `
-                    <button type="button" onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button type="button" onclick="reconsiderRiderApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>พิจารณาใหม่</span>
                     </button>
                 ` : app.status === 'approved' ? `
-                    <button type="button" onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button type="button" onclick="reconsiderRiderApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>ย้อนกลับไปรอพิจารณา</span>
                     </button>
                 ` : ''}
-                <button type="button" onclick="deleteRiderApplication('${app.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
+                <button type="button" onclick="deleteRiderApplication(${jsArg(app.id)})" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
                     <span class="material-symbols-outlined text-base">delete</span>
                 </button>
             </div>
 
             <div class="flex items-center gap-1.5 flex-wrap">
                 ${app.status === 'pending' ? `
-                    <button type="button" onclick="rejectRiderApplication('${app.id}')" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="rejectRiderApplication(${jsArg(app.id)})" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
                         ปฏิเสธ
                     </button>
-                    <button type="button" onclick="approveRiderApplication('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติเป็นไรเดอร์ในระบบและสร้างรหัสผ่าน 6 หลัก">
+                    <button type="button" onclick="approveRiderApplication(${jsArg(app.id)})" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติเป็นไรเดอร์ในระบบและสร้างรหัสผ่าน 6 หลัก">
                         <span class="material-symbols-outlined text-sm font-bold">check_circle</span>
                         <span>อนุมัติเป็นไรเดอร์</span>
                     </button>
-                    <button type="button" onclick="approveAndLoginRider('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
+                    <button type="button" onclick="approveAndLoginRider(${jsArg(app.id)})" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
                         <span class="material-symbols-outlined text-sm font-bold">sports_motorsports</span>
                         <span>อนุมัติ & รับงานทันที 🚀</span>
                     </button>
                 ` : `
-                    <button type="button" onclick="approveAndLoginRider('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าระบบรับงานเป็นไรเดอร์คนนี้ทันที">
+                    <button type="button" onclick="approveAndLoginRider(${jsArg(app.id)})" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าระบบรับงานเป็นไรเดอร์คนนี้ทันที">
                         <span class="material-symbols-outlined text-sm font-bold">sports_motorsports</span>
                         <span>เข้าสู่ระบบรับงานทันที 🚀</span>
                     </button>
-                    <button type="button" onclick="resetRiderLoginSecret('${app.id}')" class="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์คนนี้">
+                    <button type="button" onclick="resetRiderLoginSecret(${jsArg(app.id)})" class="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์คนนี้">
                         <span class="material-symbols-outlined text-sm">key</span>
                         <span>สร้างรหัสเข้าระบบใหม่</span>
                     </button>
@@ -23554,7 +23636,7 @@ function openSingleRiderPayoutModal(riderId, amount, phone, name, plate, trips, 
     const qrImg = document.getElementById("rider-payout-qr-image");
     const ppNumEl = document.getElementById("rider-payout-promptpay-number");
 
-    if (nameEl) nameEl.innerHTML = `<span class="material-symbols-outlined text-purple-600 text-sm">two_wheeler</span><span>${_currentRiderPayout.name}</span>`;
+    if (nameEl) nameEl.innerHTML = `<span class="material-symbols-outlined text-purple-600 text-sm">two_wheeler</span><span>${escapeHtml(_currentRiderPayout.name)}</span>`;
     if (plateEl) plateEl.textContent = `ทะเบียน: ${_currentRiderPayout.plate}`;
     if (phoneEl) phoneEl.textContent = _currentRiderPayout.phone;
     if (tripsEl) tripsEl.textContent = `เที่ยววิ่งสำเร็จ: ${_currentRiderPayout.trips} เที่ยว`;
@@ -24003,11 +24085,11 @@ function renderFleetPayoutModal() {
                     ` : riderRows.map(row => `
                         <tr class="hover:bg-slate-50 transition-colors">
                             <td class="p-2.5">
-                                <div class="font-bold text-slate-900">${row.name}</div>
-                                <div class="text-[10px] text-slate-400 font-mono">${row.plate || '-'} ${row.motorcycleModel ? `• ${row.motorcycleModel}` : ''}</div>
+                                <div class="font-bold text-slate-900">${escapeHtml(row.name)}</div>
+                                <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(row.plate) || '-'} ${row.motorcycleModel ? `• ${row.motorcycleModel}` : ''}</div>
                             </td>
                             <td class="p-2.5 font-mono text-emerald-800 font-bold text-[11px]">
-                                ${row.promptPayNum}
+                                ${escapeHtml(row.promptPayNum)}
                                 <div class="text-[9px] text-slate-400 font-sans">${row.bank || 'พร้อมเพย์'}</div>
                             </td>
                             <td class="p-2.5 text-center font-bold">${row.trips}</td>
@@ -24016,17 +24098,17 @@ function renderFleetPayoutModal() {
                             <td class="p-2.5 text-right font-black text-emerald-700">฿${row.totalPayout.toLocaleString()}</td>
                             <td class="p-2.5 text-center">
                                 <div class="flex items-center justify-center gap-1 flex-wrap">
-                                    <button onclick="openSingleRiderPayoutModal('${row.id}', ${row.totalPayout}, '${row.promptPayNum}', '${row.name.replace(/'/g, "\\'")}', '${row.plate || '-'}', ${row.trips}, ${row.baseEarned}, ${row.bonus})" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[10.5px] shadow-xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer">
+                                    <button onclick="openSingleRiderPayoutModal(${jsArg(row.id)}, ${row.totalPayout}, ${jsArg(row.promptPayNum)}, ${jsArg(row.name)}, ${jsArg(row.plate || '-')}, ${row.trips}, ${row.baseEarned}, ${row.bonus})" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[10.5px] shadow-xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer">
                                         <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                         <span>${row.isSettled ? 'ดู QR ซ้ำ' : 'สแกน QR โอน'}</span>
                                     </button>
                                     ${row.slipImage ? `
-                                        <button onclick="openRiderSlipViewerModal('${row.id || row.name}', '${targetDateKey}')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10.5px] shadow-xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer" title="ดูสลิปโอนเงิน">
+                                        <button onclick="openRiderSlipViewerModal(${jsArg(row.id || row.name)}, ${jsArg(targetDateKey)})" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10.5px] shadow-xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer" title="ดูสลิปโอนเงิน">
                                             <span class="material-symbols-outlined text-xs">image</span>
                                             <span>ดูสลิป</span>
                                         </button>
                                     ` : `
-                                        <button onclick="openRiderDirectSlipUploadModal('${row.id}', ${row.totalPayout}, '${row.promptPayNum}', '${row.name.replace(/'/g, "\\'")}', '${row.plate || '-'}', '${targetDateKey}')" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-lg text-[10.5px] shadow-2xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer" title="แนบสลิป">
+                                        <button onclick="openRiderDirectSlipUploadModal(${jsArg(row.id)}, ${row.totalPayout}, ${jsArg(row.promptPayNum)}, ${jsArg(row.name)}, ${jsArg(row.plate || '-')}, ${jsArg(targetDateKey)})" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-lg text-[10.5px] shadow-2xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer" title="แนบสลิป">
                                             <span class="material-symbols-outlined text-xs">attach_file</span>
                                             <span>แนบสลิป</span>
                                         </button>
@@ -24083,10 +24165,10 @@ function printFleetPayoutSlip() {
 
         riderRowsHtml += `
             <div class="slip-row" style="font-size: 11px;">
-                <span>${idx + 1}. ${r.name} (${trips} เที่ยว)</span>
+                <span>${idx + 1}. ${escapeHtml(r.name)} (${trips} เที่ยว)</span>
                 <span>฿${net.toLocaleString()}</span>
             </div>
-            <div style="font-size: 9px; color: #64748b; font-family: monospace; padding-left: 8px;">พร้อมเพย์: ${r.promptPay || r.phone || '-'}</div>
+            <div style="font-size: 9px; color: #64748b; font-family: monospace; padding-left: 8px;">พร้อมเพย์: ${escapeHtml(r.promptPay) || escapeHtml(r.phone) || '-'}</div>
         `;
     });
 
@@ -24494,7 +24576,7 @@ function renderAdminSettings() {
                         <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
                             <span class="font-bold text-emerald-900">🎟️ โปรโมชั่นคูปองต้อนรับลูกค้าใหม่:</span>
                             <div class="flex items-center gap-2 mt-1">
-                                <input type="text" id="cfg-coupon-code" value="${s.couponCode}" class="w-1/2 p-2 rounded-lg border border-emerald-300 font-mono font-bold text-emerald-800 text-xs">
+                                <input type="text" id="cfg-coupon-code" value="${escapeHtml(s.couponCode)}" class="w-1/2 p-2 rounded-lg border border-emerald-300 font-mono font-bold text-emerald-800 text-xs">
                                 <span class="text-xs">ลด ฿</span>
                                 <input type="number" id="cfg-coupon-discount" value="${s.couponDiscount}" class="w-20 p-2 rounded-lg border border-emerald-300 font-bold text-emerald-800 text-xs">
                             </div>
@@ -24552,15 +24634,15 @@ function renderAdminSettings() {
                     <div class="space-y-3 text-xs">
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">ชื่อศูนย์กลางฮับกระจายสินค้า:</label>
-                            <input type="text" id="cfg-hub-name" value="${s.hubName}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            <input type="text" id="cfg-hub-name" value="${escapeHtml(s.hubName)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
                         </div>
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">ตำแหน่งจุดรวมของ / แท่นจัดของ:</label>
-                            <input type="text" id="cfg-hub-location" value="${s.hubLocation}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            <input type="text" id="cfg-hub-location" value="${escapeHtml(s.hubLocation)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
                         </div>
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์ผู้จัดการฮับ / เบอร์ PromptPay ฮับ:</label>
-                            <input type="text" id="cfg-hub-phone" value="${s.hubPhone}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold font-mono text-emerald-700 bg-slate-50">
+                            <input type="text" id="cfg-hub-phone" value="${escapeHtml(s.hubPhone)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold font-mono text-emerald-700 bg-slate-50">
                         </div>
                     </div>
                 </div>
@@ -24716,7 +24798,7 @@ function renderAdminSettings() {
                     <span class="material-symbols-outlined text-purple-700 text-lg">edit_note</span>
                     <h4 class="font-extrabold text-sm text-slate-900">${curMeta.noteTitle}</h4>
                 </div>
-                <button onclick="resetSettingsCustomNote('${_activeSettingsSubTab}')" class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors cursor-pointer" title="รีเซ็ตกลับเป็นข้อความตัวอย่างเริ่มต้น">
+                <button onclick="resetSettingsCustomNote(${jsArg(_activeSettingsSubTab)})" class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors cursor-pointer" title="รีเซ็ตกลับเป็นข้อความตัวอย่างเริ่มต้น">
                     รีเซ็ตข้อความเริ่มต้น
                 </button>
             </div>
@@ -24727,7 +24809,7 @@ function renderAdminSettings() {
                     <span class="material-symbols-outlined text-xs text-emerald-600">check_circle</span>
                     <span>บันทึกในระบบเรียลไทม์ (Local Database Persistence)</span>
                 </span>
-                <button onclick="saveSettingsCustomNote('${_activeSettingsSubTab}')" class="px-5 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer">
+                <button onclick="saveSettingsCustomNote(${jsArg(_activeSettingsSubTab)})" class="px-5 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer">
                     <span class="material-symbols-outlined text-base">save</span>
                     <span>💾 บันทึกข้อความหน้านี้</span>
                 </button>
@@ -24745,9 +24827,9 @@ function renderAdminSettings() {
                 <div>
                     <h3 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
                         <span class="material-symbols-outlined text-purple-700">settings</span>
-                        <span>${curMeta.title}</span>
+                        <span>${escapeHtml(curMeta.title)}</span>
                     </h3>
-                    <p class="text-xs text-slate-500">${curMeta.desc}</p>
+                    <p class="text-xs text-slate-500">${escapeHtml(curMeta.desc)}</p>
                 </div>
                 <span class="text-xs font-extrabold px-3 py-1 rounded-full ${curMeta.badgeColor} self-start sm:self-auto shadow-2xs">
                     ${curMeta.badge}
@@ -25274,7 +25356,7 @@ function renderHubPickingList() {
                         <div>
                             <div class="flex items-center gap-1.5">
                                 <span class="text-[10px] bg-orange-100 text-orange-800 font-extrabold px-2 py-0.5 rounded-full">งานด่วนแผงค้าเรียกไรเดอร์</span>
-                                <span class="text-[10px] bg-slate-800 text-white font-mono px-2 py-0.5 rounded-full">${expOrder.orderId}</span>
+                                <span class="text-[10px] bg-slate-800 text-white font-mono px-2 py-0.5 rounded-full">${escapeHtml(expOrder.orderId)}</span>
                             </div>
                             <h3 class="font-extrabold text-slate-800 text-sm mt-0.5">รับของจากแผงค้าในตลาดไปส่งลูกค้า</h3>
                         </div>
@@ -25293,11 +25375,11 @@ function renderHubPickingList() {
                             <span>จุดรับของ (หน้าแผงค้าในตลาด):</span>
                         </div>
                         <div class="font-extrabold text-slate-900 text-xs">${stallTitle}</div>
-                        <div class="text-[11px] text-slate-600">ผู้ส่ง: ${origin.ownerName || 'เจ้าของแผง'} โซน ${origin.zone || 'A'}</div>
+                        <div class="text-[11px] text-slate-600">ผู้ส่ง: ${escapeHtml(origin.ownerName) || 'เจ้าของแผง'} โซน ${escapeHtml(origin.zone) || 'A'}</div>
                         <div class="pt-1 flex items-center gap-1.5">
-                            <button type="button" onclick="callContactDirect('${origin.ownerPhone || '0819998888'}', '${stallTitle}', 'แผงค้าต้นทาง')" class="px-2.5 py-1 bg-white hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-xl text-[10.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="callContactDirect(${jsArg(origin.ownerPhone || '0819998888')}, ${jsArg(stallTitle)}, 'แผงค้าต้นทาง')" class="px-2.5 py-1 bg-white hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-xl text-[10.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-xs">call</span>
-                                <span>โทรหาแผงค้า (${origin.ownerPhone || '-'})</span>
+                                <span>โทรหาแผงค้า (${escapeHtml(origin.ownerPhone) || '-'})</span>
                             </button>
                         </div>
                     </div>
@@ -25308,13 +25390,13 @@ function renderHubPickingList() {
                             <span class="material-symbols-outlined text-sm text-emerald-600">person_pin</span>
                             <span>จุดส่งของ (บ้านลูกค้าปลายทาง):</span>
                         </div>
-                        <div class="font-extrabold text-slate-900 text-xs">${expOrder.customerName || 'ลูกค้า'}</div>
+                        <div class="font-extrabold text-slate-900 text-xs">${escapeHtml(expOrder.customerName) || 'ลูกค้า'}</div>
                         <div class="text-[11px] text-slate-600 truncate">${cleanAddress}</div>
                         <div class="text-[10px] text-emerald-800 font-bold">ระยะทาง ~${distDisplay} กม. • ค่าส่ง ฿${expOrder.deliveryFee || 20} (ชำระแล้ว)</div>
                         <div class="pt-1 flex items-center gap-1.5">
-                            <button type="button" onclick="callContactDirect('${expOrder.customerPhone || '0812345678'}', 'คุณ${expOrder.customerName || 'ลูกค้า'}', 'ลูกค้าปลายทาง')" class="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-[10.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="callContactDirect(${jsArg(expOrder.customerPhone || '0812345678')}, 'คุณ${escapeHtml(expOrder.customerName) || 'ลูกค้า'}', 'ลูกค้าปลายทาง')" class="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-[10.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-xs">call</span>
-                                <span>โทรหาลูกค้า (${expOrder.customerPhone || '-'})</span>
+                                <span>โทรหาลูกค้า (${escapeHtml(expOrder.customerPhone) || '-'})</span>
                             </button>
                         </div>
                     </div>
@@ -25327,7 +25409,7 @@ function renderHubPickingList() {
                         <div class="font-extrabold text-slate-800">📦 ร้านค้าจัดเตรียมและแพ็คของเองเรียบร้อย</div>
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
-                        <button type="button" onclick="viewHubMerchantExpressSlip('${expOrder.orderId}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-[11px] font-extrabold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="กดเพื่อตรวจรูปสลิปพร้อมเพย์ฮับ">
+                        <button type="button" onclick="viewHubMerchantExpressSlip(${jsArg(expOrder.orderId)})" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-[11px] font-extrabold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="กดเพื่อตรวจรูปสลิปพร้อมเพย์ฮับ">
                             <span class="material-symbols-outlined text-xs text-amber-700">receipt_long</span>
                             <span>📷 ตรวจสลิปค่าส่ง (฿${expOrder.deliveryFee || 20})</span>
                         </button>
@@ -25350,15 +25432,15 @@ function renderHubPickingList() {
                     ${!isAssigned ? `
                         <!-- Unassigned State: 1-Click quick dispatch or Select Rider + Print Slip -->
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <button type="button" onclick="assignExpressOrderToRider('${expOrder.orderId}', 'R1')" class="py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
+                            <button type="button" onclick="assignExpressOrderToRider(${jsArg(expOrder.orderId)}, 'R1')" class="py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
                                 <span class="material-symbols-outlined text-sm">two_wheeler</span>
                                 <span>🚀 จ่ายงานให้ไรเดอร์สมศักดิ์ (พร้อมรับงาน)</span>
                             </button>
-                            <button type="button" onclick="openAssignRiderModal('${expOrder.orderId}')" class="py-2.5 px-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow-2xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
+                            <button type="button" onclick="openAssignRiderModal(${jsArg(expOrder.orderId)})" class="py-2.5 px-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow-2xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
                                 <span class="material-symbols-outlined text-sm">group</span>
                                 <span>👥 เลือกไรเดอร์คนอื่น</span>
                             </button>
-                            <button type="button" onclick="printMerchantExpressSlip('${expOrder.orderId}')" class="py-2.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer text-xs">
+                            <button type="button" onclick="printMerchantExpressSlip(${jsArg(expOrder.orderId)})" class="py-2.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer text-xs">
                                 <span class="material-symbols-outlined text-sm">print</span>
                                 <span>🖨️ พิมพ์สลิปส่งด่วน 80mm</span>
                             </button>
@@ -25366,29 +25448,29 @@ function renderHubPickingList() {
                     ` : `
                         <!-- Assigned State: Full Coordinator Operations Controls -->
                         <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                            <button type="button" onclick="callContactDirect('${rider.phone}', '${rider.name}', 'ไรเดอร์ผู้จัดส่ง')" class="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="callContactDirect(${jsArg(rider.phone)}, ${jsArg(rider.name)}, 'ไรเดอร์ผู้จัดส่ง')" class="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm">call</span>
                                 <span>โทรหาไรเดอร์</span>
                             </button>
-                            <button type="button" onclick="viewOrderOnRadar('${expOrder.orderId}')" class="py-2.5 px-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="viewOrderOnRadar(${jsArg(expOrder.orderId)})" class="py-2.5 px-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm">radar</span>
                                 <span>ดูเรดาร์สด GPS</span>
                             </button>
-                            <button type="button" onclick="openAssignRiderModal('${expOrder.orderId}')" class="py-2.5 px-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="openAssignRiderModal(${jsArg(expOrder.orderId)})" class="py-2.5 px-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm">swap_horiz</span>
                                 <span>เปลี่ยนไรเดอร์</span>
                             </button>
-                            <button type="button" onclick="printMerchantExpressSlip('${expOrder.orderId}')" class="py-2.5 px-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="printMerchantExpressSlip(${jsArg(expOrder.orderId)})" class="py-2.5 px-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm">print</span>
                                 <span>สลิป 80mm</span>
                             </button>
                             ${expOrder.status !== "delivered" ? `
-                                <button type="button" onclick="markExpressDeliveredByHub('${expOrder.orderId}')" class="py-2.5 px-2 bg-slate-900 hover:bg-black text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                <button type="button" onclick="markExpressDeliveredByHub(${jsArg(expOrder.orderId)})" class="py-2.5 px-2 bg-slate-900 hover:bg-black text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                     <span class="material-symbols-outlined text-sm">check_circle</span>
                                     <span>บันทึกส่งสำเร็จ</span>
                                 </button>
                             ` : `
-                                <button type="button" onclick="viewMerchantDeliveryProof('${expOrder.orderId}')" class="py-2.5 px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                <button type="button" onclick="viewMerchantDeliveryProof(${jsArg(expOrder.orderId)})" class="py-2.5 px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                     <span class="material-symbols-outlined text-sm">photo_camera</span>
                                     <span>ดูรูปหลักฐาน</span>
                                 </button>
@@ -25443,7 +25525,7 @@ function renderHubPickingList() {
                             <label class="flex items-center gap-2.5 cursor-pointer select-none flex-1 min-w-0">
                                 <input type="checkbox" ${isPicked ? 'checked' : ''} ${isOutOfStock ? 'disabled' : ''} onchange="toggleHubPickedItem(${sIdx}, ${iIdx})" class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-40">
                                 <span class="font-bold ${isOutOfStock ? 'text-rose-700 line-through' : (isPicked ? 'text-emerald-900 line-through opacity-80' : 'text-slate-800')} text-xs truncate">
-                                    ${item.name} (฿${actualPrice})
+                                    ${escapeHtml(item.name)} (฿${actualPrice})
                                 </span>
                             </label>
                             <div class="flex items-center gap-1.5 shrink-0">
@@ -25475,14 +25557,14 @@ function renderHubPickingList() {
                 <div class="${stall.badgeColor || 'bg-slate-50'} border border-slate-200/80 rounded-2xl p-3.5 space-y-2.5">
                     <div class="flex items-center justify-between">
                         <span class="font-extrabold text-slate-900 text-xs flex items-center gap-1">
-                            <span>${stall.name}</span>
+                            <span>${escapeHtml(stall.name)}</span>
                         </span>
                         <div class="flex items-center gap-1.5">
-                            <button type="button" onclick="printStallPickingSlip('${order.orderId}', ${sIdx})" class="px-2 py-0.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์ใบจัดของสดเฉพาะแผงนี้">
+                            <button type="button" onclick="printStallPickingSlip(${jsArg(order.orderId)}, ${sIdx})" class="px-2 py-0.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์ใบจัดของสดเฉพาะแผงนี้">
                                 <span class="material-symbols-outlined text-xs">print</span>
                                 <span>สลิปแผงนี้ 80mm</span>
                             </button>
-                            <span class="text-[10px] bg-white/90 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full font-bold shadow-2xs">${stall.tag || 'แผงค้าในตลาด'}</span>
+                            <span class="text-[10px] bg-white/90 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full font-bold shadow-2xs">${escapeHtml(stall.tag) || 'แผงค้าในตลาด'}</span>
                         </div>
                     </div>
                     <div class="space-y-1.5">
@@ -25543,7 +25625,7 @@ function renderHubPickingList() {
                                 <p class="text-[10px] text-orange-100 mt-0.5">ลูกค้าชำระค่าส่งด่วน +฿20 ไรเดอร์จะไปรับของที่หน้าร้านแผงค้าโดยตรง <strong>ไม่ต้องรวมของที่ฮับ</strong></p>
                             </div>
                         </div>
-                        <button type="button" onclick="contactExpressStall('${(order.stalls && order.stalls[0]) ? order.stalls[0].stallId : ''}', '${order.orderId}')" class="px-3 py-1.5 bg-white hover:bg-orange-50 text-orange-700 font-extrabold text-xs rounded-xl shadow-xs active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer">
+                        <button type="button" onclick="contactExpressStall(${jsArg((order.stalls && order.stalls[0]) ? order.stalls[0].stallId : '')}, ${jsArg(order.orderId)})" class="px-3 py-1.5 bg-white hover:bg-orange-50 text-orange-700 font-extrabold text-xs rounded-xl shadow-xs active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer">
                             <span class="material-symbols-outlined text-xs">call</span>
                             <span>โทรตามแผงค้า</span>
                         </button>
@@ -25553,11 +25635,11 @@ function renderHubPickingList() {
                 <div class="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div>
                         <div class="flex items-center gap-1.5">
-                            <span class="${isExpressGrocery ? 'bg-orange-100 text-orange-800 border border-orange-200' : 'bg-emerald-100 text-emerald-800'} font-extrabold text-[11px] px-2.5 py-0.5 rounded-full">${order.orderId}</span>
+                            <span class="${isExpressGrocery ? 'bg-orange-100 text-orange-800 border border-orange-200' : 'bg-emerald-100 text-emerald-800'} font-extrabold text-[11px] px-2.5 py-0.5 rounded-full">${escapeHtml(order.orderId)}</span>
                             <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">${order.status === 'delivering' ? '🛵 กำลังนำส่ง' : (isExpressGrocery ? '⚡ รอกำลังพลรับหน้าร้าน' : '📋 กำลังจัดของสด')}</span>
                         </div>
-                        <div class="text-xs font-bold text-slate-800 mt-1.5">ผู้รับ: ${customerName} (${address})</div>
-                        <div class="text-[11px] text-slate-500">โทร: ${customerPhone} • โน้ต: ${note}</div>
+                        <div class="text-xs font-bold text-slate-800 mt-1.5">ผู้รับ: ${escapeHtml(customerName)} (${escapeHtml(address)})</div>
+                        <div class="text-[11px] text-slate-500">โทร: ${customerPhone} • โน้ต: ${escapeHtml(note)}</div>
                     </div>
                     <div class="text-right">
                         <span class="text-sm font-black text-orange-600">฿${exactAmtDisplay}</span>
@@ -25591,11 +25673,11 @@ function renderHubPickingList() {
                             ลูกค้าแจ้งโอนผ่าน <strong>${paymentDesc}</strong> • กรุณาตรวจรูปสลิปหรือเทียบยอด <strong>฿${exactAmtDisplay}</strong> ในแอปธนาคารก่อนปล่อยงาน
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                            <button type="button" onclick="openOrderSlipVerificationModal('${order.orderId}')" class="py-2 px-3 bg-white text-orange-950 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="openOrderSlipVerificationModal(${jsArg(order.orderId)})" class="py-2 px-3 bg-white text-orange-950 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm text-orange-600">receipt_long</span>
                                 <span>📷 ตรวจรูปสลิป (${order.slipImage ? 'แนบแล้ว' : 'ยังไม่แนบ'})</span>
                             </button>
-                            <button type="button" onclick="approveOrderPayment('${order.orderId}')" class="py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer border border-emerald-400">
+                            <button type="button" onclick="approveOrderPayment(${jsArg(order.orderId)})" class="py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer border border-emerald-400">
                                 <span class="material-symbols-outlined text-sm">verified</span>
                                 <span>✅ ยืนยันเงินเข้าแล้ว (ปลดล็อค)</span>
                             </button>
@@ -25608,7 +25690,7 @@ function renderHubPickingList() {
                             <span>ยอดเงิน ฿${exactAmtDisplay} เข้าบัญชีแล้ว • ตรวจสอบสลิปเรียบร้อย</span>
                         </div>
                         ${order.slipImage ? `
-                            <button type="button" onclick="openOrderSlipVerificationModal('${order.orderId}')" class="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-[10.5px] font-bold shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="openOrderSlipVerificationModal(${jsArg(order.orderId)})" class="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-[10.5px] font-bold shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 📷 ดูสลิป
                             </button>
                         ` : ''}
@@ -25634,13 +25716,13 @@ function renderHubPickingList() {
                                 <span>ล็อคการปล่อยงาน: ต้องตรวจสลิปและกดยืนยันยอดโอน ฿${exactAmtDisplay} ก่อน</span>
                             </div>
                             <p class="text-[10.5px] text-rose-600">เพื่อความมั่นใจ 100% ว่าเงินเข้าบัญชีจริงก่อนปล่อยสินค้าและจ่ายงานให้ไรเดอร์</p>
-                            <button type="button" onclick="openOrderSlipVerificationModal('${order.orderId}')" class="mt-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-extrabold rounded-xl text-xs inline-flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="openOrderSlipVerificationModal(${jsArg(order.orderId)})" class="mt-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-extrabold rounded-xl text-xs inline-flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm">receipt_long</span>
                                 <span>📷 เปิดตรวจสลิป & ปลดล็อคจ่ายงาน</span>
                             </button>
                         </div>
                     ` : `
-                        <button onclick="completePickingAndDispatchOrder('${order.orderId}')" class="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold py-3.5 rounded-2xl shadow-lg flex items-center justify-center gap-2 text-xs active:scale-95 transition-all cursor-pointer">
+                        <button onclick="completePickingAndDispatchOrder(${jsArg(order.orderId)})" class="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold py-3.5 rounded-2xl shadow-lg flex items-center justify-center gap-2 text-xs active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-base">moped</span>
                             <span>รวมถุงเสร็จแล้ว • ปล่อยไรเดอร์ออกเดินทาง 🚀</span>
                         </button>
@@ -25977,7 +26059,7 @@ function renderHubSettlement() {
             vendorListHtml += `
                 <div class="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
                     <div>
-                        <div class="font-bold text-slate-800 text-xs">${stall.name}</div>
+                        <div class="font-bold text-slate-800 text-xs">${escapeHtml(stall.name)}</div>
                         <div class="text-[10px] text-slate-500">
                             ยอดขาย ฿${stallItemsTotal} <span class="text-amber-700 font-bold">(หัก GP ${gpRate}% -฿${stallGP})</span>
                             ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length})</span>` : ''}
@@ -25985,7 +26067,7 @@ function renderHubSettlement() {
                     </div>
                     <div class="text-right">
                         <div class="font-black text-emerald-700 text-xs">โอนสุทธิ ฿${stallPayout}</div>
-                        <button type="button" onclick="openVendorPayoutModal('${stallId}', '${stall.name.replace(/'/g, "\\'")}', ${stallPayout}, '${stallPhone}', '${stallOwner.replace(/'/g, "\\'")}', '${stallNum}', ${stallItemsTotal}, ${stallGP}, ${gpRate})" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
+                        <button type="button" onclick="openVendorPayoutModal(${jsArg(stallId)}, ${jsArg(stall.name)}, ${stallPayout}, ${jsArg(stallPhone)}, ${jsArg(stallOwner)}, ${jsArg(stallNum)}, ${stallItemsTotal}, ${stallGP}, ${gpRate})" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
                             โอนเคลียร์เงิน (PromptPay)
                         </button>
                     </div>
@@ -26000,7 +26082,7 @@ function renderHubSettlement() {
                 <div class="flex items-center justify-between pb-2 border-b border-slate-100">
                     <h3 class="font-bold text-sm text-slate-800 flex items-center gap-1">
                         <span class="material-symbols-outlined text-emerald-700 text-base">account_balance_wallet</span>
-                        <span>สรุปยอดจ่ายแผงค้า (${order.orderId})</span>
+                        <span>สรุปยอดจ่ายแผงค้า (${escapeHtml(order.orderId)})</span>
                     </h3>
                     <div class="text-right">
                         <div class="text-[10px] text-slate-500 font-medium">ยอดขายรวม ฿${vendorTotal}</div>
@@ -26035,16 +26117,16 @@ function renderHubSettlement() {
                 <div class="flex justify-between items-center p-3 bg-orange-50/60 rounded-2xl border border-orange-200">
                     <div class="space-y-0.5">
                         <div class="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
-                            <span>⚡ ${exp.orderId}</span>
-                            <span class="text-[10px] text-orange-800 font-bold bg-orange-100 px-2 py-0.2 rounded-full">${exp.originStall?.stallName || 'แผงค้า'}</span>
+                            <span>⚡ ${escapeHtml(exp.orderId)}</span>
+                            <span class="text-[10px] text-orange-800 font-bold bg-orange-100 px-2 py-0.2 rounded-full">${escapeHtml(exp.originStall?.stallName) || 'แผงค้า'}</span>
                         </div>
                         <div class="text-[10px] text-slate-600">
-                            🛵 ไรเดอร์: <strong>${rider.name}</strong> • ผู้รับ: คุณ${exp.customerName || 'ลูกค้า'}
+                            🛵 ไรเดอร์: <strong>${escapeHtml(rider.name)}</strong> • ผู้รับ: คุณ${escapeHtml(exp.customerName) || 'ลูกค้า'}
                         </div>
                     </div>
                     <div class="text-right shrink-0">
                         <div class="font-black text-emerald-700 text-xs">฿${fee}</div>
-                        <button type="button" onclick="clearHubSettlementVendor('ไรเดอร์: ${rider.name.replace(/'/g, "\\'")} (งาน ${exp.orderId})', this)" class="text-[10px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
+                        <button type="button" onclick="clearHubSettlementVendor('ไรเดอร์: ${rider.name.replace(/'/g, "\\'")} (งาน ${escapeHtml(exp.orderId)})', this)" class="text-[10px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
                             โอนให้ไรเดอร์
                         </button>
                     </div>
@@ -26084,7 +26166,7 @@ function renderHubSettlement() {
                 <div class="flex justify-between items-center p-3 ${isExceeded ? 'bg-rose-50 border-rose-300' : 'bg-slate-50 border-slate-200'} rounded-2xl border">
                     <div>
                         <div class="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
-                            <span>🛵 ${r.riderName}</span>
+                            <span>🛵 ${escapeHtml(r.riderName)}</span>
                             ${isExceeded ? `<span class="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-md animate-pulse">⚠️ เกินเพดาน ฿3,000</span>` : ''}
                         </div>
                         <div class="text-[10px] text-slate-500 font-mono">
@@ -26093,7 +26175,7 @@ function renderHubSettlement() {
                     </div>
                     <div class="text-right">
                         <div class="font-black ${isExceeded ? 'text-rose-700' : 'text-emerald-700'} text-xs">฿${r.netCashToHub.toLocaleString()}</div>
-                        <button type="button" onclick="settleRiderBalance('${r.riderName.replace(/'/g, "\\'")}', '${todayDateKey}'); renderHubSettlement();" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
+                        <button type="button" onclick="settleRiderBalance(${jsArg(r.riderName)}, ${jsArg(todayDateKey)}); renderHubSettlement();" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
                             💵 รับเงินสด
                         </button>
                     </div>
@@ -26272,11 +26354,11 @@ function renderOnPageRidersList() {
                         🛵
                     </div>
                     <div class="min-w-0 text-left">
-                        <div class="font-extrabold text-xs text-slate-900 truncate">${r.name}</div>
-                        <div class="text-[10px] text-slate-500 font-mono">รหัส: <strong class="text-emerald-700 font-bold">${code}</strong> • โทร: ${r.phone || '-'} • ทะเบียน: ${r.plate || '-'}</div>
+                        <div class="font-extrabold text-xs text-slate-900 truncate">${escapeHtml(r.name)}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">รหัส: <strong class="text-emerald-700 font-bold">${code}</strong> • โทร: ${escapeHtml(r.phone) || '-'} • ทะเบียน: ${escapeHtml(r.plate) || '-'}</div>
                     </div>
                 </div>
-                <button type="button" onclick="loginRiderById('${r.id}')"
+                <button type="button" onclick="loginRiderById(${jsArg(r.id)})"
                     class="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold text-xs rounded-xl shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer flex items-center gap-1">
                     <span class="material-symbols-outlined text-xs font-bold">login</span>
                     <span>เข้าสู่ระบบ</span>
@@ -26781,10 +26863,10 @@ function renderRiderLoginModalList() {
             html += `
                 <div class="flex items-center justify-between p-2 bg-white rounded-xl border border-amber-200 shadow-2xs">
                     <div>
-                        <div class="font-bold text-xs text-slate-900">${displayName}</div>
-                        <div class="text-[10px] text-slate-500 font-mono">โทร: ${a.phone} • รหัส: <strong class="text-amber-700 font-bold">${code}</strong></div>
+                        <div class="font-bold text-xs text-slate-900">${escapeHtml(displayName)}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">โทร: ${escapeHtml(a.phone)} • รหัส: <strong class="text-amber-700 font-bold">${code}</strong></div>
                     </div>
-                    <button type="button" onclick="approveAndLoginRider('${a.id}')" class="px-2.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button type="button" onclick="approveAndLoginRider(${jsArg(a.id)})" class="px-2.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-xs">verified</span>
                         <span>⚡ อนุมัติ & รับงาน</span>
                     </button>
@@ -26818,11 +26900,11 @@ function renderRiderLoginModalList() {
                         🛵
                     </div>
                     <div class="text-left">
-                        <div class="font-extrabold text-xs text-slate-900">${r.name}</div>
-                        <div class="text-[10px] text-slate-500 font-mono">รหัส: <strong class="text-sky-700 font-bold">${code}</strong> • ทะเบียน: ${r.plate || '-'}</div>
+                        <div class="font-extrabold text-xs text-slate-900">${escapeHtml(r.name)}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">รหัส: <strong class="text-sky-700 font-bold">${code}</strong> • ทะเบียน: ${escapeHtml(r.plate) || '-'}</div>
                     </div>
                 </div>
-                <button type="button" onclick="loginRiderById('${r.id}')" class="px-3.5 py-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                <button type="button" onclick="loginRiderById(${jsArg(r.id)})" class="px-3.5 py-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1">
                     <span class="material-symbols-outlined text-xs">login</span>
                     <span>เข้าสู่ระบบ</span>
                 </button>
@@ -27331,9 +27413,9 @@ function renderAuthHeaderButtons() {
             <div class="flex items-center gap-1 sm:gap-1.5 bg-amber-950/90 border border-amber-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
                 <span class="text-[11px] sm:text-xs text-amber-300 font-bold flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm text-amber-400">store</span>
-                    <span class="truncate max-w-[80px]">${state.activeMerchant.stallNumber || 'ร้านค้า'}</span>
+                    <span class="truncate max-w-[80px]">${escapeHtml(state.activeMerchant.stallNumber) || 'ร้านค้า'}</span>
                 </span>
-                <button onclick="loginAsMerchantStall('${state.activeMerchant.stallId}')" class="text-[10px] text-amber-200 bg-amber-800/80 hover:bg-amber-700 px-1.5 py-0.5 rounded font-bold transition-all">
+                <button onclick="loginAsMerchantStall(${jsArg(state.activeMerchant.stallId)})" class="text-[10px] text-amber-200 bg-amber-800/80 hover:bg-amber-700 px-1.5 py-0.5 rounded font-bold transition-all">
                     จัดการ
                 </button>
                 <button onclick="logoutMerchant()" class="text-[10px] text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 py-0.5 rounded font-bold transition-all" title="ออกจากระบบร้านค้า">
@@ -27351,7 +27433,7 @@ function renderAuthHeaderButtons() {
             <div class="flex items-center gap-1 sm:gap-1.5 bg-sky-950/90 border border-sky-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
                 <span class="text-[11px] sm:text-xs text-sky-300 font-bold flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm text-sky-400">two_wheeler</span>
-                    <span class="truncate max-w-[80px]">${state.activeRider.name || 'ไรเดอร์'}</span>
+                    <span class="truncate max-w-[80px]">${escapeHtml(state.activeRider.name) || 'ไรเดอร์'}</span>
                 </span>
                 <button onclick="switchRole('rider')" class="text-[10px] text-sky-200 bg-sky-800/80 hover:bg-sky-700 px-1.5 py-0.5 rounded font-bold transition-all">
                     รับงาน
@@ -27381,7 +27463,7 @@ function renderAuthHeaderButtons() {
                 <div class="flex items-center gap-1 sm:gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
                     <span class="text-[11px] sm:text-xs text-purple-300 font-bold flex items-center gap-1 cursor-pointer" onclick="switchRole('admin')">
                         <span class="material-symbols-outlined text-sm sm:text-base text-purple-400">admin_panel_settings</span>
-                        <span>${state.activeAdmin.name || 'เฮียส่ง'}</span>
+                        <span>${escapeHtml(state.activeAdmin.name) || 'เฮียส่ง'}</span>
                     </span>
                     <button onclick="switchRole('admin')" class="hidden sm:inline-block text-[10px] md:text-xs text-purple-200 bg-purple-800/80 hover:bg-purple-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all">
                         Admin
@@ -28359,7 +28441,7 @@ function onCatalogMainCatChange(selectEl) {
 
     if (subSelect) {
         subSelect.innerHTML = '<option value="">-- เลือกหมวดหมู่รอง --</option>' +
-            subs.map(s => `<option value="${s}">${s}</option>`).join('');
+            subs.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
     }
     if (microSelect) {
         microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย --</option>';
@@ -28379,7 +28461,7 @@ function onCatalogSubCatChange(selectEl) {
     const micros = getMicroCategories(mainCat, subCat);
 
     microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย (ชิ้นส่วน/ชนิด) --</option>' +
-        micros.map(m => `<option value="${m}">${m}</option>`).join('');
+        micros.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
 }
 window.onCatalogSubCatChange = onCatalogSubCatChange;
 
@@ -28391,7 +28473,7 @@ function onHighlightMainCatChange(selectEl, index) {
 
     if (subSelect) {
         subSelect.innerHTML = '<option value="">-- เลือกหมวดหมู่รอง --</option>' +
-            subs.map(s => `<option value="${s}">${s}</option>`).join('');
+            subs.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
     }
     if (microSelect) {
         microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย --</option>';
@@ -28409,7 +28491,7 @@ function onHighlightSubCatChange(selectEl, index) {
     const micros = getMicroCategories(mainCat, subCat);
 
     microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย (ชิ้นส่วน/ชนิด) --</option>' +
-        micros.map(m => `<option value="${m}">${m}</option>`).join('');
+        micros.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
 }
 window.onHighlightSubCatChange = onHighlightSubCatChange;
 
@@ -28572,7 +28654,7 @@ function renderMerchantTop6ProductsForm(products) {
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div class="sm:col-span-2">
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ชื่อสินค้า <span class="text-rose-500">*</span></label>
-                        <input type="text" id="m-p-name-${i}" value="${p.name || ''}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs">
+                        <input type="text" id="m-p-name-${i}" value="${escapeHtml(p.name) || ''}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หน่วยขาย</label>
@@ -29380,15 +29462,15 @@ function previewMerchantLiveStore() {
                     ${previewStallPhotosList.map((photoUrl, pIdx) => `
                         <!-- Slide ${pIdx + 1}: ภาพแผงค้า ${pIdx + 1} -->
                         <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextPreviewBannerSlide()">
-                            <img src="${photoUrl}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
-                            <img src="${photoUrl}" alt="${stallName} (รูปที่ ${pIdx + 1})" class="relative w-full h-full object-cover object-center">
+                            <img src="${escapeHtml(photoUrl)}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
+                            <img src="${escapeHtml(photoUrl)}" alt="${escapeHtml(stallName)} (รูปที่ ${pIdx + 1})" class="relative w-full h-full object-cover object-center">
                             <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none"></div>
                         </div>
                     `).join('')}
                     <!-- Slide ${previewOwnerSlideIdx + 1}: ภาพเจ้าของแผง (Composite Owner Template & Name Badge) -->
                     <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextPreviewBannerSlide()">
-                        <img id="preview-owner-banner-blur" src="${ownerBannerPreviewSrc}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
-                        <img id="preview-owner-banner-img" src="${ownerBannerPreviewSrc}" alt="${ownerName}" class="relative w-full h-full object-contain sm:object-cover object-center">
+                        <img id="preview-owner-banner-blur" src="${escapeHtml(ownerBannerPreviewSrc)}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
+                        <img id="preview-owner-banner-img" src="${escapeHtml(ownerBannerPreviewSrc)}" alt="${escapeHtml(ownerName)}" class="relative w-full h-full object-contain sm:object-cover object-center">
                         <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none"></div>
                     </div>
                 </div>
@@ -29424,7 +29506,7 @@ function previewMerchantLiveStore() {
                 <!-- Bottom Row Info -->
                 <div class="absolute bottom-3 left-3 right-3 flex items-end justify-between pointer-events-none z-10">
                     <div class="pointer-events-auto">
-                        <h2 class="text-lg sm:text-xl font-black text-white drop-shadow-md leading-tight">${stallName}</h2>
+                        <h2 class="text-lg sm:text-xl font-black text-white drop-shadow-md leading-tight">${escapeHtml(stallName)}</h2>
                         <p class="text-emerald-300 font-bold text-xs mt-0.5 drop-shadow-sm flex items-center gap-1">
                             <span>✨</span>
                             <span>${highlight}</span>
@@ -29573,14 +29655,14 @@ function previewMerchantLiveStore() {
                                         </span>
                                     ` : ''}
                                 </div>
-                                <div class="font-bold text-xs text-slate-900 line-clamp-2 leading-tight" title="${p.name}">${p.name}</div>
+                                <div class="font-bold text-xs text-slate-900 line-clamp-2 leading-tight" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
                                 ${p.mainCat || p.subCat ? `
-                                    <div class="text-[9px] text-slate-500 line-clamp-1 mt-1">${p.mainCat} • ${p.subCat}</div>
+                                    <div class="text-[9px] text-slate-500 line-clamp-1 mt-1">${escapeHtml(p.mainCat)} • ${escapeHtml(p.subCat)}</div>
                                 ` : ''}
                             </div>
                             <div class="mt-2 pt-1.5 border-t border-slate-200/80 flex items-baseline justify-between">
                                 <span class="font-black text-xs text-orange-600">฿${p.price}</span>
-                                <span class="text-[9px] text-slate-400 font-medium">/${p.unit}</span>
+                                <span class="text-[9px] text-slate-400 font-medium">/${escapeHtml(p.unit)}</span>
                             </div>
                         </div>
                     `).join('')}
@@ -29621,11 +29703,11 @@ function previewMerchantLiveStore() {
                                     <div class="px-3 py-2 flex items-center justify-between text-xs hover:bg-slate-50">
                                         <div class="flex items-center gap-2">
                                             <span class="text-[10px] text-slate-400 w-4">${idx + 1}.</span>
-                                            <span class="font-bold text-slate-800">${item.name}</span>
-                                            ${item.subCat ? `<span class="text-[9px] text-slate-400 font-medium">(${item.subCat})</span>` : ''}
+                                            <span class="font-bold text-slate-800">${escapeHtml(item.name)}</span>
+                                            ${item.subCat ? `<span class="text-[9px] text-slate-400 font-medium">(${escapeHtml(item.subCat)})</span>` : ''}
                                         </div>
                                         <div class="font-black text-xs text-orange-600">
-                                            ฿${item.price} <span class="text-[9px] text-slate-400 font-normal">/${item.unit}</span>
+                                            ฿${item.price} <span class="text-[9px] text-slate-400 font-normal">/${escapeHtml(item.unit)}</span>
                                         </div>
                                     </div>
                                 `).join('')}
@@ -30522,9 +30604,9 @@ function openSimulatedSmsModal(phone, codeVal, name, roleType, lineId, riderNumb
         : "กรุณาคัดลอกข้อความนี้ส่งให้ " + name + " ทาง LINE/SMS เอง (ระบบไม่ได้ส่งให้ และจะไม่แสดงรหัสผ่านนี้อีก)";
     if (msgEl && roleType !== "merchant") {
         // ไรเดอร์: เข้าสู่ระบบด้วย "เลขไรเดอร์ + รหัสผ่านลับ" (รหัสผ่านนี้แสดงครั้งเดียว ระบบไม่เก็บรหัสจริง)
-        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + name + "</strong>! ใบสมัครไรเดอร์ได้รับอนุมัติแล้ว เลขไรเดอร์ของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + (riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + codeVal + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
+        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! ใบสมัครไรเดอร์ได้รับอนุมัติแล้ว เลขไรเดอร์ของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
     } else if (msgEl) {
-        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + name + "</strong>! การลงทะเบียนเปิดร้าน/รับงานได้รับการอนุมัติแล้ว รหัสเข้าสู่ระบบ 6 หลักของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + codeVal + "</strong> นำรหัสนี้ไปใส่ใน " + roleNum + " เพื่อเริ่มปฏิบัติงานได้ทันทีครับ";
+        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! การลงทะเบียนเปิดร้าน/รับงานได้รับการอนุมัติแล้ว รหัสเข้าสู่ระบบ 6 หลักของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> นำรหัสนี้ไปใส่ใน " + roleNum + " เพื่อเริ่มปฏิบัติงานได้ทันทีครับ";
     }
 
     modal.classList.remove("hidden");
@@ -30782,16 +30864,16 @@ function handleCheckApplicationStatusSubmit() {
                     <div class="flex items-center justify-between">
                         <span class="font-black text-slate-800 flex items-center gap-1">
                             <span>🏪 แผงค้า:</span>
-                            <span class="text-emerald-800 font-extrabold">${mApp.stallData.stallName}</span>
+                            <span class="text-emerald-800 font-extrabold">${escapeHtml(mApp.stallData.stallName)}</span>
                         </span>
                         <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900">${statusText}</span>
                     </div>
-                    <div class="text-[11px] text-slate-500">หมายเลขแผง: ${mApp.stallData.stallNumber} • เจ้าของ: ${mApp.stallData.ownerName}</div>
+                    <div class="text-[11px] text-slate-500">หมายเลขแผง: ${escapeHtml(mApp.stallData.stallNumber)} • เจ้าของ: ${escapeHtml(mApp.stallData.ownerName)}</div>
                     ${isApproved && mApp.accessCode ? `
                         <div class="p-2.5 bg-slate-900 text-white rounded-xl flex items-center justify-between font-mono">
                             <div>
                                 <div class="text-[9px] text-slate-400 font-sans">รหัสเข้าสู่ระบบแผงค้า 6 หลัก:</div>
-                                <div class="text-base font-black text-amber-300 tracking-wider">${mApp.accessCode}</div>
+                                <div class="text-base font-black text-amber-300 tracking-wider">${escapeHtml(mApp.accessCode)}</div>
                             </div>
                             <button onclick="closeStatusCheckModal(); openMerchantLoginModal(); document.getElementById('merchant-code-login-input').value='${mApp.accessCode}'; handleMerchantCodeLoginSubmit();" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-sans font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
                                 เข้าสู่ระบบทันที >
@@ -30813,18 +30895,18 @@ function handleCheckApplicationStatusSubmit() {
                     <div class="flex items-center justify-between">
                         <span class="font-black text-slate-800 flex items-center gap-1">
                             <span>🛵 ไรเดอร์:</span>
-                            <span class="text-sky-800 font-extrabold">${rApp.fullName}</span>
+                            <span class="text-sky-800 font-extrabold">${escapeHtml(rApp.fullName)}</span>
                         </span>
                         <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900">${statusText}</span>
                     </div>
-                    <div class="text-[11px] text-slate-500">ยานพาหนะ: ${rApp.vehiclePlate || '-'} • เบอร์โทร: ${rApp.phone}</div>
+                    <div class="text-[11px] text-slate-500">ยานพาหนะ: ${escapeHtml(rApp.vehiclePlate) || '-'} • เบอร์โทร: ${escapeHtml(rApp.phone)}</div>
                     ${isPending && isOwnerSignedIn() ? `
                         <div class="p-2.5 bg-gradient-to-r from-emerald-900 to-teal-900 text-white rounded-xl flex items-center justify-between shadow-sm">
                             <div>
                                 <div class="text-[10px] text-emerald-300 font-bold">✨ เจ้าของ: อนุมัติทันที</div>
                                 <div class="text-[9px] text-slate-300">แตะปุ่มเพื่ออนุมัติและเข้าสู่ระบบรับงาน</div>
                             </div>
-                            <button onclick="closeStatusCheckModal(); approveAndLoginRider('${rApp.id}');" class="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
+                            <button onclick="closeStatusCheckModal(); approveAndLoginRider(${jsArg(rApp.id)});" class="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
                                 ⚡ อนุมัติ & รับงานทันที >
                             </button>
                         </div>
@@ -31196,21 +31278,21 @@ function viewHubMerchantExpressSlip(orderId) {
                 <div class="flex items-center gap-2">
                     <span class="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-sm font-bold">📷</span>
                     <div>
-                        <div class="font-extrabold text-sm text-slate-900">ตรวจสอบสลิปค่าส่งด่วน (${order.orderId})</div>
-                        <div class="text-[10px] text-slate-400">จาก ${order.originStall?.stallName || 'แผงค้า'} • โอนล่วงหน้า ฿${order.deliveryFee || 20}</div>
+                        <div class="font-extrabold text-sm text-slate-900">ตรวจสอบสลิปค่าส่งด่วน (${escapeHtml(order.orderId)})</div>
+                        <div class="text-[10px] text-slate-400">จาก ${escapeHtml(order.originStall?.stallName) || 'แผงค้า'} • โอนล่วงหน้า ฿${order.deliveryFee || 20}</div>
                     </div>
                 </div>
                 <button onclick="document.getElementById('hub-express-slip-modal').classList.add('hidden')" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold">✕</button>
             </div>
             <div class="bg-slate-900 rounded-2xl p-2 flex items-center justify-center overflow-hidden max-h-72 border border-slate-800">
-                <img src="${slipImg}" alt="สลิปค่าส่งด่วน" class="max-h-64 object-contain rounded-xl">
+                <img src="${escapeHtml(slipImg)}" alt="สลิปค่าส่งด่วน" class="max-h-64 object-contain rounded-xl">
             </div>
             <div class="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-[11px] text-amber-900 font-medium">
                 <div>✓ ยอดโอนค่าบริการจัดส่ง: <strong>฿${order.deliveryFee || 20}</strong> เข้าพร้อมเพย์ฮับ</div>
-                <div>📍 จุดส่ง: ${order.customerName} (${order.address})</div>
+                <div>📍 จุดส่ง: ${escapeHtml(order.customerName)} (${escapeHtml(order.address)})</div>
             </div>
             <div class="flex items-center gap-2 pt-1">
-                <button onclick="approveHubMerchantExpressSlip('${order.orderId}')" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs shadow-md active:scale-95 transition-all cursor-pointer">
+                <button onclick="approveHubMerchantExpressSlip(${jsArg(order.orderId)})" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs shadow-md active:scale-95 transition-all cursor-pointer">
                     ✓ อนุมัติสลิป & เริ่มจ่ายงานไรเดอร์
                 </button>
             </div>
@@ -31264,7 +31346,7 @@ function openOrderSlipVerificationModal(orderId) {
                     <span class="w-8 h-8 rounded-xl bg-orange-100 text-orange-800 flex items-center justify-center text-base font-bold shadow-2xs">🔍</span>
                     <div>
                         <div class="font-extrabold text-sm text-slate-900">ตรวจสอบสลิปการโอนเงิน</div>
-                        <div class="text-[10px] text-slate-400">ออเดอร์ <span class="font-mono font-bold text-slate-700">${order.orderId}</span> • เวลาสั่ง ${orderTimeStr}</div>
+                        <div class="text-[10px] text-slate-400">ออเดอร์ <span class="font-mono font-bold text-slate-700">${escapeHtml(order.orderId)}</span> • เวลาสั่ง ${orderTimeStr}</div>
                     </div>
                 </div>
                 <button onclick="document.getElementById('order-slip-verify-modal').classList.add('hidden')" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold transition-all cursor-pointer">✕</button>
@@ -31277,7 +31359,7 @@ function openOrderSlipVerificationModal(orderId) {
                     <span class="text-lg font-black text-orange-600 tracking-tight">฿${exactAmtDisplay}</span>
                 </div>
                 <div class="text-[10.5px] text-slate-600 leading-snug">
-                    ช่องทาง: <strong>${order.paymentDesc || 'โอนเงิน'}</strong> • ลูกค้า: <strong>${order.customerName || 'ลูกค้า'}</strong> (${order.customerPhone || '-'})
+                    ช่องทาง: <strong>${order.paymentDesc || 'โอนเงิน'}</strong> • ลูกค้า: <strong>${escapeHtml(order.customerName) || 'ลูกค้า'}</strong> (${escapeHtml(order.customerPhone) || '-'})
                 </div>
                 <div class="bg-white/80 p-1.5 rounded-xl text-[10px] text-amber-900 font-medium flex items-center gap-1 border border-amber-200">
                     <span class="text-xs">💡</span>
@@ -31288,8 +31370,8 @@ function openOrderSlipVerificationModal(orderId) {
             <!-- Slip Image Preview Box -->
             <div class="bg-slate-900 rounded-2xl p-2 flex flex-col items-center justify-center overflow-hidden border border-slate-800 relative group min-h-[220px]">
                 ${slipImg ? `
-                    <img src="${slipImg}" alt="สลิปโอนเงินของลูกค้า" class="max-h-80 w-auto object-contain rounded-xl select-none">
-                    <a href="${slipImg}" target="_blank" download="slip_${order.orderId}.jpg" class="absolute bottom-3 right-3 bg-black/70 hover:bg-black text-white text-[10.5px] font-bold px-2.5 py-1 rounded-lg backdrop-blur-xs flex items-center gap-1 opacity-90 hover:opacity-100 transition-opacity">
+                    <img src="${escapeHtml(slipImg)}" alt="สลิปโอนเงินของลูกค้า" class="max-h-80 w-auto object-contain rounded-xl select-none">
+                    <a href="${escapeHtml(slipImg)}" target="_blank" download="slip_${escapeHtml(order.orderId)}.jpg" class="absolute bottom-3 right-3 bg-black/70 hover:bg-black text-white text-[10.5px] font-bold px-2.5 py-1 rounded-lg backdrop-blur-xs flex items-center gap-1 opacity-90 hover:opacity-100 transition-opacity">
                         <span class="material-symbols-outlined text-xs">open_in_new</span>
                         <span>ดูภาพเต็ม</span>
                     </a>
@@ -31313,16 +31395,16 @@ function openOrderSlipVerificationModal(orderId) {
             <!-- Action Buttons -->
             <div class="space-y-2 pt-1 border-t border-slate-100">
                 ${!isVerified ? `
-                    <button type="button" onclick="approveOrderPayment('${order.orderId}')" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="approveOrderPayment(${jsArg(order.orderId)})" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-base">verified</span>
                         <span>✅ ยืนยันเงินเข้าบัญชีแล้ว (อนุมัติยอด ฿${exactAmtDisplay})</span>
                     </button>
                     <div class="grid grid-cols-2 gap-2">
-                        <button type="button" onclick="callContactDirect('${order.customerPhone || '0812345678'}', 'คุณ${order.customerName || 'ลูกค้า'}', 'ลูกค้า')" class="py-2 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                        <button type="button" onclick="callContactDirect(${jsArg(order.customerPhone || '0812345678')}, 'คุณ${escapeHtml(order.customerName) || 'ลูกค้า'}', 'ลูกค้า')" class="py-2 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-xs">call</span>
                             <span>โทรหาลูกค้า</span>
                         </button>
-                        <button type="button" onclick="rejectOrderPayment('${order.orderId}')" class="py-2 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                        <button type="button" onclick="rejectOrderPayment(${jsArg(order.orderId)})" class="py-2 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-xs">cancel</span>
                             <span>สลิปไม่ถูกต้อง</span>
                         </button>
@@ -31512,7 +31594,7 @@ function renderRiderJobPool() {
                         <span class="px-2.5 py-1 rounded-lg ${badgeClass} text-[11px] font-extrabold flex items-center gap-1">
                             ${badgeText}
                         </span>
-                        <span class="font-extrabold text-slate-800 text-xs">${job.orderId}</span>
+                        <span class="font-extrabold text-slate-800 text-xs">${escapeHtml(job.orderId)}</span>
                     </div>
                     <span class="text-[10px] text-slate-400">${job.createdAt ? (typeof job.createdAt === 'number' ? new Date(job.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : job.createdAt) : 'เมื่อสักครู่'}</span>
                 </div>
@@ -31523,19 +31605,19 @@ function renderRiderJobPool() {
                     </div>
                     <div>
                         <div class="text-[10px] text-slate-400 font-medium">ปลายทางจัดส่ง</div>
-                        <div class="font-bold text-slate-800 truncate">📍 ${job.customerName || 'ลูกค้า'}</div>
+                        <div class="font-bold text-slate-800 truncate">📍 ${escapeHtml(job.customerName) || 'ลูกค้า'}</div>
                     </div>
                 </div>
                 <div class="bg-slate-50 p-2 rounded-xl text-[11px] text-slate-600">
-                    <div class="truncate">🏠 ที่อยู่: ${job.address || 'บ้านบึง ชลบุรี'}</div>
-                    ${job.deliveryNote || job.note ? `<div class="text-amber-800 font-medium mt-0.5 truncate">📝 ${job.deliveryNote || job.note}</div>` : ''}
+                    <div class="truncate">🏠 ที่อยู่: ${escapeHtml(job.address) || 'บ้านบึง ชลบุรี'}</div>
+                    ${job.deliveryNote || job.note ? `<div class="text-amber-800 font-medium mt-0.5 truncate">📝 ${escapeHtml(job.deliveryNote) || escapeHtml(job.note)}</div>` : ''}
                 </div>
                 <div class="flex items-center justify-between pt-1">
                     <div>
                         <span class="text-[10px] text-slate-400">รายได้ค่ารอบ:</span>
                         <span class="text-sm font-extrabold text-emerald-600 ml-1">${feeText}</span>
                     </div>
-                    <button onclick="claimOrderForRider('${job.orderId}')" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button onclick="claimOrderForRider(${jsArg(job.orderId)})" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span>🛵 กดรับงานนี้</span>
                     </button>
                 </div>
@@ -31721,7 +31803,7 @@ function renderRiderWallet() {
                     <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
                         <div class="text-[10px] text-emerald-200">ยอดเงินค่ารอบสุทธิที่ได้รับ:</div>
                         <div class="text-2xl font-black text-amber-300">฿${feeEarned.toLocaleString()}</div>
-                        <div class="text-[10px] text-emerald-300/80">โอนผ่าน PromptPay ไปยัง ${activeRiderObj.promptPay || activeRiderObj.phone || 'บัญชีคนขับ'}</div>
+                        <div class="text-[10px] text-emerald-300/80">โอนผ่าน PromptPay ไปยัง ${escapeHtml(activeRiderObj.promptPay) || escapeHtml(activeRiderObj.phone) || 'บัญชีคนขับ'}</div>
                     </div>
                     <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
                         <div class="text-[10px] text-emerald-200">วัน-เวลาที่ฮับยืนยันการโอนเงิน:</div>
@@ -31745,15 +31827,15 @@ function renderRiderWallet() {
                         </div>
 
                         <div class="flex flex-col sm:flex-row items-center gap-3 bg-white/5 p-2.5 rounded-xl border border-white/10">
-                            <div class="relative cursor-pointer group shrink-0" onclick="openRiderSlipViewerModal('${activeRiderObj.id || riderName}', '${dateKey}')">
-                                <img src="${settledInfo.slipImage}" alt="สลิปโอนเงินค่ารอบ" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border-2 border-emerald-400 shadow-md group-hover:scale-105 transition-all">
+                            <div class="relative cursor-pointer group shrink-0" onclick="openRiderSlipViewerModal(${jsArg(activeRiderObj.id || riderName)}, ${jsArg(dateKey)})">
+                                <img src="${escapeHtml(settledInfo.slipImage)}" alt="สลิปโอนเงินค่ารอบ" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border-2 border-emerald-400 shadow-md group-hover:scale-105 transition-all">
                                 <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center transition-all">
                                     <span class="material-symbols-outlined text-white text-xl">zoom_in</span>
                                 </div>
                             </div>
                             <div class="space-y-1 text-xs text-left flex-1 min-w-0">
                                 <div class="text-[11px] text-emerald-200">
-                                    ผู้รับ: <strong>${riderName}</strong> (${activeRiderObj.plate || 'รถจักรยานยนต์ส่งของ'})
+                                    ผู้รับ: <strong>${escapeHtml(riderName)}</strong> (${escapeHtml(activeRiderObj.plate) || 'รถจักรยานยนต์ส่งของ'})
                                 </div>
                                 <div class="text-[11px] text-white font-mono">
                                     ยอดเงินโอนสุทธิ: <strong class="text-amber-300 text-sm">฿${feeEarned.toLocaleString()}</strong>
@@ -31761,13 +31843,13 @@ function renderRiderWallet() {
                                 <div class="text-[10px] text-slate-300">
                                     เวลาที่โอน: ${settledInfo.settledAt ? new Date(settledInfo.settledAt).toLocaleString('th-TH') : dateKey} ${settledInfo.settledBy ? `• ผู้โอน: ${settledInfo.settledBy}` : ''}
                                 </div>
-                                ${settledInfo.slipNote ? `<div class="text-[10px] text-amber-200 italic truncate">บันทึก: ${settledInfo.slipNote}</div>` : ''}
+                                ${settledInfo.slipNote ? `<div class="text-[10px] text-amber-200 italic truncate">บันทึก: ${escapeHtml(settledInfo.slipNote)}</div>` : ''}
                                 <div class="pt-1 flex items-center gap-2 flex-wrap">
-                                    <button onclick="openRiderSlipViewerModal('${activeRiderObj.id || riderName}', '${dateKey}')" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer">
+                                    <button onclick="openRiderSlipViewerModal(${jsArg(activeRiderObj.id || riderName)}, ${jsArg(dateKey)})" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer">
                                         <span class="material-symbols-outlined text-xs">zoom_in</span>
                                         <span>🔍 ดูรูปสลิปเต็มจอ</span>
                                     </button>
-                                    <a href="${settledInfo.slipImage}" download="rider_slip_${dateKey}_${activeRiderObj.id || 'rider'}.jpg" class="px-3 py-1 bg-white/20 hover:bg-white/30 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                                    <a href="${escapeHtml(settledInfo.slipImage)}" download="rider_slip_${dateKey}_${escapeHtml(activeRiderObj.id) || 'rider'}.jpg" class="px-3 py-1 bg-white/20 hover:bg-white/30 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
                                         <span class="material-symbols-outlined text-xs">download</span>
                                         <span>บันทึกรูปสลิป</span>
                                     </a>
@@ -31869,7 +31951,7 @@ function renderRiderWallet() {
                 <div class="space-y-2 text-xs">
                     <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
                         <div>
-                            <div class="font-bold text-slate-800">${state.activeOrder?.orderId || '#TH-8801'} • ${state.activeOrder?.customerName || 'ลูกค้า'}</div>
+                            <div class="font-bold text-slate-800">${escapeHtml(state.activeOrder?.orderId) || '#TH-8801'} • ${escapeHtml(state.activeOrder?.customerName) || 'ลูกค้า'}</div>
                             <div class="text-[10px] text-slate-500">เสร็จเมื่อ: ${state.activeOrder?.deliveredAt || 'วันนี้'}</div>
                         </div>
                         <div class="text-right">
