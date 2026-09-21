@@ -4697,14 +4697,14 @@
 
                         <!-- Button 1: Go to Admin to Approve (Role 5) -->
                         <button type="button" onclick="goToAdminToApproveMerchantFromSuccess()"
-                            class="w-full p-3 bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:from-purple-800 hover:to-indigo-800 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer">
+                            class="owner-only-test-ui hidden w-full p-3 bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:from-purple-800 hover:to-indigo-800 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-base">admin_panel_settings</span>
                             <span>1. ไปหน้าแอดมิน (Role 5) เพื่อตรวจสอบ & กดอนุมัติ</span>
                         </button>
 
                         <!-- Button 2: Fast Track Instant Approve & Login to Role 3 -->
                         <button type="button" onclick="approveAndLoginCurrentSubmittedMerchant()"
-                            class="w-full p-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
+                            class="owner-only-test-ui hidden w-full p-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
                             title="อนุมัติร้านค้านี้ทันทีและสลับเข้าสู่หน้าจัดการแผงค้า">
                             <span class="material-symbols-outlined text-base font-bold">verified</span>
                             <span>⚡ 2. อนุมัติทันที & สลับเข้าร้าน (Role 3 Fast-Track)</span>
@@ -4714,7 +4714,7 @@
                         <button type="button" onclick="checkCurrentMerchantApprovalAndLogin()"
                             class="w-full p-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white rounded-2xl font-black text-xs shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-base">check_circle</span>
-                            <span>3. ตรวจสอบสถานะการอนุมัติ / ล็อกอินร้านค้า</span>
+                            <span>ตรวจสอบสถานะการอนุมัติ / ล็อกอินร้านค้า</span>
                         </button>
 
                         <!-- Multi-role Quick Switches (Role 1, 2, 4) -->
@@ -4726,7 +4726,7 @@
                                 <span>🛒 ตลาดสด (Role 1)</span>
                             </button>
                             <button type="button" onclick="closeMerchantPortalModal(); switchRole('hub');"
-                                class="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all">
+                                class="owner-only-test-ui hidden p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all">
                                 <span class="material-symbols-outlined text-sm text-amber-600">inventory_2</span>
                                 <span>📦 ศูนย์ฮับ (Role 2)</span>
                             </button>
@@ -7248,7 +7248,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.32_merchant_secret_login"></script>
+    <script src="app.js?v=10.32b_merchant_secret_login"></script>
 </body>
 
 </html>
