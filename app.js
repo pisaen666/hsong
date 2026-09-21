@@ -20988,6 +20988,7 @@ async function handleRiderRegisterSubmit(e) {
     resetRiderRegExtras("reg");
 
     // Show step 2 (Success and next step options)
+    if (!isOwnerSignedIn()) rememberRiderApplicationNotice(newApp.id, displayName);
     populateRiderSuccessView(newApp);
     updateAdminRiderBadges();
 
@@ -25985,10 +25986,66 @@ function renderRiderGuestPortal() {
 }
 window.renderRiderGuestPortal = renderRiderGuestPortal;
 
+// ── กล่องแจ้งสถานะใบสมัครที่ผู้สมัครเพิ่งส่ง (ค้างบนหน้าล็อกอินจนกว่าจะกดปิด ไม่หายเหมือนข้อความ toast)
+const _RIDER_APP_NOTICE_KEY = "talathub_rider_app_notice";
+
+function _escHtml(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function rememberRiderApplicationNotice(code, name) {
+    try { sessionStorage.setItem(_RIDER_APP_NOTICE_KEY, JSON.stringify({ code: String(code), name: name || "" })); } catch (e) { }
+}
+
+function dismissRiderApplicationNotice() {
+    try { sessionStorage.removeItem(_RIDER_APP_NOTICE_KEY); } catch (e) { }
+    renderRiderApplicationNotice();
+}
+window.dismissRiderApplicationNotice = dismissRiderApplicationNotice;
+
+function renderRiderApplicationNotice() {
+    const box = document.getElementById("rider-application-notice");
+    if (!box) return;
+    let n = null;
+    try { n = JSON.parse(sessionStorage.getItem(_RIDER_APP_NOTICE_KEY) || "null"); } catch (e) { }
+    if (!n || !n.code) { box.innerHTML = ""; return; }
+    const app = loadRiderApplications().find(a => a.id === n.code);
+    const status = app ? app.status : "pending";
+    const palette = status === "approved"
+        ? { bg: "bg-emerald-50", border: "border-emerald-400", text: "text-emerald-900", head: "✅ ใบสมัครได้รับอนุมัติแล้ว", hint: "ใช้รหัสนี้เข้าสู่ระบบรับงานได้เลย (พิมพ์รหัสในช่องด้านล่าง)" }
+        : status === "rejected"
+            ? { bg: "bg-rose-50", border: "border-rose-400", text: "text-rose-900", head: "❌ ใบสมัครไม่ผ่านการอนุมัติ", hint: "กรุณาติดต่อเจ้าของตลาดเพื่อสอบถามเหตุผล" }
+            : { bg: "bg-amber-50", border: "border-amber-400", text: "text-amber-900", head: "⏳ ส่งใบสมัครแล้ว รอเจ้าของอนุมัติ", hint: "ยังเข้าสู่ระบบรับงานไม่ได้จนกว่าเจ้าของจะอนุมัติ ให้จดรหัสนี้ไว้ แล้วกลับมาใส่ในช่องด้านล่างหลังได้รับอนุมัติ" };
+    box.innerHTML = `
+        <div class="p-4 ${palette.bg} border-2 ${palette.border} rounded-2xl space-y-2 text-left ${palette.text}">
+            <div class="font-black text-sm">${palette.head}</div>
+            ${n.name ? `<div class="text-xs">ผู้สมัคร: <strong>${_escHtml(n.name)}</strong></div>` : ""}
+            <div class="text-xs">รหัสของคุณ:</div>
+            <div class="text-2xl font-black font-mono tracking-widest bg-white/80 rounded-xl px-3 py-2 text-center select-all">${_escHtml(n.code)}</div>
+            <p class="text-xs leading-relaxed">${palette.hint}</p>
+            <button type="button" onclick="dismissRiderApplicationNotice()" class="text-[11px] font-bold underline cursor-pointer">ปิดข้อความนี้</button>
+        </div>`;
+}
+window.renderRiderApplicationNotice = renderRiderApplicationNotice;
+
 function renderOnPageRidersList() {
+    renderRiderApplicationNotice();
     const container = document.getElementById("onpage-registered-riders-list");
     if (!container) return;
     const curRiders = loadCommunityRiders();
+    if ((!curRiders || curRiders.length === 0) && !isOwnerSignedIn()) {
+        // ผู้ใช้ทั่วไป: ยังไม่มีไรเดอร์ที่ได้รับอนุมัติ — ไม่ชวนกด 1-Click (ใช้ได้เฉพาะเจ้าของ) และไม่ทำให้คิดว่าใบสมัครหาย
+        container.innerHTML = `
+            <div class="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-center space-y-2">
+                <div class="font-extrabold text-xs text-slate-800">ยังไม่มีไรเดอร์ที่ได้รับอนุมัติในระบบ</div>
+                <p class="text-[11px] text-slate-500 max-w-xs mx-auto">ใบสมัครที่ส่งแล้วต้องรอเจ้าของอนุมัติก่อน จึงจะเข้าสู่ระบบรับงานได้ ถ้ายังไม่เคยสมัคร กดปุ่มด้านล่าง</p>
+                <button type="button" onclick="switchRiderGuestTab('register')" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
+                    📝 ไปหน้าลงทะเบียนสมัครไรเดอร์
+                </button>
+            </div>
+        `;
+        return;
+    }
     if (!curRiders || curRiders.length === 0) {
         container.innerHTML = `
             <div class="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-center space-y-2.5">
@@ -26266,6 +26323,7 @@ async function handleOnPageRiderRegister(e) {
     closeRiderRegisterModal();
     closeRiderLoginModal();
     if (!isOwnerSignedIn()) {
+        rememberRiderApplicationNotice(code, displayName);
         showToast(`✅ ส่งใบสมัครแล้ว! รหัสของคุณ: ${code} (จดไว้) — รอเจ้าของอนุมัติ แล้วใช้รหัสนี้เข้าสู่ระบบ`);
         if (typeof switchRiderGuestTab === "function") switchRiderGuestTab("login");
         return;

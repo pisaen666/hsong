@@ -2095,7 +2095,7 @@
                                 <span class="bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full">เปิดรับสมัครด่วน</span>
                             </div>
                             <p class="text-amber-800 leading-relaxed">
-                                ร่วมทีมจัดส่งของสดเฮียส่ง รายได้ดี ค่ารอบเริ่มต้น ฿40/เที่ยว รับเงินไว โอนผ่านพร้อมเพย์ตรง ไม่หักเปอร์เซ็นต์ (0% GP) ลงทะเบียนด้านล่างเพื่อเริ่มรับงานได้ทันที!
+                                ร่วมทีมจัดส่งของสดเฮียส่ง รายได้ดี ค่ารอบเริ่มต้น ฿40/เที่ยว รับเงินไว โอนผ่านพร้อมเพย์ตรง ไม่หักเปอร์เซ็นต์ (0% GP) ลงทะเบียนด้านล่าง แล้วรอเจ้าของตรวจสอบและอนุมัติ ก็เริ่มรับงานได้เลย!
                             </p>
                         </div>
                     </div>
@@ -2225,6 +2225,8 @@
 
                 <!-- TAB 2: LOGIN PORTAL -->
                 <div id="rider-guest-tab-login" class="p-3 sm:p-5 max-w-md mx-auto w-full space-y-4 hidden">
+                    <!-- กล่องแจ้งสถานะใบสมัครที่เพิ่งส่ง (ค้างไว้ ไม่หายเอง) — วาดโดย renderRiderApplicationNotice() -->
+                    <div id="rider-application-notice"></div>
                     <!-- Quick Login Box -->
                     <div class="bg-white rounded-3xl p-5 shadow-md border border-slate-200 space-y-4 text-left text-xs">
                         <div class="border-b border-slate-100 pb-3 flex items-center gap-2">
