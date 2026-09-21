@@ -58,5 +58,24 @@
       "name": "หมู",
       "price": 100
     }
-  ]
+  ],
+  "merchant_applications/ZZSEEDM1": {
+    "id": "ZZSEEDM1",
+    "status": "approved",
+    "accessCode": "ZZSEEDM1",
+    "loginHash": "seedhash",
+    "loginSalt": "aa11",
+    "stallData": {
+      "stallId": "ZZSEEDM1",
+      "stallName": "ร้านมีรหัส",
+      "phone": "0833333333"
+    }
+  },
+  "custom_market_stalls/ZZSEEDS1": {
+    "stallId": "ZZSEEDS1",
+    "stallName": "ร้านมีรหัส",
+    "accessCode": "ZZSEEDS1",
+    "loginHash": "seedhash",
+    "loginSalt": "aa11"
+  }
 }

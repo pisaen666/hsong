@@ -40,8 +40,8 @@
     "merchant_applications": {
       ".read": true,
       "$id": {
-        ".write": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (!data.exists() && newData.exists()) || (data.exists() && newData.exists() && newData.child('status').val() === data.child('status').val() && newData.child('accessCode').val() === data.child('accessCode').val() && newData.child('id').val() === data.child('id').val())",
-        ".validate": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (newData.child('id').val() === $id && newData.hasChildren(['id', 'stallData', 'status']) && (data.exists() || (newData.child('status').val() === 'pending' && !newData.child('accessCode').exists())))"
+        ".write": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (!data.exists() && newData.exists()) || (data.exists() && newData.exists() && newData.child('status').val() === data.child('status').val() && newData.child('accessCode').val() === data.child('accessCode').val() && newData.child('id').val() === data.child('id').val() && newData.child('loginHash').val() === data.child('loginHash').val() && newData.child('loginSalt').val() === data.child('loginSalt').val())",
+        ".validate": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (newData.child('id').val() === $id && newData.hasChildren(['id', 'stallData', 'status']) && (data.exists() || (newData.child('status').val() === 'pending' && !newData.child('accessCode').exists() && !newData.child('loginHash').exists() && !newData.child('loginSalt').exists())))"
       }
     },
     "community_riders": {
@@ -53,7 +53,7 @@
     "custom_market_stalls": {
       ".read": true,
       "$id": {
-        ".write": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (data.exists() && newData.exists() && newData.child('stallId').val() === data.child('stallId').val() && newData.child('accessCode').val() === data.child('accessCode').val())"
+        ".write": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (data.exists() && newData.exists() && newData.child('stallId').val() === data.child('stallId').val() && newData.child('accessCode').val() === data.child('accessCode').val() && newData.child('loginHash').val() === data.child('loginHash').val() && newData.child('loginSalt').val() === data.child('loginSalt').val())"
       }
     },
     "stall_catalog_database": {

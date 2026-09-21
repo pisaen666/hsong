@@ -640,24 +640,24 @@ async function verifyRiderSecret(rider, secret) {
 
 // กันเดารหัสรัว ๆ ในเครื่องเดียว: ผิด 5 ครั้งภายใน 10 นาที ล็อก 5 นาที
 const _RIDER_LOGIN_FAIL_KEY = "talathub_rider_login_fail";
-function riderLoginLockedMs() {
+function riderLoginLockedMs(key) {
     try {
-        const o = JSON.parse(localStorage.getItem(_RIDER_LOGIN_FAIL_KEY) || "null");
+        const o = JSON.parse(localStorage.getItem(key || _RIDER_LOGIN_FAIL_KEY) || "null");
         if (o && o.until && o.until > Date.now()) return o.until - Date.now();
     } catch (e) { }
     return 0;
 }
-function _noteRiderLoginFail() {
+function _noteRiderLoginFail(key) {
     try {
         const now = Date.now();
-        const o = JSON.parse(localStorage.getItem(_RIDER_LOGIN_FAIL_KEY) || "null") || { times: [] };
+        const o = JSON.parse(localStorage.getItem(key || _RIDER_LOGIN_FAIL_KEY) || "null") || { times: [] };
         o.times = (o.times || []).filter(t => now - t < 10 * 60 * 1000).concat(now);
         if (o.times.length >= 5) { o.until = now + 5 * 60 * 1000; o.times = []; }
-        localStorage.setItem(_RIDER_LOGIN_FAIL_KEY, JSON.stringify(o));
+        localStorage.setItem(key || _RIDER_LOGIN_FAIL_KEY, JSON.stringify(o));
     } catch (e) { }
 }
-function _clearRiderLoginFail() {
-    try { localStorage.removeItem(_RIDER_LOGIN_FAIL_KEY); } catch (e) { }
+function _clearRiderLoginFail(key) {
+    try { localStorage.removeItem(key || _RIDER_LOGIN_FAIL_KEY); } catch (e) { }
 }
 
 // แกนล็อกอินไรเดอร์: คืน { ok, rider?, code, message }  (ไม่แตะ DOM เพื่อให้ทดสอบได้)
@@ -686,6 +686,69 @@ async function riderSecretLogin(numberRaw, secretRaw) {
     return { ok: true, rider, code: "ok" };
 }
 window.riderSecretLogin = riderSecretLogin;
+
+// =================================================================
+// รหัสผ่านเข้าระบบแผงค้า (ความลับ) — ทำแบบเดียวกับไรเดอร์
+// - "รหัสร้าน" (stallId เช่น APP-SHOP-6758) เป็นข้อมูลสาธารณะ ใช้เป็นชื่อผู้ใช้
+// - รหัสผ่านลับ 8 ตัวสร้างตอนเจ้าของอนุมัติ/กด "สร้างรหัสผ่าน" เก็บเฉพาะ loginSalt + loginHash
+//   (บนใบสมัคร merchant_applications และบน custom_market_stalls)
+// - เบอร์โทร / เลขแผง / รหัส 6 หลักเดิม ไม่ใช่รหัสผ่านอีกต่อไป
+// =================================================================
+const _MERCHANT_LOGIN_FAIL_KEY = "talathub_merchant_login_fail";
+
+function normalizeShopCode(v) {
+    return String(v == null ? "" : v).trim().toUpperCase().replace(/\s+/g, "");
+}
+
+// ข้อมูลร้านจากใบสมัคร (พก loginHash/loginSalt ไปด้วยเสมอ ไม่งั้นการบันทึกร้านจะถูกกฎฐานข้อมูลปฏิเสธ)
+function stallFromApp(app) {
+    const sd = (app && app.stallData) || {};
+    return { ...sd, accessCode: (app && app.accessCode) || sd.accessCode, loginHash: (app && app.loginHash) || sd.loginHash, loginSalt: (app && app.loginSalt) || sd.loginSalt };
+}
+
+function _findMerchantByShopCode(code, apps, stallLists) {
+    const same = v => v != null && normalizeShopCode(v) === code;
+    const app = (apps || []).find(a => a && (same(a.id) || (a.stallData && same(a.stallData.stallId)))) || null;
+    let stall = null;
+    for (const list of (stallLists || [])) {
+        if (!Array.isArray(list)) continue;
+        stall = list.find(s => s && same(s.stallId)) || null;
+        if (stall) break;
+    }
+    return { app, stall };
+}
+
+// แกนล็อกอินแผงค้า: คืน { ok, app?, stall?, code, message } (ไม่แตะ DOM เพื่อให้ทดสอบได้)
+// opts.fetchRemote: ฟังก์ชัน async คืนรายการใบสมัครจากฐานข้อมูลกลาง (ใช้เมื่อเครื่องนี้ยังไม่มีข้อมูลร้าน)
+async function merchantSecretLogin(shopRaw, secretRaw, opts) {
+    const lockedMs = riderLoginLockedMs(_MERCHANT_LOGIN_FAIL_KEY);
+    if (lockedMs > 0) return { ok: false, code: "locked", message: "⏳ ใส่รหัสผิดหลายครั้ง กรุณารออีก " + Math.ceil(lockedMs / 60000) + " นาที แล้วลองใหม่" };
+    const code = normalizeShopCode(shopRaw);
+    const secret = normalizeRiderSecret(secretRaw);
+    if (!code || !secret) return { ok: false, code: "empty", message: "⚠️ กรุณากรอกรหัสร้าน และรหัสผ่านเข้าระบบ" };
+
+    const bad = { ok: false, code: "bad", message: "⚠️ รหัสร้านหรือรหัสผ่านไม่ถูกต้อง" };
+    let found = _findMerchantByShopCode(code, loadMerchantApplications(), [MARKET_DATA, ALL_100_STALLS]);
+    if (!found.app && !found.stall && opts && typeof opts.fetchRemote === "function") {
+        try {
+            const remote = await opts.fetchRemote();
+            if (Array.isArray(remote) && remote.length) found = _findMerchantByShopCode(code, remote, [MARKET_DATA, ALL_100_STALLS]);
+        } catch (e) { }
+    }
+    const { app, stall } = found;
+    if (!app && !stall) { _noteRiderLoginFail(_MERCHANT_LOGIN_FAIL_KEY); return bad; }
+    if (app && app.status === "pending") return { ok: false, code: "pending", message: "⏳ ใบสมัครเปิดร้านของคุณยังรอเจ้าของอนุมัติ เมื่ออนุมัติแล้วเจ้าของจะส่งรหัสผ่านให้" };
+    if (app && app.status === "rejected") return { ok: false, code: "rejected", message: "❌ ใบสมัครนี้ไม่ผ่านการอนุมัติ กรุณาติดต่อเจ้าของ" };
+    const holder = (app && app.loginHash) ? app : ((stall && stall.loginHash) ? stall : null);
+    if (!holder) return { ok: false, code: "no-secret", message: "🔑 ร้านนี้ยังไม่มีรหัสผ่านเข้าระบบ กรุณาติดต่อเจ้าของเพื่อขอรหัสผ่านใหม่" };
+    let good = false;
+    try { good = await verifyRiderSecret(holder, secret); }
+    catch (e) { return { ok: false, code: "no-crypto", message: "⚠️ เบราว์เซอร์นี้ตรวจรหัสผ่านไม่ได้ กรุณาเปิดผ่านเว็บ https" }; }
+    if (!good) { _noteRiderLoginFail(_MERCHANT_LOGIN_FAIL_KEY); return bad; }
+    _clearRiderLoginFail(_MERCHANT_LOGIN_FAIL_KEY);
+    return { ok: true, code: "ok", app, stall: stall || stallFromApp(app) };
+}
+window.merchantSecretLogin = merchantSecretLogin;
 
 // เชื่อมช่องกรอกในหน้าเว็บกับแกนล็อกอิน
 async function submitRiderSecretLogin(numberInputId, secretInputId) {
@@ -18597,11 +18660,12 @@ function renderAdminStalls() {
                                                 ` : `
                                                     <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✕ ปฏิเสธ</span>
                                                 `}
-                                                ${app.accessCode ? `
+                                                ${app.status === 'approved' ? `
                                                     <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 text-[10px] font-mono font-black px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
-                                                        <span>🔑 รหัส:</span>
-                                                        <span class="tracking-widest">${escapeHtml(app.accessCode)}</span>
+                                                        <span>🏪 รหัสร้าน:</span>
+                                                        <span class="tracking-widest">${escapeHtml(stall.stallId || app.id)}</span>
                                                     </span>
+                                                    <button onclick="resetMerchantLoginSecret(${jsArg(stall.stallId || app.id)})" class="text-[10px] font-bold px-2 py-0.5 rounded-lg cursor-pointer ${app.loginHash ? 'bg-slate-100 text-slate-700 border border-slate-300' : 'bg-amber-100 text-amber-900 border border-amber-300'}">🔑 ${app.loginHash ? 'สร้างรหัสผ่านใหม่' : 'สร้างรหัสผ่าน'}</button>
                                                 ` : ''}
                                             </div>
                                             <div class="text-[11px] text-slate-500 flex items-center gap-2.5 flex-wrap mt-0.5 font-mono">
@@ -18688,11 +18752,12 @@ function renderAdminStalls() {
                                             <td class="p-3 text-slate-700 font-medium">${escapeHtml(s.ownerName) || 'เจ้าของแผง'}</td>
                                             <td class="p-3 font-mono font-bold text-emerald-700">📱 ${escapeHtml(s.phone) || '-'}</td>
                                             <td class="p-3">
-                                                ${s.accessCode ? `
-                                                    <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-lg font-mono font-bold text-xs tracking-wider inline-flex items-center gap-1 cursor-pointer" onclick="navigator.clipboard.writeText(${jsArg(s.accessCode)}); showToast('📋 คัดลอกรหัส ${escapeHtml(s.accessCode)} แล้ว');" title="คลิกเพื่อคัดลอกรหัส">
-                                                        <span>🔑</span>
-                                                        <span>${escapeHtml(s.accessCode)}</span>
+                                                ${s.stallId ? `
+                                                    <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-lg font-mono font-bold text-xs tracking-wider inline-flex items-center gap-1">
+                                                        <span>🏪</span>
+                                                        <span>${escapeHtml(s.stallId)}</span>
                                                     </span>
+                                                    <button onclick="resetMerchantLoginSecret(${jsArg(s.stallId)})" class="mt-1 px-2 py-0.5 rounded-lg text-[10px] font-bold ${s.loginHash ? 'bg-slate-100 text-slate-700 border border-slate-300' : 'bg-amber-100 text-amber-900 border border-amber-300'} cursor-pointer">🔑 ${s.loginHash ? 'สร้างรหัสใหม่' : 'สร้างรหัสผ่าน'}</button>
                                                 ` : '<span class="text-slate-400 text-[11px] italic">- ไม่มีรหัส -</span>'}
                                             </td>
                                             <td class="p-3 text-center">
@@ -19153,26 +19218,18 @@ function viewMerchantAppDetail(appId) {
                     <div class="flex items-center gap-2.5">
                         <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">🔑</span>
                         <div>
-                            <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">รหัสผ่าน 6 หลักสำหรับเข้าสู่ระบบ (ACCESS CODE)</div>
-                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${escapeHtml(app.accessCode) || '-'}</div>
+                            <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">รหัสร้าน (ใช้คู่กับรหัสผ่านลับที่เจ้าของส่งให้)</div>
+                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${escapeHtml(stall.stallId || app.id)}</div>
                         </div>
                     </div>
-                    <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">พร้อมใช้งาน</span>
+                    <span class="text-[10px] ${app.loginHash ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-bold px-2 py-0.5 rounded-md">${app.loginHash ? 'มีรหัสผ่านแล้ว' : 'ยังไม่มีรหัสผ่าน'}</span>
                 </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-emerald-200/60">
-                    <button type="button" onclick="sendRealSmsToApplicant(${jsArg(c1.phone || stall.phone)}, ${jsArg(app.accessCode)}, ${jsArg(stall.stallName)}, 'merchant')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
-                        <span class="material-symbols-outlined text-sm">sms</span>
-                        <span>ส่ง SMS จริง</span>
+                <div class="grid grid-cols-2 gap-1.5 pt-1 border-t border-emerald-200/60">
+                    <button type="button" onclick="resetMerchantLoginSecret(${jsArg(stall.stallId || app.id)})" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                        <span>🔑</span>
+                        <span>${app.loginHash ? 'สร้างรหัสผ่านใหม่' : 'สร้างรหัสผ่าน'} (แล้วส่งให้ร้านค้า)</span>
                     </button>
-                    <button type="button" onclick="sendLineNotificationToApplicant(${jsArg(c1.line || stall.lineId || stall.phone)}, ${jsArg(app.accessCode)}, ${jsArg(stall.stallName)}, 'merchant')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
-                        <span>💬</span>
-                        <span>ส่งแจ้ง LINE</span>
-                    </button>
-                    <button type="button" onclick="copyApprovalNotificationMessage(${jsArg(c1.phone || stall.phone)}, ${jsArg(app.accessCode)}, ${jsArg(stall.stallName)}, 'merchant')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
-                        <span class="material-symbols-outlined text-sm">content_copy</span>
-                        <span>คัดลอกข้อความ</span>
-                    </button>
-                    <a href="tel:${escapeHtml(c1.phone) || escapeHtml(stall.phone)}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
+                    <a href="tel:${escapeHtml(c1.phone) || escapeHtml(stall.phone)}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">call</span>
                         <span>โทรหา</span>
                     </a>
@@ -19481,7 +19538,7 @@ function handleMerchantAppEditSubmit(e) {
     app.stallData.zone = zone;
     app.stallData.promptPayNumber = promptPay || bankNo || phone;
     app.stallData.highlight = highlight;
-    app.accessCode = accessCode || null;
+    app.accessCode = app.accessCode || accessCode || null;   // รหัสอ้างอิงเดิมไม่ถูกแก้ (ไม่ใช่รหัสผ่านแล้ว)
     app.status = status;
     app.updatedAt = new Date().toISOString();
 
@@ -19510,7 +19567,7 @@ function handleMerchantAppEditSubmit(e) {
     const stallId = app.stallData?.stallId || app.id;
     const sName = app.stallData?.stallName;
     if (status === "approved") {
-        const stallObj = { ...app.stallData, accessCode: app.accessCode };
+        const stallObj = stallFromApp(app);
         const mIdx = MARKET_DATA.findIndex(s => s.stallId === stallObj.stallId || s.phone === phone);
         if (mIdx >= 0) MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...stallObj };
         else MARKET_DATA.push(stallObj);
@@ -19669,7 +19726,7 @@ function printA4MerchantApplication(appId) {
             <div style="font-size: 16px; font-weight: bold; color: #1e293b;">${escapeHtml(stall.stallName) || 'แผงค้าใหม่'} (เลขแผง: ${escapeHtml(stall.stallNumber) || '-'})</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เจ้าของแผง: <strong>${escapeHtml(stall.ownerName) || '-'}</strong> | เบอร์โทรศัพท์: <strong>${escapeHtml(stall.phone) || '-'}</strong> | LINE: <strong>${escapeHtml(stall.lineId) || escapeHtml(stall.phone) || '-'}</strong></div>
             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">โซน: <strong>โซน ${escapeHtml(stall.zone) || '-'}</strong> | หมวดหมู่: <strong>${escapeHtml(stall.category) || escapeHtml(stall.stallTag) || 'ของสด'}</strong> | สถานะ: <strong>${statusThai}</strong></div>
-            ${app.accessCode ? `<div style="font-size: 12px; color: #047857; font-weight: bold; margin-top: 4px;">รหัสผ่าน 6 หลักเข้าสู่ระบบ (ACCESS CODE): ${escapeHtml(app.accessCode)}</div>` : ''}
+            ${app.status === 'approved' ? `<div style="font-size: 12px; color: #047857; font-weight: bold; margin-top: 4px;">รหัสร้าน: ${escapeHtml(stall.stallId || app.id)} (รหัสผ่านเข้าระบบเป็นความลับ เจ้าของแจ้งให้ทางข้อความ ไม่พิมพ์ในเอกสาร)</div>` : ''}
         </div>
         <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
             <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; color: #334155;">จุดเด่นและรายละเอียดร้านค้า</div>
@@ -20187,7 +20244,7 @@ function initMerchantRealtimeSync() {
                 const sName = app?.stallData?.stallName;
 
                 if (app && app.status === "approved" && app.stallData) {
-                    const sData = { ...app.stallData, accessCode: app.accessCode || app.stallData.accessCode };
+                    const sData = stallFromApp(app);
                     const mIdx = MARKET_DATA.findIndex(s => s.stallId === sData.stallId);
                     if (mIdx >= 0) {
                         MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...sData };
@@ -27431,7 +27488,7 @@ function renderAuthHeaderButtons() {
                     <span class="material-symbols-outlined text-sm text-amber-400">store</span>
                     <span class="truncate max-w-[80px]">${escapeHtml(state.activeMerchant.stallNumber) || 'ร้านค้า'}</span>
                 </span>
-                <button onclick="loginAsMerchantStall(${jsArg(state.activeMerchant.stallId)})" class="text-[10px] text-amber-200 bg-amber-800/80 hover:bg-amber-700 px-1.5 py-0.5 rounded font-bold transition-all">
+                <button onclick="reopenMyMerchantStall(${jsArg(state.activeMerchant.stallId)})" class="text-[10px] text-amber-200 bg-amber-800/80 hover:bg-amber-700 px-1.5 py-0.5 rounded font-bold transition-all">
                     จัดการ
                 </button>
                 <button onclick="logoutMerchant()" class="text-[10px] text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 py-0.5 rounded font-bold transition-all" title="ออกจากระบบร้านค้า">
@@ -27573,9 +27630,13 @@ function openMerchantLoginModal() {
     const modal = document.getElementById("merchant-login-modal");
     if (modal) modal.classList.remove("hidden");
     const input = document.getElementById("merchant-code-login-input");
-    if (input) {
-        input.value = "";
-        setTimeout(() => input.focus(), 100);
+    const shopInput = document.getElementById("merchant-shop-login-input");
+    const errBox = document.getElementById("merchant-login-modal-error");
+    if (errBox) { errBox.textContent = ""; errBox.classList.add("hidden"); }
+    if (input) input.value = "";
+    if (shopInput) {
+        shopInput.value = "";
+        setTimeout(() => shopInput.focus(), 100);
     }
 }
 
@@ -28189,7 +28250,25 @@ function setMerchantOwnerImgPreset(type) {
     updateMerchantImagePreviews();
 }
 
+// เจ้าของเท่านั้น: สวมเข้าแผงค้าใดก็ได้ (ปุ่ม "เข้าระบบร้านนี้" ในหน้าแอดมิน)
+// แผงค้าตัวจริงต้องเข้าผ่านรหัสร้าน + รหัสผ่านที่ handleMerchantCodeLoginSubmit เท่านั้น
 function loginAsMerchantStall(stallId) {
+    if (!requireOwnerAction()) return;
+    _enterMerchantStall(stallId);
+}
+window.loginAsMerchantStall = loginAsMerchantStall;
+
+// ปุ่ม "จัดการ" บนแถบด้านบน: กลับเข้าแผงที่ล็อกอินอยู่แล้วเท่านั้น (คนอื่นต้องเป็นเจ้าของ)
+function reopenMyMerchantStall(stallId) {
+    if (state.activeMerchant && state.activeMerchant.isLoggedIn && state.activeMerchant.stallId === stallId) {
+        _enterMerchantStall(stallId);
+        return;
+    }
+    loginAsMerchantStall(stallId);
+}
+window.reopenMyMerchantStall = reopenMyMerchantStall;
+
+function _enterMerchantStall(stallId) {
     closeMerchantLoginModal();
     closeMerchantPortalModal();
     activeMerchantStallId = stallId;
@@ -28200,7 +28279,7 @@ function loginAsMerchantStall(stallId) {
         const _apps = loadMerchantApplications();
         const _matchApp = _apps.find(a => a.status === 'approved' && (a.id === stallId || (a.stallData && a.stallData.stallId === stallId)));
         if (_matchApp && _matchApp.stallData) {
-            stall = { ..._matchApp.stallData, accessCode: _matchApp.accessCode || _matchApp.stallData.accessCode };
+            stall = stallFromApp(_matchApp);
             if (!MARKET_DATA.find(s => s.stallId === stall.stallId)) {
                 MARKET_DATA.unshift(stall);
                 if (typeof ALL_100_STALLS !== "undefined" && !ALL_100_STALLS.find(s => s.stallId === stall.stallId)) {
@@ -28240,7 +28319,6 @@ function loginAsMerchantStall(stallId) {
     }
     showToast(`🎉 เข้าสู่ระบบร้านค้า "${stall.stallName}" เรียบร้อยแล้ว`);
 }
-window.loginAsMerchantStall = loginAsMerchantStall;
 
 function openMerchantEditModal(stallId) {
     let stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
@@ -30392,7 +30470,7 @@ async function fetchOnlineStallsStartup() {
                     if (app.stallData.products && Array.isArray(app.stallData.products)) {
                         app.stallData.products.forEach(p => { if (p && p.image) delete p.image; });
                     }
-                    const sData = { ...app.stallData, accessCode: app.accessCode || app.stallData.accessCode };
+                    const sData = stallFromApp(app);
                     const mIdx = MARKET_DATA.findIndex(s => s.stallId === sData.stallId);
                     if (mIdx >= 0) {
                         MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...sData };
@@ -30472,7 +30550,7 @@ function initTalatHubApp() {
         const _mAppsOnInit = loadMerchantApplications();
         _mAppsOnInit.forEach(app => {
             if (app && app.status === 'approved' && app.stallData && app.stallData.stallId) {
-                const stall = { ...app.stallData, accessCode: app.accessCode || app.stallData.accessCode };
+                const stall = stallFromApp(app);
                 const mIdx = MARKET_DATA.findIndex(s => s.stallId === stall.stallId);
                 if (mIdx >= 0) {
                     MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...stall };
@@ -30616,13 +30694,13 @@ function openSimulatedSmsModal(phone, codeVal, name, roleType, lineId, riderNumb
 
     if (titleEl) titleEl.textContent = "ส่งรหัสเข้าสู่ระบบ" + roleName + "เรียบร้อย";
     if (subtitleEl) subtitleEl.textContent = roleType === "merchant"
-        ? "ส่ง SMS & LINE แจ้งเตือนไปยัง " + name + " สำเร็จแล้ว"
+        ? "กรุณาคัดลอกข้อความนี้ส่งให้ " + name + " ทาง LINE/SMS เอง (ระบบไม่ได้ส่งให้ และจะไม่แสดงรหัสผ่านนี้อีก)"
         : "กรุณาคัดลอกข้อความนี้ส่งให้ " + name + " ทาง LINE/SMS เอง (ระบบไม่ได้ส่งให้ และจะไม่แสดงรหัสผ่านนี้อีก)";
     if (msgEl && roleType !== "merchant") {
         // ไรเดอร์: เข้าสู่ระบบด้วย "เลขไรเดอร์ + รหัสผ่านลับ" (รหัสผ่านนี้แสดงครั้งเดียว ระบบไม่เก็บรหัสจริง)
         msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! ใบสมัครไรเดอร์ได้รับอนุมัติแล้ว เลขไรเดอร์ของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
     } else if (msgEl) {
-        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! การลงทะเบียนเปิดร้าน/รับงานได้รับการอนุมัติแล้ว รหัสเข้าสู่ระบบ 6 หลักของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> นำรหัสนี้ไปใส่ใน " + roleNum + " เพื่อเริ่มปฏิบัติงานได้ทันทีครับ";
+        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! ใบสมัครเปิดร้านค้าได้รับอนุมัติแล้ว รหัสร้านของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
     }
 
     modal.classList.remove("hidden");
@@ -30661,8 +30739,10 @@ function testLoginWithGeneratedCode() {
 
     if (roleType === "merchant") {
         openMerchantLoginModal();
+        const shopInput = document.getElementById("merchant-shop-login-input");
         const input = document.getElementById("merchant-code-login-input");
-        if (input) {
+        if (input && shopInput) {
+            shopInput.value = riderNumber || "";
             input.value = code;
             handleMerchantCodeLoginSubmit();
         }
@@ -30684,6 +30764,10 @@ function getApprovalNotificationText(phone, code, name, roleType, riderNumber) {
         // ไรเดอร์: เลขไรเดอร์ + รหัสผ่านลับ (ไม่มีการล็อกอินด้วยเบอร์โทรอีกต่อไป)
         return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัครร่วมทีมไรเดอร์ของคุณได้รับการอนุมัติเรียบร้อยแล้ว!\n🛵 เลขไรเดอร์: ${riderNumber || '-'}\n🔑 รหัสผ่านเข้าระบบ: ${code}\n(เก็บรหัสผ่านเป็นความลับ อย่าบอกใคร)` +
             `\n\nเข้าสู่ระบบที่เมนู "4. ไรเดอร์" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nใส่เลขไรเดอร์และรหัสผ่านข้างต้น แล้วเริ่มรับงานได้เลยครับ!`;
+    }
+    if (roleType === "merchant") {
+        // แผงค้า: รหัสร้าน (สาธารณะ) + รหัสผ่านลับ
+        return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัครเปิดร้านค้าของคุณได้รับการอนุมัติแล้ว 🎉\n\nรหัสร้าน: ${riderNumber || '-'}\nรหัสผ่านเข้าระบบ: ${code}\n\nเข้าสู่ระบบที่เมนู "3. แผงค้า" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nใส่รหัสร้านและรหัสผ่านนี้ (เก็บรหัสผ่านเป็นความลับ อย่าบอกใคร)`;
     }
     const roleTitle = roleType === "merchant" ? "เปิดร้านค้า" : "ร่วมทีมไรเดอร์";
     const roleTarget = roleType === "merchant" ? "3. แผงค้า" : "4. ไรเดอร์";
@@ -30885,14 +30969,14 @@ function handleCheckApplicationStatusSubmit() {
                         <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900">${statusText}</span>
                     </div>
                     <div class="text-[11px] text-slate-500">หมายเลขแผง: ${escapeHtml(mApp.stallData.stallNumber)} • เจ้าของ: ${escapeHtml(mApp.stallData.ownerName)}</div>
-                    ${isApproved && mApp.accessCode ? `
+                    ${isApproved ? `
                         <div class="p-2.5 bg-slate-900 text-white rounded-xl flex items-center justify-between font-mono">
                             <div>
-                                <div class="text-[9px] text-slate-400 font-sans">รหัสเข้าสู่ระบบแผงค้า 6 หลัก:</div>
-                                <div class="text-base font-black text-amber-300 tracking-wider">${escapeHtml(mApp.accessCode)}</div>
+                                <div class="text-[9px] text-slate-400 font-sans">รหัสร้านของคุณ (ใช้คู่กับรหัสผ่านที่เจ้าของส่งให้):</div>
+                                <div class="text-base font-black text-amber-300 tracking-wider">${escapeHtml(mApp.stallData.stallId || mApp.id)}</div>
                             </div>
-                            <button onclick="closeStatusCheckModal(); openMerchantLoginModal(); document.getElementById('merchant-code-login-input').value='${mApp.accessCode}'; handleMerchantCodeLoginSubmit();" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-sans font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
-                                เข้าสู่ระบบทันที >
+                            <button onclick="closeStatusCheckModal(); openMerchantLoginModal(); document.getElementById('merchant-shop-login-input').value=${jsArg(mApp.stallData.stallId || mApp.id)}; document.getElementById('merchant-code-login-input').focus();" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-sans font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
+                                ไปหน้าเข้าสู่ระบบ >
                             </button>
                         </div>
                     ` : ""}
@@ -30950,24 +31034,29 @@ function handleCheckApplicationStatusSubmit() {
 }
 window.handleCheckApplicationStatusSubmit = handleCheckApplicationStatusSubmit;
 
-function approveMerchantApplication(appId) {
-    if (!requireOwnerAction()) return;
+async function approveMerchantApplication(appId) {
+    if (!requireOwnerAction()) return false;
     const apps = loadMerchantApplications();
     const app = apps.find(a => a.id === appId);
     if (!app) {
         showToast("⚠️ ไม่พบข้อมูลใบสมัคร");
-        return;
+        return false;
     }
 
-    // Keep the code already issued so a repeat approval never invalidates the merchant's login
-    const code = app.accessCode || generate6DigitAccessCode();
+    // รหัสผ่านลับ: แสดงครั้งเดียวในหน้าต่างส่งข้อความ เก็บเฉพาะ salt + hash
+    let cred;
+    try { cred = await makeRiderLoginCredential(); }
+    catch (e) { showToast("⚠️ สร้างรหัสผ่านไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return false; }
+
     app.status = "approved";
-    app.accessCode = code;
+    app.accessCode = app.accessCode || app.id;   // รหัสอ้างอิงร้าน (สาธารณะ) ไม่ใช่รหัสผ่าน
     app.approvedAt = new Date().toISOString();
+    app.loginSalt = cred.loginSalt;
+    app.loginHash = cred.loginHash;
     saveMerchantApplications(apps);
 
     // Create stall in market data & all stalls
-    const stallObj = { ...app.stallData, accessCode: code };
+    const stallObj = stallFromApp(app);
     const existingIndex = MARKET_DATA.findIndex(s => s.stallId === stallObj.stallId);
     if (existingIndex >= 0) MARKET_DATA[existingIndex] = stallObj;
     else MARKET_DATA.push(stallObj);
@@ -31001,10 +31090,49 @@ function approveMerchantApplication(appId) {
         updateStallRotationUI();
     }
 
-    showToast("🎉 อนุมัติเปิดร้าน \"" + stallObj.stallName + "\" สำเร็จ! รหัสผ่าน: " + code);
-    openSimulatedSmsModal(stallObj.phone, code, stallObj.stallName, "merchant", stallObj.lineId || (app && app.lineId));
+    showToast("🎉 อนุมัติเปิดร้าน \"" + stallObj.stallName + "\" สำเร็จ! กรุณาคัดลอกรหัสผ่านส่งให้ร้านค้า (แสดงครั้งเดียว)");
+    openSimulatedSmsModal(stallObj.phone, cred.secret, stallObj.stallName, "merchant", stallObj.lineId || (app && app.lineId), stallObj.stallId || app.id);
+    return true;
 }
+
+
 window.approveMerchantApplication = approveMerchantApplication;
+
+// เจ้าของ: สร้างรหัสผ่านเข้าระบบใหม่ให้ร้านที่อนุมัติแล้ว (รหัสเดิมใช้ไม่ได้ทันที) แสดงรหัสใหม่ครั้งเดียวในหน้าต่างส่งข้อความ
+async function resetMerchantLoginSecret(stallIdRaw) {
+    if (!requireOwnerAction()) return;
+    const stallId = String(stallIdRaw || "");
+    const apps = loadMerchantApplications();
+    const app = apps.find(a => a && (a.id === stallId || (a.stallData && a.stallData.stallId === stallId))) || null;
+    const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId) || (app ? stallFromApp(app) : null);
+    if (!app && !stall) { showToast("⚠️ ไม่พบข้อมูลร้านค้า"); return; }
+    if (app && app.status !== "approved") { showToast("⚠️ สร้างรหัสได้เฉพาะร้านที่อนุมัติแล้ว"); return; }
+    const name = (stall && stall.stallName) || (app && app.stallData && app.stallData.stallName) || stallId;
+    if (!confirm(`สร้างรหัสผ่านเข้าระบบใหม่ให้ร้าน "${name}" ?
+
+รหัสเดิมจะใช้ไม่ได้ทันที และรหัสใหม่จะแสดงให้เห็นครั้งเดียว (ต้องคัดลอกส่งให้ร้านค้า)`)) return;
+    let cred;
+    try { cred = await makeRiderLoginCredential(); }
+    catch (e) { showToast("⚠️ สร้างรหัสไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return; }
+
+    if (app) {
+        app.loginSalt = cred.loginSalt;
+        app.loginHash = cred.loginHash;
+        saveMerchantApplications(apps);
+    }
+    [MARKET_DATA, ALL_100_STALLS].forEach(list => {
+        const s = list.find(x => x && x.stallId === stallId);
+        if (s) { s.loginSalt = cred.loginSalt; s.loginHash = cred.loginHash; }
+    });
+    saveMarketDataToStorage();
+    if (typeof renderAdminStalls === "function") renderAdminStalls();
+    const detail = document.getElementById("merchant-app-detail-modal");
+    if (app && detail && !detail.classList.contains("hidden") && typeof viewMerchantAppDetail === "function") viewMerchantAppDetail(app.id);
+
+    showToast("🔑 สร้างรหัสผ่านใหม่แล้ว กรุณาคัดลอกส่งให้ร้านค้า (แสดงครั้งเดียว)");
+    openSimulatedSmsModal((stall && stall.phone) || "", cred.secret, name, "merchant", (stall && stall.lineId) || "", stallId);
+}
+window.resetMerchantLoginSecret = resetMerchantLoginSecret;
 
 function goToAdminToApproveMerchantFromSuccess() {
     closeMerchantPortalModal();
@@ -31036,7 +31164,7 @@ function goToAdminToApproveMerchantFromSuccess() {
 }
 window.goToAdminToApproveMerchantFromSuccess = goToAdminToApproveMerchantFromSuccess;
 
-function approveAndLoginCurrentSubmittedMerchant() {
+async function approveAndLoginCurrentSubmittedMerchant() {
     if (!requireOwnerAction()) return;
     const apps = loadMerchantApplications();
     const app = _lastSubmittedMerchantApp ? apps.find(a => a.id === _lastSubmittedMerchantApp.id) : apps.find(a => a.status === "pending");
@@ -31046,7 +31174,8 @@ function approveAndLoginCurrentSubmittedMerchant() {
     }
 
     if (app.status !== "approved") {
-        approveMerchantApplication(app.id);
+        const approved = await approveMerchantApplication(app.id);
+        if (!approved) return;
     }
 
     closeMerchantPortalModal();
@@ -31086,131 +31215,75 @@ function rejectMerchantApplication(appId) {
 window.rejectMerchantApplication = rejectMerchantApplication;
 
 async function handleMerchantCodeLoginSubmit() {
-    const inputEl = document.getElementById("merchant-code-login-input");
-    if (!inputEl) return;
-    const query = inputEl.value.trim().toUpperCase();
-    if (!query) {
-        showToast("⚠️ กรุณากรอกรหัสผ่าน หรือเบอร์โทรศัพท์");
-        inputEl.focus();
-        return;
-    }
-
-    // Role 3: เจ้าของที่ล็อกอินอยู่เข้าแผงค้าแรกในระบบเพื่อดูแล/ทดสอบได้ (คำว่า ADMIN6305 ใช้ได้เฉพาะตอนล็อกอินเจ้าของแล้ว)
-    if (isOwnerSignedIn() && (query === "ADMIN6305" || query === "ADMIN")) {
-        let defaultStall = (Array.isArray(MARKET_DATA) && MARKET_DATA[0]) || { stallId: "stall_chicken", name: "แผงป้าพร ไก่สดตลาดบ้านบึง" };
-        state.activeMerchant = {
-            isLoggedIn: true,
-            stallId: defaultStall.stallId || "stall_chicken",
-            name: defaultStall.name || "แผงค้าหลัก (Master Merchant)",
-            role: "merchant_admin",
-            loggedInAt: Date.now()
-        };
-        saveMerchantToStorage(state.activeMerchant);
-        closeMerchantLoginModal();
-        setActiveRoleView("merchant");
-        if (typeof renderMerchantView === "function") renderMerchantView();
-        showToast("🎉 เข้าสู่ระบบแผงค้า (Role 3) สำเร็จ!");
-        return;
-    }
+    const shopEl = document.getElementById("merchant-shop-login-input");
+    const secEl = document.getElementById("merchant-code-login-input");
+    if (!shopEl || !secEl) return;
+    // ข้อความผิดพลาดเป็นกล่องแดงใต้ปุ่ม (toast หายเร็วและอยู่ล่างจอ)
+    const errEl = document.getElementById("merchant-login-modal-error");
+    const showLoginError = msg => {
+        if (!errEl) return;
+        errEl.textContent = msg || "";
+        errEl.classList.toggle("hidden", !msg);
+    };
+    showLoginError("");
 
     const submitBtn = document.querySelector("#merchant-login-modal button[onclick*='handleMerchantCodeLoginSubmit']");
     const origBtnText = submitBtn ? submitBtn.innerHTML : "";
     if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.innerHTML = `<span class="inline-block animate-spin mr-1.5">⏳</span> กำลังตรวจสอบรหัสออนไลน์...`;
+        submitBtn.innerHTML = `<span class="inline-block animate-spin mr-1.5">⏳</span> กำลังตรวจสอบรหัส...`;
     }
 
-    const cleanQuery = query.replace(/[-\s]/g, "");
-
-    function findInApps(appsList) {
-        if (!Array.isArray(appsList)) return null;
-        return appsList.find(a => a && (
-            (a.accessCode && a.accessCode.trim().toUpperCase() === query) ||
-            (a.stallData && a.stallData.accessCode && a.stallData.accessCode.trim().toUpperCase() === query) ||
-            (a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === cleanQuery) ||
-            (a.id && a.id.trim().toUpperCase() === query)
-        ));
-    }
-
-    function findInStalls(stallsList) {
-        if (!Array.isArray(stallsList)) return null;
-        return stallsList.find(s => s && (
-            (s.accessCode && s.accessCode.trim().toUpperCase() === query) ||
-            (s.phone && s.phone.replace(/[-\s]/g, "") === cleanQuery) ||
-            (s.stallNumber && s.stallNumber.trim().toUpperCase() === query) ||
-            (s.stallId && s.stallId.trim().toUpperCase() === query)
-        ));
-    }
-
-    // 1. Search in local apps & stalls
-    let apps = loadMerchantApplications();
-    let matchedApp = findInApps(apps);
-    let matchedStall = findInStalls(MARKET_DATA) || findInStalls(ALL_100_STALLS);
-
-    // 2. If not found locally, fetch directly from Firebase Realtime Database
-    if (!matchedApp && !matchedStall) {
-        try {
-            let remoteData = null;
-            if (isFirebaseReady() && db) {
-                try {
-                    const snap = await db.ref("merchant_applications").once("value");
-                    remoteData = snap.val();
-                } catch (e) {
-                    console.warn("db.ref check failed:", e);
+    let res;
+    try {
+        res = await merchantSecretLogin(shopEl.value, secEl.value, {
+            fetchRemote: async () => {
+                let remoteData = null;
+                if (isFirebaseReady() && db) {
+                    try { remoteData = (await db.ref("merchant_applications").once("value")).val(); }
+                    catch (e) { console.warn("db.ref check failed:", e); }
                 }
+                if (!remoteData) {
+                    const r = await fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json");
+                    if (r.ok) remoteData = await r.json();
+                }
+                const list = cloudValToList(remoteData, _keyOfMerchantApp);
+                if (list.length > 0) {
+                    try { localStorage.setItem("talathub_merchant_applications", JSON.stringify(list)); } catch (e) { }
+                }
+                return list;
             }
-            if (!remoteData) {
-                const res = await fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json");
-                if (res.ok) remoteData = await res.json();
-            }
-
-            const remoteList = cloudValToList(remoteData, _keyOfMerchantApp);
-
-            if (remoteList.length > 0) {
-                localStorage.setItem("talathub_merchant_applications", JSON.stringify(remoteList));
-                apps = remoteList;
-                matchedApp = findInApps(remoteList);
-            }
-        } catch (fetchErr) {
-            console.warn("Direct Firebase check failed:", fetchErr);
+        });
+    } catch (e) {
+        res = { ok: false, code: "error", message: "⚠️ เข้าสู่ระบบไม่สำเร็จ กรุณาลองอีกครั้ง (" + (e && e.message ? e.message : "ข้อผิดพลาดไม่ทราบสาเหตุ") + ")" };
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origBtnText;
         }
     }
 
-    if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = origBtnText;
-    }
-
-    if (!matchedStall && matchedApp && matchedApp.stallData) {
-        matchedStall = { ...matchedApp.stallData, accessCode: matchedApp.accessCode || matchedApp.stallData.accessCode };
-        if (!MARKET_DATA.find(s => s.stallId === matchedStall.stallId)) {
-            MARKET_DATA.unshift(matchedStall);
-            if (typeof ALL_100_STALLS !== "undefined" && !ALL_100_STALLS.find(s => s.stallId === matchedStall.stallId)) {
-                ALL_100_STALLS.unshift(matchedStall);
-            }
-            saveMarketDataToStorage();
-        }
-    }
-
-    if (!matchedStall) {
-        const pendingApp = apps.find(a => a.status === "pending" && (
-            (a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === cleanQuery) ||
-            (a.id && a.id.trim().toUpperCase() === query)
-        ));
-        if (pendingApp) {
-            alert("⏳ ใบสมัครร้าน \"" + (pendingApp.stallData?.stallName || pendingApp.id) + "\" ของคุณยังอยู่ระหว่างการพิจารณาโดยแอดมิน\n\nเมื่อแอดมินอนุมัติแล้ว จะได้รับรหัสผ่าน 6 หลักเพื่อเข้าใช้งานครับ");
-            return;
-        }
-
-        alert("⚠️ ไม่พบรหัสดังกล่าว..กรุณาตรวจสอบความถูกต้อง หรือถ้าได้รับการอนุมัติแล้วโปรดดูที่กล่องรับข้อความจากเบอร์โทรศัพท์หรือที่ไลน์ที่ให้ไว้กับทางเรา");
-        showToast("⚠️ ไม่พบรหัสดังกล่าว..กรุณาตรวจสอบความถูกต้อง");
+    if (!res.ok) {
+        showLoginError(res.message);
+        showToast(res.message);
+        if (res.code === "bad") { secEl.value = ""; secEl.focus(); }
         return;
     }
+    secEl.value = "";
 
+    const matchedStall = res.stall;
+    if (!MARKET_DATA.find(s => s.stallId === matchedStall.stallId)) {
+        MARKET_DATA.unshift(matchedStall);
+        if (typeof ALL_100_STALLS !== "undefined" && !ALL_100_STALLS.find(s => s.stallId === matchedStall.stallId)) {
+            ALL_100_STALLS.unshift(matchedStall);
+        }
+        saveMarketDataToStorage();
+    }
     closeMerchantLoginModal();
-    loginAsMerchantStall(matchedStall.stallId);
-    showToast("🎉 ยืนยันรหัสถูกต้อง! เข้าสู่ระบบแผงค้า " + matchedStall.stallName + " เรียบร้อยแล้ว");
+    _enterMerchantStall(matchedStall.stallId);
 }
+
+
 window.handleMerchantCodeLoginSubmit = handleMerchantCodeLoginSubmit;
 
 window.submitMerchantApplication = saveMerchantStallData;

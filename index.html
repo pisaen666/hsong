@@ -4007,19 +4007,26 @@
                 </button>
             </div>
 
-            <!-- Login via 6-digit Merchant Code or Phone -->
+            <!-- Login via shop code + secret password -->
             <div class="space-y-2 p-3.5 bg-emerald-50/70 border border-emerald-200/90 rounded-2xl">
                 <label class="block text-xs font-bold text-slate-800">
                     <span class="flex items-center gap-1.5 text-emerald-900">
                         <span class="material-symbols-outlined text-base text-emerald-600 font-bold">key</span>
-                        <span>กรอกรหัสผ่านร้านค้า หรือเบอร์โทรศัพท์:</span>
+                        <span>กรอกรหัสร้าน และรหัสผ่านที่เจ้าของส่งให้:</span>
                     </span>
                 </label>
                 <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">storefront</span>
+                    <input type="text" id="merchant-shop-login-input" autocomplete="username"
+                        placeholder="รหัสร้าน เช่น APP-SHOP-1234"
+                        class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-emerald-300 font-bold font-mono text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 uppercase outline-none bg-white shadow-xs"
+                        onkeydown="if(event.key === 'Enter') document.getElementById('merchant-code-login-input').focus()">
+                </div>
+                <div class="relative">
                     <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">pin</span>
-                    <input type="password" id="merchant-code-login-input"
-                        placeholder="กรอกรหัสผ่าน หรือเบอร์โทรศัพท์ร้านค้า"
-                        class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-emerald-300 font-bold font-mono text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none bg-white shadow-xs"
+                    <input type="password" id="merchant-code-login-input" autocomplete="current-password"
+                        placeholder="รหัสผ่าน 8 ตัว เช่น K7MQ-2XTA"
+                        class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-emerald-300 font-bold font-mono text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 uppercase outline-none bg-white shadow-xs"
                         onkeydown="if(event.key === 'Enter') handleMerchantCodeLoginSubmit()">
                 </div>
                 <button type="button" onclick="handleMerchantCodeLoginSubmit()"
@@ -4027,6 +4034,7 @@
                     <span class="material-symbols-outlined text-sm font-bold">login</span>
                     <span>เข้าสู่ระบบแผงค้า (Role 3)</span>
                 </button>
+                <div id="merchant-login-modal-error" role="alert" aria-live="assertive" class="hidden w-full px-3 py-2.5 rounded-xl border-2 border-rose-300 bg-rose-50 text-rose-800 font-black text-sm text-center leading-snug"></div>
             </div>
         </div>
     </div>
@@ -6104,18 +6112,14 @@
 
                 <div>
                     <label class="font-bold text-slate-700 block mb-1 flex items-center justify-between">
-                        <span>รหัสผ่าน 6 หลักเข้าสู่ระบบ (ACCESS CODE):</span>
-                        <span class="text-[10px] text-emerald-700 font-normal">แผงค้าใช้ล็อกอินเข้าระบบ</span>
+                        <span>รหัสอ้างอิงร้าน (ไม่ใช่รหัสผ่านเข้าระบบ):</span>
+                        <span class="text-[10px] text-emerald-700 font-normal">สร้างรหัสผ่านที่ปุ่ม 🔑 ในรายการร้าน</span>
                     </label>
                     <div class="flex gap-2">
-                        <input type="text" id="merchant-edit-accesscode" maxlength="6"
+                        <input type="text" id="merchant-edit-accesscode" maxlength="40" readonly
                             class="flex-1 border border-emerald-400 font-mono font-black text-sm uppercase rounded-xl px-3 py-2 text-emerald-950 bg-emerald-50/50 focus:ring-2 focus:ring-emerald-500 outline-none tracking-widest"
                             placeholder="เช่น CT4578">
-                        <button type="button"
-                            onclick="document.getElementById('merchant-edit-accesscode').value = generate6DigitAccessCode()"
-                            class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs active:scale-95 transition-all shrink-0 cursor-pointer">
-                            🔄 สุ่มรหัสใหม่
-                        </button>
+
                     </div>
                 </div>
 
@@ -7244,7 +7248,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.31_login_error_msg"></script>
+    <script src="app.js?v=10.32_merchant_secret_login"></script>
 </body>
 
 </html>

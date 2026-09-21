@@ -3,7 +3,7 @@
 // ผลลัพธ์: hsong-test.rules.v2.json และ hsong-1f342.rules.v2.json  (ไฟล์ .rules.json เดิมยังไม่ถูกแตะ)
 //
 // หลักการ v2 — "ใครก็สมัครได้ แต่อนุมัติ/สร้างรายชื่อจริง/ลบ ต้องเป็นเจ้าของ":
-//   rider_applications, merchant_applications : ใครก็สร้างใบสมัครใหม่ได้ แต่ต้องเป็น pending; แก้รายการเดิมได้แต่แก้ status/รหัส/รหัสผ่านไรเดอร์ (loginHash, loginSalt) ไม่ได้; ลบ/อนุมัติ = เจ้าของ
+//   rider_applications, merchant_applications : ใครก็สร้างใบสมัครใหม่ได้ แต่ต้องเป็น pending; แก้รายการเดิมได้แต่แก้ status/รหัส/รหัสผ่าน (loginHash, loginSalt) ไม่ได้; ลบ/อนุมัติ = เจ้าของ
 //   community_riders, custom_market_stalls    : สร้าง/ลบ = เจ้าของเท่านั้น; ผู้ใช้ทั่วไปแก้รายการเดิมได้ (สถานะ ตำแหน่ง เปิด-ปิดร้าน) แต่แก้รหัส/เบอร์ที่ผูกตัวตนไม่ได้
 //   stall_catalog_database                    : สร้าง = เจ้าของ; แผงค้าแก้สินค้าของตัวเองได้
 //   daily_reports                             : เขียน = เจ้าของ (ฮับ/แอดมิน) อ่านได้ทุกคน (แผงค้าดูยอดโอน)
@@ -48,8 +48,9 @@ function build(uids) {
             merchant_applications: {
                 ".read": true,
                 "$id": {
-                    ".write": "(" + OWNER + ") || (!data.exists() && newData.exists()) || (data.exists() && newData.exists() && " + [same("status"), same("accessCode"), same("id")].join(" && ") + ")",
-                    ".validate": "(" + OWNER + ") || (newData.child('id').val() === $id && newData.hasChildren(['id', 'stallData', 'status']) && (data.exists() || (newData.child('status').val() === 'pending' && !newData.child('accessCode').exists())))"
+                    // loginHash/loginSalt = รหัสผ่านเข้าระบบของแผงค้า (เก็บเฉพาะค่าแฮช): เจ้าของเท่านั้นตั้ง/เปลี่ยนได้
+                    ".write": "(" + OWNER + ") || (!data.exists() && newData.exists()) || (data.exists() && newData.exists() && " + [same("status"), same("accessCode"), same("id"), same("loginHash"), same("loginSalt")].join(" && ") + ")",
+                    ".validate": "(" + OWNER + ") || (newData.child('id').val() === $id && newData.hasChildren(['id', 'stallData', 'status']) && (data.exists() || (newData.child('status').val() === 'pending' && !newData.child('accessCode').exists() && !newData.child('loginHash').exists() && !newData.child('loginSalt').exists())))"
                 }
             },
 
@@ -63,7 +64,7 @@ function build(uids) {
             custom_market_stalls: {
                 ".read": true,
                 "$id": {
-                    ".write": "(" + OWNER + ") || (data.exists() && newData.exists() && " + [same("stallId"), same("accessCode")].join(" && ") + ")"
+                    ".write": "(" + OWNER + ") || (data.exists() && newData.exists() && " + [same("stallId"), same("accessCode"), same("loginHash"), same("loginSalt")].join(" && ") + ")"
                 }
             },
 

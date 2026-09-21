@@ -74,6 +74,18 @@ async function expect(name, wantAllowed, method, path, body) {
     await expect("แก้ status เป็น approved ไม่ได้", false, "PUT", `merchant_applications/${T}M1`, mApp(`${T}M1`, "approved"));
     await expect("แผงค้าอนุมัติแล้วแก้ข้อมูลร้านตัวเองได้ (status/รหัสเดิม)", true, "PUT", `merchant_applications/${SEED}M0`, mApp(`${SEED}M0`, "approved", { accessCode: "654321", stallData: { stallId: `${SEED}M0`, stallName: "ชื่อใหม่", phone: "0833333333" } }));
     await expect("แผงค้าอนุมัติแล้วเปลี่ยนรหัสตัวเองไม่ได้", false, "PUT", `merchant_applications/${SEED}M0`, mApp(`${SEED}M0`, "approved", { accessCode: "000000" }));
+
+    console.log("== merchant login secret (loginHash / loginSalt) ==");
+    const mH = (id, hash, extra) => mApp(id, "approved", Object.assign({ accessCode: id, loginHash: hash, loginSalt: "aa11" }, extra || {}));
+    await expect("สร้างใบสมัครแผงค้าที่แนบ loginHash มาเองไม่ได้", false, "PUT", `merchant_applications/${T}M4`, mApp(`${T}M4`, "pending", { loginHash: "evil", loginSalt: "s" }));
+    await expect("แผงค้าที่มีรหัสผ่านแล้ว: เปลี่ยน loginHash ไม่ได้ (สวมรอย)", false, "PUT", `merchant_applications/${SEED}M1`, mH(`${SEED}M1`, "evil"));
+    await expect("แผงค้าที่มีรหัสผ่านแล้ว: ลบ loginHash ออกไม่ได้", false, "PUT", `merchant_applications/${SEED}M1`, mApp(`${SEED}M1`, "approved", { accessCode: `${SEED}M1` }));
+    await expect("แผงค้าที่มีรหัสผ่านแล้ว: แก้ข้อมูลร้านโดย loginHash เดิม ได้", true, "PUT", `merchant_applications/${SEED}M1`, mH(`${SEED}M1`, "seedhash", { stallData: { stallId: `${SEED}M1`, stallName: "แก้ได้", phone: "0833333333" } }));
+    await expect("แผงค้าที่ยังไม่มีรหัสผ่าน: เติม loginHash เองไม่ได้", false, "PUT", `merchant_applications/${SEED}M0`, mApp(`${SEED}M0`, "approved", { accessCode: "654321", loginHash: "evil", loginSalt: "s" }));
+    await expect("แผงในตลาดที่มีรหัสผ่านแล้ว: เปลี่ยน loginHash ไม่ได้", false, "PUT", `custom_market_stalls/${SEED}S1`, { stallId: `${SEED}S1`, stallName: "ร้านมีรหัส", accessCode: `${SEED}S1`, loginHash: "evil", loginSalt: "aa11" });
+    await expect("แผงในตลาดที่มีรหัสผ่านแล้ว: ลบ loginHash ไม่ได้", false, "PUT", `custom_market_stalls/${SEED}S1`, { stallId: `${SEED}S1`, stallName: "ร้านมีรหัส", accessCode: `${SEED}S1` });
+    await expect("แผงในตลาดที่ยังไม่มีรหัสผ่าน: เติม loginHash เองไม่ได้", false, "PUT", `custom_market_stalls/${SEED}S0`, { stallId: `${SEED}S0`, stallName: "เดิม", accessCode: "222222", loginHash: "evil", loginSalt: "s" });
+    await expect("แผงในตลาดที่มีรหัสผ่านแล้ว: เปิด/ปิดร้าน โดย loginHash เดิม ได้", true, "PUT", `custom_market_stalls/${SEED}S1`, { stallId: `${SEED}S1`, stallName: "ร้านมีรหัส", accessCode: `${SEED}S1`, loginHash: "seedhash", loginSalt: "aa11", isClosed: true });
     await expect("ลบใบสมัครแผงค้าไม่ได้", false, "DELETE", `merchant_applications/${T}M1`);
 
     console.log("== custom_market_stalls / stall_catalog_database ==");
