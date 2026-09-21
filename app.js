@@ -414,6 +414,14 @@ async function verifyOwnerPassword(password) {
 
 let _legacyMigrationStarted = false;
 
+// ปุ่ม/กรอบ "ตัวช่วยทดสอบ" (เติมข้อมูลตัวอย่าง, สมัคร&ล็อกอิน 1-Click, อนุมัติทันที) เห็นและใช้ได้เฉพาะเจ้าของที่ล็อกอิน
+// ใน HTML ใส่คลาส owner-only-test-ui + hidden ไว้เป็นค่าเริ่มต้น (ผู้เข้าชมทั่วไปจึงไม่เห็นแม้แต่ชั่วขณะ)
+function syncOwnerOnlyTestUi() {
+    const owner = isOwnerSignedIn();
+    document.querySelectorAll(".owner-only-test-ui").forEach(el => el.classList.toggle("hidden", !owner));
+}
+window.syncOwnerOnlyTestUi = syncOwnerOnlyTestUi;
+
 function applyOwnerSession(user) {
     const signedIn = !!user && isOwnerUid(user.uid);
     if (signedIn) {
@@ -424,6 +432,7 @@ function applyOwnerSession(user) {
         state.activeHub = null;
     }
     if (typeof renderAuthHeaderButtons === "function") renderAuthHeaderButtons();
+    syncOwnerOnlyTestUi();
     if (signedIn) {
         // ย้ายรายการแบบเก่า (คีย์ 0,1,2...) บนคลาวด์เป็นคีย์ id หนึ่งครั้งต่อการเปิดหน้า (ทำซ้ำได้ ไม่เขียนถ้าย้ายแล้ว)
         if (!_legacyMigrationStarted && typeof migrateLegacyCloudLists === "function") {
