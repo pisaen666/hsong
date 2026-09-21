@@ -1,38 +1,62 @@
 {
-  "community_riders": {
-    "ZZSEEDR0": {
-      "id": "ZZSEEDR0",
-      "name": "เดิม",
-      "phone": "0822222222",
-      "accessCode": "ZZSEEDR0",
-      "status": "available"
-    }
+  "community_riders/ZZSEEDR0": {
+    "id": "ZZSEEDR0",
+    "name": "เดิม",
+    "phone": "0822222222",
+    "accessCode": "ZZSEEDR0",
+    "status": "available"
   },
-  "merchant_applications": {
-    "ZZSEEDM0": {
-      "id": "ZZSEEDM0",
-      "status": "approved",
-      "accessCode": "654321",
-      "stallData": {
-        "stallId": "ZZSEEDM0",
-        "stallName": "เดิม",
-        "phone": "0833333333"
-      }
-    }
+  "community_riders/ZZSEEDR2": {
+    "id": "ZZSEEDR2",
+    "name": "มีรหัส",
+    "phone": "0844444444",
+    "accessCode": "ZZSEEDR2",
+    "loginHash": "seedhash",
+    "loginSalt": "aa11",
+    "status": "available"
   },
-  "custom_market_stalls": {
-    "ZZSEEDS0": {
-      "stallId": "ZZSEEDS0",
+  "community_riders/ZZSEEDR3": {
+    "id": "ZZSEEDR3",
+    "name": "ไม่มีรหัส",
+    "phone": "0855555555",
+    "accessCode": "ZZSEEDR3",
+    "status": "available"
+  },
+  "rider_applications/ZZSEEDA0": {
+    "id": "ZZSEEDA0",
+    "accessCode": "ZZSEEDA0",
+    "fullName": "มีรหัส",
+    "phone": "0844444444",
+    "status": "approved",
+    "loginHash": "seedhash",
+    "loginSalt": "aa11"
+  },
+  "rider_applications/ZZSEEDA1": {
+    "id": "ZZSEEDA1",
+    "accessCode": "ZZSEEDA1",
+    "fullName": "ไม่มีรหัส",
+    "phone": "0855555555",
+    "status": "pending"
+  },
+  "merchant_applications/ZZSEEDM0": {
+    "id": "ZZSEEDM0",
+    "status": "approved",
+    "accessCode": "654321",
+    "stallData": {
+      "stallId": "ZZSEEDM0",
       "stallName": "เดิม",
-      "accessCode": "222222"
+      "phone": "0833333333"
     }
   },
-  "stall_catalog_database": {
-    "ZZSEEDS0": [
-      {
-        "name": "หมู",
-        "price": 100
-      }
-    ]
-  }
+  "custom_market_stalls/ZZSEEDS0": {
+    "stallId": "ZZSEEDS0",
+    "stallName": "เดิม",
+    "accessCode": "222222"
+  },
+  "stall_catalog_database/ZZSEEDS0": [
+    {
+      "name": "หมู",
+      "price": 100
+    }
+  ]
 }

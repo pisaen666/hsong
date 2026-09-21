@@ -490,6 +490,160 @@ function requireOwnerAction() {
 }
 window.requireOwnerAction = requireOwnerAction;
 
+// =================================================================
+// รหัสผ่านเข้าระบบไรเดอร์ (ความลับ)
+// - เลขไรเดอร์ (RDxxxx) เป็นข้อมูลสาธารณะ ใช้เป็น "ชื่อผู้ใช้"
+// - รหัสผ่านลับ 8 ตัว (เช่น K7MQ-2XTA) สร้างตอนเจ้าของอนุมัติ เจ้าของเห็นครั้งเดียวเพื่อส่งให้ไรเดอร์
+// - ในฐานข้อมูลเก็บเฉพาะ loginSalt + loginHash (PBKDF2-SHA256) ไม่เก็บรหัสจริง
+// - กฎ Firebase ห้ามผู้ใช้ทั่วไปแก้ loginHash/loginSalt (ไม่งั้นจะตั้งรหัสของตัวเองทับแล้วเข้าเป็นคนอื่นได้)
+// หมายเหตุ: การตรวจรหัสทำในเบราว์เซอร์ ป้องกันการสวมรอยแบบทั่วไป (รู้เบอร์/เลขไรเดอร์) แต่ไม่ใช่ด่านความปลอดภัยระดับเซิร์ฟเวอร์
+// =================================================================
+const RIDER_SECRET_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";   // 31 ตัว ตัดตัวที่อ่านสับสน (0 O 1 I L)
+const RIDER_SECRET_LENGTH = 8;
+const RIDER_SECRET_ITERATIONS = 150000;
+
+function normalizeRiderSecret(v) {
+    return String(v == null ? "" : v).toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function generateRiderSecret() {
+    const n = RIDER_SECRET_ALPHABET.length;
+    const limit = 256 - (256 % n);       // ตัดค่าที่ทำให้สุ่มเอนเอียง
+    const out = [];
+    while (out.length < RIDER_SECRET_LENGTH) {
+        const buf = new Uint8Array(16);
+        crypto.getRandomValues(buf);
+        for (const b of buf) {
+            if (b < limit && out.length < RIDER_SECRET_LENGTH) out.push(RIDER_SECRET_ALPHABET[b % n]);
+        }
+    }
+    return out.slice(0, 4).join("") + "-" + out.slice(4).join("");
+}
+
+function _bytesToHex(bytes) {
+    return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+}
+function _hexToBytes(hex) {
+    const out = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+    return out;
+}
+
+async function hashRiderSecret(secret, saltHex) {
+    if (!(typeof crypto !== "undefined" && crypto.subtle)) throw new Error("no-webcrypto");
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(normalizeRiderSecret(secret)), "PBKDF2", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: _hexToBytes(saltHex), iterations: RIDER_SECRET_ITERATIONS }, key, 256);
+    return _bytesToHex(new Uint8Array(bits));
+}
+
+// สร้างรหัสผ่านใหม่ + salt + hash (เจ้าของเท่านั้นที่เรียก) คืน { secret, loginSalt, loginHash }
+async function makeRiderLoginCredential() {
+    const secret = generateRiderSecret();
+    const saltBytes = new Uint8Array(16);
+    crypto.getRandomValues(saltBytes);
+    const loginSalt = _bytesToHex(saltBytes);
+    const loginHash = await hashRiderSecret(secret, loginSalt);
+    return { secret, loginSalt, loginHash };
+}
+
+async function verifyRiderSecret(rider, secret) {
+    if (!rider || !rider.loginHash || !rider.loginSalt) return false;
+    const h = await hashRiderSecret(secret, rider.loginSalt);
+    const want = String(rider.loginHash);
+    if (h.length !== want.length) return false;
+    let diff = 0;
+    for (let i = 0; i < h.length; i++) diff |= h.charCodeAt(i) ^ want.charCodeAt(i);
+    return diff === 0;
+}
+
+// กันเดารหัสรัว ๆ ในเครื่องเดียว: ผิด 5 ครั้งภายใน 10 นาที ล็อก 5 นาที
+const _RIDER_LOGIN_FAIL_KEY = "talathub_rider_login_fail";
+function riderLoginLockedMs() {
+    try {
+        const o = JSON.parse(localStorage.getItem(_RIDER_LOGIN_FAIL_KEY) || "null");
+        if (o && o.until && o.until > Date.now()) return o.until - Date.now();
+    } catch (e) { }
+    return 0;
+}
+function _noteRiderLoginFail() {
+    try {
+        const now = Date.now();
+        const o = JSON.parse(localStorage.getItem(_RIDER_LOGIN_FAIL_KEY) || "null") || { times: [] };
+        o.times = (o.times || []).filter(t => now - t < 10 * 60 * 1000).concat(now);
+        if (o.times.length >= 5) { o.until = now + 5 * 60 * 1000; o.times = []; }
+        localStorage.setItem(_RIDER_LOGIN_FAIL_KEY, JSON.stringify(o));
+    } catch (e) { }
+}
+function _clearRiderLoginFail() {
+    try { localStorage.removeItem(_RIDER_LOGIN_FAIL_KEY); } catch (e) { }
+}
+
+// แกนล็อกอินไรเดอร์: คืน { ok, rider?, code, message }  (ไม่แตะ DOM เพื่อให้ทดสอบได้)
+async function riderSecretLogin(numberRaw, secretRaw) {
+    const lockedMs = riderLoginLockedMs();
+    if (lockedMs > 0) return { ok: false, code: "locked", message: "⏳ ใส่รหัสผิดหลายครั้ง กรุณารออีก " + Math.ceil(lockedMs / 60000) + " นาทีแล้วลองใหม่" };
+    const number = normalizeRiderCode(String(numberRaw || "").trim());
+    const secret = normalizeRiderSecret(secretRaw);
+    if (!number || !secret) return { ok: false, code: "empty", message: "⚠️ กรุณากรอกเลขไรเดอร์ และรหัสผ่านเข้าระบบ" };
+
+    const bad = { ok: false, code: "bad", message: "⚠️ เลขไรเดอร์หรือรหัสผ่านไม่ถูกต้อง" };
+    const rider = loadCommunityRiders().find(x => (x.id && normalizeRiderCode(x.id) === number) || (x.accessCode && normalizeRiderCode(x.accessCode) === number));
+    if (!rider) {
+        const app = loadRiderApplications().find(x => (x.id && normalizeRiderCode(x.id) === number) || (x.accessCode && normalizeRiderCode(x.accessCode) === number));
+        if (app && app.status === "pending") return { ok: false, code: "pending", message: "⏳ ใบสมัครของคุณยังรอเจ้าของอนุมัติ เมื่ออนุมัติแล้วเจ้าของจะส่งรหัสผ่านเข้าระบบให้" };
+        if (app && app.status === "rejected") return { ok: false, code: "rejected", message: "❌ ใบสมัครนี้ไม่ผ่านการอนุมัติ กรุณาติดต่อเจ้าของตลาด" };
+        _noteRiderLoginFail();
+        return bad;
+    }
+    if (!rider.loginHash) return { ok: false, code: "no-secret", message: "🔑 บัญชีนี้ยังไม่มีรหัสผ่านเข้าระบบ กรุณาติดต่อเจ้าของเพื่อขอรหัสผ่านใหม่" };
+    let good = false;
+    try { good = await verifyRiderSecret(rider, secret); }
+    catch (e) { return { ok: false, code: "no-crypto", message: "⚠️ เบราว์เซอร์นี้ตรวจรหัสผ่านไม่ได้ กรุณาเปิดผ่านเว็บ https ปกติ" }; }
+    if (!good) { _noteRiderLoginFail(); return bad; }
+    _clearRiderLoginFail();
+    return { ok: true, rider, code: "ok" };
+}
+window.riderSecretLogin = riderSecretLogin;
+
+// เชื่อมช่องกรอกในหน้าเว็บกับแกนล็อกอิน
+async function submitRiderSecretLogin(numberInputId, secretInputId) {
+    const numEl = document.getElementById(numberInputId);
+    const secEl = document.getElementById(secretInputId);
+    const res = await riderSecretLogin(numEl ? numEl.value : "", secEl ? secEl.value : "");
+    if (!res.ok) {
+        showToast(res.message);
+        if (res.code === "bad" && secEl) { secEl.value = ""; secEl.focus(); }
+        return;
+    }
+    if (secEl) secEl.value = "";
+    loginRiderWithProfile(res.rider);
+    showToast("🎉 เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ " + (res.rider.name || "ไรเดอร์"));
+}
+
+// เจ้าของ: สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์ที่อนุมัติแล้ว (รหัสเดิมใช้ไม่ได้ทันที) และแสดงให้เจ้าของส่งต่อ
+async function resetRiderLoginSecret(appId) {
+    if (!requireOwnerAction()) return;
+    const apps = loadRiderApplications();
+    const app = apps.find(x => x.id === appId);
+    if (!app || app.status !== "approved") { showToast("⚠️ สร้างรหัสได้เฉพาะไรเดอร์ที่อนุมัติแล้ว"); return; }
+    const name = app.nickname ? `${app.fullName} (${app.nickname})` : app.fullName;
+    if (!confirm(`สร้างรหัสผ่านเข้าระบบใหม่ให้ "${name}" ?\n\nรหัสเดิมจะใช้ไม่ได้ทันที และต้องส่งรหัสใหม่ให้ไรเดอร์เอง`)) return;
+    let cred;
+    try { cred = await makeRiderLoginCredential(); }
+    catch (e) { showToast("⚠️ สร้างรหัสไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return; }
+    app.loginSalt = cred.loginSalt;
+    app.loginHash = cred.loginHash;
+    saveRiderApplications(apps);
+    const riders = loadCommunityRiders();
+    const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
+    const r = riders.find(x => (x.id && x.id === app.id) || (x.accessCode && x.accessCode === app.accessCode) || (cleanPhone && (x.phone || "").replace(/[-\s]/g, "") === cleanPhone));
+    if (r) { r.loginSalt = cred.loginSalt; r.loginHash = cred.loginHash; saveCommunityRiders(riders); }
+    else { saveCommunityRiders(reconcileApprovedRiders(apps, riders).riders); }
+    renderAdminRiders();
+    openSimulatedSmsModal(app.phone, cred.secret, name, "rider", app.lineId, app.accessCode);
+}
+window.resetRiderLoginSecret = resetRiderLoginSecret;
+
 window.isOwnerSignedIn = isOwnerSignedIn;
 window.verifyOwnerPassword = verifyOwnerPassword;
 
@@ -19564,11 +19718,19 @@ function reconcileApprovedRiders(apps, currentRiders) {
                 motorcycleModel: app.motorcycleModel || "",
                 promptPay: app.promptPayNumber || app.phone || "",
                 accessCode: app.accessCode || app.id,
+                loginSalt: app.loginSalt,
+                loginHash: app.loginHash,
                 codSettledToday: 0
             });
             changed = true;
         } else {
             let r = riders[existingIdx];
+            // เจ้าของเท่านั้นที่คัดลอกรหัสผ่าน (hash) จากใบสมัครลงไรเดอร์ที่มีอยู่ (ผู้ใช้ทั่วไปแก้ hash บนคลาวด์ไม่ได้อยู่แล้ว)
+            if (isOwnerSignedIn() && app.loginHash && r.loginHash !== app.loginHash) {
+                r.loginSalt = app.loginSalt;
+                r.loginHash = app.loginHash;
+                changed = true;
+            }
             if (!r.name || r.name !== displayName || !r.accessCode) {
                 r.name = displayName;
                 r.accessCode = app.accessCode || app.id || r.accessCode;
@@ -21136,6 +21298,15 @@ function checkCurrentRiderApprovalAndLogin() {
             statusBadge.textContent = "✅ ได้รับอนุมัติแล้ว";
         }
 
+        // ผู้สมัครทั่วไป: อนุมัติแล้วก็ต้องเข้าด้วยเลขไรเดอร์ + รหัสผ่านที่เจ้าของส่งให้ (ไม่พาเข้าเองโดยไม่ใช้รหัส)
+        if (!isOwnerSignedIn()) {
+            closeRiderRegisterModal();
+            switchRole("rider");
+            if (typeof switchRiderGuestTab === "function") switchRiderGuestTab("login");
+            showToast("✅ ใบสมัครได้รับอนุมัติแล้ว! เข้าสู่ระบบด้วยเลขไรเดอร์และรหัสผ่านที่เจ้าของส่งให้");
+            return;
+        }
+
         let targetRider = approvedRider;
         if (!targetRider && currentApp) {
             const displayName = currentApp.nickname ? `${currentApp.fullName} (${currentApp.nickname})` : currentApp.fullName;
@@ -21177,15 +21348,10 @@ function checkCurrentRiderApprovalAndLogin() {
 window.checkCurrentRiderApprovalAndLogin = checkCurrentRiderApprovalAndLogin;
 
 function loginRiderById(riderId) {
-    const riders = loadCommunityRiders();
-    const clean = String(riderId || "").trim().toUpperCase();
-    let r = riders.find(x => 
-        x.id === riderId || 
-        (x.id && x.id.trim().toUpperCase() === clean) ||
-        (x.accessCode && x.accessCode.trim().toUpperCase() === clean) ||
-        (x.phone && x.phone.replace(/[-\s]/g, "") === clean.replace(/[-\s]/g, "")) ||
-        (x.name && x.name.trim().toLowerCase().includes(String(riderId || "").trim().toLowerCase()))
-    );
+    // เข้าสู่ระบบเป็นไรเดอร์โดยไม่ใช้รหัส = เครื่องมือของเจ้าของ (ปุ่ม "สลับเข้ารับงาน" ในหน้าแอดมิน) เท่านั้น
+    if (!requireOwnerAction()) return;
+    const clean = normalizeRiderCode(String(riderId || "").trim());
+    const r = loadCommunityRiders().find(x => (x.id && normalizeRiderCode(x.id) === clean) || (x.accessCode && normalizeRiderCode(x.accessCode) === clean));
     if (!r) {
         showToast("⚠️ ไม่พบข้อมูลไรเดอร์คนนี้ในระบบ");
         return;
@@ -21194,16 +21360,26 @@ function loginRiderById(riderId) {
 }
 window.loginRiderById = loginRiderById;
 
-function approveAndLoginRider(appId) {
+async function approveAndLoginRider(appId) {
     const cleanId = String(appId || "").trim();
     const findApp = () => loadRiderApplications().find(x => x.id === cleanId || (x.phone || "").replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, ""));
     const before = findApp();
+    let justApproved = false;
     if (before && before.status === "approved") {
-        // อนุมัติแล้ว: ใครที่มีรหัสก็เข้าสู่ระบบได้ ไม่ต้องอนุมัติซ้ำ
+        // อนุมัติแล้ว: เข้าระบบโดยไม่ต้องใช้รหัสได้เฉพาะเจ้าของ (สลับเข้ารับงาน) — ไรเดอร์ทั่วไปต้องใช้เลขไรเดอร์ + รหัสผ่าน
+        if (!isOwnerSignedIn()) {
+            if (typeof closeStatusCheckModal === "function") closeStatusCheckModal();
+            closeRiderRegisterModal();
+            switchRole("rider");
+            if (typeof switchRiderGuestTab === "function") switchRiderGuestTab("login");
+            showToast("🔑 กรุณาเข้าสู่ระบบด้วยเลขไรเดอร์และรหัสผ่านที่เจ้าของส่งให้");
+            return;
+        }
     } else {
         // ยังไม่อนุมัติ: การอนุมัติเป็นสิทธิ์เจ้าของเท่านั้น (ไรเดอร์ที่รออยู่อนุมัติตัวเองไม่ได้)
         if (!requireOwnerAction()) return;
-        approveRiderApplication(appId);
+        await approveRiderApplication(appId);
+        justApproved = true;
     }
     const app = findApp();
     if (!app || app.status !== "approved") return;
@@ -21216,9 +21392,10 @@ function approveAndLoginRider(appId) {
         if (typeof closeStatusCheckModal === "function") closeStatusCheckModal();
         closeRiderAppDetailModal();
         closeRiderRegisterModal();
-        closeSimulatedSmsModal();
+        // เพิ่งอนุมัติ: ต้องเปิดกล่องรหัสผ่านที่เพิ่งสร้างค้างไว้ให้เจ้าของคัดลอก (เห็นได้ครั้งเดียว)
+        if (!justApproved) closeSimulatedSmsModal();
         loginRiderWithProfile(r);
-        showToast(`🎉 อนุมัติและเข้าสู่ระบบเป็น ${r.name} เรียบร้อยแล้ว! (รหัส: ${app.accessCode || r.accessCode})`);
+        showToast(`🎉 ${justApproved ? "อนุมัติและ" : ""}เข้าสู่ระบบเป็น ${r.name} เรียบร้อยแล้ว (เจ้าของสลับเข้ารับงาน)`);
     }
 }
 window.approveAndLoginRider = approveAndLoginRider;
@@ -21229,8 +21406,12 @@ function toggleAdminRiderAppsHistory() {
 }
 window.toggleAdminRiderAppsHistory = toggleAdminRiderAppsHistory;
 
-function approveRiderApplication(appId) {
+async function approveRiderApplication(appId) {
     if (!requireOwnerAction()) return;
+    // รหัสผ่านลับสำหรับเข้าระบบ: สร้างใหม่ทุกครั้งที่อนุมัติ เจ้าของเห็นครั้งเดียวในกล่องข้อความท้ายฟังก์ชัน
+    let cred;
+    try { cred = await makeRiderLoginCredential(); }
+    catch (e) { showToast("⚠️ สร้างรหัสผ่านไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return; }
     const apps = loadRiderApplications();
     const cleanId = String(appId || "").trim();
     const cleanNorm = typeof normalizeRiderCode === "function" ? normalizeRiderCode(cleanId) : cleanId;
@@ -21253,6 +21434,8 @@ function approveRiderApplication(appId) {
     }
     app.status = "approved";
     app.approvedAt = new Date().toISOString();
+    app.loginSalt = cred.loginSalt;
+    app.loginHash = cred.loginHash;
     saveRiderApplications(apps);
 
     // Update _lastSubmittedRiderApp if matching
@@ -21290,6 +21473,8 @@ function approveRiderApplication(appId) {
             motorcycleModel: app.motorcycleModel || "",
             promptPay: app.promptPayNumber || app.phone || "",
             accessCode: app.accessCode,
+            loginSalt: cred.loginSalt,
+            loginHash: cred.loginHash,
             codSettledToday: 0
         };
         riders.unshift(riderTarget);
@@ -21298,14 +21483,16 @@ function approveRiderApplication(appId) {
         riderTarget.plate = app.plate || riderTarget.plate;
         riderTarget.zone = app.zone || riderTarget.zone;
         riderTarget.accessCode = app.accessCode;
+        riderTarget.loginSalt = cred.loginSalt;
+        riderTarget.loginHash = cred.loginHash;
     }
     saveCommunityRiders(riders);
 
     updateAdminRiderBadges();
-    showToast(`🎉 อนุมัติ ${displayName} เป็นไรเดอร์สำเร็จ! รหัสผ่าน: ${app.accessCode}`);
+    showToast(`🎉 อนุมัติ ${displayName} เป็นไรเดอร์สำเร็จ! ดูรหัสผ่านเข้าระบบในกล่องข้อความ (ส่งให้ไรเดอร์ด้วย)`);
     closeRiderAppDetailModal();
     renderAdminRiders();
-    openSimulatedSmsModal(app.phone, app.accessCode, displayName, "rider", app.lineId);
+    openSimulatedSmsModal(app.phone, cred.secret, displayName, "rider", app.lineId, app.accessCode);
     setTimeout(() => initAdminRiderRadarMap(), 150);
 }
 window.approveRiderApplication = approveRiderApplication;
@@ -21914,6 +22101,10 @@ function renderAdminRiders() {
                                                 <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
                                                     <span class="material-symbols-outlined text-xs">two_wheeler</span>
                                                     <span>สลับเข้ารับงาน</span>
+                                                </button>
+                                                <button onclick="resetRiderLoginSecret('${app.id}')" class="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all" title="สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์คนนี้">
+                                                    <span class="material-symbols-outlined text-xs">key</span>
+                                                    <span>รหัสเข้าระบบ</span>
                                                 </button>
                                                 <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all">
                                                     <span class="material-symbols-outlined text-xs">replay</span>
@@ -22870,24 +23061,17 @@ function viewRiderAppDetail(appId) {
                     <div class="flex items-center gap-2.5">
                         <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">🔑</span>
                         <div>
-                            <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">รหัสผ่าน 6 หลักสำหรับเข้าสู่ระบบ (ACCESS CODE)</div>
+                            <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">เลขไรเดอร์ (ใช้คู่กับรหัสผ่านเข้าระบบ)</div>
                             <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${app.accessCode || '-'}</div>
+                            <div class="text-[10px] text-emerald-800 pt-0.5">${app.loginHash ? '🔒 ตั้งรหัสผ่านแล้ว (ระบบเก็บเฉพาะค่าเข้ารหัส ดูรหัสเดิมไม่ได้)' : '⚠️ ยังไม่มีรหัสผ่านเข้าระบบ — กดสร้างรหัสใหม่'}</div>
                         </div>
                     </div>
                     <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">พร้อมใช้งาน</span>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-emerald-200/60">
-                    <button type="button" onclick="sendRealSmsToApplicant(${jsArg(app.phone)}, ${jsArg(app.accessCode)}, ${jsArg(app.fullName)}, 'rider')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
-                        <span class="material-symbols-outlined text-sm">sms</span>
-                        <span>ส่ง SMS จริง</span>
-                    </button>
-                    <button type="button" onclick="sendLineNotificationToApplicant(${jsArg(app.lineId || app.phone)}, ${jsArg(app.accessCode)}, ${jsArg(app.fullName)}, 'rider')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
-                        <span>💬</span>
-                        <span>ส่งแจ้ง LINE</span>
-                    </button>
-                    <button type="button" onclick="copyApprovalNotificationMessage(${jsArg(app.phone)}, ${jsArg(app.accessCode)}, ${jsArg(app.fullName)}, 'rider')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
-                        <span class="material-symbols-outlined text-sm">content_copy</span>
-                        <span>คัดลอกข้อความ</span>
+                    <button type="button" onclick="resetRiderLoginSecret(${jsArg(app.id)})" class="col-span-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="สร้างรหัสผ่านเข้าระบบใหม่ แล้วส่งต่อทาง SMS / LINE จากกล่องที่ขึ้นมา">
+                        <span class="material-symbols-outlined text-sm">key</span>
+                        <span>สร้างรหัสผ่านใหม่ & ส่งให้ไรเดอร์</span>
                     </button>
                     <a href="tel:${escapeHtml(app.phone)}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
                         <span class="material-symbols-outlined text-sm">call</span>
@@ -22977,6 +23161,10 @@ function viewRiderAppDetail(appId) {
                     <button type="button" onclick="approveAndLoginRider('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าระบบรับงานเป็นไรเดอร์คนนี้ทันที">
                         <span class="material-symbols-outlined text-sm font-bold">sports_motorsports</span>
                         <span>เข้าสู่ระบบรับงานทันที 🚀</span>
+                    </button>
+                    <button type="button" onclick="resetRiderLoginSecret('${app.id}')" class="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์คนนี้">
+                        <span class="material-symbols-outlined text-sm">key</span>
+                        <span>สร้างรหัสเข้าระบบใหม่</span>
                     </button>
                     <button type="button" onclick="closeRiderAppDetailModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
                         ปิดหน้าต่าง
@@ -26021,15 +26209,15 @@ function renderRiderApplicationNotice() {
     const app = loadRiderApplications().find(a => a.id === n.code);
     const status = app ? app.status : "pending";
     const palette = status === "approved"
-        ? { bg: "bg-emerald-50", border: "border-emerald-400", text: "text-emerald-900", head: "✅ ใบสมัครได้รับอนุมัติแล้ว", hint: "ใช้รหัสนี้เข้าสู่ระบบรับงานได้เลย (พิมพ์รหัสในช่องด้านล่าง)" }
+        ? { bg: "bg-emerald-50", border: "border-emerald-400", text: "text-emerald-900", head: "✅ ใบสมัครได้รับอนุมัติแล้ว", hint: "เข้าสู่ระบบรับงานด้วยเลขนี้ และรหัสผ่านที่เจ้าของส่งให้ (พิมพ์ในช่องด้านล่าง) ถ้ายังไม่ได้รับรหัสผ่าน ให้ติดต่อเจ้าของ" }
         : status === "rejected"
             ? { bg: "bg-rose-50", border: "border-rose-400", text: "text-rose-900", head: "❌ ใบสมัครไม่ผ่านการอนุมัติ", hint: "กรุณาติดต่อเจ้าของตลาดเพื่อสอบถามเหตุผล" }
-            : { bg: "bg-amber-50", border: "border-amber-400", text: "text-amber-900", head: "⏳ ส่งใบสมัครแล้ว รอเจ้าของอนุมัติ", hint: "ยังเข้าสู่ระบบรับงานไม่ได้จนกว่าเจ้าของจะอนุมัติ ให้จดรหัสนี้ไว้ แล้วกลับมาใส่ในช่องด้านล่างหลังได้รับอนุมัติ" };
+            : { bg: "bg-amber-50", border: "border-amber-400", text: "text-amber-900", head: "⏳ ส่งใบสมัครแล้ว รอเจ้าของอนุมัติ", hint: "ยังเข้าสู่ระบบรับงานไม่ได้จนกว่าเจ้าของจะอนุมัติ ให้จดเลขนี้ไว้ เมื่ออนุมัติแล้วเจ้าของจะส่ง \"รหัสผ่านเข้าระบบ\" ให้คุณ ใช้คู่กับเลขนี้" };
     box.innerHTML = `
         <div class="p-4 ${palette.bg} border-2 ${palette.border} rounded-2xl space-y-2 text-left ${palette.text}">
             <div class="font-black text-sm">${palette.head}</div>
             ${n.name ? `<div class="text-xs">ผู้สมัคร: <strong>${_escHtml(n.name)}</strong></div>` : ""}
-            <div class="text-xs">รหัสของคุณ:</div>
+            <div class="text-xs">เลขไรเดอร์ / เลขใบสมัครของคุณ:</div>
             <div class="text-2xl font-black font-mono tracking-widest bg-white/80 rounded-xl px-3 py-2 text-center select-all">${_escHtml(n.code)}</div>
             <p class="text-xs leading-relaxed">${palette.hint}</p>
             <button type="button" onclick="dismissRiderApplicationNotice()" class="text-[11px] font-bold underline cursor-pointer">ปิดข้อความนี้</button>
@@ -26042,12 +26230,12 @@ function renderOnPageRidersList() {
     const container = document.getElementById("onpage-registered-riders-list");
     if (!container) return;
     const curRiders = loadCommunityRiders();
-    if ((!curRiders || curRiders.length === 0) && !isOwnerSignedIn()) {
-        // ผู้ใช้ทั่วไป: ยังไม่มีไรเดอร์ที่ได้รับอนุมัติ — ไม่ชวนกด 1-Click (ใช้ได้เฉพาะเจ้าของ) และไม่ทำให้คิดว่าใบสมัครหาย
+    if (!isOwnerSignedIn()) {
+        // ผู้ใช้ทั่วไป: ไม่แสดงรายชื่อไรเดอร์และไม่มีปุ่มเข้าสู่ระบบข้างชื่อ (เข้าได้ด้วยเลขไรเดอร์ + รหัสผ่านเท่านั้น)
         container.innerHTML = `
             <div class="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-center space-y-2">
-                <div class="font-extrabold text-xs text-slate-800">ยังไม่มีไรเดอร์ที่ได้รับอนุมัติในระบบ</div>
-                <p class="text-[11px] text-slate-500 max-w-xs mx-auto">ใบสมัครที่ส่งแล้วต้องรอเจ้าของอนุมัติก่อน จึงจะเข้าสู่ระบบรับงานได้ ถ้ายังไม่เคยสมัคร กดปุ่มด้านล่าง</p>
+                <div class="font-extrabold text-xs text-slate-800">เข้าสู่ระบบด้วยเลขไรเดอร์และรหัสผ่าน</div>
+                <p class="text-[11px] text-slate-500 max-w-xs mx-auto">เจ้าของจะส่งรหัสผ่านให้เมื่ออนุมัติใบสมัครของคุณ ถ้ายังไม่เคยสมัคร กดปุ่มด้านล่าง</p>
                 <button type="button" onclick="switchRiderGuestTab('register')" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
                     📝 ไปหน้าลงทะเบียนสมัครไรเดอร์
                 </button>
@@ -26333,7 +26521,7 @@ async function handleOnPageRiderRegister(e) {
     closeRiderLoginModal();
     if (!isOwnerSignedIn()) {
         rememberRiderApplicationNotice(code, displayName);
-        showToast(`✅ ส่งใบสมัครแล้ว! รหัสของคุณ: ${code} (จดไว้) — รอเจ้าของอนุมัติ แล้วใช้รหัสนี้เข้าสู่ระบบ`);
+        showToast(`✅ ส่งใบสมัครแล้ว! เลขไรเดอร์ของคุณ: ${code} (จดไว้) — รอเจ้าของอนุมัติ แล้วเจ้าของจะส่งรหัสผ่านเข้าระบบให้`);
         if (typeof switchRiderGuestTab === "function") switchRiderGuestTab("login");
         return;
     }
@@ -26343,24 +26531,7 @@ async function handleOnPageRiderRegister(e) {
 window.handleOnPageRiderRegister = handleOnPageRiderRegister;
 
 function handleOnPageRiderLoginSubmit() {
-    const inputVal = document.getElementById("onpage-rider-login-input")?.value.trim();
-    if (!inputVal) {
-        showToast("⚠️ กรุณากรอกรหัส PIN ไรเดอร์ หรือเบอร์โทรศัพท์");
-        return;
-    }
-    const clean = inputVal.toUpperCase().replace(/[-\s]/g, "");
-    const curRiders = loadCommunityRiders();
-    const r = curRiders.find(x => 
-        (x.id && x.id.toUpperCase() === clean) ||
-        (x.accessCode && x.accessCode.toUpperCase() === clean) ||
-        (x.phone && x.phone.replace(/[-\s]/g, "") === clean)
-        // ไม่ล็อกอินด้วยชื่อ: ชื่อไม่ใช่ความลับ (เดาหรือดูจากรายชื่อได้)
-    );
-    if (!r) {
-        showToast("⚠️ ไม่พบข้อมูลไรเดอร์คนนี้ กรุณาตรวจสอบรหัส หรือกดสมัครใหม่");
-        return;
-    }
-    loginRiderWithProfile(r);
+    return submitRiderSecretLogin("onpage-rider-number-input", "onpage-rider-secret-input");
 }
 window.handleOnPageRiderLoginSubmit = handleOnPageRiderLoginSubmit;
 
@@ -26586,6 +26757,8 @@ window.assignSampleOrderToRider = assignSampleOrderToRider;
 function renderRiderLoginModalList() {
     const container = document.getElementById("rider-quick-login-list");
     if (!container) return;
+    // รายชื่อไรเดอร์แบบกดเข้าทันที (และใบสมัครที่รออนุมัติ) เป็นเครื่องมือเจ้าของเท่านั้น
+    if (!isOwnerSignedIn()) { container.innerHTML = ""; return; }
 
     const riders = loadCommunityRiders();
     const apps = loadRiderApplications();
@@ -26669,7 +26842,9 @@ function openRiderLoginModal() {
 
     renderRiderLoginModalList();
 
-    const phoneInput = document.getElementById("rider-login-phone-input");
+    const secretInput = document.getElementById("rider-login-secret-input");
+    if (secretInput) secretInput.value = "";
+    const phoneInput = document.getElementById("rider-login-number-input");
     if (phoneInput) {
         phoneInput.value = "";
         setTimeout(() => phoneInput.focus(), 100);
@@ -26687,6 +26862,7 @@ function closeRiderLoginModal() {
 window.closeRiderLoginModal = closeRiderLoginModal;
 
 function quickLoginRider(name) {
+    if (!requireOwnerAction()) return;   // ล็อกอินเป็นไรเดอร์คนแรกโดยไม่ใช้รหัส = เครื่องมือเจ้าของ
     const riders = loadCommunityRiders();
     if (riders && riders.length > 0) {
         loginRiderWithProfile(riders[0]);
@@ -26699,6 +26875,7 @@ function quickLoginRider(name) {
 window.quickLoginRider = quickLoginRider;
 
 function handleRiderLoginSubmit() {
+    if (!requireOwnerAction()) return;   // เลือกไรเดอร์จากรายการแล้วเข้าเลย = เครื่องมือเจ้าของ
     const riderSelect = document.getElementById("rider-select-input");
     const val = riderSelect ? riderSelect.value : "";
     if (!val) {
@@ -26718,70 +26895,8 @@ function handleRiderLoginSubmit() {
 window.handleRiderLoginSubmit = handleRiderLoginSubmit;
 
 function handleRiderPhoneLoginSubmit() {
-    const input = document.getElementById("rider-login-phone-input");
-    const raw = input ? input.value.trim() : "";
-    if (!raw) {
-        showToast("⚠️ กรุณากรอกรหัสประจำตัวไรเดอร์ (PIN 6 หลัก) หรือเบอร์โทรศัพท์");
-        if (input) input.focus();
-        return;
-    }
-
-    const cleanRaw = raw.replace(/[-\s]/g, "");
-    const upperRaw = cleanRaw.toUpperCase();
-    const riders = loadCommunityRiders();
-
-    // Admin Master PIN Bypass (เช่น 6305 หรือ ADMIN)
-    if (isOwnerSignedIn() && (upperRaw === "6305" || upperRaw === "HB6305" || upperRaw === "ADMIN6305" || upperRaw === "ADMIN")) {
-        if (riders && riders.length > 0) {
-            loginRiderWithProfile(riders[0]);
-            showToast("🔑 เข้าสู่ระบบด้วย Master PIN ในฐานะไรเดอร์คนแรก");
-            return;
-        } else {
-            showToast("⚠️ ระบบยังไม่มีข้อมูลไรเดอร์ กรุณาสมัครไรเดอร์ก่อน");
-            return;
-        }
-    }
-
-    const normRaw = typeof normalizeRiderCode === "function" ? normalizeRiderCode(upperRaw) : upperRaw;
-
-    // 1. ตรวจสอบในรายชื่อไรเดอร์ที่ได้รับการอนุมัติแล้ว (ตรวจทั้งรหัส PIN, เบอร์โทร, ID, หรือชื่อ)
-    let r = riders.find(x => 
-        (x.accessCode && (x.accessCode.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.accessCode) === normRaw)) ||
-        (x.pin && String(x.pin).trim().toUpperCase() === upperRaw) ||
-        (x.phone && x.phone.replace(/[-\s]/g, "") === cleanRaw) ||
-        (x.id && (x.id.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.id) === normRaw))
-        // ไม่ล็อกอินด้วยชื่อ: ชื่อไม่ใช่ความลับ (เดาหรือดูจากรายชื่อได้)
-    );
-    if (r) {
-        loginRiderWithProfile(r);
-        return;
-    }
-
-    // 2. ตรวจสอบในข้อมูลใบสมัคร (Rider Applications)
-    const apps = loadRiderApplications();
-    const app = apps.find(x => 
-        (x.accessCode && (x.accessCode.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.accessCode) === normRaw)) ||
-        (x.phone && x.phone.replace(/[-\s]/g, "") === cleanRaw) ||
-        (x.id && (x.id.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.id) === normRaw))
-        // ไม่ล็อกอินด้วยชื่อ: ชื่อไม่ใช่ความลับ (เดาหรือดูจากรายชื่อได้)
-    );
-
-    if (app) {
-        if (app.status === "rejected") {
-            showToast(`❌ ใบสมัครของคุณ (${app.fullName || raw}) ไม่ผ่านการอนุมัติ กรุณาติดต่อแอดมิน`);
-            return;
-        }
-        if (app.status === "pending") {
-            showToast(`⏳ ใบสมัครของคุณ (${app.fullName || raw}) ยังรอเจ้าของอนุมัติ กรุณารอสักครู่แล้วลองใหม่`);
-            return;
-        }
-        // อนุมัติแล้ว (แต่ยังไม่อยู่ในรายชื่อที่ซิงค์มา): เข้าสู่ระบบจากใบสมัคร
-        approveAndLoginRider(app.id);
-        return;
-    }
-
-    // 3. Not found
-    showToast("⚠️ ไม่พบข้อมูลไรเดอร์ที่ตรงกับรหัสหรือเบอร์โทรนี้ กรุณาตรวจสอบหรือสมัครใหม่");
+    // ชื่อฟังก์ชันคงเดิมเพราะหน้าเว็บเรียกอยู่ แต่ตอนนี้ล็อกอินด้วย "เลขไรเดอร์ + รหัสผ่านลับ" ไม่ใช่เบอร์โทร
+    return submitRiderSecretLogin("rider-login-number-input", "rider-login-secret-input");
 }
 window.handleRiderPhoneLoginSubmit = handleRiderPhoneLoginSubmit;
 
@@ -30384,8 +30499,8 @@ window.generate6DigitAccessCode = generate6DigitAccessCode;
 
 let _lastGeneratedSmsInfo = null;
 
-function openSimulatedSmsModal(phone, codeVal, name, roleType, lineId) {
-    _lastGeneratedSmsInfo = { phone: phone, code: codeVal, name: name, roleType: roleType, lineId: lineId };
+function openSimulatedSmsModal(phone, codeVal, name, roleType, lineId, riderNumber) {
+    _lastGeneratedSmsInfo = { phone: phone, code: codeVal, name: name, roleType: roleType, lineId: lineId, riderNumber: riderNumber || "" };
     const modal = document.getElementById("simulated-sms-modal");
     if (!modal) return;
 
@@ -30402,8 +30517,13 @@ function openSimulatedSmsModal(phone, codeVal, name, roleType, lineId) {
     const roleNum = roleType === "merchant" ? "Role 3 (แผงค้า)" : "Role 4 (ไรเดอร์)";
 
     if (titleEl) titleEl.textContent = "ส่งรหัสเข้าสู่ระบบ" + roleName + "เรียบร้อย";
-    if (subtitleEl) subtitleEl.textContent = "ส่ง SMS & LINE แจ้งเตือนไปยัง " + name + " สำเร็จแล้ว";
-    if (msgEl) {
+    if (subtitleEl) subtitleEl.textContent = roleType === "merchant"
+        ? "ส่ง SMS & LINE แจ้งเตือนไปยัง " + name + " สำเร็จแล้ว"
+        : "กรุณาคัดลอกข้อความนี้ส่งให้ " + name + " ทาง LINE/SMS เอง (ระบบไม่ได้ส่งให้ และจะไม่แสดงรหัสผ่านนี้อีก)";
+    if (msgEl && roleType !== "merchant") {
+        // ไรเดอร์: เข้าสู่ระบบด้วย "เลขไรเดอร์ + รหัสผ่านลับ" (รหัสผ่านนี้แสดงครั้งเดียว ระบบไม่เก็บรหัสจริง)
+        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + name + "</strong>! ใบสมัครไรเดอร์ได้รับอนุมัติแล้ว เลขไรเดอร์ของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + (riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + codeVal + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
+    } else if (msgEl) {
         msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + name + "</strong>! การลงทะเบียนเปิดร้าน/รับงานได้รับการอนุมัติแล้ว รหัสเข้าสู่ระบบ 6 หลักของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + codeVal + "</strong> นำรหัสนี้ไปใส่ใน " + roleNum + " เพื่อเริ่มปฏิบัติงานได้ทันทีครับ";
     }
 
@@ -30419,8 +30539,8 @@ window.closeSimulatedSmsModal = closeSimulatedSmsModal;
 
 function copyGeneratedCode() {
     if (_lastGeneratedSmsInfo && _lastGeneratedSmsInfo.code) {
-        const { phone, code, name, roleType } = _lastGeneratedSmsInfo;
-        const fullMsg = getApprovalNotificationText(phone, code, name, roleType);
+        const { phone, code, name, roleType, riderNumber } = _lastGeneratedSmsInfo;
+        const fullMsg = getApprovalNotificationText(phone, code, name, roleType, riderNumber);
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(fullMsg).then(() => {
                 showToast("📋 คัดลอกรหัส " + code + " และข้อความทั้งหมดเรียบร้อยแล้ว!");
@@ -30438,7 +30558,7 @@ window.copyGeneratedCode = copyGeneratedCode;
 
 function testLoginWithGeneratedCode() {
     if (!_lastGeneratedSmsInfo) return;
-    const { code, roleType } = _lastGeneratedSmsInfo;
+    const { code, roleType, riderNumber } = _lastGeneratedSmsInfo;
     closeSimulatedSmsModal();
 
     if (roleType === "merchant") {
@@ -30450,16 +30570,23 @@ function testLoginWithGeneratedCode() {
         }
     } else {
         openRiderLoginModal();
-        const input = document.getElementById("rider-login-phone-input");
-        if (input) {
-            input.value = code;
+        const numInput = document.getElementById("rider-login-number-input");
+        const secInput = document.getElementById("rider-login-secret-input");
+        if (numInput && secInput) {
+            numInput.value = riderNumber || "";
+            secInput.value = code;
             handleRiderPhoneLoginSubmit();
         }
     }
 }
 window.testLoginWithGeneratedCode = testLoginWithGeneratedCode;
 
-function getApprovalNotificationText(phone, code, name, roleType) {
+function getApprovalNotificationText(phone, code, name, roleType, riderNumber) {
+    if (roleType !== "merchant") {
+        // ไรเดอร์: เลขไรเดอร์ + รหัสผ่านลับ (ไม่มีการล็อกอินด้วยเบอร์โทรอีกต่อไป)
+        return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัครร่วมทีมไรเดอร์ของคุณได้รับการอนุมัติเรียบร้อยแล้ว!\n🛵 เลขไรเดอร์: ${riderNumber || '-'}\n🔑 รหัสผ่านเข้าระบบ: ${code}\n(เก็บรหัสผ่านเป็นความลับ อย่าบอกใคร)` +
+            `\n\nเข้าสู่ระบบที่เมนู "4. ไรเดอร์" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nใส่เลขไรเดอร์และรหัสผ่านข้างต้น แล้วเริ่มรับงานได้เลยครับ!`;
+    }
     const roleTitle = roleType === "merchant" ? "เปิดร้านค้า" : "ร่วมทีมไรเดอร์";
     const roleTarget = roleType === "merchant" ? "3. แผงค้า" : "4. ไรเดอร์";
     return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัคร${roleTitle}ของคุณได้รับการอนุมัติเรียบร้อยแล้ว!\n🔑 รหัสผ่าน 6 หลักเข้าใช้งาน: ${code}\n(หรือล็อกอินด้วยเบอร์โทร: ${phone || '-'})` +
@@ -30467,13 +30594,13 @@ function getApprovalNotificationText(phone, code, name, roleType) {
 }
 window.getApprovalNotificationText = getApprovalNotificationText;
 
-function sendRealSmsToApplicant(phone, code, name, roleType) {
+function sendRealSmsToApplicant(phone, code, name, roleType, riderNumber) {
     const cleanPhone = String(phone || "").replace(/[^0-9]/g, "");
     if (!cleanPhone) {
         showToast("⚠️ ไม่พบเบอร์โทรศัพท์ของผู้สมัคร");
         return;
     }
-    const text = getApprovalNotificationText(cleanPhone, code, name, roleType);
+    const text = getApprovalNotificationText(cleanPhone, code, name, roleType, riderNumber);
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const separator = isIOS ? "&" : "?";
     const smsUrl = `sms:${cleanPhone}${separator}body=${encodeURIComponent(text)}`;
@@ -30482,8 +30609,8 @@ function sendRealSmsToApplicant(phone, code, name, roleType) {
 }
 window.sendRealSmsToApplicant = sendRealSmsToApplicant;
 
-function sendLineNotificationToApplicant(lineTarget, code, name, roleType) {
-    const text = getApprovalNotificationText("", code, name, roleType);
+function sendLineNotificationToApplicant(lineTarget, code, name, roleType, riderNumber) {
+    const text = getApprovalNotificationText("", code, name, roleType, riderNumber);
     if (isMobileDevice()) {
         const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
         try {
@@ -30498,8 +30625,8 @@ function sendLineNotificationToApplicant(lineTarget, code, name, roleType) {
 }
 window.sendLineNotificationToApplicant = sendLineNotificationToApplicant;
 
-function copyApprovalNotificationMessage(phone, code, name, roleType) {
-    const text = getApprovalNotificationText(phone, code, name, roleType);
+function copyApprovalNotificationMessage(phone, code, name, roleType, riderNumber) {
+    const text = getApprovalNotificationText(phone, code, name, roleType, riderNumber);
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(() => {
             showToast("📋 คัดลอกข้อความแจ้งผลและรหัสผ่านเรียบร้อยแล้ว!");
@@ -30514,15 +30641,15 @@ window.copyApprovalNotificationMessage = copyApprovalNotificationMessage;
 
 function sendRealSmsFromModal() {
     if (!_lastGeneratedSmsInfo) return;
-    const { phone, code, name, roleType } = _lastGeneratedSmsInfo;
-    sendRealSmsToApplicant(phone, code, name, roleType);
+    const { phone, code, name, roleType, riderNumber } = _lastGeneratedSmsInfo;
+    sendRealSmsToApplicant(phone, code, name, roleType, riderNumber);
 }
 window.sendRealSmsFromModal = sendRealSmsFromModal;
 
 function sendLineFromModal() {
     if (!_lastGeneratedSmsInfo) return;
-    const { phone, code, name, roleType, lineId } = _lastGeneratedSmsInfo;
-    sendLineNotificationToApplicant(lineId || phone, code, name, roleType);
+    const { phone, code, name, roleType, lineId, riderNumber } = _lastGeneratedSmsInfo;
+    sendLineNotificationToApplicant(lineId || phone, code, name, roleType, riderNumber);
 }
 window.sendLineFromModal = sendLineFromModal;
 
@@ -30691,10 +30818,10 @@ function handleCheckApplicationStatusSubmit() {
                         <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900">${statusText}</span>
                     </div>
                     <div class="text-[11px] text-slate-500">ยานพาหนะ: ${rApp.vehiclePlate || '-'} • เบอร์โทร: ${rApp.phone}</div>
-                    ${isPending ? `
+                    ${isPending && isOwnerSignedIn() ? `
                         <div class="p-2.5 bg-gradient-to-r from-emerald-900 to-teal-900 text-white rounded-xl flex items-center justify-between shadow-sm">
                             <div>
-                                <div class="text-[10px] text-emerald-300 font-bold">✨ ไม่ต้องรอแอดมิน! เริ่มงานได้ทันที</div>
+                                <div class="text-[10px] text-emerald-300 font-bold">✨ เจ้าของ: อนุมัติทันที</div>
                                 <div class="text-[9px] text-slate-300">แตะปุ่มเพื่ออนุมัติและเข้าสู่ระบบรับงาน</div>
                             </div>
                             <button onclick="closeStatusCheckModal(); approveAndLoginRider('${rApp.id}');" class="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
@@ -30705,11 +30832,11 @@ function handleCheckApplicationStatusSubmit() {
                     ${isApproved ? `
                         <div class="p-2.5 bg-slate-900 text-white rounded-xl flex items-center justify-between font-mono">
                             <div>
-                                <div class="text-[9px] text-slate-400 font-sans">รหัสเข้าสู่ระบบไรเดอร์:</div>
-                                <div class="text-base font-black text-amber-300 tracking-wider">${rApp.accessCode || rApp.phone}</div>
+                                <div class="text-[9px] text-slate-400 font-sans">เลขไรเดอร์ (ใช้คู่กับรหัสผ่านที่เจ้าของส่งให้):</div>
+                                <div class="text-base font-black text-amber-300 tracking-wider">${escapeHtml(rApp.accessCode || rApp.id)}</div>
                             </div>
-                            <button onclick="closeStatusCheckModal(); openRiderLoginModal(); document.getElementById('rider-login-phone-input').value='${rApp.accessCode || rApp.phone}'; handleRiderPhoneLoginSubmit();" class="px-2.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-sans font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
-                                เข้าสู่ระบบทันที >
+                            <button onclick="closeStatusCheckModal(); openRiderLoginModal(); document.getElementById('rider-login-number-input').value=${jsArg(rApp.accessCode || rApp.id)}; document.getElementById('rider-login-secret-input').focus();" class="px-2.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-sans font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
+                                ไปหน้าเข้าสู่ระบบ >
                             </button>
                         </div>
                     ` : ""}

@@ -4,7 +4,7 @@
 // วิธีรัน (จากโฟลเดอร์โปรเจกต์; ต้องใส่ --project hsong-test ทุกครั้ง ห้ามพลาดไปโดนโปรเจกต์จริง):
 //   1) เตรียมข้อมูลตั้งต้นสำหรับข้อ "แก้ของเดิม" (สิทธิ์แอดมินของ CLI ใช้ได้เฉพาะที่ test):
 //        MSYS_NO_PATHCONV=1 firebase database:update / firebase-rules/tests/rules-anon.seed.json --project hsong-test --force
-//      (คำสั่งนี้เขียนทับโหนด community_riders/merchant_applications/custom_market_stalls/stall_catalog_database ของ hsong-test ทั้งโหนด)
+//      (ไฟล์ seed ใช้คีย์แบบพาธ จึงเพิ่มเฉพาะรายการ ZZSEED* ไม่ทับข้อมูลอื่นของ hsong-test)
 //   2) node firebase-rules/tests/rules-anon.test.js
 //   3) ท้ายสคริปต์จะพิมพ์คำสั่งล้างข้อมูลที่รอบนี้สร้างไว้
 const RUN = Date.now().toString(36).toUpperCase();   // รหัสใหม่ทุกรอบ ให้ข้อ "สร้าง" รันซ้ำได้
@@ -52,6 +52,19 @@ async function expect(name, wantAllowed, method, path, body) {
     await expect("แก้ accessCode ของไรเดอร์เดิมไม่ได้", false, "PUT", `community_riders/${SEED}R0`, { id: `${SEED}R0`, name: "เดิม", phone: "0822222222", accessCode: "STOLEN", status: "busy" });
     await expect("แก้ phone ของไรเดอร์เดิมไม่ได้", false, "PUT", `community_riders/${SEED}R0`, { id: `${SEED}R0`, name: "เดิม", phone: "0899999999", accessCode: `${SEED}R0`, status: "busy" });
     await expect("ลบไรเดอร์ไม่ได้", false, "DELETE", `community_riders/${SEED}R0`);
+
+    console.log("== rider login secret (loginHash / loginSalt) ==");
+    const withHash = (id, hash) => riderApp(id, "approved", { loginHash: hash, loginSalt: "aa11" });
+    await expect("สร้างใบสมัครที่แนบ loginHash มาเองไม่ได้", false, "PUT", `rider_applications/${T}H1`, riderApp(`${T}H1`, "pending", { loginHash: "evil", loginSalt: "s" }));
+    await expect("ใบสมัครที่มีรหัสผ่านแล้ว: เปลี่ยน loginHash ไม่ได้ (สวมรอย)", false, "PUT", `rider_applications/${SEED}A0`, withHash(`${SEED}A0`, "evil"));
+    await expect("ใบสมัครที่มีรหัสผ่านแล้ว: ลบ loginHash ออกไม่ได้", false, "PUT", `rider_applications/${SEED}A0`, riderApp(`${SEED}A0`, "approved"));
+    await expect("ใบสมัครที่มีรหัสผ่านแล้ว: แก้ฟิลด์อื่นโดย loginHash เดิม ได้", true, "PUT", `rider_applications/${SEED}A0`, withHash(`${SEED}A0`, "seedhash", { nickname: "แก้ได้" }));
+    await expect("ใบสมัครที่ยังไม่มีรหัสผ่าน: เติม loginHash เองไม่ได้", false, "PUT", `rider_applications/${SEED}A1`, riderApp(`${SEED}A1`, "pending", { loginHash: "evil", loginSalt: "s" }));
+    await expect("ไรเดอร์ที่มีรหัสผ่านแล้ว: เปลี่ยน loginHash ไม่ได้ (สวมรอย)", false, "PUT", `community_riders/${SEED}R2`, { id: `${SEED}R2`, name: "มีรหัส", phone: "0844444444", accessCode: `${SEED}R2`, loginHash: "evil", loginSalt: "aa11" });
+    await expect("ไรเดอร์ที่มีรหัสผ่านแล้ว: เปลี่ยน loginSalt ไม่ได้", false, "PUT", `community_riders/${SEED}R2`, { id: `${SEED}R2`, name: "มีรหัส", phone: "0844444444", accessCode: `${SEED}R2`, loginHash: "seedhash", loginSalt: "zz99" });
+    await expect("ไรเดอร์ที่มีรหัสผ่านแล้ว: ลบ loginHash ไม่ได้", false, "PUT", `community_riders/${SEED}R2`, { id: `${SEED}R2`, name: "มีรหัส", phone: "0844444444", accessCode: `${SEED}R2`, status: "busy" });
+    await expect("ไรเดอร์ที่ยังไม่มีรหัสผ่าน: เติม loginHash เองไม่ได้", false, "PUT", `community_riders/${SEED}R3`, { id: `${SEED}R3`, name: "ไม่มีรหัส", phone: "0855555555", accessCode: `${SEED}R3`, loginHash: "evil", loginSalt: "s" });
+    await expect("ไรเดอร์ที่มีรหัสผ่านแล้ว: อัปเดตสถานะ/พิกัด โดย loginHash เดิม ได้", true, "PUT", `community_riders/${SEED}R2`, { id: `${SEED}R2`, name: "มีรหัส", phone: "0844444444", accessCode: `${SEED}R2`, loginHash: "seedhash", loginSalt: "aa11", status: "busy", lat: 13.3 });
 
     console.log("== merchant_applications ==");
     const mApp = (id, status, extra) => Object.assign({ id, status, stallData: { stallId: id, stallName: "ทดสอบ", phone: "0833333333" } }, extra || {});

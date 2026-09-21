@@ -33,8 +33,8 @@
     "rider_applications": {
       ".read": true,
       "$id": {
-        ".write": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (!data.exists() && newData.exists()) || (data.exists() && newData.exists() && newData.child('status').val() === data.child('status').val() && newData.child('accessCode').val() === data.child('accessCode').val() && newData.child('id').val() === data.child('id').val())",
-        ".validate": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (newData.child('id').val() === $id && newData.hasChildren(['id', 'fullName', 'phone', 'status']) && (data.exists() || newData.child('status').val() === 'pending'))"
+        ".write": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (!data.exists() && newData.exists()) || (data.exists() && newData.exists() && newData.child('status').val() === data.child('status').val() && newData.child('accessCode').val() === data.child('accessCode').val() && newData.child('id').val() === data.child('id').val() && newData.child('loginHash').val() === data.child('loginHash').val() && newData.child('loginSalt').val() === data.child('loginSalt').val())",
+        ".validate": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (newData.child('id').val() === $id && newData.hasChildren(['id', 'fullName', 'phone', 'status']) && (data.exists() || (newData.child('status').val() === 'pending' && !newData.child('loginHash').exists() && !newData.child('loginSalt').exists())))"
       }
     },
     "merchant_applications": {
@@ -47,7 +47,7 @@
     "community_riders": {
       ".read": true,
       "$id": {
-        ".write": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (data.exists() && newData.exists() && newData.child('id').val() === data.child('id').val() && newData.child('accessCode').val() === data.child('accessCode').val() && newData.child('phone').val() === data.child('phone').val())"
+        ".write": "(auth != null && (auth.uid === 'hloZD0Flzyd0X8CCq6RuDV3GYjQ2' || auth.uid === 'DIhgzYpqR8c3m8SIBXvQ6h8PqsL2')) || (data.exists() && newData.exists() && newData.child('id').val() === data.child('id').val() && newData.child('accessCode').val() === data.child('accessCode').val() && newData.child('phone').val() === data.child('phone').val() && newData.child('loginHash').val() === data.child('loginHash').val() && newData.child('loginSalt').val() === data.child('loginSalt').val())"
       }
     },
     "custom_market_stalls": {

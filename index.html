@@ -2130,7 +2130,7 @@
                                 </span>
                                 <div>
                                     <h3 class="font-black text-sm text-slate-900">แบบฟอร์มลงทะเบียนสมัครไรเดอร์</h3>
-                                    <p class="text-[10px] text-slate-500">กรอกข้อมูลเพื่อเปิดบัญชีและรับรหัส PIN ไรเดอร์</p>
+                                    <p class="text-[10px] text-slate-500">กรอกข้อมูลส่งใบสมัคร เจ้าของจะส่งรหัสผ่านเข้าระบบให้เมื่ออนุมัติ</p>
                                 </div>
                             </div>
                             <span class="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full">รอเจ้าของอนุมัติ</span>
@@ -2235,15 +2235,19 @@
                             </span>
                             <div>
                                 <h3 class="font-black text-sm text-slate-900">เข้าสู่ระบบไรเดอร์</h3>
-                                <p class="text-[11px] text-slate-500">สำหรับไรเดอร์ที่ลงทะเบียนแล้ว</p>
+                                <p class="text-[11px] text-slate-500">สำหรับไรเดอร์ที่เจ้าของอนุมัติแล้ว</p>
                             </div>
                         </div>
 
                         <div class="space-y-2">
-                            <label class="block font-bold text-slate-700">รหัสประจำตัวไรเดอร์ (PIN 6 หลัก) หรือ เบอร์โทร:</label>
-                            <input type="text" id="onpage-rider-login-input"
-                                placeholder="เช่น รหัส PIN หรือเบอร์โทร 08xxxxxxxx"
-                                class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono font-bold text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 uppercase outline-none"
+                            <label class="block font-bold text-slate-700">เลขไรเดอร์ (เช่น RD1234):</label>
+                            <input type="text" id="onpage-rider-number-input" autocomplete="username"
+                                placeholder="เลขไรเดอร์ เช่น RD1234"
+                                class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono font-bold text-sm text-slate-800 focus:ring-2 focus:ring-emerald-500 uppercase outline-none">
+                            <label class="block font-bold text-slate-700 pt-1">รหัสผ่านเข้าระบบ (8 ตัว ที่เจ้าของส่งให้):</label>
+                            <input type="password" id="onpage-rider-secret-input" autocomplete="current-password"
+                                placeholder="เช่น K7MQ-2XTA"
+                                class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono font-bold text-sm text-slate-800 focus:ring-2 focus:ring-emerald-500 uppercase outline-none"
                                 onkeydown="if(event.key === 'Enter') handleOnPageRiderLoginSubmit()">
                             <button type="button" onclick="handleOnPageRiderLoginSubmit()"
                                 class="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
@@ -2255,8 +2259,8 @@
 
                     <!-- Registered Riders List Container -->
                     <div class="space-y-2 text-left">
-                        <div class="text-[11px] font-black text-slate-600 uppercase tracking-wider px-1">
-                            ไรเดอร์ที่ลงทะเบียนในระบบ:
+                        <div class="owner-only-test-ui hidden text-[11px] font-black text-slate-600 uppercase tracking-wider px-1">
+                            ไรเดอร์ที่ลงทะเบียนในระบบ (เครื่องมือเจ้าของ):
                         </div>
                         <div id="onpage-registered-riders-list" class="space-y-2">
                             <!-- Dynamically populated via renderOnPageRidersList() -->
@@ -6915,10 +6919,10 @@
             <div class="p-3 bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200 rounded-2xl text-xs text-sky-900 space-y-1">
                 <div class="font-bold flex items-center gap-1.5 text-sky-800">
                     <span class="material-symbols-outlined text-base text-sky-600">badge</span>
-                    <span>เข้าสู่ระบบด้วยรหัสไรเดอร์ (PIN 6 หลัก) หรือเบอร์โทร</span>
+                    <span>เข้าสู่ระบบด้วยเลขไรเดอร์ และรหัสผ่าน</span>
                 </div>
                 <div class="text-[11px] text-slate-500">
-                    กรุณากรอกรหัสประจำตัวไรเดอร์หรือเบอร์โทรศัพท์ที่ได้รับอนุมัติ เพื่อเข้าสู่หน้าจอรับงานจัดส่งของสด
+                    กรอกเลขไรเดอร์ (RDxxxx) และรหัสผ่าน 8 ตัวที่เจ้าของส่งให้หลังอนุมัติ เพื่อเข้าสู่หน้าจอรับงานจัดส่งของสด
                 </div>
             </div>
 
@@ -6927,15 +6931,20 @@
                 <label class="block text-xs font-bold text-slate-800 flex items-center justify-between">
                     <span class="flex items-center gap-1 text-sky-900">
                         <span class="material-symbols-outlined text-base text-sky-600 font-bold">key</span>
-                        <span>หรือกรอกรหัสไรเดอร์ / เบอร์โทร:</span>
+                        <span>เลขไรเดอร์ + รหัสผ่านเข้าระบบ:</span>
                     </span>
-                    <span class="text-[10px] text-sky-700 font-mono bg-sky-100 px-1.5 py-0.5 rounded font-bold">เช่น รหัส PIN 6 หลัก, เบอร์โทร</span>
                 </label>
                 <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">badge</span>
+                    <input type="text" id="rider-login-number-input" autocomplete="username"
+                        placeholder="เลขไรเดอร์ เช่น RD1234"
+                        class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-sky-300 font-bold font-mono text-sm text-slate-800 focus:ring-2 focus:ring-sky-500 uppercase outline-none bg-white shadow-xs">
+                </div>
+                <div class="relative">
                     <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">pin</span>
-                    <input type="text" id="rider-login-phone-input"
-                        placeholder="กรอกรหัส PIN ไรเดอร์ หรือเบอร์โทรศัพท์"
-                        class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-sky-300 font-bold font-mono text-xs text-slate-800 focus:ring-2 focus:ring-sky-500 uppercase outline-none bg-white shadow-xs"
+                    <input type="password" id="rider-login-secret-input" autocomplete="current-password"
+                        placeholder="รหัสผ่าน 8 ตัว เช่น K7MQ-2XTA"
+                        class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-sky-300 font-bold font-mono text-sm text-slate-800 focus:ring-2 focus:ring-sky-500 uppercase outline-none bg-white shadow-xs"
                         onkeydown="if(event.key === 'Enter') handleRiderPhoneLoginSubmit()">
                 </div>
                 <button type="button" onclick="handleRiderPhoneLoginSubmit()"
@@ -6945,8 +6954,8 @@
                 </button>
             </div>
 
-            <!-- Method 2: Quick Rider One-Click List -->
-            <div class="space-y-1">
+            <!-- Method 2: Quick Rider One-Click List (เครื่องมือเจ้าของเท่านั้น) -->
+            <div class="owner-only-test-ui hidden space-y-1">
                 <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">หรือเลือกไรเดอร์ในระบบ:</div>
                 <div id="rider-quick-login-list" class="space-y-1.5 pt-1">
                     <!-- Populated dynamically via renderRiderLoginModalList() -->
@@ -6964,10 +6973,10 @@
                     <button type="button" onclick="closeRiderLoginModal(); openStatusCheckModal();"
                         class="w-full py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all">
                         <span class="material-symbols-outlined text-xs">search</span>
-                        <span>เช็กรหัสผ่าน 6 หลัก / รหัส SMS ของไรเดอร์</span>
+                        <span>เช็กสถานะใบสมัครของไรเดอร์</span>
                     </button>
                 </div>
-                <div>
+                <div class="owner-only-test-ui hidden">
                     <button type="button" onclick="cleanRiderDatabase()"
                         class="w-full py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer"
                         title="ล้างข้อมูลไรเดอร์ทั้งหมดในเครื่องและคลาวด์เพื่อเริ่มใหม่">
