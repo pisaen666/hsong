@@ -17634,6 +17634,22 @@ function setActiveRoleView(role) {
         updateAdminRiderBadges();
     }
 
+    // 📱 บนจอแคบปุ่มทั้ง 5 อาจล้นแถบ (โดยเฉพาะปุ่มที่กำลังเลือกซึ่งตัวหนา/กว้างกว่าปกติ)
+    //   เลื่อนแถบให้ปุ่มที่กำลังเลือกอยู่เห็นเต็มปุ่มเสมอ กันปัญหา "กดแล้วปุ่มโผล่ไม่เต็ม"
+    const activeRoleBtn = document.getElementById(`role-btn-${role}`);
+    const roleBar = document.getElementById("main-role-selector-bar");
+    if (activeRoleBtn && roleBar) {
+        requestAnimationFrame(() => {
+            const barRect = roleBar.getBoundingClientRect();
+            const btnRect = activeRoleBtn.getBoundingClientRect();
+            if (btnRect.right > barRect.right) {
+                roleBar.scrollLeft += (btnRect.right - barRect.right) + 8;
+            } else if (btnRect.left < barRect.left) {
+                roleBar.scrollLeft -= (barRect.left - btnRect.left) + 8;
+            }
+        });
+    }
+
     if (role === "hub") {
         renderHubPickingList();
         renderHubSettlement();
