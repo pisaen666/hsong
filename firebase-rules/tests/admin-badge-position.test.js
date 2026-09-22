@@ -34,5 +34,19 @@ ok(!/-right-1/.test(badgeLine), "ป้ายแจ้งเตือนไม�
 // setActiveRoleView ต้องมี auto-scroll ให้ปุ่มที่กำลังเลือกเลื่อนเข้ามาเต็มปุ่มเสมอ
 ok(/roleBar\.scrollLeft/.test(src), "setActiveRoleView มีโค้ดเลื่อนแถบ (scrollLeft) ให้ปุ่มที่กำลังเลือกเห็นเต็มปุ่ม");
 
+// บั๊กที่ 3 พบ 2026-09-22 (เจอตอนไล่หาบั๊กที่ 1): ป้าย "NEW" ของปุ่ม "2. จัดส่ง" (hub-badge-count) โดนบั๊กเดียวกันเป๊ะ -
+// เทมเพลต className ของปุ่มที่ไม่ใช่แอดมิน/ลูกค้า (ใช้กับ จัดส่ง/แผงค้า/ไรเดอร์) ก็ไม่มีคลาส "relative" เหมือนกัน
+// ทำให้ป้าย NEW ไปยึดกับทั้งแถบแทนปุ่ม "จัดส่ง" ลอยไปโผล่ใกล้ปุ่มไรเดอร์/แอดมินแทน (ทั้งที่มีไว้แจ้งเตือนเรื่องปุ่มจัดส่ง)
+const setActiveRoleViewStart = src.indexOf("function setActiveRoleView(role)");
+const setActiveRoleViewEnd = src.indexOf("\nfunction ", setActiveRoleViewStart + 10);
+const setActiveRoleViewBody = src.slice(setActiveRoleViewStart, setActiveRoleViewEnd);
+const nonAdminLines = setActiveRoleViewBody.split("\n").filter(l => l.includes('btn.className = "role-btn') && !/purple/.test(l));
+ok(nonAdminLines.length === 2, "พบเทมเพลต className ของปุ่ม จัดส่ง/แผงค้า/ไรเดอร์ ครบ 2 แบบ (ตอน active และไม่ active)");
+nonAdminLines.forEach((l, i) => {
+    ok(/\brelative\b/.test(l), `เทมเพลตที่ ${i + 1} (จัดส่ง/แผงค้า/ไรเดอร์) มีคลาส "relative" (กันป้าย NEW ของปุ่มจัดส่งไปยึดกับทั้งแถบ)`);
+});
+const hubBadgeLine = indexSrc.split("\n").find(l => l.includes('id="hub-badge-count"'));
+ok(!!hubBadgeLine, "พบแท็กป้ายแจ้งเตือน hub-badge-count ใน index.html");
+
 console.log(fail ? "\n" + fail + " FAILED" : "\nALL PASSED");
 process.exit(fail ? 1 : 0);

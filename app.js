@@ -17605,7 +17605,7 @@ function setActiveRoleView(role) {
                 } else if (r === "customer") {
                     // Update via updateCustomerRoleButtonUI
                 } else {
-                    btn.className = "role-btn active py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
+                    btn.className = "role-btn active py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center relative shrink-0 cursor-pointer";
                 }
             } else {
                 if (r === "admin") {
@@ -17613,7 +17613,7 @@ function setActiveRoleView(role) {
                 } else if (r === "customer") {
                     // Update via updateCustomerRoleButtonUI
                 } else {
-                    btn.className = "role-btn py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
+                    btn.className = "role-btn py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center relative shrink-0 cursor-pointer";
                 }
             }
         }
@@ -27800,7 +27800,7 @@ function renderAuthHeaderButtons() {
         html += `
             <button onclick="openRiderRegisterModal()" id="btn-rider-register" class="px-2 sm:px-3 md:px-3.5 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0" title="สมัครเป็นไรเดอร์ส่งของสด">
                 <span class="material-symbols-outlined text-sm font-bold">how_to_reg</span>
-                <span class="hidden xs:inline sm:inline">สมัครไรเดอร์</span>
+                <span class="whitespace-nowrap">สมัครไรเดอร์</span>
             </button>
         `;
     }
@@ -30877,6 +30877,7 @@ function initTalatHubApp() {
     if (typeof setupDragScroll === 'function') {
         setupDragScroll('category-tabs');
         setupDragScroll('main-role-selector-bar');   // แถบสลับบทบาท 5 ปุ่ม: บนคอมจอไม่กว้างพอ (โดยเฉพาะโหมดตัวอักษรใหญ่) ต้องลากเลื่อนดูปุ่มที่เกินได้
+        setupDragScroll('top-auth-buttons-container'); // แถวปุ่ม "เปิดร้าน/สมัครไรเดอร์": จอแคบ+ตัวอักษรใหญ่ อาจล้นแถวได้เช่นกัน
     }
     updateAdminRiderBadges();
     updateAdminStallsBadge();
