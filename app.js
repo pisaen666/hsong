@@ -20699,6 +20699,13 @@ const RIDER_DOC_SLOTS = [
 const RIDER_BANK_OPTIONS = ["พร้อมเพย์ (PromptPay)", "กสิกรไทย (KBank)", "ไทยพาณิชย์ (SCB)", "กรุงเทพ (BBL)", "กรุงไทย (KTB)", "ออมสิน (GSB)", "กรุงศรี (BAY)", "ทหารไทยธนชาต (ttb)"];
 const RIDER_EMERGENCY_RELATIONS = ["บิดา / มารดา", "คู่สมรส / แฟน", "พี่น้อง", "ญาติ", "เพื่อน", "อื่น ๆ"];
 const RIDER_MAX_ACCOUNTS = 3;
+// 🔍 เอกสารที่ยัง "ไม่ครบ" ตาม RIDER_DOC_SLOTS ที่ required:true (selfie/license/registration; ไม่รวม vehicle ที่ไม่บังคับ)
+//   ใช้กันไม่ให้เจ้าของกดอนุมัติไรเดอร์ที่ยังไม่ได้ส่งเอกสารครบ (เดิม approveRiderApplication ไม่เคยตรวจเรื่องนี้เลย)
+function getMissingRequiredRiderDocs(app) {
+    const flags = (app && app.docFlags) || {};
+    return RIDER_DOC_SLOTS.filter(s => s.required && !flags[s.key]).map(s => s.label);
+}
+window.getMissingRequiredRiderDocs = getMissingRequiredRiderDocs;
 const RIDER_DB_BASE_URL = "https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app";
 const RIDER_FORM_FIELD_IDS = {
     onpage: { fullName: "onpage-rider-fullname", phone: "onpage-rider-phone" },
@@ -21777,20 +21784,40 @@ window.toggleAdminRiderAppsHistory = toggleAdminRiderAppsHistory;
 
 async function approveRiderApplication(appId) {
     if (!requireOwnerAction()) return;
-    // รหัสผ่านลับสำหรับเข้าระบบ: สร้างใหม่ทุกครั้งที่อนุมัติ เจ้าของเห็นครั้งเดียวในกล่องข้อความท้ายฟังก์ชัน
-    let cred;
-    try { cred = await makeRiderLoginCredential(); }
-    catch (e) { showToast("⚠️ สร้างรหัสผ่านไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return; }
     const apps = loadRiderApplications();
     const cleanId = String(appId || "").trim();
     const cleanNorm = typeof normalizeRiderCode === "function" ? normalizeRiderCode(cleanId) : cleanId;
-    const app = apps.find(x => x.id === cleanId || (x.id && normalizeRiderCode(x.id) === cleanNorm)) || 
+    const app = apps.find(x => x.id === cleanId || (x.id && normalizeRiderCode(x.id) === cleanNorm)) ||
                 apps.find(x => (x.phone || "").replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, ""));
 
     if (!app) {
         showToast("⚠️ ไม่พบข้อมูลใบสมัคร (" + (appId || "ไม่มีรหัส") + ")");
         return;
     }
+
+    // 🔒 ต้องส่งเอกสารครบก่อนถึงจะอนุมัติได้ (เดิมกดอนุมัติได้เลยแม้ไม่มีเอกสารสักใบ)
+    const missingDocs = getMissingRequiredRiderDocs(app);
+    if (missingDocs.length > 0) {
+        showToast("⚠️ อนุมัติไม่ได้ ยังขาดเอกสาร: " + missingDocs.join(", "));
+        if (typeof viewRiderAppDetail === "function") viewRiderAppDetail(app.id);
+        return;
+    }
+    // 🔒 บังคับให้เจ้าของยืนยันว่า "เปิดดู" เอกสารแล้วจริง ก่อนอนุมัติทุกครั้งที่ยังไม่เคยยืนยัน (กันกดอนุมัติมั่ว ๆ จากรายการโดยไม่เปิดดูรูป)
+    if (!app.docsVerifiedAt) {
+        const displayName = app.nickname ? `${app.fullName} (${app.nickname})` : app.fullName;
+        const confirmed = confirm(`ก่อนอนุมัติ "${displayName}" กรุณายืนยัน:\n\n✓ เปิดดูรูปเอกสารทั้ง ${RIDER_DOC_SLOTS.filter(s => s.required).length} รายการแล้ว (หน้าตรง, ใบขับขี่, ทะเบียนรถ)\n✓ หน้าในรูปตรงกับชื่อ-นามสกุลที่สมัคร\n✓ อ่านตัวเลข/วันหมดอายุในเอกสารได้ชัดเจน ไม่เบลอ\n\nยืนยันว่าตรวจสอบแล้วและจะอนุมัติใช่หรือไม่?`);
+        if (!confirmed) {
+            showToast("ยกเลิกการอนุมัติ (ยังไม่ได้ยืนยันว่าตรวจสอบเอกสารแล้ว)");
+            return;
+        }
+        app.docsVerifiedAt = new Date().toISOString();
+        app.docsVerifiedBy = (state.activeAdmin && state.activeAdmin.name) || "เจ้าของ";
+    }
+
+    // รหัสผ่านลับสำหรับเข้าระบบ: สร้างใหม่ทุกครั้งที่อนุมัติ เจ้าของเห็นครั้งเดียวในกล่องข้อความท้ายฟังก์ชัน
+    let cred;
+    try { cred = await makeRiderLoginCredential(); }
+    catch (e) { showToast("⚠️ สร้างรหัสผ่านไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return; }
 
     if (!app.accessCode) {
         if (/^[A-Z]{2}\d{4}$/.test(app.id)) {
@@ -22427,6 +22454,9 @@ function renderAdminRiders() {
                                                     ` : `
                                                         <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✕ ปฏิเสธ</span>
                                                     `}
+                                                    ${app.status === 'pending' && getMissingRequiredRiderDocs(app).length ? `
+                                                        <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⚠️ เอกสารไม่ครบ</span>
+                                                    ` : ''}
                                                 </div>
                                                 <div class="text-[11px] text-slate-500 flex items-center gap-2.5 flex-wrap mt-0.5 font-mono">
                                                     <a href="tel:${escapeHtml(app.phone)}" class="text-sky-700 font-bold hover:underline flex items-center gap-0.5">
@@ -22795,6 +22825,11 @@ function renderAdminRiders() {
                                         ⏳ รออนุมัติ
                                     </span>
                                 </div>
+                                ${getMissingRequiredRiderDocs(app).length ? `
+                                <div class="bg-rose-50 border border-rose-300 text-rose-800 text-[10px] font-bold px-2 py-1 rounded-lg">
+                                    ⚠️ เอกสารไม่ครบ: ${escapeHtml(getMissingRequiredRiderDocs(app).join(", "))}
+                                </div>
+                                ` : ''}
 
                                 <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[11px] space-y-1">
                                     <div class="flex justify-between">
@@ -23484,6 +23519,21 @@ function viewRiderAppDetail(appId) {
                 </div>
                 <span class="material-symbols-outlined text-2xl text-emerald-600">account_balance</span>
             </div>
+
+            ${app.status === 'pending' && getMissingRequiredRiderDocs(app).length ? `
+            <div class="bg-rose-50 border-2 border-rose-300 p-3 rounded-xl flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-rose-600 text-2xl">warning</span>
+                <div>
+                    <div class="font-black text-sm text-rose-800">⚠️ เอกสารยังไม่ครบ อนุมัติไม่ได้</div>
+                    <div class="text-[11px] text-rose-700">ขาด: ${escapeHtml(getMissingRequiredRiderDocs(app).join(", "))}</div>
+                </div>
+            </div>
+            ` : app.docsVerifiedAt ? `
+            <div class="bg-emerald-50/70 border border-emerald-200 p-2.5 rounded-xl text-[11px] text-emerald-800 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-emerald-600">verified</span>
+                <span>ตรวจสอบเอกสารแล้วโดย ${escapeHtml(app.docsVerifiedBy || "เจ้าของ")} เมื่อ ${formatRiderAppDate(app.docsVerifiedAt)}</span>
+            </div>
+            ` : ''}
 
             ${renderRiderAppExtrasHtml(app)}
         `;
