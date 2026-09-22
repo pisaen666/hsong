@@ -20195,6 +20195,13 @@ function saveCommunityRiders(list) {
 async function cleanRiderDatabase(skipToast) {
     if (!requireOwnerAction()) return;   // ล้างฐานข้อมูลไรเดอร์ = เจ้าของเท่านั้น
     try {
+        // เก็บรายชื่อ id ไว้ก่อนล้าง local เพื่อไปลบทีละ id บนคลาวด์ (เหมือน clearFleetTestData) -
+        //   community_riders/rider_applications/rider_documents/rider_private ไม่มี .write ที่ตัวโหนดแม่เอง
+        //   ตามกฎ v2 (มีแค่ระดับ $id/$riderId) ดังนั้น .remove() ทั้งก้อนที่โหนดแม่จะโดนปฏิเสธเสมอ แม้ล็อกอินเป็นเจ้าของ
+        const riderIdsForCleanup = Array.from(new Set([
+            ...loadCommunityRiders().map(r => r && r.id).filter(Boolean),
+            ...loadRiderApplications().map(a => a && a.id).filter(Boolean)
+        ]));
         localStorage.removeItem("talathub_community_riders");
         localStorage.removeItem("talathub_rider_applications");
         localStorage.removeItem("talathub_logged_in_rider");
@@ -20208,23 +20215,19 @@ async function cleanRiderDatabase(skipToast) {
         wipeAllRiderDocuments();
 
         if (typeof isFirebaseReady === "function" && isFirebaseReady() && db) {
-            db.ref("rider_documents").remove().catch(() => {});
-            db.ref("rider_private").remove().catch(() => {});
-            db.ref("community_riders").remove().catch(() => {});
-            db.ref("rider_applications").remove().catch(() => {});
+            // โหนดที่กฎ v2 ล็อกไว้ระดับ $id/$riderId เท่านั้น: ต้องลบทีละ id ห้าม .remove()/.set() ทั้งก้อนที่โหนดแม่
+            riderIdsForCleanup.forEach(id => {
+                db.ref("rider_documents/" + id).remove().catch(() => {});
+                db.ref("rider_private/" + id).remove().catch(() => {});
+                db.ref("community_riders/" + id).remove().catch(() => {});
+                db.ref("rider_applications/" + id).remove().catch(() => {});
+            });
+            // โหนดที่เปิดกว้างอยู่แล้ว (.write: true ที่ตัวโหนดแม่เอง) - ลบทั้งก้อนได้ตามปกติ
             db.ref("active_rider").remove().catch(() => {});
             db.ref("rider_locations").remove().catch(() => {});
             db.ref("rider_status").remove().catch(() => {});
             db.ref("riders").remove().catch(() => {});
         }
-        try {
-            const endpoints = ["community_riders", "rider_applications", "rider_documents", "rider_private", "active_rider", "rider_locations", "rider_status", "riders"];
-            endpoints.forEach(ep => {
-                fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/${ep}.json`, {
-                    method: "DELETE"
-                }).catch(() => {});
-            });
-        } catch(e) {}
 
         if (!skipToast) {
             showToast("🧹 ล้างฐานข้อมูลไรเดอร์ทั้งหมดสะอาดเรียบร้อยแล้ว!");
@@ -24622,17 +24625,24 @@ function simulateRiderGpsMovement() {
 }
 
 function clearFleetTestData() {
+    if (!requireOwnerAction()) return;
     if (!confirm("⚠️ คุณต้องการล้างข้อมูลระบบไรเดอร์ทั้งหมด (ล้างทั้งใบสมัครและไรเดอร์ทั้งหมด) หรือไม่?\n\n• ข้อมูลในเครื่องนี้และบนคลาวด์ Firebase จะถูกรีเซ็ตให้สะอาด 100% พร้อมใช้งานจริง")) return;
+
+    // เก็บรายชื่อ id ไว้ก่อนล้าง local เพื่อไปลบทีละรายการบนคลาวด์ (กฎ v2 อนุญาตให้ลบทีละ id เท่านั้น
+    //   ไม่มี .write ที่ตัวโหนดแม่ rider_applications/community_riders เอง - set([]) ทั้งก้อนจะโดนปฏิเสธเสมอ
+    //   แม้ว่าจะล็อกอินเป็นเจ้าของอยู่ก็ตาม เพราะ Firebase ไม่มองลึกลงไปที่กฎของลูก $id เวลาตัวเขียนคือโหนดแม่)
+    const appIds = loadRiderApplications().map(a => a && a.id).filter(Boolean);
+    const riderIds = loadCommunityRiders().map(r => r && r.id).filter(Boolean);
 
     // Reset local storage
     localStorage.removeItem("talathub_rider_applications");
     localStorage.removeItem("talathub_community_riders");
     localStorage.removeItem("talathub_logged_in_rider");
 
-    // Reset Firebase Realtime Database with empty arrays
+    // Reset Firebase Realtime Database: ลบทีละ id ตามกฎ v2 (ห้าม set() ทั้งโหนดแม่อีก - ดู CLAUDE.md 5c)
     if (isFirebaseReady() && db) {
-        db.ref("rider_applications").set([]).catch(console.warn);
-        db.ref("community_riders").set([]).catch(console.warn);
+        appIds.forEach(id => db.ref("rider_applications/" + id).remove().catch(console.warn));
+        riderIds.forEach(id => db.ref("community_riders/" + id).remove().catch(console.warn));
     }
 
     _lastSubmittedRiderApp = null;
