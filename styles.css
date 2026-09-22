@@ -225,6 +225,19 @@ button, input, select, span, div {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
 }
 
+/* แบนเนอร์ชวนสมัครไรเดอร์: ในโหมดจำลองจอมือถือ (430px) ต้องเรียงเป็นแถวตั้งเสมอ
+   แม้เบราว์เซอร์จะกว้าง (คลาส sm: ของ Tailwind ยึดความกว้างหน้าต่างจริง ไม่ใช่ความกว้างกรอบ 430px นี้) */
+#main-app-container.frame-mobile #rider-recruit-banner-card {
+    flex-direction: column !important;
+}
+#main-app-container.frame-mobile #rider-recruit-banner-card > div {
+    width: 100% !important;
+}
+#main-app-container.frame-mobile #rider-recruit-banner-card button {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+}
+
 /* =========================================================
    Owner Template & Name Badge Styles (Style 1: Emerald & Gold Capsule)
    ========================================================= */
