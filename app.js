@@ -30860,6 +30860,7 @@ function initTalatHubApp() {
     initMarketHeroCarousel();
     if (typeof setupDragScroll === 'function') {
         setupDragScroll('category-tabs');
+        setupDragScroll('main-role-selector-bar');   // แถบสลับบทบาท 5 ปุ่ม: บนคอมจอไม่กว้างพอ (โดยเฉพาะโหมดตัวอักษรใหญ่) ต้องลากเลื่อนดูปุ่มที่เกินได้
     }
     updateAdminRiderBadges();
     updateAdminStallsBadge();

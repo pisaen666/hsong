@@ -76,10 +76,10 @@
     <!-- TOP ROLE SWITCHER BAR (แถบสลับบทบาท & ควบคุมการเข้าสู่ระบบ สีส้มพรีเมียม สวยเด่นชัด) -->
     <header
         class="w-full bg-gradient-to-r from-orange-600 via-amber-500 to-orange-600 text-white shadow-lg border-b border-orange-700/40 z-50 sticky top-0 px-2.5 sm:px-4 py-2 sm:py-2.5 max-w-full overflow-hidden">
-        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 min-w-0">
+        <div class="max-w-7xl mx-auto flex flex-col items-stretch justify-between gap-2 min-w-0">
 
             <!-- Row 1 on Mobile / Left & Right on Desktop: Brand Logo + Compact Auth Controls -->
-            <div class="flex items-center justify-between gap-2 w-full md:w-auto shrink-0">
+            <div class="flex items-center justify-between gap-2 w-full shrink-0">
                 <!-- Left: Logo & Brand Header (คลิกเพื่อกลับหน้าแรก) -->
                 <div onclick="goToHomePage()"
                     class="flex items-center gap-2 md:gap-3 cursor-pointer hover:opacity-95 transition-all group shrink-0"
@@ -131,7 +131,7 @@
 
             <!-- Row 2 on Mobile / Right on Desktop: Role Selector Segmented Bar (5 บทบาทครบถ้วน ข้อความชัดเจน ไม่ตกหล่น) -->
             <div id="main-role-selector-bar"
-                class="w-full md:w-auto flex items-center justify-between sm:justify-center gap-1 sm:gap-1.5 bg-slate-950/75 backdrop-blur-md border border-white/20 p-1 sm:p-1.5 rounded-2xl text-[11px] sm:text-xs md:text-sm shadow-inner overflow-x-auto scrollbar-none">
+                class="w-full flex items-center flex-nowrap justify-start gap-1 sm:gap-1.5 bg-slate-950/75 backdrop-blur-md border border-white/20 p-1 sm:p-1.5 rounded-2xl text-[11px] sm:text-xs md:text-sm shadow-inner overflow-x-auto scrollbar-none">
                 <button onclick="switchRole('customer')" id="role-btn-customer"
                     class="role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-white bg-slate-800/90 border border-white/20 flex items-center justify-center gap-1 sm:gap-1.5 transition-all duration-200 text-center shrink-0 cursor-pointer"
                     title="1. ลูกค้าสั่งซื้อของสด">
@@ -7303,7 +7303,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.36_rider_doc_verify"></script>
+    <script src="app.js?v=10.37b_role_bar_scroll"></script>
 </body>
 
 </html>
