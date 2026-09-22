@@ -1297,6 +1297,28 @@ function updateOrderStatusInFirebase(orderId, newStatus) {
 window.updateOrderStatusInFirebase = updateOrderStatusInFirebase;
 
 // ✅ ปุ่ม "ซิงค์สด" — ดึงออเดอร์ล่าสุดจาก Firebase Cloud หรือ LocalStorage มาอัปเดตหน้าจอ Hub ทันที
+// 🔒 เลือกออเดอร์ "ของลูกค้าคนนี้เอง" จากรายการที่ดึงมาจากคลาวด์เท่านั้น
+//   แก้บั๊กความปลอดภัยที่พบ 2026-09-22: ฟังก์ชันซิงก์ออเดอร์หลายจุด (เดิมตั้งใจไว้สำหรับฮับ/แอดมิน แต่ไม่มีการตรวจสิทธิ์)
+//   เคยหยิบ "ออเดอร์ล่าสุดของใครก็ได้ที่ยังไม่ส่งเสร็จ" มาใส่ state.activeOrder ซึ่งรันตั้งแต่โหลดหน้าเว็บครั้งแรกสำหรับทุกคน
+//   ทำให้คนแปลกหน้าเห็นชื่อ/เบอร์/ที่อยู่ของลูกค้าคนอื่นบนหน้าติดตามออเดอร์ของตัวเอง โดยไม่ต้องทำอะไรเลยนอกจากเปิดเว็บทิ้งไว้
+function pickMyOwnActiveOrder(list) {
+    if (!Array.isArray(list) || !list.length) return null;
+    const activeOrders = list.filter(o => o && o.orderId && o.status !== "delivered");
+    if (!activeOrders.length) return null;
+    activeOrders.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+    if (state.activeOrder && state.activeOrder.orderId) {
+        const mine = activeOrders.find(o => o.orderId === state.activeOrder.orderId);
+        if (mine) return mine;   // ออเดอร์ที่ติดตามอยู่แล้ว (ผ่านการตรวจรหัสลิงก์/เป็นของเบราว์เซอร์นี้มาก่อน) แค่รีเฟรชสถานะ
+    }
+    const myPhoneDigits = (state.customer && state.customer.identifier) ? String(state.customer.identifier).replace(/\D/g, "") : "";
+    if (myPhoneDigits.length >= 9) {
+        const mine = activeOrders.find(o => String(o.customerPhone || "").replace(/\D/g, "") === myPhoneDigits);
+        if (mine) return mine;
+    }
+    return null;   // ไม่ใช่ของเรา ไม่เอามาใส่ state.activeOrder (แค่ปล่อยให้ window._cachedFirebaseOrders ใช้ในหน้าแอดมิน/ฮับต่อไป)
+}
+window.pickMyOwnActiveOrder = pickMyOwnActiveOrder;
+
 async function syncLatestOrderFromCloud() {
     try {
         let syncedOrder = null;
@@ -1321,12 +1343,9 @@ async function syncLatestOrderFromCloud() {
                     localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
                 } catch(e) {}
 
-                // หา grocery order ล่าสุดที่ยังไม่ delivered
-                const activeGroceries = ordersList.filter(o => o.orderType !== "MERCHANT_EXPRESS" && !o.orderId.startsWith("EXP-") && o.status !== "delivered");
-                if (activeGroceries.length > 0) {
-                    activeGroceries.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-                    syncedOrder = activeGroceries[0];
-                }
+                // หา grocery order "ของลูกค้าคนนี้เอง" ที่ยังไม่ delivered (ไม่ใช่ของใครก็ได้)
+                const groceryCandidates = ordersList.filter(o => o.orderType !== "MERCHANT_EXPRESS" && !o.orderId.startsWith("EXP-"));
+                syncedOrder = pickMyOwnActiveOrder(groceryCandidates);
             }
         }
 
@@ -1431,13 +1450,10 @@ async function syncAdminOrdersFromCloud() {
                 localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
             } catch(e) {}
 
-            // Sync Active Grocery Order if none currently
+            // Sync Active Grocery Order if none currently (เฉพาะออเดอร์ของลูกค้าคนนี้เอง)
             if (!state.activeOrder || state.activeOrder.status === "delivered") {
-                const activeOrders = list.filter(o => o.status !== "delivered");
-                if (activeOrders.length > 0) {
-                    activeOrders.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-                    state.activeOrder = activeOrders[0];
-                }
+                const mine = pickMyOwnActiveOrder(list);
+                if (mine) state.activeOrder = mine;
             }
 
             // Merge into talathub_order_history so localStorage and reports stay updated
@@ -1507,13 +1523,10 @@ function listenToFirebaseOrdersForAdmin() {
                     localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
                 } catch(e) {}
 
-                // Active order update
+                // Active order update (เฉพาะออเดอร์ของลูกค้าคนนี้เอง)
                 if (!state.activeOrder || state.activeOrder.status === "delivered") {
-                    const activeOrders = list.filter(o => o.status !== "delivered");
-                    if (activeOrders.length > 0) {
-                        activeOrders.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-                        state.activeOrder = activeOrders[0];
-                    }
+                    const mine = pickMyOwnActiveOrder(list);
+                    if (mine) state.activeOrder = mine;
                 }
 
                 // Update queue badge
@@ -4533,6 +4546,73 @@ function updateHomeActiveOrderBanner() {
 }
 
 // ✅ จัดการ Deep Link สำหรับการติดตามสถานะออเดอร์สด (เช่น ลิงก์ที่ส่งไปใน LINE)
+// =================================================================
+// รหัสติดตามออเดอร์ (ไม่ต้องล็อกอิน) — กันคนอื่นเปิดดูออเดอร์ของคุณจากแค่เลขออเดอร์
+//   - สร้างครั้งเดียวตอนสั่งซื้อสำเร็จ ผูกกับ "ออเดอร์ใบนั้นใบเดียว" ไม่ใช่รหัสผ่านล็อกอินถาวร สั่งใหม่ได้รหัสใหม่เสมอ
+//   - ลิงก์ติดตามที่ส่งให้ลูกค้าทุกช่องทาง (LINE/SMS/QR) พกรหัสนี้ไปด้วยเสมอ (buildOrderTrackingUrl)
+//   - ข้อจำกัด (บอกเจ้าของไว้ตรง ๆ): ตรวจที่ฝั่งเว็บเท่านั้น เหมือนรหัสผ่านไรเดอร์/แผงค้า
+//     ไม่ได้ปิดกั้นคนที่ดึงข้อมูลตรงจากฐานข้อมูลจริง (Firebase REST) เพราะ orders ยังเป็นโหนดเปิด (ไม่มี Firebase Auth ให้ลูกค้า/ไรเดอร์)
+//     กันได้แค่ "เปิดลิงก์ดูจากหน้าเว็บ" โดยไม่รู้รหัส ซึ่งปิดช่องที่รั่วง่ายที่สุด (เดา/รู้แค่เลขออเดอร์)
+// =================================================================
+const ORDER_TRACK_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";   // 31 ตัว ตัดตัวที่อ่านสับสน (0 O 1 I L) เหมือนรหัสไรเดอร์
+const ORDER_TRACK_CODE_LENGTH = 6;
+function generateOrderTrackCode() {
+    const n = ORDER_TRACK_CODE_ALPHABET.length;
+    const limit = 256 - (256 % n);
+    const out = [];
+    while (out.length < ORDER_TRACK_CODE_LENGTH) {
+        const buf = new Uint8Array(8);
+        if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(buf);
+        else for (let i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256);
+        for (const b of buf) { if (b < limit && out.length < ORDER_TRACK_CODE_LENGTH) out.push(ORDER_TRACK_CODE_ALPHABET[b % n]); }
+    }
+    return out.join("");
+}
+function normalizeOrderTrackCode(v) {
+    return String(v == null ? "" : v).toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+function verifyOrderTrackCode(order, code) {
+    if (!order || !order.trackCode) return false;
+    return normalizeOrderTrackCode(order.trackCode) === normalizeOrderTrackCode(code);
+}
+// ลิงก์ติดตามออเดอร์ (พกรหัสไปด้วยเสมอถ้าออเดอร์นี้มีรหัส)
+function buildOrderTrackingUrl(order, baseOverride) {
+    if (!order || !order.orderId) return "";
+    const base = baseOverride || ((typeof window !== "undefined" && window.location) ? (window.location.origin + window.location.pathname) : "https://pisaen666.github.io/hsong/");
+    const clean = String(order.orderId).replace(/^#/, "");
+    let url = base + "?track=" + encodeURIComponent(clean);
+    if (order.trackCode) url += "&code=" + encodeURIComponent(order.trackCode);
+    return url;
+}
+// ตัดสินใจว่าลิงก์นี้เปิดดูออเดอร์ได้ไหม (แยกออกมาเป็นฟังก์ชันล้วน ๆ เพื่อทดสอบได้โดยไม่ต้องพึ่ง DOM/Firebase)
+//   order ที่ยังไม่เคยมีรหัส (สร้างไว้ก่อนระบบนี้จะมี) ให้ผ่านไปก่อน เพราะย้อนไปออกรหัสให้ไม่ได้ (ระบุไว้เป็นข้อจำกัดที่ทราบ)
+function resolveOrderTrackingAccess(order, providedCodeRaw) {
+    if (!order || !order.orderId) return { ok: false, reason: "not-found" };
+    if (!order.trackCode) return { ok: true, reason: "legacy-no-code" };
+    if (verifyOrderTrackCode(order, providedCodeRaw)) return { ok: true, reason: "ok" };
+    return { ok: false, reason: "bad-code" };
+}
+function copyTrackingLink() {
+    const order = state.activeOrder;
+    if (!order || !order.orderId) { showToast("⚠️ ไม่พบออเดอร์ที่จะสร้างลิงก์"); return; }
+    const url = buildOrderTrackingUrl(order);
+    const text = `ติดตามออเดอร์ ${order.orderId} ของฉัน: ${url}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast("📋 คัดลอกลิงก์ติดตามออเดอร์แล้ว! เก็บไว้เปิดดูภายหลังได้เลย");
+        }).catch(() => { copyTextToClipboard(text); showToast("📋 คัดลอกลิงก์ติดตามออเดอร์แล้ว!"); });
+    } else {
+        copyTextToClipboard(text);
+        showToast("📋 คัดลอกลิงก์ติดตามออเดอร์แล้ว!");
+    }
+}
+window.copyTrackingLink = copyTrackingLink;
+
+window.generateOrderTrackCode = generateOrderTrackCode;
+window.verifyOrderTrackCode = verifyOrderTrackCode;
+window.buildOrderTrackingUrl = buildOrderTrackingUrl;
+window.resolveOrderTrackingAccess = resolveOrderTrackingAccess;
+
 async function handleTrackingDeepLink() {
     try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -4545,6 +4625,7 @@ async function handleTrackingDeepLink() {
         if (trackId) {
             trackId = decodeURIComponent(trackId).trim();
             const cleanKey = trackId.replace(/^#/, '');
+            const providedTrackCode = urlParams.get("code") || (window.location.hash.includes("code=") ? window.location.hash.split("code=")[1] : "");
 
             // 1. ถ้ามีใน state.activeOrder อยู่แล้ว
             if (state.activeOrder && state.activeOrder.orderId && 
@@ -4578,6 +4659,15 @@ async function handleTrackingDeepLink() {
                 } catch(e) {
                     console.warn("Firebase deep link load error:", e);
                 }
+            }
+
+            // 🔒 ต้องมีรหัสติดตามที่ถูกต้องก่อนถึงจะเปิดดูออเดอร์ของคนอื่นได้ (กันแค่รู้/เดาเลขออเดอร์แล้วดูข้อมูลคนอื่น)
+            const access = resolveOrderTrackingAccess(state.activeOrder, providedTrackCode);
+            if (!access.ok) {
+                state.activeOrder = null;
+                try { localStorage.removeItem("talathub_active_order"); } catch (e) { }
+                showToast(access.reason === "bad-code" ? "🔒 ลิงก์นี้ไม่มีรหัสติดตาม หรือรหัสไม่ถูกต้อง กรุณาใช้ลิงก์ที่ได้รับตอนสั่งซื้อ" : "⚠️ ไม่พบข้อมูลออเดอร์นี้");
+                return;
             }
 
             // นำลูกค้าไปที่หน้า Tracking ทันที (รองรับ Guest เปิดดูจากลิงก์ LINE)
@@ -4653,19 +4743,28 @@ document.addEventListener("DOMContentLoaded", () => {
             const isRecent = newOrder.savedAt && (Date.now() - newOrder.savedAt) < 30000;
             if (!isRecent) return;
 
-            // อัปเดต state
-            state.activeOrder = newOrder;
-            try { localStorage.setItem("talathub_active_order", JSON.stringify(newOrder)); } catch(e) {}
+            // 🔒 แก้บั๊กความปลอดภัยที่พบ 2026-09-22: โค้ดเดิมเขียนทับ state.activeOrder ของ "ทุกคน" ที่เปิดเว็บอยู่
+            // ด้วยออเดอร์ใหม่ล่าสุดของใครก็ได้ ทำให้คนแปลกหน้าเห็นชื่อ/เบอร์/ที่อยู่ของลูกค้าคนอื่นบนหน้าติดตามออเดอร์ของตัวเอง
+            // ตอนนี้จะอัปเดต state.activeOrder เฉพาะกรณีเป็นออเดอร์ของ "ลูกค้าคนนี้เอง" ในเบราว์เซอร์นี้เท่านั้น
+            const myPhoneDigits = (state.customer && state.customer.identifier) ? String(state.customer.identifier).replace(/\D/g, "") : "";
+            const orderPhoneDigits = String(newOrder.customerPhone || "").replace(/\D/g, "");
+            const isMyOwnOrder = (state.activeOrder && state.activeOrder.orderId === newOrder.orderId) || (myPhoneDigits.length >= 9 && myPhoneDigits === orderPhoneDigits);
+            if (isMyOwnOrder) {
+                state.activeOrder = newOrder;
+                try { localStorage.setItem("talathub_active_order", JSON.stringify(newOrder)); } catch(e) {}
+                renderTrackingScreen();
+                updateHomeActiveOrderBanner();
+            }
 
-            // อัปเดต UI (Hub badge + เสียง + picking list)
-            const hubBadge = document.getElementById("hub-badge-count");
-            if (hubBadge) { hubBadge.classList.remove("hidden"); hubBadge.textContent = "NEW"; }
-            if (typeof renderHubPickingList === "function") renderHubPickingList();
-            if (typeof renderHubDeliveryView === "function") renderHubDeliveryView();
-            renderTrackingScreen();
-            updateHomeActiveOrderBanner();
-            playOrderAlertSound();
-            showToast(`🔔 ออเดอร์ใหม่ ${newOrder.orderId} เข้ามา! ฿${newOrder.grandTotal || newOrder.total}`);
+            // แจ้งเตือนฝั่งฮับ/แอดมิน (มีสิทธิ์เห็นออเดอร์ทุกใบอยู่แล้วผ่านการล็อกอินเจ้าของ) — ไม่เกี่ยวกับ state.activeOrder ของลูกค้า
+            if (isOwnerSignedIn()) {
+                const hubBadge = document.getElementById("hub-badge-count");
+                if (hubBadge) { hubBadge.classList.remove("hidden"); hubBadge.textContent = "NEW"; }
+                if (typeof renderHubPickingList === "function") renderHubPickingList();
+                if (typeof renderHubDeliveryView === "function") renderHubDeliveryView();
+                playOrderAlertSound();
+                showToast(`🔔 ออเดอร์ใหม่ ${newOrder.orderId} เข้ามา! ฿${newOrder.grandTotal || newOrder.total}`);
+            }
         });
 
         // 2. ฟัง order status update (มือถือลูกค้าจะเห็นสถานะ picking→delivering→delivered ทันที)
@@ -12466,6 +12565,7 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         deliveryNote: orderLandmark,
         customerName: (state.customer && state.customer.isLoggedIn) ? state.customer.identifier : "ลูกค้าทั่วไป",
         customerPhone: formatThaiPhone(getCustomerContactPhone()) || "-",
+        trackCode: generateOrderTrackCode(),   // รหัสติดตามออเดอร์นี้ (ไม่ต้องล็อกอิน) — ดู resolveOrderTrackingAccess
         address: orderAddress,
         houseNumber: orderHouse,
         soiRoad: orderSoi,
@@ -12526,6 +12626,16 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
 function renderTrackingScreen() {
     const order = state.activeOrder;
     const isCustomerLoggedIn = state.customer && state.customer.isLoggedIn;
+
+    const shareBox = document.getElementById("tracking-share-box");
+    const shareBtn = document.getElementById("tracking-share-btn");
+    const showShare = !!(order && order.orderId && order.trackCode);
+    if (shareBox) shareBox.classList.toggle("hidden", !showShare);
+    if (shareBtn) shareBtn.classList.toggle("hidden", !showShare);
+    if (showShare) {
+        const codeEl = document.getElementById("tracking-share-code");
+        if (codeEl) codeEl.textContent = order.trackCode;
+    }
 
     const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
@@ -16032,7 +16142,7 @@ function shareMerchantTrackingToLine(orderId) {
 
     const origin = order.originStall || {};
     const rider = order.assignedRider || { name: "ฮับกำลังจัดสรรไรเดอร์", phone: "-" };
-    const trackingUrl = `${window.location.origin}${window.location.pathname}?track=${order.orderId}`;
+    const trackingUrl = buildOrderTrackingUrl(order);
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(trackingUrl)}`;
 
     const text = `🛵 [ตลาดฮับวิศิษฐ์ชัย] แจ้งสถานะการจัดส่งของสด\n` +
@@ -16892,7 +17002,7 @@ function printMerchantExpressSlip(orderId) {
     const origin = order.originStall || {};
     const rider = order.assignedRider || { name: "กำลังจัดสรรไรเดอร์", plate: "-", phone: "-" };
     const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
-    const trackingUrl = `${window.location.origin}${window.location.pathname}?track=${order.orderId}`;
+    const trackingUrl = buildOrderTrackingUrl(order);
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(trackingUrl)}`;
 
     let distDisplay = "0.8";
@@ -25090,7 +25200,7 @@ function generateLineOrderMessage(order) {
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const cleanId = (order.orderId || "").replace(/#/g, '');
-    const trackUrl = `https://pisaen666.github.io/hsong/?track=${encodeURIComponent(cleanId)}`;
+    const trackUrl = buildOrderTrackingUrl(order, "https://pisaen666.github.io/hsong/");
 
     let itemsList = "";
     let itemIndex = 1;
@@ -25976,7 +26086,7 @@ function sendOutOfStockLineNotice() {
     }
     const refund = order.refundCashTotal || 0;
     const cleanOrderId = (order.orderId || "").replace(/#/g, '');
-    const trackUrl = `https://pisaen666.github.io/hsong/?track=${encodeURIComponent(cleanOrderId)}`;
+    const trackUrl = buildOrderTrackingUrl(order, "https://pisaen666.github.io/hsong/");
     const msg = `🔔【เฮียส่ง】แจ้งเตือนเรื่องสินค้าออเดอร์ ${order.orderId}:\nขออภัยครับ มีสินค้าที่แผงค้าหมด ได้แก่:\n${oosList.map(n => `• ${n}`).join('\n')}\n━━━━━━━━━━━━━━━━━━\n✉️ คืนเงินสดใส่ซอง: ฿${refund}\nทีมงานตัดรายการออก และไรเดอร์ได้นำเงินสดทอนจำนวน ฿${refund} ใส่ซองใสแนบไปกับถุงของสดเรียบร้อยแล้วครับ 🛵💨\n━━━━━━━━━━━━━━━━━━\n👉 แตะลิงก์นี้เพื่อดูสถานะจัดส่ง & ซองเงินทอนของคุณ:\n${trackUrl}`;
 
     if (isMobileDevice()) {

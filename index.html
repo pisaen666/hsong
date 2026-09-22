@@ -1352,6 +1352,12 @@
                         <p class="text-[11px] text-emerald-200 font-medium" id="tracking-order-id">ไม่มีออเดอร์ค้างส่ง
                         </p>
                     </div>
+                    <button type="button" id="tracking-share-btn" onclick="copyTrackingLink()"
+                        class="hidden shrink-0 px-2.5 py-1.5 bg-white/15 hover:bg-white/25 text-white rounded-xl text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                        title="คัดลอกลิงก์ติดตามออเดอร์ (เปิดดูภายหลังได้โดยไม่ต้องล็อกอิน)">
+                        <span class="material-symbols-outlined text-sm">link</span>
+                        <span class="hidden sm:inline">คัดลอกลิงก์</span>
+                    </button>
                     <button onclick="refreshOrderStatus()"
                         class="w-8 h-8 rounded-full hover:bg-white/10 active:scale-90 flex items-center justify-center transition-all"
                         title="รีเฟรชสถานะออเดอร์ล่าสุด">
@@ -1360,6 +1366,19 @@
                 </div>
 
                 <div class="p-3.5 sm:p-4 flex-1 overflow-y-auto space-y-3.5 pb-20">
+                    <!-- รหัสติดตามออเดอร์ (ไม่ต้องล็อกอิน): เก็บลิงก์นี้ไว้เปิดดูภายหลังได้ -->
+                    <div id="tracking-share-box" class="hidden bg-emerald-50 border border-emerald-200 rounded-2xl p-2.5 flex items-center justify-between gap-2">
+                        <div class="min-w-0">
+                            <div class="text-[10px] text-emerald-700 font-bold">รหัสติดตามออเดอร์นี้ (เก็บไว้เปิดดูภายหลัง)</div>
+                            <div class="text-base font-black text-emerald-900 tracking-widest font-mono" id="tracking-share-code">-</div>
+                        </div>
+                        <button type="button" onclick="copyTrackingLink()"
+                            class="shrink-0 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                            <span class="material-symbols-outlined text-sm">link</span>
+                            <span>คัดลอกลิงก์</span>
+                        </button>
+                    </div>
+
                     <!-- Status Hero Banner -->
                     <div
                         class="bg-white rounded-2xl p-4 shadow-card border border-slate-200/80 text-center relative overflow-hidden">
@@ -7284,7 +7303,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.34g_checkout_gate"></script>
+    <script src="app.js?v=10.35b_order_track_code"></script>
 </body>
 
 </html>
