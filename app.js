@@ -498,6 +498,35 @@ let _legacyMigrationStarted = false;
 
 // ปุ่ม/กรอบ "ตัวช่วยทดสอบ" (เติมข้อมูลตัวอย่าง, สมัคร&ล็อกอิน 1-Click, อนุมัติทันที) เห็นและใช้ได้เฉพาะเจ้าของที่ล็อกอิน
 // ใน HTML ใส่คลาส owner-only-test-ui + hidden ไว้เป็นค่าเริ่มต้น (ผู้เข้าชมทั่วไปจึงไม่เห็นแม้แต่ชั่วขณะ)
+// ขนาดตัวอักษร: normal | large (ค่าเริ่มต้น) | xlarge — กฎ CSS อยู่ใน styles.css บล็อก TEXT-SIZE (สร้างด้วย firebase-rules/tools/build-text-size-css.js)
+const _TEXT_SIZE_KEY = "talathub_text_size";
+const _TEXT_SIZE_LABEL = { normal: "ปกติ", large: "ใหญ่", xlarge: "ใหญ่มาก" };
+function getTextSizeMode() {
+    try {
+        const m = localStorage.getItem(_TEXT_SIZE_KEY);
+        if (m === "normal" || m === "large" || m === "xlarge") return m;
+    } catch (e) { }
+    return "large";
+}
+function applyTextSizeMode(mode) {
+    const el = document.documentElement;
+    el.classList.remove("text-large", "text-xlarge");
+    if (mode !== "normal") el.classList.add("text-" + mode);
+    const lab = document.getElementById("text-size-label");
+    if (lab) lab.textContent = _TEXT_SIZE_LABEL[mode] || "";
+}
+function cycleTextSize() {
+    const order = ["large", "xlarge", "normal"];
+    const next = order[(order.indexOf(getTextSizeMode()) + 1) % order.length];
+    try { localStorage.setItem(_TEXT_SIZE_KEY, next); } catch (e) { }
+    applyTextSizeMode(next);
+    showToast("🔠 ขนาดตัวอักษร: " + _TEXT_SIZE_LABEL[next]);
+}
+window.cycleTextSize = cycleTextSize;
+window.getTextSizeMode = getTextSizeMode;
+window.applyTextSizeMode = applyTextSizeMode;
+applyTextSizeMode(getTextSizeMode());
+
 function syncOwnerOnlyTestUi() {
     const owner = isOwnerSignedIn();
     document.querySelectorAll(".owner-only-test-ui").forEach(el => el.classList.toggle("hidden", !owner));
