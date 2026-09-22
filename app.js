@@ -1693,6 +1693,12 @@ const MARKET_ORIGIN = {
     shortName: "ตลาดวิศิษฐ์ชัย"
 };
 
+// ที่อยู่ปลอมที่เวอร์ชันเก่าใส่ให้เองตอนลูกค้ากดสั่งโดยยังไม่ระบุที่อยู่ (ห้ามใช้เป็นที่อยู่จริง)
+const _FAKE_DEFAULT_ADDRESS_PREFIX = "บ้านเลขที่ 12/3 ซอยเทศบาล 1";
+function isFakeDefaultDeliveryLocation(loc) {
+    return !!loc && typeof loc.fullAddress === "string" && loc.fullAddress.indexOf(_FAKE_DEFAULT_ADDRESS_PREFIX) === 0;
+}
+
 function loadSavedLocation() {
     try {
         const saved = localStorage.getItem("talathub_delivery_location");
@@ -1704,6 +1710,10 @@ function loadSavedLocation() {
                 !parsed.title ||
                 parsed.title.includes("สุรีย์")
             )) {
+                localStorage.removeItem("talathub_delivery_location");
+                return null;
+            }
+            if (parsed && isFakeDefaultDeliveryLocation(parsed)) {   // ที่อยู่ปลอมที่เวอร์ชันเก่าสร้างให้เองตอนกดสั่ง
                 localStorage.removeItem("talathub_delivery_location");
                 return null;
             }
@@ -3617,6 +3627,14 @@ document.addEventListener("pointerdown", function (e) {
 // =========================================================================
 // PERMANENT IN-PAGE LOCATION PICKER CONTROLLER (ถาวรบนหน้าแรกสำหรับทุกอุปกรณ์)
 // =========================================================================
+// ปุ่มทางลัดบนหน้าแรก: เลื่อนไปยังส่วนที่ต้องการ (ที่อยู่จัดส่ง / รายการสินค้า)
+function scrollToHomeSection(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+window.scrollToHomeSection = scrollToHomeSection;
+
 function showInPageLocationPicker(shouldShow = true) {
     const pickerView = document.getElementById("inpage-location-picker-view");
     const summaryView = document.getElementById("inpage-location-summary-view");
@@ -6427,7 +6445,7 @@ function openVendorSlipViewerModal(stallIdOrName, dateKey) {
     // ตรวจสอบว่าแผงค้านี้มีสลิปที่เคยแนบไว้แล้วหรือไม่
     const dateKeyForSlip = _activeReportDateKey || getReportDateKey(Date.now());
     const settledMapForSlip = _loadVendorSettlementState(dateKeyForSlip);
-    const existingRecForSlip = settledMapForSlip[finalStallId] || settledMapForSlip[finalStallName] || (meta ? settledMapForSlip[meta.stallId] : null);
+    const existingRecForSlip = settledMapForSlip[record.stallId || stallIdOrName] || settledMapForSlip[record.stallName] || (meta ? settledMapForSlip[meta.stallId] : null);   // (เดิมอ้างตัวแปรที่ไม่มีอยู่ ทำให้เปิดดูสลิปโอนเงินร้านค้าไม่ได้)
 
     _currentPayoutSlipBase64 = (existingRecForSlip && existingRecForSlip.slipImage) ? existingRecForSlip.slipImage : null;
     _currentPayoutSlipNote = (existingRecForSlip && existingRecForSlip.slipNote) ? existingRecForSlip.slipNote : "";
@@ -11792,6 +11810,8 @@ function updateCartUI() {
 // CHECKOUT PAGE RENDERING & PAYMENT LOGIC
 // ==========================================
 function renderCheckoutPage() {
+    syncCheckoutContactField();
+    showCheckoutError("");
     const container = document.getElementById("checkout-stalls-group");
     if (!container) return;
 
@@ -12044,43 +12064,91 @@ function selectPaymentMethod(method) {
 }
 
 // Order Checkout Processor
-function processOrderCheckout() {
-    if (!state.customer || !state.customer.isLoggedIn) {
-        state.customer = {
-            name: "คุณลูกค้าทั่วไป",
-            phone: "089-123-4567",
-            identifier: "0891234567",
-            isLoggedIn: true,
-            loggedInAt: Date.now()
-        };
-        saveCustomerToStorage(state.customer);
-        updateCustomerRoleButtonUI();
-        renderAuthHeaderButtons();
+// เบอร์โทรติดต่อลูกค้า (9-10 หลัก): จากบัญชีที่ล็อกอินด้วยเบอร์ หรือจากช่องกรอกในหน้าชำระเงิน (กรณีล็อกอินด้วย LINE ID)
+function getCustomerContactPhone() {
+    const c = state.customer;
+    const digits = v => String(v == null ? "" : v).replace(/\D/g, "");
+    if (c && c.isLoggedIn) {
+        if (c.phone && digits(c.phone).length >= 9) return digits(c.phone);
+        if (c.type !== "line" && digits(c.identifier).length >= 9) return digits(c.identifier);
     }
+    const inp = document.getElementById("checkout-contact-phone-input");
+    const d = inp ? digits(inp.value) : "";
+    return (d.length >= 9 && d.length <= 10) ? d : "";
+}
+function formatThaiPhone(d) {
+    return d.length === 10 ? `${d.substring(0, 3)}-${d.substring(3, 6)}-${d.substring(6)}` : d;
+}
+window.getCustomerContactPhone = getCustomerContactPhone;
+
+// แสดงช่องกรอกเบอร์ในหน้าชำระเงิน เมื่อบัญชีที่ล็อกอินอยู่ไม่มีเบอร์ (หรือยังไม่ล็อกอิน)
+function syncCheckoutContactField() {
+    const wrap = document.getElementById("checkout-contact-phone-wrap");
+    if (!wrap) return;
+    const c = state.customer;
+    const accountHasPhone = !!(c && c.isLoggedIn && (c.type !== "line") && String(c.identifier || "").replace(/\D/g, "").length >= 9);
+    wrap.classList.toggle("hidden", accountHasPhone);
+}
+
+function showCheckoutError(msg) {
+    const box = document.getElementById("checkout-error-box");
+    if (!box) return;
+    box.textContent = msg || "";
+    box.classList.toggle("hidden", !msg);
+}
+
+// ตรวจความพร้อมก่อนสั่งซื้อ: ต้องมีสินค้า, ร้านต้องเปิด, ต้องล็อกอิน, ต้องมีเบอร์โทร, ต้องระบุที่อยู่จริง
+// (เวอร์ชันเก่าใส่ชื่อ "คุณลูกค้าทั่วไป" เบอร์และที่อยู่ปลอมให้เอง ทำให้ไรเดอร์ส่งผิดที่และติดต่อลูกค้าไม่ได้)
+function validateOrderPrerequisites() {
+    const totals = calculateCartTotals();
+    if (!state.cart || totals.itemsCount === 0) {
+        return { ok: false, message: "⚠️ ยังไม่มีสินค้าในตะกร้า กรุณาเลือกสินค้าก่อนสั่งซื้อ" };
+    }
+    const closed = [];
+    state.cart.forEach(item => {
+        const st = MARKET_DATA.find(s => s.stallId === item.stallId) || ALL_100_STALLS.find(s => s.stallId === item.stallId);
+        if (st && st.isClosed) {
+            const nm = st.stallName || item.stallName || item.stallId;
+            if (!closed.includes(nm)) closed.push(nm);
+        }
+    });
+    if (closed.length) {
+        return { ok: false, message: `🔴 ร้าน "${closed.join('", "')}" พักรับออเดอร์ชั่วคราว กรุณานำสินค้าของร้านนี้ออกจากตะกร้าก่อน แล้วสั่งซื้อใหม่` };
+    }
+    if (!state.customer || !state.customer.isLoggedIn || !state.customer.identifier) {
+        return { ok: false, action: "login", message: "⚠️ กรุณาเข้าสู่ระบบด้วยเบอร์โทรของคุณก่อนสั่งซื้อ เพื่อให้ไรเดอร์ติดต่อได้" };
+    }
+    if (!getCustomerContactPhone()) {
+        return { ok: false, focusId: "checkout-contact-phone-input", message: "⚠️ กรุณากรอกเบอร์โทรที่ไรเดอร์โทรหาได้ (9-10 หลัก) ในช่องเบอร์โทรด้านบน" };
+    }
+    const loc = state.deliveryLocation;
+    if (!loc || !loc.isSet || isFakeDefaultDeliveryLocation(loc) || typeof loc.lat !== "number" || typeof loc.lng !== "number") {
+        if (isFakeDefaultDeliveryLocation(loc)) { state.deliveryLocation = null; saveLocationToStorage(null); updateDeliveryLocationUI(); }
+        return { ok: false, action: "location", message: "⚠️ กรุณาระบุที่อยู่จัดส่งของคุณ (ปักหมุดบนแผนที่) ก่อนสั่งซื้อ เพื่อให้ไรเดอร์ไปส่งถูกที่" };
+    }
+    return { ok: true };
+}
+window.validateOrderPrerequisites = validateOrderPrerequisites;
+
+// คืน true ถ้าผ่าน ถ้าไม่ผ่านจะแสดงกล่องแดง + พาไปแก้จุดนั้น
+function enforceOrderPrerequisites() {
+    const check = validateOrderPrerequisites();
+    if (check.ok) { showCheckoutError(""); return true; }
+    showCheckoutError(check.message);
+    showToast(check.message);
+    if (check.action === "login") openCustomerLoginModal();
+    else if (check.action === "location") openLocationModal();
+    else if (check.focusId) {
+        const el = document.getElementById(check.focusId);
+        if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus(); }
+    }
+    return false;
+}
+
+function processOrderCheckout() {
+    if (!enforceOrderPrerequisites()) return;
 
     const totals = calculateCartTotals();
-    if (totals.itemsCount === 0) {
-        showToast("กรุณาเลือกสินค้าลงตะกร้าก่อนทำรายการ");
-        return;
-    }
-
-    // Default delivery location fallback if not set
-    if (!state.deliveryLocation || !state.deliveryLocation.isSet) {
-        state.deliveryLocation = {
-            title: "บ้านลูกค้า (โซนตัวอำเภอบ้านบึง)",
-            fullAddress: "บ้านเลขที่ 12/3 ซอยเทศบาล 1 ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
-            detail: "ห่างจากตลาดวิศิษฐ์ชัย 1.2 กม. • ค่าส่ง ฿20",
-            distance: "1.2 กม.",
-            distFromMarketText: "ห่างจากตลาดวิศิษฐ์ชัย 1.2 กม.",
-            fee: 20,
-            lat: 13.3105,
-            lng: 101.1142,
-            isRealGPS: true,
-            isSet: true
-        };
-        saveLocationToStorage(state.deliveryLocation);
-        updateDeliveryLocationUI();
-    }
 
     const selectedRadio = document.querySelector('input[name="payment_method"]:checked');
     const selectedPayment = selectedRadio ? selectedRadio.value : "promptpay";
@@ -12280,6 +12348,8 @@ function confirmSCBPayment() {
 
 // Payment Success Simulation & Order Creation
 function simulatePaymentSuccess(paymentType = "promptpay") {
+    // ตรวจซ้ำก่อนสร้างออเดอร์ (ร้านอาจเพิ่งพักร้าน / ผู้ใช้ปิดหน้าต่างชำระเงินไปแก้ข้อมูล)
+    if (!enforceOrderPrerequisites()) { closePromptPayModal(); closeSCBModal(); return; }
     // 🛡️ Safeguard: ถ้าโอนเงินผ่าน PromptPay หรือ SCB ต้องแนบสลิปก่อน
     if (paymentType === "promptpay" || paymentType === "bank_transfer") {
         if (!state.currentUploadedSlip) {
@@ -12317,7 +12387,7 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
     }
 
     const noteInput = document.getElementById("delivery-note-input");
-    const noteVal = noteInput ? noteInput.value.trim() : "อยู่ติดกับ 7-11";
+    const noteVal = noteInput ? noteInput.value.trim() : "";
 
     const stallsMap = {};
     state.cart.forEach(item => {
@@ -12350,11 +12420,14 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
     const loc = state.deliveryLocation;
     const orderLat = (loc && loc.lat) ? loc.lat : MARKET_ORIGIN.lat;
     const orderLng = (loc && loc.lng) ? loc.lng : MARKET_ORIGIN.lng;
-    const orderHouse = (loc && loc.houseNumber) ? loc.houseNumber : "";
+    const quickHouseEl = document.getElementById("checkout-quick-house-no");
+    const quickHouse = quickHouseEl ? quickHouseEl.value.trim() : "";   // ช่อง "บ้านเลขที่/ซอย" ในหน้าชำระเงิน (เดิมกรอกแล้วไม่ถูกใช้)
+    const orderHouse = (loc && loc.houseNumber) ? loc.houseNumber : quickHouse;
     const orderSoi = (loc && loc.soiRoad) ? loc.soiRoad : "";
     const orderSub = (loc && loc.subdistrict) ? loc.subdistrict : "";
     const orderLandmark = noteVal || (loc && loc.landmark) || "";
-    const orderAddress = (loc && loc.fullAddress) ? loc.fullAddress : (loc && loc.title ? loc.title : "ตามพิกัดที่ลูกค้าระบุ");
+    const orderAddressBase = (loc && loc.fullAddress) ? loc.fullAddress : (loc && loc.title ? loc.title : "ตามพิกัดที่ลูกค้าระบุ");
+    const orderAddress = (quickHouse && !(loc && loc.houseNumber)) ? `${quickHouse} ${orderAddressBase}` : orderAddressBase;
 
     const nowTime = Date.now();
     const timeStr = new Date(nowTime).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.";
@@ -12381,7 +12454,7 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         total: Number(totals.grandTotal || 0),
         grandTotal: Number(totals.grandTotal || 0),
         deliveryFee: Number(totals.deliveryFee || 20),
-        payAmountExact: exactPayAmount,
+        payAmountExact: paymentType === "cod" ? Number(totals.grandTotal || 0) : exactPayAmount,   // เก็บเงินปลายทางไม่ต้องมีเศษสตางค์สุ่ม
         paymentType: paymentType,
         paymentDesc: paymentDesc,
         paymentStatus: paymentStatus,
@@ -12392,7 +12465,7 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         paymentVerifiedBy: null,
         deliveryNote: orderLandmark,
         customerName: (state.customer && state.customer.isLoggedIn) ? state.customer.identifier : "ลูกค้าทั่วไป",
-        customerPhone: (state.customer && state.customer.phone) ? state.customer.phone : ((state.customer && state.customer.identifier && /^\d+$/.test(state.customer.identifier.replace(/-/g,''))) ? state.customer.identifier : "-"),
+        customerPhone: formatThaiPhone(getCustomerContactPhone()) || "-",
         address: orderAddress,
         houseNumber: orderHouse,
         soiRoad: orderSoi,
@@ -12483,12 +12556,14 @@ function renderTrackingScreen() {
 
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} น.`;
-    const exactPayStr = (order.payAmountExact !== undefined && order.payAmountExact !== null)
+    const exactPayStr = (order.paymentType !== "cod" && order.payAmountExact !== undefined && order.payAmountExact !== null)
         ? Number(order.payAmountExact).toFixed(2)
-        : Number(order.total || 0).toLocaleString();
-    const payStatusNote = order.paymentVerified
-        ? " • ✓ เงินเข้าแล้ว"
-        : (order.paymentType === "cod" ? " • 💵 เก็บเงินสด COD" : " • ⏳ แนบสลิปแล้ว/รอตรวจยอด");
+        : Number(order.total || 0).toLocaleString();   // เก็บเงินปลายทาง: แสดงยอดจริง ไม่มีเศษสตางค์สุ่ม
+    // (เคยหายไปจากโค้ดตั้งแต่การแก้เรื่องเศษสตางค์ ทำให้หน้าติดตามออเดอร์ error ทุกครั้งที่มีออเดอร์)
+    const payMethodText = order.paymentType === "bank_transfer" ? "โอน SCB" : (order.paymentType === "cod" ? "COD" : "พร้อมเพย์");
+    const payStatusNote = order.paymentType === "cod"
+        ? " • 💵 เก็บเงินสดปลายทาง"
+        : (order.paymentVerified ? " • ✓ เงินเข้าแล้ว" : " • ⏳ แนบสลิปแล้ว/รอตรวจยอด");
 
     setVal("tracking-step1-subtitle", `${timeStr} • ยอดรวม ฿${exactPayStr} (${payMethodText}${payStatusNote})`);
 
@@ -16756,7 +16831,7 @@ function assignExpressOrderToRider(param1 = "R1", param2 = null) {
             rider = communityRiders.find(r => r.id === riderChoice || r.name.includes(riderChoice));
         }
         if (!rider) {
-            rider = communityRiders.find(r => r.status === 'available') || communityRiders[0] || (RIDER_DATABASE && RIDER_DATABASE.length > 0 ? RIDER_DATABASE[0] : {
+            rider = communityRiders.find(r => r.status === 'available') || communityRiders[0] || (typeof RIDER_DATABASE !== "undefined" && RIDER_DATABASE && RIDER_DATABASE.length > 0 ? RIDER_DATABASE[0] : {
                 id: "R1",
                 name: "สมศักดิ์ ขับไว (Rider ประจำฮับ)",
                 phone: "082-111-2233",

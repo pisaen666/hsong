@@ -279,38 +279,18 @@
                     </div>
                 </div>
 
-                <!-- 🛵 RIDER RECRUITMENT BANNER (ขั้นตอนที่ 1: ร่วมทีมไรเดอร์เฮียส่ง) -->
-                <div class="px-3 sm:px-4 pt-2 pb-1">
-                    <div
-                        class="bg-gradient-to-r from-slate-900 via-sky-950 to-blue-950 text-white rounded-2xl p-3.5 shadow-md border border-sky-500/40 flex flex-col sm:flex-row items-center justify-between gap-3">
-                        <div class="flex items-center gap-3 w-full sm:w-auto">
-                            <div
-                                class="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-400 to-blue-600 text-white flex items-center justify-center font-black text-xl shadow-md shrink-0">
-                                🛵
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <div class="flex items-center gap-1.5 flex-wrap">
-                                    <span
-                                        class="text-[9px] bg-sky-400 text-slate-950 font-black px-2 py-0.2 rounded-full uppercase">เปิดรับสมัคร</span>
-                                    <span
-                                        class="text-xs font-black text-sky-200 truncate">ร่วมทีมไรเดอร์ส่งของสดเฮียส่ง</span>
-                                </div>
-                                <p class="text-[11px] text-slate-300 mt-0.5">ค่ารอบเริ่มต้น ฿40/เที่ยว • โบนัสฝนตก •
-                                    รับเงินไว 0% GP</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-2 w-full sm:w-auto shrink-0">
-                            <button type="button" onclick="goToRiderRegisterScreen()"
-                                class="flex-1 sm:flex-none px-3.5 py-2 bg-gradient-to-r from-sky-400 to-blue-500 hover:from-sky-300 hover:to-blue-400 text-slate-950 font-black rounded-xl text-xs shadow-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
-                                <span class="material-symbols-outlined text-sm font-bold">how_to_reg</span>
-                                <span>สมัครเป็นไรเดอร์</span>
-                            </button>
-                            <button type="button" onclick="switchRole('rider')"
-                                class="flex-1 sm:flex-none px-3 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs border border-white/20 flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
-                                <span>เข้าสู่ระบบรับงาน</span>
-                            </button>
-                        </div>
-                    </div>
+                <!-- ⚡ ทางลัดสำหรับลูกค้า: ข้ามไปที่อยู่จัดส่ง / ไปเลือกสินค้า (หน้าแรกยาว) -->
+                <div class="px-3 sm:px-4 pt-2 pb-1 grid grid-cols-2 gap-2" id="home-quick-actions">
+                    <button type="button" onclick="scrollToHomeSection('inpage-location-container')"
+                        class="px-3 py-3 rounded-2xl bg-white border-2 border-emerald-500 text-emerald-800 font-black text-sm flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-base">location_on</span>
+                        <span>ระบุที่อยู่จัดส่ง</span>
+                    </button>
+                    <button type="button" onclick="scrollToHomeSection('products-catalog-container')"
+                        class="px-3 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-sm flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer">
+                        <span class="material-symbols-outlined text-base">shopping_basket</span>
+                        <span>เลือกสินค้าเลย</span>
+                    </button>
                 </div>
 
                 <!-- 🛵 STICKY ACTIVE ORDER LIVE TRACKER BANNER (แสดงเมื่อลูกค้ามีออเดอร์ค้างส่ง) -->
@@ -350,7 +330,7 @@
                 </div>
 
                 <!-- 📍 PERMANENT IN-PAGE LOCATION & DELIVERY SECTION (แผนที่ & ระบุพิกัดดาวเทียมถาวรบนหน้าแรก) -->
-                <div class="px-4 -mt-1.5" id="inpage-location-container">
+                <div class="px-4 -mt-1.5" id="inpage-location-container" style="scroll-margin-top:120px">
 
                     <!-- PERMANENT INTERACTIVE SMART IN-PAGE MAP & ADDRESS FORM -->
                     <div id="inpage-location-picker-view"
@@ -682,7 +662,7 @@
                 </div>
 
                 <!-- Product Catalog List -->
-                <div class="px-4 py-2 flex-1 overflow-y-auto space-y-3" id="products-catalog-container">
+                <div class="px-4 py-2 flex-1 overflow-y-auto space-y-3" id="products-catalog-container" style="scroll-margin-top:120px">
                     <!-- Products will be dynamically rendered here via app.js -->
                 </div>
 
@@ -899,6 +879,40 @@
 
                 <!-- 🛍️ SUBCATEGORY PRODUCTS VIEW CONTAINER (แสดง 15 รายการคัดสรรเมื่อคลิกเลือกหมวดหมู่) -->
                 <div class="px-4 py-2 space-y-3" id="subcategory-products-container"></div>
+                <!-- 🛵 RIDER RECRUITMENT BANNER (ขั้นตอนที่ 1: ร่วมทีมไรเดอร์เฮียส่ง) -->
+                <div class="px-3 sm:px-4 pt-2 pb-1">
+                    <div
+                        class="bg-gradient-to-r from-slate-900 via-sky-950 to-blue-950 text-white rounded-2xl p-3.5 shadow-md border border-sky-500/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div class="flex items-center gap-3 w-full sm:w-auto">
+                            <div
+                                class="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-400 to-blue-600 text-white flex items-center justify-center font-black text-xl shadow-md shrink-0">
+                                🛵
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span
+                                        class="text-[9px] bg-sky-400 text-slate-950 font-black px-2 py-0.2 rounded-full uppercase">เปิดรับสมัคร</span>
+                                    <span
+                                        class="text-xs font-black text-sky-200 truncate">ร่วมทีมไรเดอร์ส่งของสดเฮียส่ง</span>
+                                </div>
+                                <p class="text-[11px] text-slate-300 mt-0.5">ค่ารอบเริ่มต้น ฿40/เที่ยว • โบนัสฝนตก •
+                                    รับเงินไว 0% GP</p>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0">
+                            <button type="button" onclick="goToRiderRegisterScreen()"
+                                class="flex-1 min-w-[10.5rem] sm:flex-none px-3.5 py-2 bg-gradient-to-r from-sky-400 to-blue-500 hover:from-sky-300 hover:to-blue-400 text-slate-950 font-black rounded-xl text-xs shadow-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                                <span class="material-symbols-outlined text-sm font-bold">how_to_reg</span>
+                                <span class="whitespace-nowrap">สมัครเป็นไรเดอร์</span>
+                            </button>
+                            <button type="button" onclick="switchRole('rider')"
+                                class="flex-1 min-w-[10.5rem] sm:flex-none px-3 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs border border-white/20 flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                                <span class="whitespace-nowrap">เข้าสู่ระบบรับงาน</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Floating Cart Bottom Bar -->
                 <div id="customer-floating-cart"
                     class="hidden sticky bottom-16 left-0 right-0 px-4 py-2 z-30 justify-center"
@@ -1020,6 +1034,12 @@
                                     ข้อความถึงไรเดอร์</label>
                                 <input type="text" id="delivery-note-input"
                                     placeholder="เช่น แขวนถุงไว้ที่รั้ว โทรแจ้งก่อนถึง"
+                                    class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium">
+                            </div>
+                            <div id="checkout-contact-phone-wrap" class="sm:col-span-2 hidden">
+                                <label class="text-[11px] font-semibold text-slate-700 mb-1 block">📞 เบอร์โทรที่ไรเดอร์โทรหาได้ (จำเป็น)</label>
+                                <input type="tel" inputmode="numeric" id="checkout-contact-phone-input" maxlength="12" autocomplete="tel"
+                                    placeholder="เช่น 0812345678"
                                     class="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium">
                             </div>
                         </div>
@@ -1295,6 +1315,7 @@
                 <!-- Sticky Checkout Footer Bar (ตรึงขอบล่างเสมอ มองเห็นทันที 100%) -->
                 <div id="checkout-floating-bottom-bar"
                     class="shrink-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 sm:p-4 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] space-y-1.5">
+                    <div id="checkout-error-box" role="alert" aria-live="assertive" class="hidden w-full px-3 py-2.5 rounded-xl border-2 border-rose-300 bg-rose-50 text-rose-800 font-black text-sm text-center leading-snug"></div>
                     <button type="button" id="btn-process-checkout" onclick="processOrderCheckout()"
                         class="w-full bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white font-bold py-3.5 px-4 rounded-2xl shadow-orange-glow flex items-center justify-between active:scale-[0.99] transition-all cursor-pointer">
                         <div class="text-left">
@@ -7263,7 +7284,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.33_text_size"></script>
+    <script src="app.js?v=10.34d_checkout_gate"></script>
 </body>
 
 </html>
