@@ -131,38 +131,38 @@
 
             <!-- Row 2 on Mobile / Right on Desktop: Role Selector Segmented Bar (5 บทบาทครบถ้วน ข้อความชัดเจน ไม่ตกหล่น) -->
             <div id="main-role-selector-bar"
-                class="w-full flex items-center flex-nowrap justify-start gap-1 sm:gap-1.5 bg-slate-950/75 backdrop-blur-md border border-white/20 p-1 sm:p-1.5 rounded-2xl text-[11px] sm:text-xs md:text-sm shadow-inner overflow-x-auto scrollbar-none">
+                class="w-full flex items-center flex-nowrap justify-start gap-0.5 sm:gap-1.5 bg-slate-950/75 backdrop-blur-md border border-white/20 p-1 sm:p-1.5 rounded-2xl text-[11px] sm:text-xs md:text-sm shadow-inner overflow-x-auto scrollbar-none">
                 <button onclick="switchRole('customer')" id="role-btn-customer"
-                    class="role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-white bg-slate-800/90 border border-white/20 flex items-center justify-center gap-1 sm:gap-1.5 transition-all duration-200 text-center shrink-0 cursor-pointer"
+                    class="role-btn py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-white bg-slate-800/90 border border-white/20 flex items-center justify-center gap-1 sm:gap-1.5 transition-all duration-200 text-center shrink-0 cursor-pointer"
                     title="1. ลูกค้าสั่งซื้อของสด">
                     <span class="material-symbols-outlined text-sm md:text-base">shopping_cart</span>
-                    <span class="whitespace-nowrap">1. ลูกค้า</span>
+                    <span class="whitespace-nowrap"><span class="hidden sm:inline">1. </span>ลูกค้า</span>
                 </button>
                 <button onclick="switchRole('hub')" id="role-btn-hub"
-                    class="role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 transition-all duration-200 text-center relative shrink-0 cursor-pointer"
+                    class="role-btn py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 transition-all duration-200 text-center relative shrink-0 cursor-pointer"
                     title="2. ศูนย์จัดของฮับ">
                     <span class="material-symbols-outlined text-sm md:text-base">inventory_2</span>
-                    <span class="whitespace-nowrap">2. จัดส่ง</span>
+                    <span class="whitespace-nowrap"><span class="hidden sm:inline">2. </span>จัดส่ง</span>
                     <span id="hub-badge-count"
                         class="bg-amber-400 text-slate-950 text-[9px] font-black px-1 rounded-full absolute -top-1 right-1 hidden">1</span>
                 </button>
                 <button onclick="switchRole('merchant')" id="role-btn-merchant"
-                    class="role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 transition-all duration-200 text-center shrink-0 cursor-pointer"
+                    class="role-btn py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 transition-all duration-200 text-center shrink-0 cursor-pointer"
                     title="3. แผงค้าในตลาด">
                     <span class="material-symbols-outlined text-sm md:text-base">storefront</span>
-                    <span class="whitespace-nowrap">3. แผงค้า</span>
+                    <span class="whitespace-nowrap"><span class="hidden sm:inline">3. </span>แผงค้า</span>
                 </button>
                 <button onclick="switchRole('rider')" id="role-btn-rider"
-                    class="role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 transition-all duration-200 text-center shrink-0 cursor-pointer"
+                    class="role-btn py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 transition-all duration-200 text-center shrink-0 cursor-pointer"
                     title="4. ไรเดอร์ส่งของชุมชน">
                     <span class="material-symbols-outlined text-sm md:text-base">two_wheeler</span>
-                    <span class="whitespace-nowrap">4. ไรเดอร์</span>
+                    <span class="whitespace-nowrap"><span class="hidden sm:inline">4. </span>ไรเดอร์</span>
                 </button>
                 <button onclick="switchRole('admin')" id="role-btn-admin"
-                    class="role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-purple-200 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-1 sm:gap-1.5 transition-all duration-200 text-center relative shrink-0 cursor-pointer"
+                    class="role-btn py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-purple-200 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-1 sm:gap-1.5 transition-all duration-200 text-center relative shrink-0 cursor-pointer"
                     title="5. แอดมินส่วนกลาง">
                     <span class="material-symbols-outlined text-sm md:text-base">admin_panel_settings</span>
-                    <span class="whitespace-nowrap">5. แอดมิน</span>
+                    <span class="whitespace-nowrap"><span class="hidden sm:inline">5. </span>แอดมิน</span>
                     <span id="role-admin-badge" class="hidden absolute -top-1 -right-1 flex h-3.5 w-3.5"><span
                             class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span><span
                             class="relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-500 text-[8px] text-white font-bold items-center justify-center">!</span></span>
@@ -7303,7 +7303,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.37b_role_bar_scroll"></script>
+    <script src="app.js?v=10.39_role_bar_compact"></script>
 </body>
 
 </html>
