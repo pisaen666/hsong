@@ -52,5 +52,37 @@ ok(/_onMerchantMapPinMoved/.test(applyBody), "_applyLocationResultToMerchantMap 
         ok(indexSrc.includes('id="' + id + '"'), `index.html มีช่อง id="${id}"`);
     });
 
+// บั๊กตามมา 2026-09-23 (เจ้าของทดสอบจริงบนมือถือ): พอเพิ่มช่องค้นหาแล้ว เนื้อหาในหน้าต่างแผนที่แผงค้าล้นจอสั้น ๆ
+// จนเลื่อนลงไปกดปุ่ม "ยืนยันปักหมุด" ไม่ถึง (โดนบล็อกโดย touch-action:none ที่กรอบนอก + ไม่มีตัวไหนเลื่อนได้เลย)
+//   - แก้โดยห่อทุกอย่างยกเว้นหัวข้อกับปุ่มยืนยันด้วย div ที่เลื่อนได้ (overflow-y-auto) แล้วย้ายปุ่มยืนยันออกมาไว้
+//     นอกกรอบเลื่อน ให้ปักหมุดอยู่ล่างสุดเสมอ กดถึงได้โดยไม่ต้องเลื่อนหา
+const modalMatch = indexSrc.match(/<div id="merchant-map-modal"[\s\S]*?<!-- END MERCHANT MAP PICKER MODAL -->/);
+ok(!!modalMatch, "พบบล็อก #merchant-map-modal ทั้งก้อนใน index.html");
+const modalHtml = modalMatch ? modalMatch[0] : "";
+
+ok(!/id="merchant-map-modal"[^>]*touch-action\s*:\s*none/.test(modalHtml), "กรอบนอก #merchant-map-modal ไม่มี touch-action:none อีกแล้ว (เคยบล็อกการเลื่อนทั้งหน้าต่าง)");
+ok(/overflow-y-auto/.test(modalHtml), "มี div ที่เลื่อนได้ (overflow-y-auto) อยู่ในหน้าต่างนี้");
+
+// ปุ่มยืนยันต้องอยู่ "หลัง" ตำแหน่งปิดของ div ที่เลื่อนได้ (คืออยู่นอกกรอบเลื่อน ไม่ใช่ในกรอบเลื่อน)
+const scrollDivStart = modalHtml.indexOf('overflow-y-auto');
+const scrollDivOpenTagStart = modalHtml.lastIndexOf('<div', scrollDivStart);
+// หาโครงปิดของ div เลื่อนได้แบบนับวงเล็บ <div ... </div> คร่าว ๆ โดยนับจากจุดเปิดไปหาจุดที่ระดับซ้อนกลับมาเท่าเดิม
+function findMatchingCloseDivIndex(html, openTagStart) {
+    let i = html.indexOf(">", openTagStart) + 1;
+    let depth = 1;
+    const tagRe = /<div\b|<\/div>/g;
+    tagRe.lastIndex = i;
+    let m;
+    while ((m = tagRe.exec(html))) {
+        if (m[0] === "<div") depth++;
+        else depth--;
+        if (depth === 0) return m.index;
+    }
+    return -1;
+}
+const scrollDivCloseIdx = findMatchingCloseDivIndex(modalHtml, scrollDivOpenTagStart);
+const confirmBtnIdx = modalHtml.indexOf('id="merchant-map-confirm-btn"');
+ok(scrollDivCloseIdx > 0 && confirmBtnIdx > scrollDivCloseIdx, "ปุ่ม merchant-map-confirm-btn อยู่นอกกรอบที่เลื่อนได้ (ปักหมุดอยู่ล่างสุดเสมอ ไม่ต้องเลื่อนหา)");
+
 console.log(fail ? "\n" + fail + " FAILED" : "\nALL PASSED");
 process.exit(fail ? 1 : 0);
