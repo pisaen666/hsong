@@ -66,5 +66,20 @@ const nextBtnIdx = htmlSrc.indexOf("ถัดไป: ใส่สินค้า
 ok(paymentIdx > 0 && lineIdx > paymentIdx, "กล่อง LINE อยู่หลังกล่องช่องทางการรับชำระเงินแล้ว (ไม่ได้อยู่บนสุดของแท็บ)");
 ok(lineIdx > 0 && nextBtnIdx > lineIdx, "กล่อง LINE อยู่ก่อนปุ่ม 'ถัดไป' ท้ายฟอร์มพอดี");
 
+console.log("== ข้อ 6 (เพิ่มทีหลัง 2026-09-23): กรอบใหญ่ที่คลุมกรอบย่อยต้องเข้มกว่ากรอบย่อยด้านใน ==");
+ok(htmlSrc.includes('p-3.5 bg-white border-2 border-slate-300 rounded-2xl space-y-3 shadow-2xs'),
+    "กรอบ 'ข้อมูลร้านค้าเบื้องต้น' เข้มขึ้นแล้ว (border-2 border-slate-300)");
+ok(htmlSrc.includes('p-3.5 bg-white border-2 border-slate-300 rounded-2xl space-y-4 shadow-2xs'),
+    "กรอบ 'อัปโหลดรูปภาพร้านค้า/เจ้าของร้าน' เข้มขึ้นแล้ว (border-2 border-slate-300)");
+ok((htmlSrc.match(/p-3 bg-white border-2 border-slate-300 rounded-2xl space-y-2\.5/g) || []).length === 2,
+    "กรอบ 'ผู้ติดต่อคนที่ 1' และ 'คนที่ 2' เข้มขึ้นทั้งคู่ (border-2 border-slate-300)");
+ok(htmlSrc.includes('p-3 bg-amber-50/80 border-2 border-amber-300 rounded-2xl space-y-2.5'),
+    "กรอบ 'ช่องทางการรับชำระเงิน' เข้มขึ้นแล้ว (border-2 border-amber-300)");
+// กรอบย่อยด้านใน (ช่องรูปแต่ละรูป, บัญชี 1/2) ต้องยังคงบางกว่ากรอบใหญ่ ไม่ถูกแก้ไปด้วย - รักษาลำดับชั้นสายตา
+ok(htmlSrc.includes('bg-slate-50 p-3 rounded-xl border border-slate-200/80'),
+    "กรอบย่อย (ช่องอัปโหลดรูปหน้าร้านแต่ละรูป) ยังบางเหมือนเดิม ไม่ได้ถูกทำให้เข้มไปด้วย");
+ok(htmlSrc.includes('bg-white p-2.5 rounded-xl border border-amber-200/50 mb-2'),
+    "กรอบย่อย (บัญชีหลักที่ 1) ยังบางเหมือนเดิม ไม่ได้ถูกทำให้เข้มไปด้วย");
+
 console.log(fail ? "\n" + fail + " FAILED" : "\nALL PASSED");
 process.exit(fail ? 1 : 0);
