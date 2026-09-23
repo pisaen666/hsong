@@ -4101,12 +4101,12 @@
                     <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs w-full scroll-smooth cursor-grab active:cursor-grabbing"
                         id="merchant-portal-tab-bar">
                         <button onclick="switchMerchantPortalTab('tab-info')" id="btn-tab-info"
-                            class="merchant-tab-btn active px-3 py-1.5 rounded-xl font-bold bg-white text-emerald-800 shadow-xs flex items-center gap-1 shrink-0">
+                            class="merchant-tab-btn active px-3.5 py-2 rounded-xl font-bold bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 shrink-0">
                             <span class="material-symbols-outlined text-sm">badge</span>
                             <span>1. ชื่อร้านค้าและผู้ติดต่อ</span>
                         </button>
                         <button onclick="switchMerchantPortalTab('tab-products')" id="btn-tab-products"
-                            class="merchant-tab-btn px-3 py-1.5 rounded-xl font-medium bg-transparent text-slate-600 hover:bg-white/60 flex items-center gap-1 shrink-0">
+                            class="merchant-tab-btn px-3.5 py-2 rounded-xl font-bold bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 flex items-center gap-1.5 shrink-0">
                             <span class="material-symbols-outlined text-sm">fastfood</span>
                             <span>2. สินค้าและราคาที่ต้องการจำหน่าย</span>
                         </button>
@@ -4123,44 +4123,21 @@
 
                     <!-- TAB 1: General Info -->
                     <div id="tab-info" class="merchant-tab-pane space-y-3.5">
-                        <div
-                            class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-emerald-900 flex items-start gap-2">
-                            <span
-                                class="material-symbols-outlined text-emerald-700 text-base shrink-0 mt-0.5">info</span>
-                            <div>
-                                <div class="font-bold">กรอกข้อมูลพื้นฐานของแผงค้า</div>
-                                <div class="text-[11px] text-emerald-800">
-                                    ระบบจะนำข้อมูลนี้ไปสร้างหน้าร้านและแสดงให้นักช้อปในชุมชนเห็นบนแอปพลิเคชัน
-                                    กรุณาตรวจสอบความถูกต้องและชัดเจนของข้อมูลเพื่อประโยชน์ของร้านค้าท่าน</div>
-                            </div>
+                        <div class="flex items-center gap-1.5 text-[11px] text-emerald-800">
+                            <span class="material-symbols-outlined text-emerald-600 text-sm shrink-0">info</span>
+                            <span>ข้อมูลนี้จะแสดงบนหน้าร้านให้ลูกค้าเห็น กรุณากรอกให้ถูกต้องและชัดเจน</span>
                         </div>
 
-                        <!-- LINE Admin Contact Banner (ช่วยเหลือระหว่างกรอกข้อมูลเปิดร้าน) -->
-                        <div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 rounded-2xl p-3 flex items-center justify-between gap-2.5 shadow-2xs">
-                            <div class="flex items-center gap-2.5 min-w-0">
-                                <a href="https://lin.ee/61O4EyH" target="_blank" rel="noopener noreferrer" class="shrink-0 group block" title="คลิกเพื่อเปิด LINE">
-                                    <img src="images/line_oa_qr.png" alt="LINE Official QR Code" class="w-11 h-11 rounded-xl bg-white p-0.5 border border-emerald-300 shadow-xs group-hover:scale-105 transition-transform">
-                                </a>
-                                <div class="min-w-0">
-                                    <div class="font-extrabold text-xs text-emerald-950 flex items-center gap-1.5 flex-wrap">
-                                        <span>มีข้อสงสัยเรื่องเปิดแผงค้า? ติดต่อแอดมิน</span>
-                                        <span class="text-[9px] bg-[#06C755] text-white font-black px-1.5 py-0.2 rounded-full">LINE OA</span>
-                                    </div>
-                                    <div class="text-[10px] text-emerald-700 truncate">ปรึกษาการเลือกแผงค้า ส่งเอกสาร หรือสอบถามขั้นตอนกับแอดมิน</div>
-                                </div>
+                        <!-- ส่วนที่ 1: ข้อมูลร้านค้าเบื้องต้น -->
+                        <div class="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-2xs">
+                            <div class="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                                <span class="material-symbols-outlined text-base text-emerald-600">storefront</span>
+                                <span>ข้อมูลร้านค้าเบื้องต้น</span>
                             </div>
-                            <a href="https://lin.ee/61O4EyH" target="_blank" rel="noopener noreferrer"
-                                class="px-3 py-1.5 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl font-bold text-xs shrink-0 flex items-center gap-1 shadow-xs transition-transform active:scale-95">
-                                <span>แอด LINE</span>
-                                <span class="material-symbols-outlined text-xs">open_in_new</span>
-                            </a>
-                        </div>
-
-                        <div class="grid grid-cols-1 gap-3">
                             <div>
                                 <label class="block font-bold text-slate-700 mb-1">ชื่อร้านค้า / แผงค้า <span
                                         class="text-rose-500">*</span></label>
-                                <input type="text" id="m-stall-name" placeholder="กรอกชื่อร้าน"
+                                <input type="text" id="m-stall-name" placeholder="เช่น ร้านผักสดป้าแดง"
                                     class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-medium">
                             </div>
                             <div>
@@ -4398,17 +4375,17 @@
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                                 <div>
                                     <label class="block font-bold text-slate-700 text-[11px] mb-1">ชื่อผู้ติดต่อ</label>
-                                    <input type="text" id="m-contact1-name" placeholder=""
+                                    <input type="text" id="m-contact1-name" placeholder="ชื่อ-นามสกุล หรือชื่อเล่น"
                                         class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
                                 </div>
                                 <div>
                                     <label class="block font-bold text-slate-700 text-[11px] mb-1">เบอร์โทรศัพท์</label>
-                                    <input type="tel" id="m-contact1-phone" placeholder=""
+                                    <input type="tel" id="m-contact1-phone" placeholder="08x-xxx-xxxx"
                                         class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
                                 </div>
                                 <div>
                                     <label class="block font-bold text-slate-700 text-[11px] mb-1">เบอร์ Line</label>
-                                    <input type="text" id="m-contact1-line" placeholder=""
+                                    <input type="text" id="m-contact1-line" placeholder="เช่น mama_veggie88"
                                         class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
                                 </div>
                             </div>
@@ -4418,22 +4395,22 @@
                         <div class="p-3 bg-white border border-slate-200 rounded-2xl space-y-2.5">
                             <div class="font-bold text-slate-800 text-xs flex items-center gap-1">
                                 <span class="material-symbols-outlined text-sm">person_add</span>
-                                ผู้ติดต่อคนที่ 2
+                                ผู้ติดต่อคนที่ 2 <span class="text-[10px] font-normal text-slate-400">(ไม่บังคับ)</span>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                                 <div>
                                     <label class="block font-bold text-slate-700 text-[11px] mb-1">ชื่อผู้ติดต่อ</label>
-                                    <input type="text" id="m-contact2-name" placeholder=""
+                                    <input type="text" id="m-contact2-name" placeholder="ชื่อ-นามสกุล หรือชื่อเล่น"
                                         class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
                                 </div>
                                 <div>
                                     <label class="block font-bold text-slate-700 text-[11px] mb-1">เบอร์โทรศัพท์</label>
-                                    <input type="tel" id="m-contact2-phone" placeholder=""
+                                    <input type="tel" id="m-contact2-phone" placeholder="08x-xxx-xxxx"
                                         class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
                                 </div>
                                 <div>
                                     <label class="block font-bold text-slate-700 text-[11px] mb-1">เบอร์ Line</label>
-                                    <input type="text" id="m-contact2-line" placeholder=""
+                                    <input type="text" id="m-contact2-line" placeholder="เช่น mama_veggie88"
                                         class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
                                 </div>
                             </div>
@@ -4468,13 +4445,13 @@
                                     <div>
                                         <label class="block font-bold text-slate-700 text-[11px] mb-1">เลขที่บัญชี <span
                                                 class="text-rose-500">*</span></label>
-                                        <input type="text" id="m-bank-account-no" placeholder="กรอกเลขที่บัญชี"
+                                        <input type="text" id="m-bank-account-no" placeholder="เช่น 123-4-56789-0"
                                             class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-mono text-xs font-bold bg-white">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 text-[11px] mb-1">ชื่อบัญชี <span
                                                 class="text-rose-500">*</span></label>
-                                        <input type="text" id="m-bank-account-name" placeholder="กรอกชื่อบัญชี"
+                                        <input type="text" id="m-bank-account-name" placeholder="ชื่อ-นามสกุลเจ้าของบัญชี"
                                             class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
                                     </div>
                                 </div>
@@ -4501,18 +4478,41 @@
                                     <div>
                                         <label
                                             class="block font-bold text-slate-700 text-[11px] mb-1">เลขที่บัญชี</label>
-                                        <input type="text" id="m-bank-account-no-2" placeholder="กรอกเลขที่บัญชี"
+                                        <input type="text" id="m-bank-account-no-2" placeholder="เช่น 123-4-56789-0"
                                             class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 font-mono text-xs font-bold bg-white">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 text-[11px] mb-1">ชื่อบัญชี</label>
-                                        <input type="text" id="m-bank-account-name-2" placeholder="กรอกชื่อบัญชี"
+                                        <input type="text" id="m-bank-account-name-2" placeholder="ชื่อ-นามสกุลเจ้าของบัญชี"
                                             class="w-full p-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 text-xs font-medium bg-white">
                                     </div>
                                 </div>
                             </div>
                         </div>
 
+
+                        <!-- LINE Admin Contact Banner (ช่วยเหลือระหว่างกรอกข้อมูลเปิดร้าน - ย้ายมาไว้ก่อนปุ่มถัดไป
+                             2026-09-23 ตามคำแนะนำเจ้าของ: เดิมอยู่บนสุดแย่งความสนใจจากฟิลด์กรอกข้อมูล
+                             ทั้งที่เป็นแค่ทางเลือกเสริมสำหรับคนที่ติดขัด) -->
+                        <div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 rounded-2xl p-3 flex items-center justify-between gap-2.5 shadow-2xs">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <a href="https://lin.ee/61O4EyH" target="_blank" rel="noopener noreferrer" class="shrink-0 group block" title="คลิกเพื่อเปิด LINE">
+                                    <img src="images/line_oa_qr.png" alt="LINE Official QR Code" class="w-11 h-11 rounded-xl bg-white p-0.5 border border-emerald-300 shadow-xs group-hover:scale-105 transition-transform">
+                                </a>
+                                <div class="min-w-0">
+                                    <div class="font-extrabold text-xs text-emerald-950 flex items-center gap-1.5 flex-wrap">
+                                        <span>กรอกไม่ได้ / ติดขัดตรงไหน? ติดต่อแอดมิน</span>
+                                        <span class="text-[9px] bg-[#06C755] text-white font-black px-1.5 py-0.2 rounded-full">LINE OA</span>
+                                    </div>
+                                    <div class="text-[10px] text-emerald-700 truncate">ปรึกษาการเลือกแผงค้า ส่งเอกสาร หรือสอบถามขั้นตอนกับแอดมิน</div>
+                                </div>
+                            </div>
+                            <a href="https://lin.ee/61O4EyH" target="_blank" rel="noopener noreferrer"
+                                class="px-3 py-1.5 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl font-bold text-xs shrink-0 flex items-center gap-1 shadow-xs transition-transform active:scale-95">
+                                <span>แอด LINE</span>
+                                <span class="material-symbols-outlined text-xs">open_in_new</span>
+                            </a>
+                        </div>
 
                         <!-- Step 1 Next Button -->
                         <div class="pt-2 flex justify-end">
@@ -7336,7 +7336,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.51_merchant_hide_hub_rider_tabs"></script>
+    <script src="app.js?v=10.52_merchant_reg_form_uiux"></script>
 </body>
 
 </html>

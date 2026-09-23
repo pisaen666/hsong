@@ -28110,14 +28110,14 @@ function switchMerchantPortalTab(tabId) {
     if (activePane) activePane.classList.remove("hidden");
 
     document.querySelectorAll(".merchant-tab-btn").forEach(btn => {
-        btn.classList.remove("active", "bg-white", "text-emerald-800", "shadow-xs", "font-bold");
-        btn.classList.add("bg-transparent", "text-slate-600", "font-medium");
+        btn.classList.remove("active", "bg-emerald-700", "text-white", "shadow-sm");
+        btn.classList.add("bg-white", "text-slate-500", "border", "border-slate-200");
     });
 
     const activeBtn = document.getElementById(`btn-${tabId}`);
     if (activeBtn) {
-        activeBtn.classList.remove("bg-transparent", "text-slate-600", "font-medium");
-        activeBtn.classList.add("active", "bg-white", "text-emerald-800", "shadow-xs", "font-bold");
+        activeBtn.classList.remove("bg-white", "text-slate-500", "border", "border-slate-200");
+        activeBtn.classList.add("active", "bg-emerald-700", "text-white", "shadow-sm");
     }
     const scrollContent = document.getElementById("merchant-portal-content");
     if (scrollContent) scrollContent.scrollTop = 0;
