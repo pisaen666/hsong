@@ -4368,6 +4368,32 @@ function getMainCategories() {
     return Object.keys(CATEGORY_TAXONOMY_3TIER);
 }
 
+// 🏪 หมวดหมู่ "ร้านค้า" (stall.category) รวมให้ใช้ชุดเดียวกับหมวดหมู่ "สินค้า" 10 หมวด (+1 อื่นๆ) ด้านบนแล้ว
+//   (เดิมร้านค้าเคยมีชุดหมวดหมู่แยกต่างหากแค่ 5 แบบ: chicken/pork/veggie/curry/seafood - เจ้าของสังเกตเห็นว่า
+//   ช่องเลือกตอนสมัครร้านกับช่องเลือกตอนเพิ่มสินค้ามีจำนวนไม่เท่ากัน จึงรวมให้เป็นชุดเดียวกันทั้งระบบ 2026-09-23)
+const DEFAULT_STALL_CATEGORY = getMainCategories()[0];
+
+// สีป้ายของแต่ละหมวดหมู่ร้านค้า (ใช้ในแถบ "ร้านโปรด/ร้านค้าต่าง ๆ" หน้าแรก) - รองรับทั้งค่าใหม่ (ชื่อหมวดเต็ม)
+//   และค่าเก่าที่ยังหลงเหลืออยู่ (เช่น "chicken" ของร้านที่สมัครไว้ก่อนรวมหมวดหมู่) ผ่าน normalizeMainCategoryName
+function getStallCategoryColorClass(rawCategory) {
+    const cat = (typeof normalizeMainCategoryName === "function" ? normalizeMainCategoryName(rawCategory) : rawCategory) || "";
+    const colorMap = {
+        "🥩 เนื้อสัตว์และสัตว์ปีก": "bg-white hover:bg-orange-50 text-orange-950 border-orange-200",
+        "🦐 อาหารทะเลสดและแปรรูป": "bg-white hover:bg-cyan-50 text-cyan-950 border-cyan-200",
+        "🥬 ผักสด และเห็ด": "bg-white hover:bg-emerald-50 text-emerald-950 border-emerald-200",
+        "🍌 ผลไม้สด": "bg-white hover:bg-amber-50 text-amber-950 border-amber-200",
+        "🌾 ข้าวสาร ของชำ และไข่ไก่": "bg-white hover:bg-yellow-50 text-yellow-950 border-yellow-200",
+        "🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง": "bg-white hover:bg-sky-50 text-sky-950 border-sky-200",
+        "🍲 อาหารปรุงสุก ของทอด และพร้อมทาน": "bg-white hover:bg-red-50 text-red-950 border-red-200",
+        "🧋 เครื่องดื่ม ขนมหวาน และเบเกอรี่": "bg-white hover:bg-purple-50 text-purple-950 border-purple-200",
+        "💐 ดอกไม้สด และสังฆภัณฑ์": "bg-white hover:bg-pink-50 text-pink-950 border-pink-200",
+        "📦 บรรจุภัณฑ์ ของใช้ และอื่นๆ": "bg-white hover:bg-slate-100 text-slate-800 border-slate-300",
+        "🏷️ อื่นๆ": "bg-white hover:bg-slate-100 text-slate-800 border-slate-300"
+    };
+    return colorMap[cat] || "bg-white hover:bg-amber-50 text-slate-800 border-amber-200";
+}
+window.getStallCategoryColorClass = getStallCategoryColorClass;
+
 // ฟังก์ชันแปลงชื่อหมวดหมู่ให้เป็นชื่อหมวดหลักมาตรฐาน 10 หมวด (+1 อื่นๆ)
 function normalizeMainCategoryName(catName) {
     if (!catName || typeof catName !== "string") return "";
@@ -4382,7 +4408,7 @@ function normalizeMainCategoryName(catName) {
         return "🦐 อาหารทะเลสดและแปรรูป";
     }
     // 3. หมวดผักสดและเห็ด
-    if (clean.includes("ผักสด") || clean.includes("เห็ด") || clean.includes("สมุนไพร") || clean === "vegetable") {
+    if (clean.includes("ผักสด") || clean.includes("เห็ด") || clean.includes("สมุนไพร") || clean === "vegetable" || clean === "veggie") {
         return "🥬 ผักสด และเห็ด";
     }
     // 4. หมวดผลไม้สด
@@ -4398,7 +4424,7 @@ function normalizeMainCategoryName(catName) {
         return "🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง";
     }
     // 7. หมวดอาหารปรุงสุก ของทอด และพร้อมทาน (รวม อาหารสำเร็จรูป)
-    if (clean.includes("อาหารสำเร็จรูป") || clean.includes("อาหารปรุงสุก") || clean.includes("ของทอด") || clean.includes("ของย่าง") || clean.includes("พร้อมทาน") || clean.includes("แกงถุง") || clean.includes("อาหารจานเดียว") || clean === "cooked") {
+    if (clean.includes("อาหารสำเร็จรูป") || clean.includes("อาหารปรุงสุก") || clean.includes("ของทอด") || clean.includes("ของย่าง") || clean.includes("พร้อมทาน") || clean.includes("แกงถุง") || clean.includes("อาหารจานเดียว") || clean === "cooked" || clean === "curry") {
         return "🍲 อาหารปรุงสุก ของทอด และพร้อมทาน";
     }
     // 8. หมวดเครื่องดื่ม ขนมหวาน และเบเกอรี่
@@ -9745,8 +9771,8 @@ function selectRandomStallBatch() {
     const selectedStalls = [...customApproved];
     const maxToPick = Math.max(3, selectedStalls.length);
 
-    // สุ่มเลือก 2 ถึง 3 ร้านค้าจากหมวดหมู่ที่แตกต่างกันเพื่อกระจายความหลากหลาย
-    const categories = ["chicken", "pork", "veggie", "curry", "seafood"];
+    // สุ่มเลือก 2 ถึง 3 ร้านค้าจากหมวดหมู่ที่แตกต่างกันเพื่อกระจายความหลากหลาย (ใช้ชุดหมวดหมู่เดียวกับสินค้าทั้งระบบ)
+    const categories = getMainCategories();
     const shuffledCats = [...categories].sort(() => 0.5 - Math.random());
 
     for (const cat of shuffledCats) {
@@ -10430,12 +10456,7 @@ function renderFavoriteStallsBar() {
         const stall = (typeof ALL_100_STALLS !== "undefined" ? ALL_100_STALLS.find(s => s.stallId === stallId) : null) || MARKET_DATA.find(s => s.stallId === stallId);
         if (!stall) return;
 
-        let colorClass = "bg-white hover:bg-amber-50 text-slate-800 border-amber-200";
-        if (stall.category === "chicken") colorClass = "bg-white hover:bg-orange-50 text-orange-950 border-orange-200";
-        else if (stall.category === "veggie") colorClass = "bg-white hover:bg-emerald-50 text-emerald-950 border-emerald-200";
-        else if (stall.category === "pork") colorClass = "bg-white hover:bg-pink-50 text-pink-950 border-pink-200";
-        else if (stall.category === "curry") colorClass = "bg-white hover:bg-red-50 text-red-950 border-red-200";
-        else if (stall.category === "seafood") colorClass = "bg-white hover:bg-cyan-50 text-cyan-950 border-cyan-200";
+        let colorClass = getStallCategoryColorClass(stall.category);
 
         const isCurrentlySelected = state.currentSingleStall === stallId;
         const activeRing = isCurrentlySelected ? "ring-2 ring-amber-500 bg-amber-100/90 font-extrabold shadow-sm" : "font-bold";
@@ -28749,7 +28770,7 @@ function openMerchantEditModal(stallId) {
     if (document.getElementById("m-stall-name")) document.getElementById("m-stall-name").value = stall.stallName || "";
     if (document.getElementById("m-stall-number")) document.getElementById("m-stall-number").value = stall.stallNumber || "";
     if (document.getElementById("m-stall-zone")) document.getElementById("m-stall-zone").value = stall.zone ? `โซน ${stall.zone.charAt(0)}` : "โซน A (เนื้อสัตว์ & ไก่สด)";
-    if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = stall.category || "chicken";
+    if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = stall.category || DEFAULT_STALL_CATEGORY;
 
     // Fill Contact 1
     const c1 = (stall.contacts && stall.contacts[0]) || {};
@@ -28838,7 +28859,7 @@ function fillSampleMerchantRegistration() {
 
     // 1. ชื่อร้าน & หมวดหมู่
     setVal("m-stall-name", "ร้านไก่สดเฮียวิศิษฐ์");
-    setVal("m-stall-category", "chicken");
+    setVal("m-stall-category", DEFAULT_STALL_CATEGORY);
 
     // 2. เจ้าของร้าน (ชื่อเล่น 2 คน)
     setVal("m-owner1-nickname", "เฮียวิศิษฐ์");
@@ -29013,7 +29034,7 @@ function registerNewMerchantStall() {
     // Keep legacy fields functional for backward-compat
     if (document.getElementById("m-stall-number")) document.getElementById("m-stall-number").value = "";
     if (document.getElementById("m-stall-zone")) document.getElementById("m-stall-zone").value = "โซน A (เนื้อสัตว์ & ไก่สด)";
-    if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = "chicken";
+    if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = DEFAULT_STALL_CATEGORY;
     if (document.getElementById("m-owner-name")) document.getElementById("m-owner-name").value = "";
     if (document.getElementById("m-phone")) document.getElementById("m-phone").value = "";
     if (document.getElementById("m-phone2")) document.getElementById("m-phone2").value = "";
@@ -29424,7 +29445,7 @@ async function saveMerchantStallData() {
         // Legacy fields - keep backward compat
         const stallNumber = (document.getElementById("m-stall-number")?.value || "").trim();
         const zoneVal = document.getElementById("m-stall-zone")?.value || "";
-        const category = document.getElementById("m-stall-category")?.value || "chicken";
+        const category = document.getElementById("m-stall-category")?.value || DEFAULT_STALL_CATEGORY;
         const ownerName = contact1Name || (document.getElementById("m-owner-name")?.value || "").trim();
         const phone = contact1Phone || (document.getElementById("m-phone")?.value || "").trim();
         const phone2 = contact2Phone || (document.getElementById("m-phone2")?.value || "").trim();
@@ -29823,7 +29844,7 @@ function previewMerchantLiveStore() {
     const stallName = document.getElementById("m-stall-name")?.value.trim() || "ตัวอย่างชื่อร้านค้า";
     const stallNumber = document.getElementById("m-stall-number")?.value.trim() || "แผง A-01";
     const zoneVal = document.getElementById("m-stall-zone")?.value || "โซน A";
-    const category = document.getElementById("m-stall-category")?.value || "chicken";
+    const category = document.getElementById("m-stall-category")?.value || DEFAULT_STALL_CATEGORY;
 
     const contact1Name = document.getElementById("m-contact1-name")?.value.trim() || "";
     const contact1Phone = document.getElementById("m-contact1-phone")?.value.trim() || "";
@@ -29936,18 +29957,10 @@ function previewMerchantLiveStore() {
         }
     });
 
-    const categoryNames = {
-        "pork": "หมูสด / เนื้อหมู",
-        "chicken": "ไก่สด / เป็ด / สัตว์ปีก",
-        "beef": "เนื้อวัว / เนื้อโคขุน",
-        "seafood": "อาหารทะเล / กุ้ง หอย ปู ปลา",
-        "vegetable": "ผักสด / พืชผลการเกษตร",
-        "egg": "ไข่ไก่ / ไข่เป็ด / ไข่นกกระทา",
-        "frozen": "อาหารแช่แข็ง / ลูกชิ้น",
-        "dryfood": "ของแห้ง / เครื่องปรุง / สมุนไพร",
-        "all": "รวมของสดทุกประเภท"
-    };
-    const catLabel = categoryNames[category] || "สินค้าของสด";
+    // category ตอนนี้เป็นชื่อหมวดหมู่เต็มที่อ่านง่ายอยู่แล้ว (เช่น "🥩 เนื้อสัตว์และสัตว์ปีก") ไม่ต้องแปลผ่านตารางอีกต่อไป
+    //   (เดิมเคยมีตาราง categoryNames แปลรหัสอังกฤษสั้น ๆ เป็นไทย แต่ตั้งแต่รวมหมวดหมู่ร้านค้าให้ใช้ชุดเดียวกับ
+    //   สินค้าแล้ว ค่าที่อ่านได้จากช่องนี้เป็นภาษาไทยพร้อมใช้อยู่แล้ว)
+    const catLabel = category || "สินค้าของสด";
 
     const contentContainer = document.getElementById("merchant-preview-content");
     const titleEl = document.getElementById("preview-modal-title");
