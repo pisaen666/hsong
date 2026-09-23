@@ -1,0 +1,31 @@
+// ทดสอบบั๊กที่พบ 2026-09-23 (จากการตรวจสอบระบบสุ่มหมุนเวียนร้านค้าตามคำขอเจ้าของ):
+//   ทุกร้านค้าที่สมัคร/แก้ไขข้อมูลได้หมวดหมู่ "chicken" (ไก่) ติดตัวไปเสมอ ไม่ว่าจะขายอะไรจริง เพราะช่อง
+//   "เลือกหมวดหมู่ร้าน" (id="m-stall-category") ที่โค้ดพยายามอ่านค่า ไม่มีอยู่จริงในหน้าฟอร์มมานานแล้ว
+//   (ฟอร์มถูกปรับปรุงใหม่ให้เรียบง่ายลงแต่ลืมเอาช่องนี้กลับมา) - document.getElementById(...)?.value คืนค่า
+//   undefined เสมอ จึง fallback ไปที่ "chicken" ทุกครั้ง ไม่มีทางแก้ไขทีหลังได้เลยทั้งฝั่งร้านค้าเองและฝั่งแอดมิน
+//   - แก้โดยเพิ่มช่อง <select id="m-stall-category"> กลับเข้าไปในฟอร์มสมัคร/แก้ไขร้านค้า พร้อม 5 หมวดหมู่
+//     ที่ตรงกับที่ระบบสุ่ม/ป้ายสี/รายชื่อแอดมินใช้อยู่แล้ว (chicken/pork/veggie/curry/seafood)
+const fs = require("fs");
+const path = require("path");
+const src = fs.readFileSync(path.join(__dirname, "..", "..", "app.js"), "utf8");
+const indexSrc = fs.readFileSync(path.join(__dirname, "..", "..", "index.html"), "utf8");
+
+let fail = 0;
+const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) fail++; };
+
+// ต้องมีช่อง select ในฟอร์มจริง ๆ (ไม่ใช่แค่ในโค้ด JS ที่อ่านมัน)
+const selectMatch = indexSrc.match(/<select id="m-stall-category"[\s\S]*?<\/select>/);
+ok(!!selectMatch, "พบช่อง <select id=\"m-stall-category\"> ในฟอร์มสมัคร/แก้ไขร้านค้าจริง (index.html)");
+const selectHtml = selectMatch ? selectMatch[0] : "";
+
+// ต้องมีครบ 5 หมวดหมู่ที่ระบบอื่น ๆ ใช้อยู่แล้ว (สุ่มหมุนเวียน, ป้ายสีร้านโปรด, รายชื่อแอดมิน)
+["chicken", "pork", "veggie", "curry", "seafood"].forEach(cat => {
+    ok(new RegExp('value="' + cat + '"').test(selectHtml), `ช่องเลือกหมวดหมู่มีตัวเลือก "${cat}" (ตรงกับที่ระบบสุ่ม/ป้ายสีใช้อยู่แล้ว)`);
+});
+
+// จุดที่เคยอ่านค่าจากช่องนี้ (สมัคร/แก้ไข/พรีวิว) ต้องยังอ้างถึง id เดิม - ตอนนี้จะอ่านค่าจริงได้แล้วเพราะช่องมีอยู่จริง
+const readSites = src.match(/document\.getElementById\("m-stall-category"\)/g) || [];
+ok(readSites.length >= 3, `พบจุดที่อ่านค่าจากช่องนี้ครบ (สมัครใหม่/แก้ไขร้าน/พรีวิว) อย่างน้อย 3 จุด (เจอ ${readSites.length} จุด)`);
+
+console.log(fail ? "\n" + fail + " FAILED" : "\nALL PASSED");
+process.exit(fail ? 1 : 0);
