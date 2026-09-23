@@ -20915,7 +20915,7 @@ function renderRiderRegExtras(prefix, opts) {
     const labelCls = "font-bold text-slate-700 block mb-1 text-xs sm:text-[13px]";
     const req = `<span class="text-rose-500">*</span>`;
     const head = (icon, title, badge) => `
-        <div class="font-extrabold text-slate-800 flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
+        <div class="font-extrabold text-slate-800 flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
             <div class="flex items-center gap-1.5 text-sm">
                 <span class="material-symbols-outlined text-base text-sky-600">${icon}</span>
                 <span>${n++}. ${title}</span>
@@ -20927,7 +20927,7 @@ function renderRiderRegExtras(prefix, opts) {
 
     if (o.identity) {
         html += `
-        <div class="space-y-3">
+        <div class="p-3.5 bg-white border-2 border-slate-300 rounded-2xl space-y-3">
             ${head("badge", "ข้อมูลยืนยันตัวตน & ที่อยู่")}
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -20955,12 +20955,12 @@ function renderRiderRegExtras(prefix, opts) {
     }
 
     html += `
-        <div class="space-y-3">
+        <div class="p-3.5 bg-white border-2 border-slate-300 rounded-2xl space-y-3">
             ${head("contact_emergency", "ผู้ติดต่อฉุกเฉิน", "เพื่อความปลอดภัย")}
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                     <label class="${labelCls}">ชื่อ - นามสกุล ${req}</label>
-                    <input type="text" id="${prefix}-emg-name" placeholder="ชื่อผู้ที่ติดต่อได้" class="${inputCls}">
+                    <input type="text" id="${prefix}-emg-name" placeholder="เช่น นางสมศรี ใจดี" class="${inputCls}">
                 </div>
                 <div>
                     <label class="${labelCls}">เบอร์โทรศัพท์ ${req}</label>
@@ -20974,7 +20974,7 @@ function renderRiderRegExtras(prefix, opts) {
         </div>`;
 
     html += `
-        <div class="space-y-3">
+        <div class="p-3.5 bg-white border-2 border-slate-300 rounded-2xl space-y-3">
             ${head("photo_camera", "รูปถ่าย & เอกสารยืนยันตัวตน", "ไฟล์รูปไม่เกิน 15 MB")}
             <p class="text-xs text-slate-500">ระบบจะย่อรูปให้อัตโนมัติ ถ่ายในที่สว่างและให้เห็นตัวหนังสือชัดเจน</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -21004,13 +21004,13 @@ function renderRiderRegExtras(prefix, opts) {
         </div>`;
 
     html += `
-        <div class="space-y-3">
+        <div class="p-3.5 bg-white border-2 border-slate-300 rounded-2xl space-y-3">
             ${head("payments", `บัญชีรับเงินค่ารอบ (เพิ่มได้สูงสุด ${RIDER_MAX_ACCOUNTS} บัญชี)`, "โอนค่ารอบเข้าบัญชีหลัก")}
             <div id="${prefix}-acct-list" class="space-y-3"></div>
         </div>`;
 
     html += `
-        <div class="space-y-2 bg-amber-50/70 border border-amber-200 rounded-2xl p-3">
+        <div class="space-y-2 bg-amber-50/70 border-2 border-amber-300 rounded-2xl p-3">
             ${head("verified_user", "ยืนยันและยินยอม")}
             <label class="flex items-start gap-2.5 cursor-pointer text-sm text-slate-800 font-bold leading-snug">
                 <input type="checkbox" id="${prefix}-consent" class="accent-emerald-600 w-5 h-5 mt-0.5 shrink-0">
@@ -29177,7 +29177,7 @@ function renderMerchantTop6ProductsForm(products) {
         const unitOptions = STALL_PRODUCT_UNITS.map(u => `<option value="${u}" ${u === (p.unit||'กก.') ? 'selected' : ''}>${u}</option>`).join('');
 
         html += `
-            <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
+            <div class="p-3.5 bg-slate-50 border-2 border-slate-300 rounded-2xl space-y-2.5">
                 <div class="flex items-center justify-between">
                     <span class="font-extrabold text-emerald-800 flex items-center gap-1.5">
                         <span class="w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">${i + 1}</span>
@@ -29213,7 +29213,7 @@ function renderMerchantTop6ProductsForm(products) {
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div class="sm:col-span-2">
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ชื่อสินค้า <span class="text-rose-500">*</span></label>
-                        <input type="text" id="m-p-name-${i}" value="${escapeHtml(p.name) || ''}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs">
+                        <input type="text" id="m-p-name-${i}" value="${escapeHtml(p.name) || ''}" placeholder="เช่น คอหมูย่าง, ไก่ทอด" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หน่วยขาย</label>
@@ -29226,7 +29226,7 @@ function renderMerchantTop6ProductsForm(products) {
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ราคา (บาท)</label>
-                        <input type="number" id="m-p-price-${i}" value="${priceVal}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-emerald-700 text-xs">
+                        <input type="number" id="m-p-price-${i}" value="${priceVal}" placeholder="เช่น 50" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-emerald-700 text-xs">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ป้ายสินค้า (Badge)</label>
@@ -29286,7 +29286,7 @@ function renderMerchantCatalogTable(groups) {
                         const { catOptions, subOptions, microOptions, unitOptions } = buildCatalogCategorySelects(mainCat, subCat, microCat);
 
                         const newRow = document.createElement("div");
-                        newRow.className = "catalog-item-container p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 relative shadow-sm";
+                        newRow.className = "catalog-item-container p-3.5 bg-white border-2 border-slate-300 rounded-2xl space-y-2.5 relative shadow-sm";
                         newRow.id = `m-c-row-${index}`;
                         newRow.innerHTML = `
                             <div class="flex items-center justify-between">
@@ -29326,7 +29326,7 @@ function renderMerchantCatalogTable(groups) {
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <div class="sm:col-span-2 relative">
                                     <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ชื่อสินค้า <span class="text-rose-500">*</span></label>
-                                    <input type="text" value="${cleanName}" placeholder="ชื่อสินค้า" oninput="validateCatalogItemInput(this)" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs catalog-item-name-input">
+                                    <input type="text" value="${cleanName}" placeholder="เช่น คอหมูย่าง, ไก่ทอด" oninput="validateCatalogItemInput(this)" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs catalog-item-name-input">
                                     <div class="duplicate-warning text-[10px] text-rose-500 font-bold hidden mt-0.5 flex items-center gap-0.5">
                                         <span class="material-symbols-outlined text-[12px]">warning</span>
                                         <span>ชื่อซ้ำกับสินค้า Highlight</span>
@@ -29343,7 +29343,7 @@ function renderMerchantCatalogTable(groups) {
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <div>
                                     <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ราคา (บาท)</label>
-                                    <input type="number" value="${item.price || ''}" placeholder="ราคา" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-emerald-700 text-xs catalog-item-price-input">
+                                    <input type="number" value="${item.price || ''}" placeholder="เช่น 50" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-emerald-700 text-xs catalog-item-price-input">
                                 </div>
                             </div>
                         `;

@@ -2127,8 +2127,8 @@
                     </div>
 
                     <!-- On-Page Rider Registration Form -->
-                    <form id="onpage-rider-reg-form" onsubmit="handleOnPageRiderRegister(event)" class="bg-white rounded-3xl p-4 sm:p-6 shadow-md border border-slate-200 space-y-5 text-left text-xs">
-                        <div class="border-b border-slate-100 pb-3 flex items-center justify-between">
+                    <form id="onpage-rider-reg-form" onsubmit="handleOnPageRiderRegister(event)" class="space-y-4 text-left text-xs">
+                        <div class="flex items-center justify-between px-0.5">
                             <div class="flex items-center gap-2">
                                 <span class="w-8 h-8 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-base">
                                     📋
@@ -2138,11 +2138,11 @@
                                     <p class="text-[10px] text-slate-500">กรอกข้อมูลส่งใบสมัคร เจ้าของจะส่งรหัสผ่านเข้าระบบให้เมื่ออนุมัติ</p>
                                 </div>
                             </div>
-                            <span class="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full">รอเจ้าของอนุมัติ</span>
+                            <span class="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full shrink-0">รอเจ้าของอนุมัติ</span>
                         </div>
 
                         <!-- 1. ข้อมูลส่วนตัว -->
-                        <div class="space-y-3">
+                        <div class="p-3.5 bg-white border-2 border-slate-300 rounded-2xl space-y-3">
                             <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
                                 <span class="material-symbols-outlined text-base text-sky-600">person</span>
                                 <span>1. ข้อมูลส่วนตัวผู้สมัคร</span>
@@ -2172,7 +2172,7 @@
                         </div>
 
                         <!-- 2. ข้อมูลยานพาหนะ -->
-                        <div class="space-y-3">
+                        <div class="p-3.5 bg-white border-2 border-slate-300 rounded-2xl space-y-3">
                             <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
                                 <span class="material-symbols-outlined text-base text-sky-600">two_wheeler</span>
                                 <span>2. ข้อมูลรถจักรยานยนต์ & เอกสาร</span>
@@ -2197,7 +2197,7 @@
                         </div>
 
                         <!-- 3. พื้นที่วิ่งส่ง & บัญชีพร้อมเพย์ -->
-                        <div class="space-y-3">
+                        <div class="p-3.5 bg-white border-2 border-slate-300 rounded-2xl space-y-3">
                             <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
                                 <span class="material-symbols-outlined text-base text-sky-600">map</span>
                                 <span>3. พื้นที่วิ่งส่งประจำ</span>
@@ -2215,7 +2215,7 @@
                         </div>
 
                         <!-- ส่วนเสริม (สร้างโดย app.js: mountRiderRegExtras) ยืนยันตัวตน / ผู้ติดต่อฉุกเฉิน / รูปเอกสาร / บัญชีรับเงิน / ยินยอม -->
-                        <div id="onpage-rider-extras" class="space-y-5"></div>
+                        <div id="onpage-rider-extras" class="space-y-4"></div>
 
                         <!-- Action Submit Button -->
                         <div class="pt-2">
@@ -4528,18 +4528,9 @@
                     <div id="tab-products" class="merchant-tab-pane space-y-4 hidden">
 
                         <!-- Highlight Products -->
-                        <div
-                            class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-emerald-900 flex items-start gap-2">
-                            <span
-                                class="material-symbols-outlined text-emerald-700 text-base shrink-0 mt-0.5">grid_view</span>
-                            <div>
-                                <div class="font-bold">สินค้า Highlight ที่ต้องการจำหน่าย (10 รายการ)</div>
-                                <div class="text-[11px] text-emerald-800">
-                                    สินค้ารายการที่จะนำไปแสดงเป็นอันดับแรกเมื่อลูกค้าเข้าร้านค้า <span
-                                        class="font-bold text-rose-600">กรุณาพิจารณาและตัดสินใจเลือกสินค้า 10
-                                        รายการแรกนี้อย่างระมัดระวัง
-                                        เพราะจะเป็นส่วนที่ลูกค้านักช้อปมองเห็นทันทีที่คลิกเข้าร้านค้าของคุณ</span></div>
-                            </div>
+                        <div class="flex items-center gap-1.5 text-[11px] text-emerald-800">
+                            <span class="material-symbols-outlined text-emerald-600 text-sm shrink-0">grid_view</span>
+                            <span><strong>สินค้า Highlight 10 รายการ</strong> - ลูกค้าเห็นก่อนใครทันทีที่เข้าร้าน เลือกให้ดีที่สุด</span>
                         </div>
 
                         <div id="merchant-top6-products-container" class="space-y-3">
@@ -4555,18 +4546,10 @@
                         </div>
 
                         <!-- Additional Products Info Box and Add Button -->
-                        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-blue-900 mt-4">
-                            <div class="flex items-start gap-2 mb-3">
-                                <span
-                                    class="material-symbols-outlined text-blue-700 text-base shrink-0 mt-0.5">info</span>
-                                <div>
-                                    <div class="font-bold">เพิ่มรายการสินค้าอื่นๆ (สูงสุด 50 รายการ)</div>
-                                    <div class="text-xs text-blue-800 mt-1">คุณสามารถเพิ่มรายการสินค้าเพิ่มเติมได้ถึง 50
-                                        รายการ ซึ่งระบบจะนำไปแสดงให้ลูกค้าเห็นเมื่อลูกค้าคลิกที่ปุ่ม
-                                        <strong>"ต้องการดูสินค้าเพิ่มเติม"</strong> ที่อยู่ในหน้าร้านค้าของคุณ
-                                        (ไม่จำเป็นต้องกรอกครบ 50 รายการ ได้แค่ไหนก็แค่นั้น)
-                                    </div>
-                                </div>
+                        <div class="bg-blue-50 border-2 border-blue-200 rounded-2xl p-3.5 text-blue-900 mt-4 space-y-2.5">
+                            <div class="flex items-center gap-1.5 text-[11px] text-blue-800">
+                                <span class="material-symbols-outlined text-blue-600 text-sm shrink-0">info</span>
+                                <span><strong>เพิ่มสินค้าอื่นๆ ได้สูงสุด 50 รายการ</strong> (ไม่บังคับ) - ลูกค้าเห็นเมื่อกดปุ่ม "ดูสินค้าเพิ่มเติม" ในร้าน ไม่ต้องกรอกครบก็ได้</span>
                             </div>
                             <div class="flex justify-center">
                                 <button type="button" onclick="addMerchantCatalogRow()"
@@ -6534,33 +6517,12 @@
                         </button>
                     </div>
 
-                    <!-- LINE Admin Contact Banner (สอบถามการสมัครไรเดอร์) -->
-                    <div class="bg-gradient-to-r from-sky-50 via-teal-50 to-sky-50 border border-sky-200 rounded-2xl p-3 flex items-center justify-between gap-2.5 shadow-2xs">
-                        <div class="flex items-center gap-2.5 min-w-0">
-                            <a href="https://lin.ee/61O4EyH" target="_blank" rel="noopener noreferrer" class="shrink-0 group block" title="คลิกเพื่อเปิด LINE">
-                                <img src="images/line_oa_qr.png" alt="LINE Official QR Code" class="w-11 h-11 rounded-xl bg-white p-0.5 border border-sky-300 shadow-xs group-hover:scale-105 transition-transform">
-                            </a>
-                            <div class="min-w-0">
-                                <div class="font-extrabold text-xs text-sky-950 flex items-center gap-1.5 flex-wrap">
-                                    <span>สอบถามเรื่องการสมัครไรเดอร์? ติดต่อแอดมิน</span>
-                                    <span class="text-[9px] bg-[#06C755] text-white font-black px-1.5 py-0.2 rounded-full">LINE OA</span>
-                                </div>
-                                <div class="text-[10px] text-sky-700 truncate">ติดต่อสอบถามรอบวิ่งงาน อุปกรณ์ เสื้อกั๊ก หรือนัดส่งเอกสาร</div>
-                            </div>
-                        </div>
-                        <a href="https://lin.ee/61O4EyH" target="_blank" rel="noopener noreferrer"
-                            class="px-3 py-1.5 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl font-bold text-xs shrink-0 flex items-center gap-1 shadow-xs transition-transform active:scale-95">
-                            <span>แอด LINE</span>
-                            <span class="material-symbols-outlined text-xs">open_in_new</span>
-                        </a>
-                    </div>
-
                     <form id="rider-register-form" onsubmit="handleRiderRegisterSubmit(event)" novalidate
                         class="space-y-4">
                         <!-- Section 1: Personal Info -->
-                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                        <div class="bg-slate-50 p-3.5 rounded-2xl border-2 border-slate-300 space-y-3">
                             <div
-                                class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-2">
                                 <span class="material-symbols-outlined text-base text-sky-600">badge</span>
                                 <span>1. ข้อมูลส่วนตัวผู้สมัคร</span>
                             </div>
@@ -6617,9 +6579,9 @@
                         </div>
 
                         <!-- Section 2: Vehicle & Driving License -->
-                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                        <div class="bg-slate-50 p-3.5 rounded-2xl border-2 border-slate-300 space-y-3">
                             <div
-                                class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-2">
                                 <span class="material-symbols-outlined text-base text-sky-600">two_wheeler</span>
                                 <span>2. ข้อมูลรถจักรยานยนต์ & ใบขับขี่</span>
                             </div>
@@ -6656,9 +6618,9 @@
                         </div>
 
                         <!-- Section 3: Zone & Shifts -->
-                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                        <div class="bg-slate-50 p-3.5 rounded-2xl border-2 border-slate-300 space-y-3">
                             <div
-                                class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-2">
                                 <span class="material-symbols-outlined text-base text-sky-600">near_me</span>
                                 <span>3. พื้นที่และช่วงเวลาที่สะดวกรับงาน</span>
                             </div>
@@ -6702,9 +6664,9 @@
                         </div>
 
                         <!-- Section 4: Equipment Readiness -->
-                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                        <div class="bg-slate-50 p-3.5 rounded-2xl border-2 border-slate-300 space-y-3">
                             <div
-                                class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-2">
                                 <span class="material-symbols-outlined text-base text-sky-600">inventory</span>
                                 <span>4. อุปกรณ์และความพร้อมในการจัดส่ง</span>
                             </div>
@@ -6735,6 +6697,29 @@
 
                         <!-- ส่วนเสริม (สร้างโดย app.js: mountRiderRegExtras) ผู้ติดต่อฉุกเฉิน / รูปเอกสาร / บัญชีรับเงิน / ยินยอม -->
                         <div id="reg-rider-extras" class="space-y-4"></div>
+
+                        <!-- LINE Admin Contact Banner (สอบถามการสมัครไรเดอร์ - ย้ายมาไว้ก่อนปุ่มส่งใบสมัคร
+                             2026-09-23 ตามหลักการเดียวกับฟอร์มร้านค้า: เดิมอยู่บนสุดแย่งความสนใจจากฟิลด์กรอกข้อมูล
+                             ทั้งที่เป็นแค่ทางเลือกเสริมสำหรับคนที่ติดขัด) -->
+                        <div class="bg-gradient-to-r from-sky-50 via-teal-50 to-sky-50 border border-sky-200 rounded-2xl p-3 flex items-center justify-between gap-2.5 shadow-2xs">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <a href="https://lin.ee/61O4EyH" target="_blank" rel="noopener noreferrer" class="shrink-0 group block" title="คลิกเพื่อเปิด LINE">
+                                    <img src="images/line_oa_qr.png" alt="LINE Official QR Code" class="w-11 h-11 rounded-xl bg-white p-0.5 border border-sky-300 shadow-xs group-hover:scale-105 transition-transform">
+                                </a>
+                                <div class="min-w-0">
+                                    <div class="font-extrabold text-xs text-sky-950 flex items-center gap-1.5 flex-wrap">
+                                        <span>กรอกไม่ได้ / ติดขัดตรงไหน? ติดต่อแอดมิน</span>
+                                        <span class="text-[9px] bg-[#06C755] text-white font-black px-1.5 py-0.2 rounded-full">LINE OA</span>
+                                    </div>
+                                    <div class="text-[10px] text-sky-700 truncate">ติดต่อสอบถามรอบวิ่งงาน อุปกรณ์ เสื้อกั๊ก หรือนัดส่งเอกสาร</div>
+                                </div>
+                            </div>
+                            <a href="https://lin.ee/61O4EyH" target="_blank" rel="noopener noreferrer"
+                                class="px-3 py-1.5 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl font-bold text-xs shrink-0 flex items-center gap-1 shadow-xs transition-transform active:scale-95">
+                                <span>แอด LINE</span>
+                                <span class="material-symbols-outlined text-xs">open_in_new</span>
+                            </a>
+                        </div>
                     </form>
                 </div>
 
@@ -7336,7 +7321,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.52_merchant_reg_form_uiux"></script>
+    <script src="app.js?v=10.53_reg_forms_uiux_consistency"></script>
 </body>
 
 </html>
