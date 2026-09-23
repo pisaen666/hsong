@@ -9748,6 +9748,17 @@ function generateSampleDailyOrders() {
 // RANDOMIZED STALL DISPLAY SYSTEM (ระบบสุ่มหมุนเวียนร้านค้าตามหมวดหมู่)
 // ==========================================
 
+// สลับลำดับอาเรย์แบบสุ่มจริง ๆ (Fisher-Yates) - ไม่ใช้ .sort(() => 0.5 - Math.random()) เพราะเป็นวิธีที่รู้กันว่า
+//   สุ่มไม่เท่าเทียมกันจริง (บางตำแหน่งมีโอกาสถูกเลือกมากกว่าอันอื่นตามการทำงานภายในของ .sort แต่ละเอนจิน)
+function shuffleArray(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+}
+
 function selectRandomStallBatch() {
     let pool = MARKET_DATA;
 
@@ -9762,7 +9773,7 @@ function selectRandomStallBatch() {
     if (state.currentCategoryFilter && state.currentCategoryFilter !== "all") {
         const catPool = pool.filter(s => s.category === state.currentCategoryFilter);
         if (catPool.length > 0) {
-            const shuffled = [...catPool].sort(() => 0.5 - Math.random());
+            const shuffled = shuffleArray(catPool);
             state.stallRotation.displayedStallIds = shuffled.map(s => s.stallId);
             return;
         }
@@ -9773,7 +9784,7 @@ function selectRandomStallBatch() {
 
     // สุ่มเลือก 2 ถึง 3 ร้านค้าจากหมวดหมู่ที่แตกต่างกันเพื่อกระจายความหลากหลาย (ใช้ชุดหมวดหมู่เดียวกับสินค้าทั้งระบบ)
     const categories = getMainCategories();
-    const shuffledCats = [...categories].sort(() => 0.5 - Math.random());
+    const shuffledCats = shuffleArray(categories);
 
     for (const cat of shuffledCats) {
         if (selectedStalls.length >= maxToPick) break;
@@ -9786,7 +9797,7 @@ function selectRandomStallBatch() {
 
     if (selectedStalls.length < maxToPick) {
         const remaining = pool.filter(s => !selectedStalls.some(sel => sel.stallId === s.stallId));
-        const shuffledRemaining = [...remaining].sort(() => 0.5 - Math.random());
+        const shuffledRemaining = shuffleArray(remaining);
         selectedStalls.push(...shuffledRemaining.slice(0, maxToPick - selectedStalls.length));
     }
 
@@ -18190,15 +18201,40 @@ function toggleMarketRushMode() {
 }
 window.toggleMarketRushMode = toggleMarketRushMode;
 
+// พบ 2026-09-23 ระหว่างเพิ่มปุ่มแก้หมวดหมู่ร้านค้า: ALL_100_STALLS กับ MARKET_DATA เก็บคนละอ็อบเจกต์กัน
+//   (ไม่ใช่ reference เดียวกัน) ฟังก์ชันนี้เคยแก้แค่ตัวที่เจอก่อน (มักเป็น ALL_100_STALLS เพราะเช็คก่อน) ทำให้
+//   บนจอ "ดูเหมือน" ปิด/เปิดร้านสำเร็จ (เพราะตารางแอดมินอ่านจาก ALL_100_STALLS) แต่ค่าที่บันทึกจริงไม่เปลี่ยน
+//   เพราะ saveMarketDataToStorage() อ่านจาก MARKET_DATA - พอโหลดหน้าใหม่/ซิงก์จากคลาวด์ค่าจะเด้งกลับที่เดิม
 function toggleStallOpenStatusByAdmin(stallId) {
-    const s = ALL_100_STALLS.find(x => x.stallId === stallId) || MARKET_DATA.find(x => x.stallId === stallId);
-    if (!s) return;
-    s.isClosed = !s.isClosed;
+    const s1 = ALL_100_STALLS.find(x => x.stallId === stallId);
+    const s2 = MARKET_DATA.find(x => x.stallId === stallId);
+    if (!s1 && !s2) return;
+    const newState = !((s1 || s2).isClosed);
+    if (s1) s1.isClosed = newState;
+    if (s2) s2.isClosed = newState;
     saveMarketDataToStorage();
-    showToast(`${s.isClosed ? '🔴 ปิด/พักร้าน' : '🟢 เปิดรับออเดอร์ปกติ'} แผง ${s.stallName || stallId} สำเร็จ`);
+    const stallName = (s1 && s1.stallName) || (s2 && s2.stallName) || stallId;
+    showToast(`${newState ? '🔴 ปิด/พักร้าน' : '🟢 เปิดรับออเดอร์ปกติ'} แผง ${stallName} สำเร็จ`);
     renderAdminStalls();
 }
 window.toggleStallOpenStatusByAdmin = toggleStallOpenStatusByAdmin;
+
+// 🏷️ ให้แอดมินแก้ไขหมวดหมู่ร้านค้าได้เองจากหน้ารายชื่อร้านค้า (เผื่อร้านค้าเลือกผิดตอนสมัคร หรือขายหลายอย่าง)
+//   ⚠️ ALL_100_STALLS กับ MARKET_DATA เก็บคนละอ็อบเจกต์กัน (ไม่ใช่ reference เดียวกัน) แม้ stallId เดียวกัน
+//   ต้องแก้ทั้งคู่ ไม่งั้นค่าที่บันทึกจริง (saveMarketDataToStorage อ่านจาก MARKET_DATA) จะไม่ถูกอัปเดต
+function adminUpdateStallCategory(stallId, newCategory) {
+    if (!newCategory) return;
+    const s1 = ALL_100_STALLS.find(x => x.stallId === stallId);
+    const s2 = MARKET_DATA.find(x => x.stallId === stallId);
+    if (!s1 && !s2) return;
+    if (s1) s1.category = newCategory;
+    if (s2) s2.category = newCategory;
+    saveMarketDataToStorage();
+    const stallName = (s1 && s1.stallName) || (s2 && s2.stallName) || stallId;
+    showToast(`✅ เปลี่ยนหมวดหมู่ร้าน "${stallName}" เป็น "${newCategory}" แล้ว`);
+    renderAdminStalls();
+}
+window.adminUpdateStallCategory = adminUpdateStallCategory;
 
 function adminMarkStallReady(orderId, stallId) {
     let orders = [];
@@ -19101,7 +19137,10 @@ function renderAdminStalls() {
                                             </td>
                                             <td class="p-3">
                                                 <div class="font-extrabold text-slate-900">${escapeHtml(s.stallName)}</div>
-                                                <div class="text-[10px] text-slate-400">${escapeHtml(s.stallTag) || escapeHtml(s.category) || ''}</div>
+                                                ${s.stallTag ? `<div class="text-[10px] text-slate-400">${escapeHtml(s.stallTag)}</div>` : ''}
+                                                <select onchange="adminUpdateStallCategory(${jsArg(s.stallId)}, this.value)" title="แก้ไขหมวดหมู่ร้านค้า" class="mt-1 text-[10px] text-slate-600 border border-slate-200 rounded-lg px-1.5 py-0.5 bg-white max-w-[150px] cursor-pointer">
+                                                    ${getMainCategories().map(c => `<option value="${escapeHtml(c)}" ${normalizeMainCategoryName(s.category) === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+                                                </select>
                                             </td>
                                             <td class="p-3 text-slate-700 font-medium">${escapeHtml(s.ownerName) || 'เจ้าของแผง'}</td>
                                             <td class="p-3 font-mono font-bold text-emerald-700">📱 ${escapeHtml(s.phone) || '-'}</td>
