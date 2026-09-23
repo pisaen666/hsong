@@ -1777,7 +1777,7 @@
                         <div class="flex items-center gap-1.5">
                             <span
                                 class="text-[10px] bg-black/25 text-amber-200 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider"
-                                id="merchant-header-zone-badge">โซน A • ของสด</span>
+                                id="merchant-header-category-badge">ของสด</span>
                             <span class="text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full font-black"
                                 id="merchant-header-stallno">แผง A01</span>
                         </div>
@@ -2711,37 +2711,47 @@
                 </button>
             </div>
 
-            <!-- Zone Filter Buttons with Left/Right Arrow Buttons & Mouse-Drag -->
+            <!-- Category Filter Buttons with Left/Right Arrow Buttons & Mouse-Drag (แทนที่ระบบ "โซน" เดิม 2026-09-23 ตามคำขอเจ้าของ: ร้านค้าเปลี่ยนมือบ่อย โซนไม่ตรงกับของที่ขายจริงอีกต่อไป ใช้หมวดหมู่ 11 กลุ่มเดียวกับตอนลงทะเบียนแทน) -->
             <div class="relative flex items-center gap-1 shrink-0">
                 <!-- Left Arrow -->
-                <button onclick="scrollZoneTabs(-130)"
+                <button onclick="scrollDirectoryCategoryTabs(-130)"
                     class="w-6 h-6 bg-white shadow-sm border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 transition-transform active:scale-90"
                     title="เลื่อนซ้าย">
                     <span class="material-symbols-outlined text-xs font-bold">chevron_left</span>
                 </button>
 
-                <!-- Zone Tabs -->
+                <!-- Category Tabs -->
                 <div class="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none text-xs w-full scroll-smooth cursor-grab active:cursor-grabbing select-none"
-                    id="directory-zone-tabs">
-                    <button onclick="filterDirectoryZone('all')"
-                        class="dir-zone-btn active px-3 py-1.5 rounded-xl bg-emerald-700 text-white font-bold whitespace-nowrap shadow-sm shrink-0">ทั้งหมด
+                    id="directory-category-tabs">
+                    <button onclick="filterDirectoryCategory('all')"
+                        class="dir-cat-btn active px-3 py-1.5 rounded-xl bg-emerald-700 text-white font-bold whitespace-nowrap shadow-sm shrink-0">ทั้งหมด
                         (ร้านค้าต่าง ๆ)</button>
-                    <button onclick="filterDirectoryZone('A')"
-                        class="dir-zone-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">โซน
-                        A (เนื้อ/ไก่สด)</button>
-                    <button onclick="filterDirectoryZone('B')"
-                        class="dir-zone-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">โซน
-                        B (ผักสด)</button>
-                    <button onclick="filterDirectoryZone('C')"
-                        class="dir-zone-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">โซน
-                        C (ของแห้ง/แกง)</button>
-                    <button onclick="filterDirectoryZone('E')"
-                        class="dir-zone-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">โซน
-                        E (อาหารทะเล)</button>
+                    <button onclick="filterDirectoryCategory('🥩 เนื้อสัตว์และสัตว์ปีก')"
+                        class="dir-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">🥩 เนื้อสัตว์และสัตว์ปีก</button>
+                    <button onclick="filterDirectoryCategory('🦐 อาหารทะเลสดและแปรรูป')"
+                        class="dir-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">🦐 อาหารทะเลสดและแปรรูป</button>
+                    <button onclick="filterDirectoryCategory('🥬 ผักสด และเห็ด')"
+                        class="dir-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">🥬 ผักสด และเห็ด</button>
+                    <button onclick="filterDirectoryCategory('🍌 ผลไม้สด')"
+                        class="dir-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">🍌 ผลไม้สด</button>
+                    <button onclick="filterDirectoryCategory('🌾 ข้าวสาร ของชำ และไข่ไก่')"
+                        class="dir-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">🌾 ข้าวสาร ของชำ และไข่ไก่</button>
+                    <button onclick="filterDirectoryCategory('🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง')"
+                        class="dir-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว แช่แข็ง</button>
+                    <button onclick="filterDirectoryCategory('🍲 อาหารปรุงสุก ของทอด และพร้อมทาน')"
+                        class="dir-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">🍲 อาหารปรุงสุก ของทอด พร้อมทาน</button>
+                    <button onclick="filterDirectoryCategory('🧋 เครื่องดื่ม ขนมหวาน และเบเกอรี่')"
+                        class="dir-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">🧋 เครื่องดื่ม ขนมหวาน เบเกอรี่</button>
+                    <button onclick="filterDirectoryCategory('💐 ดอกไม้สด และสังฆภัณฑ์')"
+                        class="dir-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">💐 ดอกไม้สด และสังฆภัณฑ์</button>
+                    <button onclick="filterDirectoryCategory('📦 บรรจุภัณฑ์ ของใช้ และอื่นๆ')"
+                        class="dir-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">📦 บรรจุภัณฑ์ ของใช้ อื่นๆ</button>
+                    <button onclick="filterDirectoryCategory('🏷️ อื่นๆ')"
+                        class="dir-cat-btn px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 font-medium whitespace-nowrap hover:bg-slate-200 shrink-0">🏷️ อื่นๆ</button>
                 </div>
 
                 <!-- Right Arrow -->
-                <button onclick="scrollZoneTabs(130)"
+                <button onclick="scrollDirectoryCategoryTabs(130)"
                     class="w-6 h-6 bg-white shadow-sm border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 transition-transform active:scale-90"
                     title="เลื่อนขวา">
                     <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
@@ -2782,7 +2792,7 @@
                             <span class="text-[10px] bg-emerald-500 text-white font-extrabold px-2 py-0.5 rounded-full"
                                 id="modal-stall-number">-</span>
                             <span class="text-[10px] bg-white/20 text-white font-medium px-2 py-0.5 rounded-full"
-                                id="modal-stall-zone">-</span>
+                                id="modal-stall-category">-</span>
                             <span class="text-[10px] text-emerald-300 font-bold" id="modal-stall-owner">-</span>
                         </div>
                         <h3 class="font-extrabold text-base text-white mt-0.5" id="modal-stall-name">แผงค้าในตลาด</h3>
@@ -4076,7 +4086,7 @@
                         <div class="flex items-center gap-1.5">
                             <span class="text-[10px] bg-emerald-800 text-emerald-300 font-bold px-2 py-0.5 rounded-full"
                                 id="merchant-portal-badge">แผงค้าใหม่</span>
-                            <span class="text-[10px] text-slate-400" id="merchant-portal-zone-text">โซนตลาดสด</span>
+                            <span class="text-[10px] text-slate-400" id="merchant-portal-category-text">ของสด</span>
                         </div>
                         <h2 class="font-extrabold text-base text-white mt-0.5" id="merchant-portal-title">
                             เทมเพลตข้อมูลแผงค้า (Stall Setup Form)</h2>
@@ -4665,7 +4675,7 @@
                             <span id="nextstep-merchant-name" class="font-bold text-slate-800">-</span>
                         </div>
                         <div class="flex items-center justify-between">
-                            <span class="text-slate-500">หมายเลขแผง & โซน:</span>
+                            <span class="text-slate-500">หมายเลขแผง & หมวดหมู่:</span>
                             <span id="nextstep-merchant-stall" class="font-bold text-slate-800">-</span>
                         </div>
                         <div class="flex items-center justify-between">
@@ -6034,14 +6044,20 @@
                             class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
                     </div>
                     <div>
-                        <label class="font-bold text-slate-700 block mb-1">โซนในตลาด:</label>
-                        <select id="merchant-edit-zone"
+                        <label class="font-bold text-slate-700 block mb-1">หมวดหมู่ร้านค้า:</label>
+                        <select id="merchant-edit-category"
                             class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
-                            <option value="A">โซน A (เนื้อสัตว์/ไก่สด)</option>
-                            <option value="B">โซน B (ผักสด/ผลไม้)</option>
-                            <option value="C">โซน C (เครื่องเทศ/ของแห้ง)</option>
-                            <option value="D">โซน D (อาหารปรุงสำเร็จ/ขนม)</option>
-                            <option value="E">โซน E (อาหารทะเล/ซีฟู้ด)</option>
+                            <option value="🥩 เนื้อสัตว์และสัตว์ปีก">🥩 เนื้อสัตว์และสัตว์ปีก</option>
+                            <option value="🦐 อาหารทะเลสดและแปรรูป">🦐 อาหารทะเลสดและแปรรูป</option>
+                            <option value="🥬 ผักสด และเห็ด">🥬 ผักสด และเห็ด</option>
+                            <option value="🍌 ผลไม้สด">🍌 ผลไม้สด</option>
+                            <option value="🌾 ข้าวสาร ของชำ และไข่ไก่">🌾 ข้าวสาร ของชำ และไข่ไก่</option>
+                            <option value="🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง">🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง</option>
+                            <option value="🍲 อาหารปรุงสุก ของทอด และพร้อมทาน">🍲 อาหารปรุงสุก ของทอด และพร้อมทาน</option>
+                            <option value="🧋 เครื่องดื่ม ขนมหวาน และเบเกอรี่">🧋 เครื่องดื่ม ขนมหวาน และเบเกอรี่</option>
+                            <option value="💐 ดอกไม้สด และสังฆภัณฑ์">💐 ดอกไม้สด และสังฆภัณฑ์</option>
+                            <option value="📦 บรรจุภัณฑ์ ของใช้ และอื่นๆ">📦 บรรจุภัณฑ์ ของใช้ และอื่นๆ</option>
+                            <option value="🏷️ อื่นๆ">🏷️ อื่นๆ</option>
                         </select>
                     </div>
                 </div>
@@ -7332,7 +7348,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.49_stall_dual_array_sync_fix"></script>
+    <script src="app.js?v=10.50_stall_zone_removed"></script>
 </body>
 
 </html>

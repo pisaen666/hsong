@@ -4605,7 +4605,7 @@ const state = {
     subCategorySearchQuery: "", // in-subcategory search
     subCategoryLoadedItems: [], // cache of loaded subcategory items
     currentSingleStall: null,     // null or stallId
-    currentDirectoryZone: "all",
+    currentDirectoryCategory: "all",
     searchQuery: "",
     favorites: loadSavedFavorites(),     // Persistent favorite stalls list
     customer: loadSavedCustomer(),       // Logged in customer session
@@ -5374,7 +5374,6 @@ function findStallInfo(stallId, stallName) {
         stallId: stallId || "stall_general",
         stallName: stallName || "แผงค้าทั่วไป",
         stallNumber: stallName && stallName.includes("(") ? stallName.split("(")[1].replace(")", "") : "แผงทั่วไป",
-        zone: "ตลาดสด",
         ownerName: "แม่ค้าประจำแผง",
         phone: "089-123-4567"
     };
@@ -5535,7 +5534,6 @@ function aggregateDailyOperations(targetDateKey) {
                         stallId: st.stallId || (meta && meta.stallId),
                         stallName: (meta && meta.stallName) || st.name,
                         stallNumber: (meta && meta.stallNumber) || "แผงตลาด",
-                        zone: (meta && meta.zone) || "กลาง",
                         ownerName: (meta && meta.ownerName) || "เจ้าของแผง",
                         phone: (meta && meta.phone) || "089-123-4567",
                         promptPayPhone: ((meta && meta.phone) || "0891234567").replace(/[^0-9]/g, ""),
@@ -6252,7 +6250,7 @@ function renderHubDailyReport(targetDateKey) {
                     <tr class="hover:bg-slate-50/70 transition-colors">
                         <td class="p-2.5">
                             <div class="font-extrabold text-slate-800 text-xs">${escapeHtml(s.stallName)}</div>
-                            <span class="text-[9px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.2 rounded">${escapeHtml(s.stallNumber)} (โซน ${escapeHtml(s.zone)})</span>
+                            <span class="text-[9px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.2 rounded">${escapeHtml(s.stallNumber)}</span>
                         </td>
                         <td class="p-2.5">
                             <div class="font-bold text-slate-700">${escapeHtml(s.ownerName)}</div>
@@ -7491,7 +7489,7 @@ function exportDailyReportCSV(dateKey) {
 
     // 3. เคลียร์เงินร้านค้า
     csv += "--- 3. เคลียร์เงินร้านค้า/แผงค้า ---\n";
-    csv += "แผงค้า,เลขแผง/โซน,เจ้าของ,เบอร์พร้อมเพย์,จำนวนชิ้น,จำนวนออเดอร์,ยอดเงินที่ต้องโอน(บาท),สถานะโอน\n";
+    csv += "แผงค้า,เลขแผง,เจ้าของ,เบอร์พร้อมเพย์,จำนวนชิ้น,จำนวนออเดอร์,ยอดเงินที่ต้องโอน(บาท),สถานะโอน\n";
     report.vendorSettlement.stalls.forEach(s => {
         csv += `"${s.stallName}","${s.stallNumber}",${s.ownerName},"${s.phone}",${s.itemsCount},${s.orderCount},${s.totalAmount},"${s.isSettled ? 'โอนแล้ว' : 'รอโอน'}"\n`;
     });
@@ -7867,7 +7865,7 @@ function printThermalVendorSlip(stallId, dateKey) {
         <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
         <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
         <div class="slip-row"><span class="slip-label">แผงค้า:</span><span class="slip-value">${escapeHtml(s.stallName)}</span></div>
-        <div class="slip-row"><span class="slip-label">ตำแหน่ง:</span><span class="slip-value">${escapeHtml(s.stallNumber)} (โซน ${escapeHtml(s.zone)})</span></div>
+        <div class="slip-row"><span class="slip-label">ตำแหน่ง:</span><span class="slip-value">${escapeHtml(s.stallNumber)}</span></div>
         <div class="slip-row"><span class="slip-label">เจ้าของแผง:</span><span class="slip-value">${escapeHtml(s.ownerName)}</span></div>
         <div class="slip-row"><span class="slip-label">เบอร์พร้อมเพย์:</span><span class="slip-value">${escapeHtml(s.phone)}</span></div>
         <div class="divider-dashed"></div>
@@ -8190,7 +8188,7 @@ function printA4VendorsSummary(dateKey) {
             <tr>
                 <td class="text-center">${idx + 1}</td>
                 <td><strong>${escapeHtml(s.stallName)}</strong></td>
-                <td class="text-center">${escapeHtml(s.stallNumber)} (โซน ${escapeHtml(s.zone)})</td>
+                <td class="text-center">${escapeHtml(s.stallNumber)}</td>
                 <td>${escapeHtml(s.ownerName)}</td>
                 <td class="text-center">${escapeHtml(s.phone)}</td>
                 <td class="text-center">${s.itemsCount} ชิ้น</td>
@@ -8237,7 +8235,7 @@ function printA4VendorsSummary(dateKey) {
                 <tr>
                     <th class="text-center" style="width: 35px;">ที่</th>
                     <th>แผงค้า / ร้านค้า</th>
-                    <th class="text-center">เลขแผง / โซน</th>
+                    <th class="text-center">เลขแผง</th>
                     <th>เจ้าของแผง</th>
                     <th class="text-center">เบอร์พร้อมเพย์</th>
                     <th class="text-center">ชิ้นที่ขาย</th>
@@ -8644,7 +8642,6 @@ function aggregatePeriodOperations(mode = "week", refDateKey = null) {
                     stallId: st.stallId,
                     stallName: st.stallName,
                     stallNumber: st.stallNumber,
-                    zone: st.zone,
                     ownerName: st.ownerName,
                     phone: st.phone,
                     orderCount: 0,
@@ -9294,7 +9291,7 @@ function exportPeriodAnalysisCSV() {
 
     // 3. แผงค้ายอดนิยม
     csv += "--- 3. สรุปยอดขายรายแผงค้า ---\n";
-    csv += "ชื่อแผงค้า,เลขแผง/โซน,เจ้าของ,ออเดอร์,จำนวนชิ้น,ยอดขายรวม(บาท),GP(บาท),ยอดโอนสุทธิ(บาท)\n";
+    csv += "ชื่อแผงค้า,เลขแผง,เจ้าของ,ออเดอร์,จำนวนชิ้น,ยอดขายรวม(บาท),GP(บาท),ยอดโอนสุทธิ(บาท)\n";
     data.stallsRanked.forEach(s => {
         csv += `"${s.stallName}","${s.stallNumber}",${s.ownerName},${s.orderCount},${s.itemsCount},${s.totalAmount},${s.gpAmount},${s.payoutAmount}\n`;
     });
@@ -10908,7 +10905,6 @@ function getSubCategoryProducts(mainCat, subCat, microCat, searchQuery = "", req
                 stallName: stall.stallName,
                 stallNumber: stall.stallNumber,
                 stallTag: stall.stallTag,
-                zone: stall.zone,
                 isClosed: !!stall.isClosed,
                 sourceTier: 1, // Highlight 10
                 score: calcSubCategoryItemScore(stall, p)
@@ -10988,7 +10984,6 @@ function getSubCategoryProducts(mainCat, subCat, microCat, searchQuery = "", req
                     stallName: stall.stallName,
                     stallNumber: stall.stallNumber,
                     stallTag: stall.stallTag,
-                    zone: stall.zone,
                     isClosed: !!stall.isClosed,
                     sourceTier: 2, // Extended 50 catalog
                     score: calcSubCategoryItemScore(stall, catItem)
@@ -11320,8 +11315,8 @@ function scrollMerchantPortalTabs(amount) {
     }
 }
 
-function scrollZoneTabs(amount) {
-    const container = document.getElementById("directory-zone-tabs");
+function scrollDirectoryCategoryTabs(amount) {
+    const container = document.getElementById("directory-category-tabs");
     if (container) {
         container.scrollBy({ left: amount, behavior: 'smooth' });
     }
@@ -11329,7 +11324,7 @@ function scrollZoneTabs(amount) {
 
 // Enable Mouse Drag-to-Scroll on PC Desktop
 function enableDragToScroll() {
-    ['category-tabs', 'subcategory-tabs', 'favorite-stalls-list', 'modal-stall-category-pills', 'directory-zone-tabs', 'merchant-portal-tab-bar'].forEach(id => {
+    ['category-tabs', 'subcategory-tabs', 'favorite-stalls-list', 'modal-stall-category-pills', 'directory-category-tabs', 'merchant-portal-tab-bar'].forEach(id => {
         const slider = document.getElementById(id);
         if (!slider) return;
 
@@ -11409,9 +11404,9 @@ function closeDirectoryModal() {
     document.getElementById("directory-modal").classList.add("hidden");
 }
 
-function filterDirectoryZone(zone) {
-    state.currentDirectoryZone = zone;
-    document.querySelectorAll(".dir-zone-btn").forEach(btn => {
+function filterDirectoryCategory(category) {
+    state.currentDirectoryCategory = category;
+    document.querySelectorAll(".dir-cat-btn").forEach(btn => {
         btn.classList.remove("active", "bg-emerald-700", "text-white", "font-bold");
         btn.classList.add("bg-slate-100", "text-slate-700", "font-medium");
     });
@@ -11425,8 +11420,8 @@ function renderDirectoryList() {
     if (!listContainer) return;
 
     let stalls = ALL_100_STALLS;
-    if (state.currentDirectoryZone !== "all") {
-        stalls = ALL_100_STALLS.filter(s => s.zone === state.currentDirectoryZone);
+    if (state.currentDirectoryCategory !== "all") {
+        stalls = ALL_100_STALLS.filter(s => normalizeMainCategoryName(s.category) === state.currentDirectoryCategory);
     }
 
     let html = "";
@@ -11443,7 +11438,7 @@ function renderDirectoryList() {
                             <span>${escapeHtml(stall.stallName)}</span>
                             ${isHub ? '<span class="text-[9px] bg-orange-500 text-white px-1 rounded font-bold">Hub ร้านเรา</span>' : ''}
                         </div>
-                        <div class="text-[10px] text-slate-400">${escapeHtml(stall.stallTag)} • โซน ${escapeHtml(stall.zone)}</div>
+                        <div class="text-[10px] text-slate-400">${escapeHtml(stall.stallTag)} • ${escapeHtml(normalizeMainCategoryName(stall.category) || stall.category || 'ของสด')}</div>
                     </div>
                 </div>
                 <span class="material-symbols-outlined text-sm text-slate-400">chevron_right</span>
@@ -11550,7 +11545,7 @@ function openStallCatalogModal(stallId) {
     // Set modal headers
     const iconEl = document.getElementById("modal-stall-icon");
     const numEl = document.getElementById("modal-stall-number");
-    const zoneEl = document.getElementById("modal-stall-zone");
+    const categoryEl = document.getElementById("modal-stall-category");
     const ownerEl = document.getElementById("modal-stall-owner");
     const nameEl = document.getElementById("modal-stall-name");
     const searchInput = document.getElementById("stall-catalog-search-input");
@@ -11558,7 +11553,7 @@ function openStallCatalogModal(stallId) {
 
     if (iconEl) iconEl.textContent = stall.stallTag ? stall.stallTag.split(" ")[0] : "🏪";
     if (numEl) numEl.textContent = stall.stallNumber;
-    if (zoneEl) zoneEl.textContent = `โซน ${stall.zone}`;
+    if (categoryEl) categoryEl.textContent = normalizeMainCategoryName(stall.category) || stall.category || "ของสด";
     if (ownerEl) ownerEl.textContent = stall.ownerName ? stall.ownerName.split(" ")[0] : "เจ้าของแผง";
     if (nameEl) nameEl.textContent = stall.stallName;
     if (searchInput) searchInput.value = "";
@@ -14346,7 +14341,6 @@ function getEffectiveMerchantStall() {
             stallId: state.activeMerchant.stallId || "stall_active_merchant",
             stallName: state.activeMerchant.stallName || "แผงค้าของฉัน",
             stallNumber: state.activeMerchant.stallNumber || "แผงค้า",
-            zone: state.activeMerchant.zone || "ตลาดสด",
             ownerName: state.activeMerchant.ownerName || "เจ้าของร้าน",
             phone: state.activeMerchant.phone || "089-123-4567"
         };
@@ -14363,7 +14357,6 @@ function getEffectiveMerchantStall() {
             stallId: "stall_default",
             stallName: "แผงค้าของฉัน",
             stallNumber: "แผงค้า",
-            zone: "ตลาดสด",
             ownerName: "เจ้าของร้าน",
             phone: "089-123-4567"
         };
@@ -15048,7 +15041,7 @@ function renderMerchantIncomingOrders() {
                         🏪
                     </div>
                     <div>
-                        <div class="text-[11px] text-amber-100 font-bold">แผงค้าของฉัน • ${stall ? (escapeHtml(stall.stallNumber) || 'แผงค้า') : 'แผงค้า'} (${stall ? (escapeHtml(stall.zone) || 'ตลาดสด') : 'ตลาดสด'})</div>
+                        <div class="text-[11px] text-amber-100 font-bold">แผงค้าของฉัน • ${stall ? (escapeHtml(stall.stallNumber) || 'แผงค้า') : 'แผงค้า'} (${stall ? (escapeHtml(normalizeMainCategoryName(stall.category)) || escapeHtml(stall.category) || 'ของสด') : 'ของสด'})</div>
                         <h3 class="text-base sm:text-lg font-black leading-tight">${stall ? escapeHtml(stall.stallName) : 'แผงค้า'}</h3>
                     </div>
                 </div>
@@ -15350,7 +15343,7 @@ function renderMerchantView() {
 
     // 2. Update Header & Badges
     const headerIcon = document.getElementById("merchant-header-icon");
-    const headerZone = document.getElementById("merchant-header-zone-badge");
+    const headerCategory = document.getElementById("merchant-header-category-badge");
     const headerStallNo = document.getElementById("merchant-header-stallno");
     const headerStallName = document.getElementById("merchant-header-stallname");
     const senderBadge = document.getElementById("merchant-sender-badge");
@@ -15359,10 +15352,10 @@ function renderMerchantView() {
 
     const emoji = stall.stallTag ? stall.stallTag.split(" ")[0] : "🏪";
     if (headerIcon) headerIcon.textContent = emoji;
-    if (headerZone) headerZone.textContent = stall.zone ? `โซน ${stall.zone.charAt(0)} • ${stall.category || 'ตลาดสด'}` : "โซนตลาดสด";
+    if (headerCategory) headerCategory.textContent = normalizeMainCategoryName(stall.category) || stall.category || "ของสด";
     if (headerStallNo) headerStallNo.textContent = stall.stallNumber || "แผง A01";
     if (headerStallName) headerStallName.textContent = stall.stallName || "แผงค้าในตลาด";
-    if (senderBadge) senderBadge.textContent = `${stall.stallNumber || 'แผงค้า'} • ${stall.zone || 'ตลาดสด'}`;
+    if (senderBadge) senderBadge.textContent = `${stall.stallNumber || 'แผงค้า'} • ${normalizeMainCategoryName(stall.category) || stall.category || 'ของสด'}`;
     if (senderName) senderName.textContent = `${stall.stallName} (${stall.stallNumber || 'แผงค้า'})`;
     if (senderPhone) senderPhone.textContent = `${stall.ownerName || 'เจ้าของร้าน'} (${stall.phone || '081-999-8888'})`;
 
@@ -15374,7 +15367,7 @@ function renderMerchantView() {
         let html = "";
         MARKET_DATA.forEach(s => {
             const isSel = s.stallId === stall.stallId ? "selected" : "";
-            html += `<option value="${escapeHtml(s.stallId)}" ${isSel}>${escapeHtml(s.stallName)} (${escapeHtml(s.stallNumber) || 'แผงค้า'} • โซน ${escapeHtml(s.zone) || 'A'})</option>`;
+            html += `<option value="${escapeHtml(s.stallId)}" ${isSel}>${escapeHtml(s.stallName)} (${escapeHtml(s.stallNumber) || 'แผงค้า'} • ${escapeHtml(normalizeMainCategoryName(s.category)) || escapeHtml(s.category) || 'ของสด'})</option>`;
         });
         selectEl.innerHTML = html;
     }
@@ -15714,7 +15707,6 @@ function submitMerchantCall() {
             stallId: currentStall.stallId,
             stallName: currentStall.stallName,
             stallNumber: currentStall.stallNumber || "แผงค้า",
-            zone: currentStall.zone || "A",
             ownerName: currentStall.ownerName || "เจ้าของร้าน",
             ownerPhone: currentStall.phone || "081-999-8888"
         },
@@ -15763,7 +15755,7 @@ function openMerchantPaymentModal(order) {
 
     if (orderIdEl) orderIdEl.textContent = order.orderId;
     if (timeEl) timeEl.textContent = `${order.time} (~${order.distanceKm} กม.)`;
-    if (originEl) originEl.textContent = `${order.originStall.stallName} (${order.originStall.stallNumber}) โซน ${order.originStall.zone}`;
+    if (originEl) originEl.textContent = `${order.originStall.stallName} (${order.originStall.stallNumber})`;
     if (destEl) destEl.textContent = `${order.customerName} - ${order.address}`;
     if (amountEl) amountEl.textContent = `฿${order.deliveryFee}`;
 
@@ -16599,7 +16591,7 @@ function openMerchantRiderChat(orderId) {
             <button type="button" onclick="sendQuickRiderMessage('📦 ของสดแพ็คเสร็จแล้ว มารับหน้าร้านได้เลยครับ')" class="shrink-0 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold border border-emerald-200 transition-colors active:scale-95">
                 📦 แพ็คเสร็จแล้ว มารับได้เลย
             </button>
-            <button type="button" onclick="sendQuickRiderMessage('🏪 ร้านอยู่โซน ${order.originStall?.zone || 'A'} แผง ${escapeHtml(order.originStall?.stallNumber) || 'แผงค้า'} ครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
+            <button type="button" onclick="sendQuickRiderMessage('🏪 ร้านอยู่แผง ${escapeHtml(order.originStall?.stallNumber) || 'แผงค้า'} ครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
                 🏪 พิกัดแผง ${escapeHtml(order.originStall?.stallNumber) || 'แผงค้า'}
             </button>
             <button type="button" onclick="sendQuickRiderMessage('📞 ลูกค้าฝากแจ้งว่าช่วยโทรหาก่อนถึง 5 นาทีครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
@@ -17850,7 +17842,7 @@ function renderScreenModeButton() {
 let _activeAdminTab = "report";
 if (typeof window !== "undefined") window._activeAdminTab = _activeAdminTab;
 let _adminStallSearchQuery = "";
-let _adminStallZoneFilter = "all";
+let _adminStallCategoryFilter = "all";
 
 function handleAdminButtonClick() {
     if (state.activeAdmin && state.activeAdmin.isLoggedIn) {
@@ -18115,7 +18107,7 @@ function renderAdminAnalytics() {
 // ── Tab 3: Stalls Directory, Roster & Merchant Applications (Merchant & Kitchen Operations)
 let _adminStallSubTab = "live"; // 'live' | 'roster' | 'settlement' | 'settings'
 let _adminStallStatusFilter = "all"; // 'all' | 'active_orders' | 'open' | 'closed'
-_adminStallZoneFilter = "all"; // 'all' | 'A' | 'B' | 'C' | 'E'
+_adminStallCategoryFilter = "all"; // 'all' or a main category string from getMainCategories()
 _adminStallSearchQuery = "";
 let _adminStallRosterView = "roster"; // 'roster' | 'applications'
 let _adminMerchantAppFilter = "all"; // 'all' | 'pending' | 'approved' | 'rejected'
@@ -18176,11 +18168,11 @@ function handleAdminStallSearch(val) {
 }
 window.handleAdminStallSearch = handleAdminStallSearch;
 
-function filterAdminStallsByZone(zone) {
-    _adminStallZoneFilter = zone;
+function filterAdminStallsByCategory(category) {
+    _adminStallCategoryFilter = category;
     renderAdminStalls();
 }
-window.filterAdminStallsByZone = filterAdminStallsByZone;
+window.filterAdminStallsByCategory = filterAdminStallsByCategory;
 
 function filterAdminStallsByStatus(status) {
     _adminStallStatusFilter = status;
@@ -18427,7 +18419,7 @@ function printA4VendorSettlementsReport(targetDateKey) {
         rowsHtml = vendors.map((v, idx) => `
             <tr>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
-                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(v.stallNumber) || '-'} (${escapeHtml(v.zone) || '-'})</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(v.stallNumber) || '-'}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(v.stallName)}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${v.orderCount} ออเดอร์</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: right; color: #475569;">฿${Number(v.totalAmount || 0).toLocaleString()}</td>
@@ -18455,7 +18447,7 @@ function printA4VendorSettlementsReport(targetDateKey) {
             <thead>
                 <tr style="background: #f1f5f9;">
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">ลำดับ</th>
-                    <th style="padding: 6px; border: 1px solid #cbd5e1;">เลขแผง/โซน</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">เลขแผง</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">ชื่อแผงค้า</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">จำนวนออเดอร์</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">ยอดขายรวม</th>
@@ -18488,7 +18480,7 @@ function printA4MerchantRules() {
     const content = `
         <div class="a4-header" style="text-align: center; border-bottom: 2px solid #7c3aed; padding-bottom: 12px; margin-bottom: 20px;">
             <div style="font-size: 20px; font-weight: 900; color: #4c1d95;">ระเบียบปฏิบัติสำหรับ 100 แผงค้า ตลาดสดวิศิษฐ์ชัย (เฮียส่ง)</div>
-            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">ประกาศใช้อย่างเป็นทางการสำหรับผู้เช่าแผงและผู้ประกอบการค้าทุกโซน (A, B, C, E)</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">ประกาศใช้อย่างเป็นทางการสำหรับผู้เช่าแผงและผู้ประกอบการค้าทุกแผง</div>
         </div>
         <div style="font-size: 12px; line-height: 1.8; color: #1e293b; space-y-4;">
             <div style="margin-bottom: 12px; padding: 10px; background: #faf5ff; border-left: 4px solid #7c3aed; border-radius: 4px;">
@@ -18594,7 +18586,7 @@ function renderAdminStalls() {
                 stallId: sId,
                 stallName: stallMeta.stallName || st.name,
                 stallNumber: stallMeta.stallNumber || "แผงตลาด",
-                zone: stallMeta.zone || "A",
+                category: normalizeMainCategoryName(stallMeta.category) || stallMeta.category || DEFAULT_STALL_CATEGORY,
                 ownerName: stallMeta.ownerName || "เจ้าของแผง",
                 phone: stallMeta.phone || "089-123-4567",
                 customerName: o.customerName || "ลูกค้าชุมชน",
@@ -18626,8 +18618,8 @@ function renderAdminStalls() {
 
     // Stalls filtering for Tab 2 (Roster)
     let filteredStalls = ALL_100_STALLS;
-    if (_adminStallZoneFilter && _adminStallZoneFilter !== "all") {
-        filteredStalls = filteredStalls.filter(s => s.zone === _adminStallZoneFilter);
+    if (_adminStallCategoryFilter && _adminStallCategoryFilter !== "all") {
+        filteredStalls = filteredStalls.filter(s => normalizeMainCategoryName(s.category) === _adminStallCategoryFilter);
     }
     if (_adminStallSearchQuery) {
         const q = _adminStallSearchQuery.toLowerCase();
@@ -18643,8 +18635,8 @@ function renderAdminStalls() {
     // Filter stalls with active tasks for Tab 1 (Live)
     const stallsWithOrdersIds = new Set(stallActiveTasks.map(t => t.stallId));
     let displayLiveStalls = ALL_100_STALLS;
-    if (_adminStallZoneFilter && _adminStallZoneFilter !== "all") {
-        displayLiveStalls = displayLiveStalls.filter(s => s.zone === _adminStallZoneFilter);
+    if (_adminStallCategoryFilter && _adminStallCategoryFilter !== "all") {
+        displayLiveStalls = displayLiveStalls.filter(s => normalizeMainCategoryName(s.category) === _adminStallCategoryFilter);
     }
     if (_adminStallStatusFilter === "active_orders") {
         displayLiveStalls = displayLiveStalls.filter(s => stallsWithOrdersIds.has(s.stallId));
@@ -18678,8 +18670,7 @@ function renderAdminStalls() {
                     name: it.name,
                     qty: it.qty || 1,
                     stallName: t.stallName,
-                    stallNumber: t.stallNumber,
-                    zone: t.zone
+                    stallNumber: t.stallNumber
                 });
             });
         });
@@ -18742,7 +18733,7 @@ function renderAdminStalls() {
             <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-2.5">
                 <div class="w-full sm:w-72 relative">
                     <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
-                    <input type="text" value="${_adminStallSearchQuery}" oninput="handleAdminStallSearch(this.value)" placeholder="ค้นหาชื่อร้าน, เลขแผง, โซน..." class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                    <input type="text" value="${_adminStallSearchQuery}" oninput="handleAdminStallSearch(this.value)" placeholder="ค้นหาชื่อร้าน, เลขแผง..." class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
                 </div>
 
                 <div class="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0 scrollbar-none text-xs w-full sm:w-auto">
@@ -18794,7 +18785,7 @@ function renderAdminStalls() {
                                         <div class="flex items-center gap-1.5 flex-wrap">
                                             <span class="font-black text-sm text-slate-900">${escapeHtml(task.stallName)}</span>
                                             <span class="bg-slate-100 text-slate-700 text-[10px] font-mono px-2 py-0.5 rounded-md font-bold">${escapeHtml(task.stallNumber)}</span>
-                                            <span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded-md">โซน ${escapeHtml(task.zone)}</span>
+                                            <span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded-md">${escapeHtml(task.category)}</span>
                                         </div>
                                         <div class="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap mt-0.5">
                                             <span>เจ้าของ: <strong>${escapeHtml(task.ownerName)}</strong></span>
@@ -18891,14 +18882,14 @@ function renderAdminStalls() {
                     `).join('')}
                 </div>
 
-                <!-- Right: Interactive Market Zone Grid & Urgent Watch (Span 5) -->
+                <!-- Right: Interactive Market Category Grid & Urgent Watch (Span 5) -->
                 <div class="lg:col-span-5 space-y-3">
                     <!-- Market Stall Interactive Matrix -->
                     <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
                         <div class="flex items-center justify-between pb-2 border-b border-slate-100">
                             <div class="font-extrabold text-xs sm:text-sm text-slate-800 flex items-center gap-1.5">
                                 <span class="material-symbols-outlined text-purple-600 text-base">map</span>
-                                <span>ผังโซน 100 แผงค้า (Market Stall Grid)</span>
+                                <span>แผงค้าแยกตามหมวดหมู่ (Market Stall Grid)</span>
                             </div>
                             <span class="text-[10px] text-slate-400">คลิกที่แผงเพื่อกรอง</span>
                         </div>
@@ -18908,19 +18899,19 @@ function renderAdminStalls() {
                             <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-300"></span> ⚪ พักร้าน</span>
                         </div>
 
-                        <!-- 4 Zones Mini Grid -->
+                        <!-- Category Mini Grid (แทนที่ "4 โซน" เดิม 2026-09-23) -->
                         <div class="space-y-2.5 text-xs max-h-[360px] overflow-y-auto pr-1">
-                            ${['A', 'B', 'C', 'E'].map(z => {
-                                const zoneStalls = ALL_100_STALLS.filter(s => s.zone === z);
-                                const zoneLabel = z === 'A' ? 'โซน A (เนื้อ/ไก่สด)' : (z === 'B' ? 'โซน B (ผักสด)' : (z === 'C' ? 'โซน C (ของแห้ง/แกง)' : 'โซน E (อาหารทะเล)'));
+                            ${getMainCategories().map(cat => {
+                                const catStalls = ALL_100_STALLS.filter(s => normalizeMainCategoryName(s.category) === cat);
+                                if (catStalls.length === 0) return '';
                                 return `
                                     <div class="p-2 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5">
                                         <div class="font-black text-[11px] text-slate-700 flex items-center justify-between">
-                                            <span>${zoneLabel}</span>
-                                            <span class="text-[10px] text-slate-400 font-mono">${zoneStalls.length} แผง</span>
+                                            <span>${escapeHtml(cat)}</span>
+                                            <span class="text-[10px] text-slate-400 font-mono">${catStalls.length} แผง</span>
                                         </div>
                                         <div class="flex flex-wrap gap-1">
-                                            ${zoneStalls.slice(0, 20).map(s => {
+                                            ${catStalls.slice(0, 20).map(s => {
                                                 const hasOrder = stallsWithOrdersIds.has(s.stallId);
                                                 return `
                                                     <button onclick="handleAdminStallSearch(${jsArg(s.stallNumber)})" title="${escapeHtml(s.stallNumber)}: ${escapeHtml(s.stallName)} (${hasOrder ? 'มีออเดอร์ค้างทำ!' : (s.isClosed ? 'พักร้าน' : 'เปิดปกติ')})" class="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold transition-all active:scale-95 cursor-pointer ${
@@ -19102,11 +19093,10 @@ function renderAdminStalls() {
                 <div class="space-y-3">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
                         <div class="flex items-center gap-1.5 overflow-x-auto text-xs pb-1 sm:pb-0">
-                            <button onclick="filterAdminStallsByZone('all')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${_adminStallZoneFilter === 'all' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">ทั้งหมด (${ALL_100_STALLS.length})</button>
-                            <button onclick="filterAdminStallsByZone('A')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${_adminStallZoneFilter === 'A' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">โซน A ไก่/เนื้อ</button>
-                            <button onclick="filterAdminStallsByZone('B')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${_adminStallZoneFilter === 'B' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">โซน B ผักสด</button>
-                            <button onclick="filterAdminStallsByZone('C')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${_adminStallZoneFilter === 'C' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">โซน C เครื่องแกง</button>
-                            <button onclick="filterAdminStallsByZone('E')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${_adminStallZoneFilter === 'E' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">โซน E ซีฟู้ด</button>
+                            <button onclick="filterAdminStallsByCategory('all')" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer shrink-0 ${_adminStallCategoryFilter === 'all' ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">ทั้งหมด (${ALL_100_STALLS.length})</button>
+                            ${getMainCategories().map(cat => `
+                            <button onclick="filterAdminStallsByCategory(${jsArg(cat)})" class="px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${_adminStallCategoryFilter === cat ? 'bg-purple-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}">${escapeHtml(cat)}</button>
+                            `).join('')}
                         </div>
                         <div class="w-full sm:w-64 relative">
                             <span class="material-symbols-outlined absolute left-3 top-2 text-slate-400 text-sm">search</span>
@@ -19119,7 +19109,7 @@ function renderAdminStalls() {
                             <table class="w-full text-left text-xs">
                                 <thead>
                                     <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                                        <th class="p-3">เลขแผง / โซน</th>
+                                        <th class="p-3">เลขแผง</th>
                                         <th class="p-3">ชื่อร้านค้า</th>
                                         <th class="p-3">เจ้าของแผง</th>
                                         <th class="p-3">เบอร์โทรศัพท์</th>
@@ -19133,7 +19123,6 @@ function renderAdminStalls() {
                                         <tr class="hover:bg-slate-50 transition-colors">
                                             <td class="p-3 font-mono font-bold text-slate-700">
                                                 <span class="bg-slate-100 px-2 py-0.5 rounded">${escapeHtml(s.stallNumber) || 'แผงตลาด'}</span>
-                                                <span class="text-[10px] text-slate-400 ml-1">โซน ${escapeHtml(s.zone) || '-'}</span>
                                             </td>
                                             <td class="p-3">
                                                 <div class="font-extrabold text-slate-900">${escapeHtml(s.stallName)}</div>
@@ -19253,7 +19242,7 @@ function renderAdminStalls() {
                     <table class="w-full text-left text-xs">
                         <thead>
                             <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                                <th class="p-3">เลขแผง / โซน</th>
+                                <th class="p-3">เลขแผง</th>
                                 <th class="p-3">ชื่อแผงค้า / เจ้าของ</th>
                                 <th class="p-3 text-center">ออเดอร์</th>
                                 <th class="p-3 text-right">ยอดขายรวม</th>
@@ -19285,7 +19274,6 @@ function renderAdminStalls() {
                                 <tr class="hover:bg-slate-50 transition-colors">
                                     <td class="p-3 font-mono font-bold text-slate-700">
                                         <span class="bg-slate-100 px-2 py-0.5 rounded">${escapeHtml(v.stallNumber) || 'แผง'}</span>
-                                        <span class="text-[10px] text-slate-400 ml-1">โซน ${escapeHtml(v.zone) || '-'}</span>
                                     </td>
                                     <td class="p-3">
                                         <div class="font-extrabold text-slate-900">${escapeHtml(v.stallName)}</div>
@@ -19642,10 +19630,6 @@ function viewMerchantAppDetail(appId) {
                         <div class="font-mono font-bold text-slate-800">${escapeHtml(stall.stallNumber || '-')}</div>
                     </div>
                     <div>
-                        <span class="text-[10px] text-slate-400">โซนตลาด:</span>
-                        <div class="font-bold text-purple-700">${stall.zone ? 'โซน ' + escapeHtml(stall.zone) : '-'}</div>
-                    </div>
-                    <div>
                         <span class="text-[10px] text-slate-400">หมวดหมู่สินค้า:</span>
                         <div class="font-bold text-slate-700">${escapeHtml(stall.category) || escapeHtml(stall.stallTag) || 'ของสด'}</div>
                     </div>
@@ -19850,7 +19834,7 @@ function openEditMerchantAppModal(appId) {
     document.getElementById("merchant-edit-ownername").value = c1.name || stall.ownerName || "";
     document.getElementById("merchant-edit-phone").value = c1.phone || stall.phone || "";
     document.getElementById("merchant-edit-lineid").value = c1.line || stall.lineId || stall.line || "";
-    document.getElementById("merchant-edit-zone").value = stall.zone || "A";
+    document.getElementById("merchant-edit-category").value = normalizeMainCategoryName(stall.category) || DEFAULT_STALL_CATEGORY;
     document.getElementById("merchant-edit-accesscode").value = app.accessCode || "";
     document.getElementById("merchant-edit-status").value = app.status || "pending";
     document.getElementById("merchant-edit-promptpay").value = stall.promptPayNumber || stall.phone || "";
@@ -19896,7 +19880,7 @@ function handleMerchantAppEditSubmit(e) {
     const ownerName = document.getElementById("merchant-edit-ownername")?.value.trim();
     const phone = document.getElementById("merchant-edit-phone")?.value.trim();
     const lineId = document.getElementById("merchant-edit-lineid")?.value.trim();
-    const zone = document.getElementById("merchant-edit-zone")?.value;
+    const category = document.getElementById("merchant-edit-category")?.value;
     const accessCode = document.getElementById("merchant-edit-accesscode")?.value.trim().toUpperCase();
     const status = document.getElementById("merchant-edit-status")?.value;
     const promptPay = document.getElementById("merchant-edit-promptpay")?.value.trim();
@@ -19928,7 +19912,7 @@ function handleMerchantAppEditSubmit(e) {
     app.stallData.phone = phone;
     app.stallData.phone2 = contact2Phone;
     app.stallData.lineId = lineId;
-    app.stallData.zone = zone;
+    app.stallData.category = category;
     app.stallData.promptPayNumber = promptPay || bankNo || phone;
     app.stallData.highlight = highlight;
     app.accessCode = app.accessCode || accessCode || null;   // รหัสอ้างอิงเดิมไม่ถูกแก้ (ไม่ใช่รหัสผ่านแล้ว)
@@ -20118,7 +20102,7 @@ function printA4MerchantApplication(appId) {
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
             <div style="font-size: 16px; font-weight: bold; color: #1e293b;">${escapeHtml(stall.stallName) || 'แผงค้าใหม่'} (เลขแผง: ${escapeHtml(stall.stallNumber) || '-'})</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เจ้าของแผง: <strong>${escapeHtml(stall.ownerName) || '-'}</strong> | เบอร์โทรศัพท์: <strong>${escapeHtml(stall.phone) || '-'}</strong> | LINE: <strong>${escapeHtml(stall.lineId) || escapeHtml(stall.phone) || '-'}</strong></div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">โซน: <strong>โซน ${escapeHtml(stall.zone) || '-'}</strong> | หมวดหมู่: <strong>${escapeHtml(stall.category) || escapeHtml(stall.stallTag) || 'ของสด'}</strong> | สถานะ: <strong>${statusThai}</strong></div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">หมวดหมู่: <strong>${escapeHtml(stall.category) || escapeHtml(stall.stallTag) || 'ของสด'}</strong> | สถานะ: <strong>${statusThai}</strong></div>
             ${app.status === 'approved' ? `<div style="font-size: 12px; color: #047857; font-weight: bold; margin-top: 4px;">รหัสร้าน: ${escapeHtml(stall.stallId || app.id)} (รหัสผ่านเข้าระบบเป็นความลับ เจ้าของแจ้งให้ทางข้อความ ไม่พิมพ์ในเอกสาร)</div>` : ''}
         </div>
         <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
@@ -20158,7 +20142,7 @@ function printA4MerchantDirectory() {
             <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
             <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(s.stallNumber) || '-'}</td>
             <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(s.stallName)}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1;">โซน ${escapeHtml(s.zone) || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1;">${escapeHtml(normalizeMainCategoryName(s.category)) || escapeHtml(s.category) || '-'}</td>
             <td style="padding: 6px; border: 1px solid #cbd5e1;">${escapeHtml(s.ownerName) || '-'}</td>
             <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${escapeHtml(s.phone) || '-'}</td>
             <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #047857;">${escapeHtml(s.accessCode) || '-'}</td>
@@ -20176,7 +20160,7 @@ function printA4MerchantDirectory() {
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">ลำดับ</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">เลขแผง</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">ชื่อแผงค้า</th>
-                    <th style="padding: 6px; border: 1px solid #cbd5e1;">โซน</th>
+                    <th style="padding: 6px; border: 1px solid #cbd5e1;">หมวดหมู่</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">เจ้าของแผง</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">เบอร์โทร</th>
                     <th style="padding: 6px; border: 1px solid #cbd5e1;">รหัส 6 หลัก</th>
@@ -25691,7 +25675,6 @@ function createDemoMerchantExpressOrder() {
             stallId: "stall_veg",
             stallName: "แผงผักสดป้าสมร",
             stallNumber: "A-01",
-            zone: "โซน A (ผักสด)",
             ownerName: "ป้าสมร",
             ownerPhone: "081-234-5678"
         },
@@ -25901,7 +25884,7 @@ function renderHubPickingList() {
                             <span>จุดรับของ (หน้าแผงค้าในตลาด):</span>
                         </div>
                         <div class="font-extrabold text-slate-900 text-xs">${stallTitle}</div>
-                        <div class="text-[11px] text-slate-600">ผู้ส่ง: ${escapeHtml(origin.ownerName) || 'เจ้าของแผง'} โซน ${escapeHtml(origin.zone) || 'A'}</div>
+                        <div class="text-[11px] text-slate-600">ผู้ส่ง: ${escapeHtml(origin.ownerName) || 'เจ้าของแผง'}</div>
                         <div class="pt-1 flex items-center gap-1.5">
                             <button type="button" onclick="callContactDirect(${jsArg(origin.ownerPhone || '0819998888')}, ${jsArg(stallTitle)}, 'แผงค้าต้นทาง')" class="px-2.5 py-1 bg-white hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-xl text-[10.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-xs">call</span>
@@ -28799,16 +28782,15 @@ function openMerchantEditModal(stallId) {
     backToMerchantRegisterForm();
 
     const badgeEl = document.getElementById("merchant-portal-badge");
-    const zoneEl = document.getElementById("merchant-portal-zone-text");
+    const categoryTextEl = document.getElementById("merchant-portal-category-text");
     const titleEl = document.getElementById("merchant-portal-title");
     if (badgeEl) badgeEl.textContent = stall.stallNumber ? `แผง ${stall.stallNumber}` : "แผงค้าของฉัน";
-    if (zoneEl) zoneEl.textContent = stall.zone ? `โซน ${stall.zone}` : "โซนตลาดสด";
+    if (categoryTextEl) categoryTextEl.textContent = normalizeMainCategoryName(stall.category) || stall.category || "ของสด";
     if (titleEl) titleEl.textContent = `✏️ แก้ไขข้อมูลร้าน: ${stall.stallName}`;
 
     // Fill General Info
     if (document.getElementById("m-stall-name")) document.getElementById("m-stall-name").value = stall.stallName || "";
     if (document.getElementById("m-stall-number")) document.getElementById("m-stall-number").value = stall.stallNumber || "";
-    if (document.getElementById("m-stall-zone")) document.getElementById("m-stall-zone").value = stall.zone ? `โซน ${stall.zone.charAt(0)}` : "โซน A (เนื้อสัตว์ & ไก่สด)";
     if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = stall.category || DEFAULT_STALL_CATEGORY;
 
     // Fill Contact 1
@@ -29065,14 +29047,13 @@ function registerNewMerchantStall() {
     if (successStep) successStep.classList.add("hidden");
 
     document.getElementById("merchant-portal-badge").textContent = "✨ ลงทะเบียนแผงค้าใหม่";
-    document.getElementById("merchant-portal-zone-text").textContent = "โซนตลาดสด";
+    document.getElementById("merchant-portal-category-text").textContent = "ของสด";
     document.getElementById("merchant-portal-title").textContent = "เทมเพลตเปิดแผงค้าใหม่ (เฮียส่ง Partner)";
 
     // Clear shop name
     if (document.getElementById("m-stall-name")) document.getElementById("m-stall-name").value = "";
     // Keep legacy fields functional for backward-compat
     if (document.getElementById("m-stall-number")) document.getElementById("m-stall-number").value = "";
-    if (document.getElementById("m-stall-zone")) document.getElementById("m-stall-zone").value = "โซน A (เนื้อสัตว์ & ไก่สด)";
     if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = DEFAULT_STALL_CATEGORY;
     if (document.getElementById("m-owner-name")) document.getElementById("m-owner-name").value = "";
     if (document.getElementById("m-phone")) document.getElementById("m-phone").value = "";
@@ -29483,7 +29464,6 @@ async function saveMerchantStallData() {
 
         // Legacy fields - keep backward compat
         const stallNumber = (document.getElementById("m-stall-number")?.value || "").trim();
-        const zoneVal = document.getElementById("m-stall-zone")?.value || "";
         const category = document.getElementById("m-stall-category")?.value || DEFAULT_STALL_CATEGORY;
         const ownerName = contact1Name || (document.getElementById("m-owner-name")?.value || "").trim();
         const phone = contact1Phone || (document.getElementById("m-phone")?.value || "").trim();
@@ -29674,7 +29654,6 @@ async function saveMerchantStallData() {
             stallId: activeMerchantStallId,
             stallName: stallName,
             stallNumber: stallNumber || "-",
-            zone: zoneVal ? zoneVal.replace("โซน ", "").replace(/\(.*\)/, "").trim() : "",
             category: category,
             ownerName: ownerName,
             phone: phone,
@@ -29764,7 +29743,7 @@ async function saveMerchantStallData() {
             const elStatus = document.getElementById("nextstep-merchant-status");
             if (elId) elId.textContent = appId;
             if (elName) elName.textContent = stallName;
-            if (elStall) elStall.textContent = `${stallNumber} • ${zoneVal}`;
+            if (elStall) elStall.textContent = `${stallNumber} • ${category}`;
             if (elPhone) elPhone.textContent = `${ownerName} (${phone})`;
             if (elStatus) elStatus.innerHTML = '<span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full">⏳ รอแอดมินอนุมัติ</span>';
 
@@ -29882,7 +29861,6 @@ async function saveMerchantStallData() {
 function previewMerchantLiveStore() {
     const stallName = document.getElementById("m-stall-name")?.value.trim() || "ตัวอย่างชื่อร้านค้า";
     const stallNumber = document.getElementById("m-stall-number")?.value.trim() || "แผง A-01";
-    const zoneVal = document.getElementById("m-stall-zone")?.value || "โซน A";
     const category = document.getElementById("m-stall-category")?.value || DEFAULT_STALL_CATEGORY;
 
     const contact1Name = document.getElementById("m-contact1-name")?.value.trim() || "";
@@ -30039,9 +30017,6 @@ function previewMerchantLiveStore() {
                     <div class="flex items-center gap-1.5 flex-wrap pointer-events-auto">
                         <span class="bg-emerald-600 text-white font-black text-[11px] px-2.5 py-0.5 rounded-full shadow-md">
                             ${stallNumber}
-                        </span>
-                        <span class="bg-slate-900/80 backdrop-blur-xs text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full border border-white/20">
-                            ${zoneVal}
                         </span>
                         <span class="bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full shadow-xs">
                             🏷️ ${catLabel}
