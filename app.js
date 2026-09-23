@@ -28832,24 +28832,36 @@ window.backToMerchantRegisterForm = backToMerchantRegisterForm;
 
 function fillSampleMerchantRegistration() {
     backToMerchantRegisterForm();
-    
-    // 1. Info
-    document.getElementById("m-stall-name").value = "ร้านไก่สดเฮียวิศิษฐ์";
-    document.getElementById("m-stall-number").value = "แผง A-18";
-    document.getElementById("m-stall-zone").value = "โซน A (เนื้อสัตว์ & ไก่สด)";
-    document.getElementById("m-stall-category").value = "chicken";
-    document.getElementById("m-owner-name").value = "นายวิศิษฐ์ มั่นคง (เฮียวิศิษฐ์)";
-    document.getElementById("m-phone").value = "0815556789";
-    if (document.getElementById("m-phone2")) document.getElementById("m-phone2").value = "038245678";
-    if (document.getElementById("m-line")) document.getElementById("m-line").value = "@hsong_chicken";
-    document.getElementById("m-highlight").value = "ไก่สดส่งตรงจากฟาร์มทุกเช้า ชำแหละสด สะอาด ไร้สารเร่ง ปลอดภัย 100%";
-    document.getElementById("m-desc").value = "จำหน่ายเนื้อไก่สด อกไก่ น่องไก่ สันใน โครงไก่ และเครื่องในสดใหม่คัดเกรด A ประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง) อ.บ้านบึง จ.ชลบุรี พร้อมบริการตัดแต่งตามสั่ง";
 
-    // 2. Images (3 Stall Photos + Owner Photo)
-    document.getElementById("m-stall-image-url").value = MERCHANT_PRESET_IMAGES.stall.chicken;
-    if (document.getElementById("m-stall2-image-url")) document.getElementById("m-stall2-image-url").value = MERCHANT_PRESET_IMAGES.stall.pork;
-    if (document.getElementById("m-stall3-image-url")) document.getElementById("m-stall3-image-url").value = MERCHANT_PRESET_IMAGES.stall.beef;
-    document.getElementById("m-owner-image-url").value = MERCHANT_PRESET_IMAGES.owner.man1;
+    // เติมค่าแบบปลอดภัย (เช็คว่าช่องมีอยู่จริงก่อนเสมอ) กันพังถ้าฟอร์มถูกปรับปรุงอีกในอนาคต
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+
+    // 1. ชื่อร้าน & หมวดหมู่
+    setVal("m-stall-name", "ร้านไก่สดเฮียวิศิษฐ์");
+    setVal("m-stall-category", "chicken");
+
+    // 2. เจ้าของร้าน (ชื่อเล่น 2 คน)
+    setVal("m-owner1-nickname", "เฮียวิศิษฐ์");
+    setVal("m-owner2-nickname", "");
+
+    // 3. ผู้ติดต่อ 2 ช่องทาง
+    setVal("m-contact1-name", "นายวิศิษฐ์ มั่นคง");
+    setVal("m-contact1-phone", "0815556789");
+    setVal("m-contact1-line", "@hsong_chicken");
+    setVal("m-contact2-name", "");
+    setVal("m-contact2-phone", "");
+    setVal("m-contact2-line", "");
+
+    // 4. บัญชีรับเงิน (บัญชีหลัก)
+    setVal("m-bank-name", "กสิกรไทย (KBank)");
+    setVal("m-bank-account-no", "1234567890");
+    setVal("m-bank-account-name", "นายวิศิษฐ์ มั่นคง");
+
+    // 5. รูปภาพ (3 รูปหน้าร้าน + รูปเจ้าของร้าน)
+    setVal("m-stall-image-url", MERCHANT_PRESET_IMAGES.stall.chicken);
+    setVal("m-stall2-image-url", MERCHANT_PRESET_IMAGES.stall.pork);
+    setVal("m-stall3-image-url", MERCHANT_PRESET_IMAGES.stall.curry);
+    setVal("m-owner-image-url", MERCHANT_PRESET_IMAGES.owner.man1);
     updateMerchantImagePreviews();
 
     // 3. Top 6 Highlight Products

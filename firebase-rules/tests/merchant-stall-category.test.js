@@ -27,5 +27,28 @@ const selectHtml = selectMatch ? selectMatch[0] : "";
 const readSites = src.match(/document\.getElementById\("m-stall-category"\)/g) || [];
 ok(readSites.length >= 3, `พบจุดที่อ่านค่าจากช่องนี้ครบ (สมัครใหม่/แก้ไขร้าน/พรีวิว) อย่างน้อย 3 จุด (เจอ ${readSites.length} จุด)`);
 
+// บั๊กที่ 2 พบ 2026-09-23 (เจอตอนแก้บั๊กแรก เจ้าของขอให้แก้พร้อมกัน): ปุ่ม "1-Click กรอกข้อมูลตัวอย่าง"
+// (fillSampleMerchantRegistration) พังอยู่ อ้างถึง id เก่าที่ไม่มีในฟอร์มแล้ว (m-stall-number, m-stall-zone,
+// m-owner-name, m-phone, m-highlight, m-desc - ฟอร์มถูกปรับโครงสร้างใหม่ไปนานแล้ว) รวมถึงอ้าง
+// MERCHANT_PRESET_IMAGES.stall.beef ที่ไม่มีคีย์นี้อยู่จริง (มีแค่ chicken/veggie/pork/curry/seafood)
+//   - แก้โดยเขียนใหม่ให้ตรงกับฟอร์มปัจจุบัน (ชื่อเล่นเจ้าของ, contact1/contact2, บัญชีธนาคาร) ทุกจุดเช็ค
+//     ก่อนเขียนค่า (setVal helper) กันพังอีกถ้าฟอร์มถูกปรับต่อในอนาคต
+function fn(name) {
+    const start = src.indexOf("function " + name + "(");
+    if (start < 0) throw new Error("not found: " + name);
+    let i = src.indexOf("{", start), d = 0;
+    for (; i < src.length; i++) { if (src[i] === "{") d++; else if (src[i] === "}" && --d === 0) break; }
+    return src.slice(start, i + 1);
+}
+const fillSampleBody = fn("fillSampleMerchantRegistration");
+["m-stall-number", "m-stall-zone", "m-owner-name", '"m-phone"', "m-highlight", "m-desc"].forEach(staleId => {
+    ok(!fillSampleBody.includes(staleId), `fillSampleMerchantRegistration ไม่อ้างถึง id เก่าที่ไม่มีแล้ว: ${staleId}`);
+});
+["m-owner1-nickname", "m-contact1-name", "m-contact1-phone", "m-bank-name", "m-bank-account-no"].forEach(realId => {
+    ok(fillSampleBody.includes(realId), `fillSampleMerchantRegistration เติมค่าช่องจริงที่มีอยู่: ${realId}`);
+});
+ok(!/MERCHANT_PRESET_IMAGES\.stall\.beef/.test(fillSampleBody), "ไม่อ้างถึง MERCHANT_PRESET_IMAGES.stall.beef (คีย์ที่ไม่มีอยู่จริง)");
+ok(/const setVal = /.test(fillSampleBody), "ใช้ helper ที่เช็คว่าช่องมีอยู่จริงก่อนเขียนค่าทุกช่อง (กันพังซ้ำในอนาคต)");
+
 console.log(fail ? "\n" + fail + " FAILED" : "\nALL PASSED");
 process.exit(fail ? 1 : 0);
