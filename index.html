@@ -1801,7 +1801,7 @@
                 </div>
             </div>
 
-            <!-- Cross-Role Quick Navigation Bar for Merchant (เชื่อมโยงไปยังทุกบทบาท) -->
+            <!-- Cross-Role Quick Navigation Bar for Merchant (ไปดูหน้าลูกค้าเท่านั้น - จัดส่ง/ไรเดอร์ซ่อนไว้ ไม่เกี่ยวกับร้านค้า 2026-09-23) -->
             <div
                 class="bg-slate-900 text-slate-300 px-3 py-2 border-b border-slate-800 flex items-center justify-between gap-2 overflow-x-auto text-[11px] shrink-0">
                 <div class="flex items-center gap-1 shrink-0 text-slate-400 font-bold">
@@ -1811,21 +1811,9 @@
                 <div class="flex items-center gap-1.5 shrink-0">
                     <button type="button" onclick="switchRole('customer')"
                         class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95"
-                        title="1. สลับไปสั่งของสด">
+                        title="สลับไปสั่งของสด">
                         <span class="material-symbols-outlined text-xs text-emerald-400">shopping_cart</span>
-                        <span>1. ลูกค้า</span>
-                    </button>
-                    <button type="button" onclick="switchRole('hub')"
-                        class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95"
-                        title="2. สลับไปศูนย์จัดของฮับ">
-                        <span class="material-symbols-outlined text-xs text-amber-400">inventory_2</span>
-                        <span>2. จัดส่ง</span>
-                    </button>
-                    <button type="button" onclick="switchRole('rider')"
-                        class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95"
-                        title="4. สลับไปหน้าไรเดอร์">
-                        <span class="material-symbols-outlined text-xs text-sky-400">two_wheeler</span>
-                        <span>4. ไรเดอร์</span>
+                        <span>ดูหน้าลูกค้า</span>
                     </button>
                 </div>
             </div>
@@ -7348,7 +7336,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.50_stall_zone_removed"></script>
+    <script src="app.js?v=10.51_merchant_hide_hub_rider_tabs"></script>
 </body>
 
 </html>

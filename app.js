@@ -17760,6 +17760,9 @@ function setActiveRoleView(role) {
     if (typeof updateAdminRiderBadges === "function") {
         updateAdminRiderBadges();
     }
+    if (typeof updateHubRiderTabsVisibility === "function") {
+        updateHubRiderTabsVisibility();
+    }
 
     // 📱 บนจอแคบปุ่มทั้ง 5 อาจล้นแถบ (โดยเฉพาะปุ่มที่กำลังเลือกซึ่งตัวหนา/กว้างกว่าปกติ)
     //   เลื่อนแถบให้ปุ่มที่กำลังเลือกอยู่เห็นเต็มปุ่มเสมอ กันปัญหา "กดแล้วปุ่มโผล่ไม่เต็ม"
@@ -17807,6 +17810,19 @@ function updateRoleSelectorVisibility() {
     roleBar.classList.remove("hidden");
 }
 window.updateRoleSelectorVisibility = updateRoleSelectorVisibility;
+
+// เจ้าของร้านค้า (Role 3) ไม่ต้องเห็นแท็บ "จัดส่ง" (ฮับ ต้องล็อกอินเจ้าของเท่านั้น) และ "ไรเดอร์"
+// (ต้องมีรหัสไรเดอร์แยกต่างหาก) เพราะกดไปก็เจอแค่หน้าล็อกอินที่ไม่เกี่ยวกับร้านค้า สร้างความสับสนเปล่า ๆ
+// ให้พ่อค้าแม่ค้าที่ไม่ถนัดเทคโนโลยี (คำขอเจ้าของ 2026-09-23) - แท็บ "ลูกค้า" ยังคงแสดงไว้ตามเดิม เพราะ
+// ร้านค้ามีปุ่ม "ดูหน้าร้านในตลาด" ที่ตั้งใจสลับไปแท็บนี้อยู่แล้ว
+function updateHubRiderTabsVisibility() {
+    const hubBtnInBar = document.getElementById("role-btn-hub");
+    const riderBtnInBar = document.getElementById("role-btn-rider");
+    const isMerchantView = state.currentRole === "merchant";
+    if (hubBtnInBar) hubBtnInBar.classList.toggle("hidden", isMerchantView);
+    if (riderBtnInBar) riderBtnInBar.classList.toggle("hidden", isMerchantView);
+}
+window.updateHubRiderTabsVisibility = updateHubRiderTabsVisibility;
 
 // ==========================================
 // PC / MOBILE SCREEN MODE CONTROLLER
@@ -28000,6 +28016,9 @@ function renderAuthHeaderButtons() {
     }
     if (typeof updateAdminRiderBadges === "function") {
         updateAdminRiderBadges();
+    }
+    if (typeof updateHubRiderTabsVisibility === "function") {
+        updateHubRiderTabsVisibility();
     }
 
     updateCustomerLoyaltyBanner();
