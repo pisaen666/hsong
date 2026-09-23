@@ -1,0 +1,122 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "orders": {
+      ".read": true,
+      ".write": true
+    },
+    "carts": {
+      ".read": true,
+      ".write": true
+    },
+    "riders": {
+      ".read": true,
+      ".write": true
+    },
+    "rider_status": {
+      ".read": true,
+      ".write": true
+    },
+    "rider_locations": {
+      ".read": true,
+      ".write": true
+    },
+    "active_rider": {
+      ".read": true,
+      ".write": true
+    },
+    "daily_reports": {
+      ".read": true,
+      ".write": "auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')"
+    },
+    "rider_applications": {
+      ".read": true,
+      "$id": {
+        ".write": "(auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')) || (!data.exists() && newData.exists()) || (data.exists() && newData.exists() && newData.child('status').val() === data.child('status').val() && newData.child('accessCode').val() === data.child('accessCode').val() && newData.child('id').val() === data.child('id').val() && newData.child('loginHash').val() === data.child('loginHash').val() && newData.child('loginSalt').val() === data.child('loginSalt').val())",
+        ".validate": "(auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')) || (newData.child('id').val() === $id && newData.hasChildren(['id', 'fullName', 'phone', 'status']) && (data.exists() || (newData.child('status').val() === 'pending' && !newData.child('loginHash').exists() && !newData.child('loginSalt').exists())))"
+      }
+    },
+    "merchant_applications": {
+      ".read": true,
+      "$id": {
+        ".write": "(auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')) || (!data.exists() && newData.exists()) || (data.exists() && newData.exists() && newData.child('status').val() === data.child('status').val() && newData.child('accessCode').val() === data.child('accessCode').val() && newData.child('id').val() === data.child('id').val() && newData.child('loginHash').val() === data.child('loginHash').val() && newData.child('loginSalt').val() === data.child('loginSalt').val())",
+        ".validate": "(auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')) || (newData.child('id').val() === $id && newData.hasChildren(['id', 'stallData', 'status']) && (data.exists() || (newData.child('status').val() === 'pending' && !newData.child('accessCode').exists() && !newData.child('loginHash').exists() && !newData.child('loginSalt').exists())))"
+      }
+    },
+    "community_riders": {
+      ".read": true,
+      "$id": {
+        ".write": "(auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')) || (data.exists() && newData.exists() && newData.child('id').val() === data.child('id').val() && newData.child('accessCode').val() === data.child('accessCode').val() && newData.child('phone').val() === data.child('phone').val() && newData.child('loginHash').val() === data.child('loginHash').val() && newData.child('loginSalt').val() === data.child('loginSalt').val())"
+      }
+    },
+    "custom_market_stalls": {
+      ".read": true,
+      "$id": {
+        ".write": "(auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')) || (data.exists() && newData.exists() && newData.child('stallId').val() === data.child('stallId').val() && newData.child('accessCode').val() === data.child('accessCode').val() && newData.child('loginHash').val() === data.child('loginHash').val() && newData.child('loginSalt').val() === data.child('loginSalt').val())"
+      }
+    },
+    "stall_catalog_database": {
+      ".read": true,
+      "$id": {
+        ".write": "(auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')) || (data.exists() && newData.exists())"
+      }
+    },
+    "rider_documents": {
+      ".read": "auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')",
+      "$riderId": {
+        ".write": "(auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')) || !data.exists()",
+        ".validate": "newData.hasChildren(['selfie','license','registration'])",
+        "selfie": {
+          ".validate": "newData.isString() && newData.val().length < 400000"
+        },
+        "license": {
+          ".validate": "newData.isString() && newData.val().length < 400000"
+        },
+        "registration": {
+          ".validate": "newData.isString() && newData.val().length < 400000"
+        },
+        "vehicle": {
+          ".validate": "newData.isString() && newData.val().length < 400000"
+        },
+        "savedAt": {
+          ".validate": "newData.isString()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "rider_private": {
+      ".read": "auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')",
+      "$riderId": {
+        ".write": "(auth != null && (auth.uid === '0muWz0V3goRday826zSnzNMSuHC2' || auth.uid === 'zDM4Q2uerQNheJ6cQEeJlFwUSy03')) || !data.exists()",
+        ".validate": "newData.hasChildren()",
+        "idCard": {
+          ".validate": "newData.isString() && newData.val().length < 2000"
+        },
+        "address": {
+          ".validate": "newData.isString() && newData.val().length < 2000"
+        },
+        "drivingLicense": {
+          ".validate": "newData.isString() && newData.val().length < 2000"
+        },
+        "license": {
+          ".validate": "newData.isString() && newData.val().length < 2000"
+        },
+        "emergencyContact": {
+          ".validate": true
+        },
+        "bankAccounts": {
+          ".validate": true
+        },
+        "savedAt": {
+          ".validate": "newData.isString()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}

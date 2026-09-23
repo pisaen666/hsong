@@ -156,6 +156,88 @@ function jsArg(value) {
 window.jsArg = jsArg;
 
 // ==========================================================
+// UNTRUSTED DATA GUARD — ตัวกรองข้อมูลที่มาจากภายนอก (Firebase / REST / API ของบุคคลที่สาม)
+// ใครก็เขียนข้อมูลบางส่วนลงฐานข้อมูลได้ (ใบสมัคร ออเดอร์ ตะกร้า ฯลฯ) ถ้าใส่โค้ดแทนชื่อแล้วหน้าเว็บเอาชื่อไปแสดงตรง ๆ
+// โค้ดนั้นจะรันในเครื่องของคนที่เปิดดู (รวมถึงเจ้าของตอนล็อกอินแอดมิน) — จึงล้างตัวอักษรอันตรายที่ "ประตูเข้า" ทางเดียว
+//   ตัวอักษร  < > " ' ` \  ถูกแทนด้วยตัวที่หน้าตาคล้ายกันแต่ไม่ใช่โค้ด (＜ ＞ ” ’ ˋ ＼)
+//   "&#..." / "&quot;" ที่พิมพ์มาเอง (เบราว์เซอร์จะแปลงกลับเป็นเครื่องหมายคำพูดในแอตทริบิวต์) ถูกทำให้เป็น ＆
+//   ค่าที่ขึ้นต้น javascript: / vbscript: / data:text/html ถูกนำหน้าด้วย blocked-
+// ใช้กับ: snapshot.val()/exportVal() ของ Firebase SDK, ผลลัพธ์ .json() ของ fetch และค่า JSON ที่อ่านจาก localStorage ทุกครั้ง (ตัวเลข/URL/รูปแบบ base64 ไม่ถูกแตะ)
+// ข้อมูลที่ระบบเขียนเอง (ไม่มีอักขระเหล่านี้) จะเหมือนเดิมทุกตัวอักษร และยังเป็นแค่ชั้นเสริม: จุดแสดงผลสำคัญยังควรใช้ escapeHtml/jsArg
+// ==========================================================
+const _NEUTRAL_CHARS = { "<": "＜", ">": "＞", '"': "”", "'": "’", "`": "ˋ", "\\": "＼" };
+function neutralizeUntrustedString(s) {
+    if (typeof s !== "string" || s.length === 0) return s;
+    let out = s.replace(/[<>"'`\\]/g, c => _NEUTRAL_CHARS[c]).replace(/&(?=#|quot|apos|lt|gt|amp)/gi, "＆");
+    const head = out.slice(0, 40).replace(/[\u0000-\u0020]/g, "").toLowerCase();
+    if (/^(javascript:|vbscript:|data:text\/html)/.test(head)) out = "blocked-" + out;
+    return out;
+}
+function neutralizeUntrustedDeep(v, _depth) {
+    const depth = _depth || 0;
+    if (typeof v === "string") return neutralizeUntrustedString(v);
+    if (v === null || typeof v !== "object" || depth > 40) return v;
+    if (Array.isArray(v)) return v.map(x => neutralizeUntrustedDeep(x, depth + 1));
+    const out = {};
+    Object.keys(v).forEach(k => { out[neutralizeUntrustedString(k)] = neutralizeUntrustedDeep(v[k], depth + 1); });
+    return out;
+}
+window.neutralizeUntrustedString = neutralizeUntrustedString;
+window.neutralizeUntrustedDeep = neutralizeUntrustedDeep;
+
+(function installUntrustedDataGuard() {
+    window.__untrustedGuard = { snapshot: false, fetch: false, storage: false };
+    try {
+        const Snap = window.firebase && firebase.database && firebase.database.DataSnapshot;
+        if (Snap && Snap.prototype) {
+            ["val", "exportVal"].forEach(m => {
+                const orig = Snap.prototype[m];
+                if (typeof orig !== "function" || orig._untrustedGuard) return;
+                const guarded = function () { return neutralizeUntrustedDeep(orig.apply(this, arguments)); };
+                guarded._untrustedGuard = true;
+                Snap.prototype[m] = guarded;
+            });
+            window.__untrustedGuard.snapshot = true;
+        }
+    } catch (e) { console.warn("untrusted-data guard (snapshot) not installed:", e); }
+    try {
+        const origFetch = window.fetch;
+        if (typeof origFetch === "function" && !origFetch._untrustedGuard) {
+            const guardedFetch = function () {
+                return origFetch.apply(this, arguments).then(res => {
+                    try {
+                        const origJson = res.json;
+                        res.json = function () { return origJson.apply(this, arguments).then(v => neutralizeUntrustedDeep(v)); };
+                    } catch (e) { }
+                    return res;
+                });
+            };
+            guardedFetch._untrustedGuard = true;
+            window.fetch = guardedFetch;
+            window.__untrustedGuard.fetch = true;
+        }
+    } catch (e) { console.warn("untrusted-data guard (fetch) not installed:", e); }
+    // ข้อมูลที่เครื่องนี้เก็บไว้ (localStorage) ตั้งแต่ก่อนมีตัวกรอง อาจมีของอันตรายค้างอยู่: ล้างตอนอ่านด้วย (เฉพาะค่า JSON ที่มีตัวอักษรน่าสงสัย จึงไม่กระทบความเร็ว)
+    try {
+        const StoreProto = window.Storage && Storage.prototype;
+        const origGet = StoreProto && StoreProto.getItem;
+        if (typeof origGet === "function" && !origGet._untrustedGuard) {
+            const SUSPICIOUS = /[<>'`\\]|&(?:#|quot|apos|lt|gt|amp)|(?:javascript|vbscript)\s*:|data:text\/html/i;
+            const guardedGet = function () {
+                const v = origGet.apply(this, arguments);
+                if (typeof v !== "string" || v.length < 2) return v;
+                const c = v.charCodeAt(0);
+                if ((c !== 123 && c !== 91) || !SUSPICIOUS.test(v)) return v;   // ต้องเป็น JSON แบบ { หรือ [ และมีตัวน่าสงสัยเท่านั้น
+                try { return JSON.stringify(neutralizeUntrustedDeep(JSON.parse(v))); } catch (e) { return v; }
+            };
+            guardedGet._untrustedGuard = true;
+            StoreProto.getItem = guardedGet;
+            window.__untrustedGuard.storage = true;
+        }
+    } catch (e) { console.warn("untrusted-data guard (storage) not installed:", e); }
+})();
+
+// ==========================================================
 // RIDER PRIVATE DATA — ข้อมูลส่วนตัวไรเดอร์เก็บที่ rider_private/<riderId> (เจ้าของอ่านได้คนเดียวตามกฎ Firebase)
 // ไม่เก็บไว้ในเครื่อง (localStorage) และไม่ส่งขึ้น rider_applications / community_riders ที่เปิดสาธารณะ
 // ==========================================================
@@ -412,6 +494,45 @@ async function verifyOwnerPassword(password) {
     }
 }
 
+let _legacyMigrationStarted = false;
+
+// ปุ่ม/กรอบ "ตัวช่วยทดสอบ" (เติมข้อมูลตัวอย่าง, สมัคร&ล็อกอิน 1-Click, อนุมัติทันที) เห็นและใช้ได้เฉพาะเจ้าของที่ล็อกอิน
+// ใน HTML ใส่คลาส owner-only-test-ui + hidden ไว้เป็นค่าเริ่มต้น (ผู้เข้าชมทั่วไปจึงไม่เห็นแม้แต่ชั่วขณะ)
+// ขนาดตัวอักษร: normal | large (ค่าเริ่มต้น) | xlarge — กฎ CSS อยู่ใน styles.css บล็อก TEXT-SIZE (สร้างด้วย firebase-rules/tools/build-text-size-css.js)
+const _TEXT_SIZE_KEY = "talathub_text_size";
+const _TEXT_SIZE_LABEL = { normal: "ปกติ", large: "ใหญ่", xlarge: "ใหญ่มาก" };
+function getTextSizeMode() {
+    try {
+        const m = localStorage.getItem(_TEXT_SIZE_KEY);
+        if (m === "normal" || m === "large" || m === "xlarge") return m;
+    } catch (e) { }
+    return "large";
+}
+function applyTextSizeMode(mode) {
+    const el = document.documentElement;
+    el.classList.remove("text-large", "text-xlarge");
+    if (mode !== "normal") el.classList.add("text-" + mode);
+    const lab = document.getElementById("text-size-label");
+    if (lab) lab.textContent = _TEXT_SIZE_LABEL[mode] || "";
+}
+function cycleTextSize() {
+    const order = ["large", "xlarge", "normal"];
+    const next = order[(order.indexOf(getTextSizeMode()) + 1) % order.length];
+    try { localStorage.setItem(_TEXT_SIZE_KEY, next); } catch (e) { }
+    applyTextSizeMode(next);
+    showToast("🔠 ขนาดตัวอักษร: " + _TEXT_SIZE_LABEL[next]);
+}
+window.cycleTextSize = cycleTextSize;
+window.getTextSizeMode = getTextSizeMode;
+window.applyTextSizeMode = applyTextSizeMode;
+applyTextSizeMode(getTextSizeMode());
+
+function syncOwnerOnlyTestUi() {
+    const owner = isOwnerSignedIn();
+    document.querySelectorAll(".owner-only-test-ui").forEach(el => el.classList.toggle("hidden", !owner));
+}
+window.syncOwnerOnlyTestUi = syncOwnerOnlyTestUi;
+
 function applyOwnerSession(user) {
     const signedIn = !!user && isOwnerUid(user.uid);
     if (signedIn) {
@@ -422,7 +543,13 @@ function applyOwnerSession(user) {
         state.activeHub = null;
     }
     if (typeof renderAuthHeaderButtons === "function") renderAuthHeaderButtons();
+    syncOwnerOnlyTestUi();
     if (signedIn) {
+        // ย้ายรายการแบบเก่า (คีย์ 0,1,2...) บนคลาวด์เป็นคีย์ id หนึ่งครั้งต่อการเปิดหน้า (ทำซ้ำได้ ไม่เขียนถ้าย้ายแล้ว)
+        if (!_legacyMigrationStarted && typeof migrateLegacyCloudLists === "function") {
+            _legacyMigrationStarted = true;
+            migrateLegacyCloudLists().catch(() => { _legacyMigrationStarted = false; });
+        }
         // ดึงข้อมูลส่วนตัวไรเดอร์ (เจ้าของอ่านได้คนเดียว) มาไว้ในหน่วยความจำ แล้ววาดหน้าไรเดอร์ใหม่ถ้าเปิดอยู่
         refreshRiderPrivateCache().then(ok => {
             if (ok && state.currentRole === "admin" && _activeAdminTab === "riders" && typeof renderAdminRiders === "function") renderAdminRiders();
@@ -465,8 +592,418 @@ function signOutOwner() {
     setActiveRoleView("customer");
 }
 
+// ทำรายการของเจ้าของ (อนุมัติ/ปฏิเสธ/ลบ) ต้องล็อกอินเจ้าของก่อน — กฎ Firebase บังคับซ้ำอีกชั้นหนึ่ง
+function requireOwnerAction() {
+    if (isOwnerSignedIn()) return true;
+    showToast("🔒 ต้องล็อกอินเจ้าของ (อีเมลและรหัสผ่าน) ก่อนจึงจะทำรายการนี้ได้");
+    if (typeof openAdminLoginModal === "function") openAdminLoginModal();
+    return false;
+}
+window.requireOwnerAction = requireOwnerAction;
+
+// =================================================================
+// รหัสผ่านเข้าระบบไรเดอร์ (ความลับ)
+// - เลขไรเดอร์ (RDxxxx) เป็นข้อมูลสาธารณะ ใช้เป็น "ชื่อผู้ใช้"
+// - รหัสผ่านลับ 8 ตัว (เช่น K7MQ-2XTA) สร้างตอนเจ้าของอนุมัติ เจ้าของเห็นครั้งเดียวเพื่อส่งให้ไรเดอร์
+// - ในฐานข้อมูลเก็บเฉพาะ loginSalt + loginHash (PBKDF2-SHA256) ไม่เก็บรหัสจริง
+// - กฎ Firebase ห้ามผู้ใช้ทั่วไปแก้ loginHash/loginSalt (ไม่งั้นจะตั้งรหัสของตัวเองทับแล้วเข้าเป็นคนอื่นได้)
+// หมายเหตุ: การตรวจรหัสทำในเบราว์เซอร์ ป้องกันการสวมรอยแบบทั่วไป (รู้เบอร์/เลขไรเดอร์) แต่ไม่ใช่ด่านความปลอดภัยระดับเซิร์ฟเวอร์
+// =================================================================
+const RIDER_SECRET_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";   // 31 ตัว ตัดตัวที่อ่านสับสน (0 O 1 I L)
+const RIDER_SECRET_LENGTH = 8;
+const RIDER_SECRET_ITERATIONS = 150000;
+
+function normalizeRiderSecret(v) {
+    return String(v == null ? "" : v).toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function generateRiderSecret() {
+    const n = RIDER_SECRET_ALPHABET.length;
+    const limit = 256 - (256 % n);       // ตัดค่าที่ทำให้สุ่มเอนเอียง
+    const out = [];
+    while (out.length < RIDER_SECRET_LENGTH) {
+        const buf = new Uint8Array(16);
+        crypto.getRandomValues(buf);
+        for (const b of buf) {
+            if (b < limit && out.length < RIDER_SECRET_LENGTH) out.push(RIDER_SECRET_ALPHABET[b % n]);
+        }
+    }
+    return out.slice(0, 4).join("") + "-" + out.slice(4).join("");
+}
+
+function _bytesToHex(bytes) {
+    return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+}
+function _hexToBytes(hex) {
+    const out = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+    return out;
+}
+
+async function hashRiderSecret(secret, saltHex) {
+    if (!(typeof crypto !== "undefined" && crypto.subtle)) throw new Error("no-webcrypto");
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(normalizeRiderSecret(secret)), "PBKDF2", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: _hexToBytes(saltHex), iterations: RIDER_SECRET_ITERATIONS }, key, 256);
+    return _bytesToHex(new Uint8Array(bits));
+}
+
+// สร้างรหัสผ่านใหม่ + salt + hash (เจ้าของเท่านั้นที่เรียก) คืน { secret, loginSalt, loginHash }
+async function makeRiderLoginCredential() {
+    const secret = generateRiderSecret();
+    const saltBytes = new Uint8Array(16);
+    crypto.getRandomValues(saltBytes);
+    const loginSalt = _bytesToHex(saltBytes);
+    const loginHash = await hashRiderSecret(secret, loginSalt);
+    return { secret, loginSalt, loginHash };
+}
+
+async function verifyRiderSecret(rider, secret) {
+    if (!rider || !rider.loginHash || !rider.loginSalt) return false;
+    const h = await hashRiderSecret(secret, rider.loginSalt);
+    const want = String(rider.loginHash);
+    if (h.length !== want.length) return false;
+    let diff = 0;
+    for (let i = 0; i < h.length; i++) diff |= h.charCodeAt(i) ^ want.charCodeAt(i);
+    return diff === 0;
+}
+
+// กันเดารหัสรัว ๆ ในเครื่องเดียว: ผิด 5 ครั้งภายใน 10 นาที ล็อก 5 นาที
+const _RIDER_LOGIN_FAIL_KEY = "talathub_rider_login_fail";
+function riderLoginLockedMs(key) {
+    try {
+        const o = JSON.parse(localStorage.getItem(key || _RIDER_LOGIN_FAIL_KEY) || "null");
+        if (o && o.until && o.until > Date.now()) return o.until - Date.now();
+    } catch (e) { }
+    return 0;
+}
+function _noteRiderLoginFail(key) {
+    try {
+        const now = Date.now();
+        const o = JSON.parse(localStorage.getItem(key || _RIDER_LOGIN_FAIL_KEY) || "null") || { times: [] };
+        o.times = (o.times || []).filter(t => now - t < 10 * 60 * 1000).concat(now);
+        if (o.times.length >= 5) { o.until = now + 5 * 60 * 1000; o.times = []; }
+        localStorage.setItem(key || _RIDER_LOGIN_FAIL_KEY, JSON.stringify(o));
+    } catch (e) { }
+}
+function _clearRiderLoginFail(key) {
+    try { localStorage.removeItem(key || _RIDER_LOGIN_FAIL_KEY); } catch (e) { }
+}
+
+// แกนล็อกอินไรเดอร์: คืน { ok, rider?, code, message }  (ไม่แตะ DOM เพื่อให้ทดสอบได้)
+async function riderSecretLogin(numberRaw, secretRaw) {
+    const lockedMs = riderLoginLockedMs();
+    if (lockedMs > 0) return { ok: false, code: "locked", message: "⏳ ใส่รหัสผิดหลายครั้ง กรุณารออีก " + Math.ceil(lockedMs / 60000) + " นาทีแล้วลองใหม่" };
+    const number = normalizeRiderCode(String(numberRaw || "").trim());
+    const secret = normalizeRiderSecret(secretRaw);
+    if (!number || !secret) return { ok: false, code: "empty", message: "⚠️ กรุณากรอกเลขไรเดอร์ และรหัสผ่านเข้าระบบ" };
+
+    const bad = { ok: false, code: "bad", message: "⚠️ เลขไรเดอร์หรือรหัสผ่านไม่ถูกต้อง" };
+    const rider = loadCommunityRiders().find(x => (x.id && normalizeRiderCode(x.id) === number) || (x.accessCode && normalizeRiderCode(x.accessCode) === number));
+    if (!rider) {
+        const app = loadRiderApplications().find(x => (x.id && normalizeRiderCode(x.id) === number) || (x.accessCode && normalizeRiderCode(x.accessCode) === number));
+        if (app && app.status === "pending") return { ok: false, code: "pending", message: "⏳ ใบสมัครของคุณยังรอเจ้าของอนุมัติ เมื่ออนุมัติแล้วเจ้าของจะส่งรหัสผ่านเข้าระบบให้" };
+        if (app && app.status === "rejected") return { ok: false, code: "rejected", message: "❌ ใบสมัครนี้ไม่ผ่านการอนุมัติ กรุณาติดต่อเจ้าของตลาด" };
+        _noteRiderLoginFail();
+        return bad;
+    }
+    if (!rider.loginHash) return { ok: false, code: "no-secret", message: "🔑 บัญชีนี้ยังไม่มีรหัสผ่านเข้าระบบ กรุณาติดต่อเจ้าของเพื่อขอรหัสผ่านใหม่" };
+    let good = false;
+    try { good = await verifyRiderSecret(rider, secret); }
+    catch (e) { return { ok: false, code: "no-crypto", message: "⚠️ เบราว์เซอร์นี้ตรวจรหัสผ่านไม่ได้ กรุณาเปิดผ่านเว็บ https ปกติ" }; }
+    if (!good) { _noteRiderLoginFail(); return bad; }
+    _clearRiderLoginFail();
+    return { ok: true, rider, code: "ok" };
+}
+window.riderSecretLogin = riderSecretLogin;
+
+// =================================================================
+// รหัสผ่านเข้าระบบแผงค้า (ความลับ) — ทำแบบเดียวกับไรเดอร์
+// - "รหัสร้าน" (stallId เช่น APP-SHOP-6758) เป็นข้อมูลสาธารณะ ใช้เป็นชื่อผู้ใช้
+// - รหัสผ่านลับ 8 ตัวสร้างตอนเจ้าของอนุมัติ/กด "สร้างรหัสผ่าน" เก็บเฉพาะ loginSalt + loginHash
+//   (บนใบสมัคร merchant_applications และบน custom_market_stalls)
+// - เบอร์โทร / เลขแผง / รหัส 6 หลักเดิม ไม่ใช่รหัสผ่านอีกต่อไป
+// =================================================================
+const _MERCHANT_LOGIN_FAIL_KEY = "talathub_merchant_login_fail";
+
+function normalizeShopCode(v) {
+    return String(v == null ? "" : v).trim().toUpperCase().replace(/\s+/g, "");
+}
+
+// ข้อมูลร้านจากใบสมัคร (พก loginHash/loginSalt ไปด้วยเสมอ ไม่งั้นการบันทึกร้านจะถูกกฎฐานข้อมูลปฏิเสธ)
+function stallFromApp(app) {
+    const sd = (app && app.stallData) || {};
+    return { ...sd, accessCode: (app && app.accessCode) || sd.accessCode, loginHash: (app && app.loginHash) || sd.loginHash, loginSalt: (app && app.loginSalt) || sd.loginSalt };
+}
+
+function _findMerchantByShopCode(code, apps, stallLists) {
+    const same = v => v != null && normalizeShopCode(v) === code;
+    const app = (apps || []).find(a => a && (same(a.id) || (a.stallData && same(a.stallData.stallId)))) || null;
+    let stall = null;
+    for (const list of (stallLists || [])) {
+        if (!Array.isArray(list)) continue;
+        stall = list.find(s => s && same(s.stallId)) || null;
+        if (stall) break;
+    }
+    return { app, stall };
+}
+
+// แกนล็อกอินแผงค้า: คืน { ok, app?, stall?, code, message } (ไม่แตะ DOM เพื่อให้ทดสอบได้)
+// opts.fetchRemote: ฟังก์ชัน async คืนรายการใบสมัครจากฐานข้อมูลกลาง (ใช้เมื่อเครื่องนี้ยังไม่มีข้อมูลร้าน)
+async function merchantSecretLogin(shopRaw, secretRaw, opts) {
+    const lockedMs = riderLoginLockedMs(_MERCHANT_LOGIN_FAIL_KEY);
+    if (lockedMs > 0) return { ok: false, code: "locked", message: "⏳ ใส่รหัสผิดหลายครั้ง กรุณารออีก " + Math.ceil(lockedMs / 60000) + " นาที แล้วลองใหม่" };
+    const code = normalizeShopCode(shopRaw);
+    const secret = normalizeRiderSecret(secretRaw);
+    if (!code || !secret) return { ok: false, code: "empty", message: "⚠️ กรุณากรอกรหัสร้าน และรหัสผ่านเข้าระบบ" };
+
+    const bad = { ok: false, code: "bad", message: "⚠️ รหัสร้านหรือรหัสผ่านไม่ถูกต้อง" };
+    let found = _findMerchantByShopCode(code, loadMerchantApplications(), [MARKET_DATA, ALL_100_STALLS]);
+    if (!found.app && !found.stall && opts && typeof opts.fetchRemote === "function") {
+        try {
+            const remote = await opts.fetchRemote();
+            if (Array.isArray(remote) && remote.length) found = _findMerchantByShopCode(code, remote, [MARKET_DATA, ALL_100_STALLS]);
+        } catch (e) { }
+    }
+    const { app, stall } = found;
+    if (!app && !stall) { _noteRiderLoginFail(_MERCHANT_LOGIN_FAIL_KEY); return bad; }
+    if (app && app.status === "pending") return { ok: false, code: "pending", message: "⏳ ใบสมัครเปิดร้านของคุณยังรอเจ้าของอนุมัติ เมื่ออนุมัติแล้วเจ้าของจะส่งรหัสผ่านให้" };
+    if (app && app.status === "rejected") return { ok: false, code: "rejected", message: "❌ ใบสมัครนี้ไม่ผ่านการอนุมัติ กรุณาติดต่อเจ้าของ" };
+    const holder = (app && app.loginHash) ? app : ((stall && stall.loginHash) ? stall : null);
+    if (!holder) return { ok: false, code: "no-secret", message: "🔑 ร้านนี้ยังไม่มีรหัสผ่านเข้าระบบ กรุณาติดต่อเจ้าของเพื่อขอรหัสผ่านใหม่" };
+    let good = false;
+    try { good = await verifyRiderSecret(holder, secret); }
+    catch (e) { return { ok: false, code: "no-crypto", message: "⚠️ เบราว์เซอร์นี้ตรวจรหัสผ่านไม่ได้ กรุณาเปิดผ่านเว็บ https" }; }
+    if (!good) { _noteRiderLoginFail(_MERCHANT_LOGIN_FAIL_KEY); return bad; }
+    _clearRiderLoginFail(_MERCHANT_LOGIN_FAIL_KEY);
+    return { ok: true, code: "ok", app, stall: stall || stallFromApp(app) };
+}
+window.merchantSecretLogin = merchantSecretLogin;
+
+// เชื่อมช่องกรอกในหน้าเว็บกับแกนล็อกอิน
+async function submitRiderSecretLogin(numberInputId, secretInputId) {
+    const numEl = document.getElementById(numberInputId);
+    const secEl = document.getElementById(secretInputId);
+    // ข้อความผิดพลาดแสดงเป็นกล่องแดงใต้ปุ่ม (ค้างอยู่จนกว่าจะลองใหม่) — toast หายเร็วและอยู่ล่างจอ ผู้ใช้มักไม่เห็น
+    const errEl = document.getElementById(numberInputId === "onpage-rider-number-input" ? "onpage-rider-login-error" : "rider-login-modal-error");
+    const showLoginError = msg => {
+        if (!errEl) return;
+        errEl.textContent = msg || "";
+        errEl.classList.toggle("hidden", !msg);
+        if (msg && errEl.scrollIntoView) errEl.scrollIntoView({ block: "center", behavior: "smooth" });
+    };
+    showLoginError("");
+    let res;
+    try {
+        res = await riderSecretLogin(numEl ? numEl.value : "", secEl ? secEl.value : "");
+    } catch (e) {
+        res = { ok: false, code: "error", message: "⚠️ เข้าสู่ระบบไม่สำเร็จ กรุณาลองอีกครั้ง (" + (e && e.message ? e.message : "ข้อผิดพลาดไม่ทราบสาเหตุ") + ")" };
+    }
+    if (!res.ok) {
+        showLoginError(res.message);
+        showToast(res.message);
+        if (res.code === "bad" && secEl) { secEl.value = ""; secEl.focus(); }
+        return;
+    }
+    showLoginError("");
+    if (secEl) secEl.value = "";
+    loginRiderWithProfile(res.rider);
+    showToast("🎉 เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ " + (res.rider.name || "ไรเดอร์"));
+}
+
+// เจ้าของ: สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์ที่อนุมัติแล้ว (รหัสเดิมใช้ไม่ได้ทันที) และแสดงให้เจ้าของส่งต่อ
+async function resetRiderLoginSecret(appId) {
+    if (!requireOwnerAction()) return;
+    const apps = loadRiderApplications();
+    const app = apps.find(x => x.id === appId);
+    if (!app || app.status !== "approved") { showToast("⚠️ สร้างรหัสได้เฉพาะไรเดอร์ที่อนุมัติแล้ว"); return; }
+    const name = app.nickname ? `${app.fullName} (${app.nickname})` : app.fullName;
+    if (!confirm(`สร้างรหัสผ่านเข้าระบบใหม่ให้ "${name}" ?\n\nรหัสเดิมจะใช้ไม่ได้ทันที และต้องส่งรหัสใหม่ให้ไรเดอร์เอง`)) return;
+    let cred;
+    try { cred = await makeRiderLoginCredential(); }
+    catch (e) { showToast("⚠️ สร้างรหัสไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return; }
+    app.loginSalt = cred.loginSalt;
+    app.loginHash = cred.loginHash;
+    saveRiderApplications(apps);
+    const riders = loadCommunityRiders();
+    const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
+    const r = riders.find(x => (x.id && x.id === app.id) || (x.accessCode && x.accessCode === app.accessCode) || (cleanPhone && (x.phone || "").replace(/[-\s]/g, "") === cleanPhone));
+    if (r) { r.loginSalt = cred.loginSalt; r.loginHash = cred.loginHash; saveCommunityRiders(riders); }
+    else { saveCommunityRiders(reconcileApprovedRiders(apps, riders).riders); }
+    renderAdminRiders();
+    openSimulatedSmsModal(app.phone, cred.secret, name, "rider", app.lineId, app.accessCode);
+}
+window.resetRiderLoginSecret = resetRiderLoginSecret;
+
 window.isOwnerSignedIn = isOwnerSignedIn;
 window.verifyOwnerPassword = verifyOwnerPassword;
+
+// =================================================================
+// เขียนรายการขึ้น Firebase "ทีละ id" (ไม่เขียนทั้งก้อน)
+// เหตุผล: กฎ Firebase แยกสิทธิ์ได้ระดับรายการ — ใครก็สมัคร (pending) ได้ แต่อนุมัติ/ลบต้องเป็นเจ้าของ
+// โหนดที่ใช้: rider_applications, community_riders, merchant_applications, custom_market_stalls, stall_catalog_database
+// =================================================================
+const _cloudBaselines = {};      // node -> { key: json } สิ่งที่รู้ว่าอยู่บนคลาวด์ตอนนี้ (ใช้หาว่ารายการไหนเปลี่ยน)
+const _cloudBaselineWaiters = {};
+
+// แปลงเป็น JSON รูปแบบเดียวกับที่ Firebase เก็บจริง (คีย์เรียงตัวอักษร ตัด null/undefined/อาร์เรย์ว่าง/ออบเจ็กต์ว่าง)
+// เพื่อเทียบว่า "รายการเปลี่ยนจริงไหม" — ไม่งั้นข้อมูลที่เท่ากันจะดูเหมือนต่างกันแล้วเขียนซ้ำทุกครั้ง
+function _canonJson(value) {
+    const norm = x => {
+        if (x === null || x === undefined) return undefined;
+        if (Array.isArray(x)) {
+            const arr = x.map(v => { const n = norm(v); return n === undefined ? null : n; });
+            return arr.some(v => v !== null) ? arr : undefined;
+        }
+        if (typeof x === "object") {
+            const out = {};
+            Object.keys(x).sort().forEach(k => { const n = norm(x[k]); if (n !== undefined) out[k] = n; });
+            return Object.keys(out).length ? out : undefined;
+        }
+        return x;
+    };
+    const n = norm(value);
+    return n === undefined ? undefined : JSON.stringify(n);
+}
+
+function _cloudSafeKey(k) {
+    return String(k).replace(/[.#$\/\[\]]/g, "_");
+}
+
+// แปลงค่าจากคลาวด์ (array แบบเก่า หรือ object แบบ id) เป็น { key: item }
+// รายการแบบเก่าคีย์ตัวเลข (0,1,2...) ถูกอ่านก่อน แล้วรายการคีย์ id ใหม่เขียนทับ (รายการใหม่กว่าเสมอ) จึงไม่เกิดรายการซ้ำระหว่างรอย้ายข้อมูล
+function cloudValToMap(val, keyFn) {
+    const map = {};
+    if (!val || typeof val !== "object") return map;
+    const entries = Array.isArray(val)
+        ? val.map((v, i) => [String(i), v])
+        : Object.entries(val);
+    const isLegacyKey = k => /^\d+$/.test(k);
+    entries.filter(([k]) => isLegacyKey(k)).concat(entries.filter(([k]) => !isLegacyKey(k))).forEach(([k, item]) => {
+        if (!item || typeof item !== "object") return;
+        const id = isLegacyKey(k) ? keyFn(item) : k;
+        if (id === undefined || id === null || id === "") return;
+        map[_cloudSafeKey(id)] = item;
+    });
+    return map;
+}
+
+function cloudValToList(val, keyFn) {
+    return Object.values(cloudValToMap(val, keyFn));
+}
+window.cloudValToList = cloudValToList;
+
+const _keyOfRiderApp = a => a && a.id && normalizeRiderCode(a.id);
+const _keyOfCommunityRider = r => r && (r.id || r.riderId || r.accessCode);
+const _keyOfMerchantApp = a => a && (a.id || (a.stallData && a.stallData.stallId));
+const _keyOfStall = s => s && s.stallId;
+
+// โหนดที่ข้อมูลในเครื่องถูกตัดข้อมูลส่วนตัวไรเดอร์ออกก่อนเขียนเสมอ — ต้องตัดฝั่งคลาวด์ตอนเทียบด้วย
+// (รายการเก่าบนคลาวด์อาจยังมีข้อมูลส่วนตัวติดอยู่ ถ้าไม่ตัดจะเห็นว่า "ต่างกัน" ทุกครั้ง; ตัวเทียบไม่ลบข้อมูลบนคลาวด์เอง)
+const _CLOUD_COMPARE_MAPPERS = {
+    rider_applications: stripRiderPrivate,
+    community_riders: stripRiderPrivate
+};
+
+// เรียกจากตัวฟัง .on("value") เพื่อบอกว่าตอนนี้คลาวด์มีอะไรอยู่ (จะได้เขียนเฉพาะที่เปลี่ยน)
+function noteCloudSnapshot(node, val, keyFn, mapper) {
+    mapper = mapper || _CLOUD_COMPARE_MAPPERS[node];
+    const map = keyFn ? cloudValToMap(val, keyFn) : ((val && typeof val === "object") ? val : {});
+    const base = {};
+    Object.keys(map).forEach(k => { base[k] = _canonJson(mapper ? mapper(map[k]) : map[k]); });
+    _cloudBaselines[node] = base;
+}
+
+function _ensureCloudBaseline(node, keyFn, mapper) {
+    if (_cloudBaselines[node]) return Promise.resolve(true);
+    if (_cloudBaselineWaiters[node]) return _cloudBaselineWaiters[node];
+    _cloudBaselineWaiters[node] = _withTimeout(db.ref(node).once("value"), 8000)
+        .then(snap => { noteCloudSnapshot(node, snap.val(), keyFn, mapper); return true; })
+        .catch(() => false)
+        .then(ok => { delete _cloudBaselineWaiters[node]; return ok; });
+    return _cloudBaselineWaiters[node];
+}
+
+// map = { key: item }  เขียนเฉพาะ key ที่เปลี่ยนไปจากที่คลาวด์มี
+//   opts.keyFn/mapper : ใช้ตอนโหลด baseline (mapper = ตัดข้อมูลส่วนตัวออกก่อนเทียบ)
+//   opts.canDelete    : ลบรายการที่หายไปหรือไม่ (ค่าเริ่มต้น = เฉพาะเจ้าของ)
+//   opts.canCreate    : สร้างรายการใหม่ได้ไหม (ค่าเริ่มต้น = true; ผู้ใช้ทั่วไปสร้าง community_riders/custom_market_stalls ไม่ได้)
+async function syncKeyedToCloud(node, map, opts) {
+    opts = opts || {};
+    try {
+        if (!(isFirebaseReady() && db)) return { written: 0, skipped: true };
+        const ready = await _ensureCloudBaseline(node, opts.keyFn, opts.mapper);
+        if (!ready) return { written: 0, skipped: true };   // ยังคุยกับคลาวด์ไม่ได้ — ข้อมูลยังอยู่ในเครื่อง
+        const base = _cloudBaselines[node];
+        const owner = isOwnerSignedIn();
+        const canDelete = opts.canDelete === undefined ? owner : opts.canDelete;
+        const canCreate = opts.canCreate === undefined ? true : opts.canCreate;
+        const jobs = [];
+        const mapper = opts.mapper || _CLOUD_COMPARE_MAPPERS[node];
+        Object.keys(map).forEach(k => {
+            const item = mapper ? mapper(map[k]) : map[k];
+            const json = _canonJson(item);
+            if (json === undefined || base[k] === json) return;
+            if (!(k in base) && !canCreate) return;
+            // parse กลับเพื่อล้างค่า undefined (Firebase โยน error ถ้าเจอ undefined) และห่อให้แต่ละรายการล้มแยกกัน
+            jobs.push(Promise.resolve().then(() => db.ref(node + "/" + k).set(JSON.parse(JSON.stringify(item)))).then(() => { base[k] = json; }));
+        });
+        if (canDelete) {
+            Object.keys(base).forEach(k => {
+                if (k in map) return;
+                jobs.push(Promise.resolve().then(() => db.ref(node + "/" + k).remove()).then(() => { delete base[k]; }));
+            });
+        }
+        const results = await Promise.allSettled(jobs);
+        const failed = results.filter(r => r.status === "rejected");
+        if (failed.length) console.warn("Firebase save " + node + ": " + failed.length + " รายการถูกปฏิเสธ", failed[0].reason);
+        return { written: results.length - failed.length, failed: failed.length };
+    } catch (e) {
+        console.warn("syncKeyedToCloud " + node + " error:", e);
+        return { written: 0, failed: 1 };
+    }
+}
+
+function syncListToCloud(node, list, keyFn, opts) {
+    const map = {};
+    (list || []).forEach(item => {
+        const id = keyFn(item);
+        if (id === undefined || id === null || id === "") return;
+        map[_cloudSafeKey(id)] = item;
+    });
+    return syncKeyedToCloud(node, map, Object.assign({ keyFn }, opts || {}));
+}
+window.syncListToCloud = syncListToCloud;
+window.syncKeyedToCloud = syncKeyedToCloud;
+
+// เจ้าของล็อกอินครั้งแรกหลังอัปเดต: ย้ายรายการแบบเก่า (คีย์ 0,1,2...) ไปเป็นคีย์ id (เขียนครั้งเดียว ไม่ทำซ้ำถ้าย้ายแล้ว)
+const _LEGACY_LIST_NODES = [
+    ["rider_applications", _keyOfRiderApp],
+    ["community_riders", _keyOfCommunityRider],
+    ["merchant_applications", _keyOfMerchantApp],
+    ["custom_market_stalls", _keyOfStall]
+];
+async function migrateLegacyCloudLists() {
+    if (!isOwnerSignedIn() || !(isFirebaseReady() && db)) return;
+    for (const [node, keyFn] of _LEGACY_LIST_NODES) {
+        try {
+            const snap = await _withTimeout(db.ref(node).once("value"), 10000);
+            const val = snap.val();
+            if (!val || typeof val !== "object") continue;
+            const entries = Array.isArray(val) ? val.map((v, i) => [String(i), v]) : Object.entries(val);
+            const legacyKeys = entries.filter(([k, v]) => /^\d+$/.test(k) && v).map(([k]) => k);
+            if (!legacyKeys.length) continue;
+            const updates = {};
+            const map = cloudValToMap(val, keyFn);
+            Object.keys(map).forEach(k => { updates[k] = map[k]; });
+            legacyKeys.forEach(k => { if (!(k in updates)) updates[k] = null; });
+            await db.ref(node).update(updates);
+            console.info("ย้ายข้อมูล " + node + " เป็นคีย์ id แล้ว (" + Object.keys(map).length + " รายการ)");
+        } catch (e) {
+            console.warn("migrateLegacyCloudLists " + node + " ไม่สำเร็จ:", e);
+        }
+    }
+}
+window.migrateLegacyCloudLists = migrateLegacyCloudLists;
 
 function openHubClearOrdersModal() {
     const modal = document.getElementById("hub-clear-orders-modal");
@@ -760,6 +1297,28 @@ function updateOrderStatusInFirebase(orderId, newStatus) {
 window.updateOrderStatusInFirebase = updateOrderStatusInFirebase;
 
 // ✅ ปุ่ม "ซิงค์สด" — ดึงออเดอร์ล่าสุดจาก Firebase Cloud หรือ LocalStorage มาอัปเดตหน้าจอ Hub ทันที
+// 🔒 เลือกออเดอร์ "ของลูกค้าคนนี้เอง" จากรายการที่ดึงมาจากคลาวด์เท่านั้น
+//   แก้บั๊กความปลอดภัยที่พบ 2026-09-22: ฟังก์ชันซิงก์ออเดอร์หลายจุด (เดิมตั้งใจไว้สำหรับฮับ/แอดมิน แต่ไม่มีการตรวจสิทธิ์)
+//   เคยหยิบ "ออเดอร์ล่าสุดของใครก็ได้ที่ยังไม่ส่งเสร็จ" มาใส่ state.activeOrder ซึ่งรันตั้งแต่โหลดหน้าเว็บครั้งแรกสำหรับทุกคน
+//   ทำให้คนแปลกหน้าเห็นชื่อ/เบอร์/ที่อยู่ของลูกค้าคนอื่นบนหน้าติดตามออเดอร์ของตัวเอง โดยไม่ต้องทำอะไรเลยนอกจากเปิดเว็บทิ้งไว้
+function pickMyOwnActiveOrder(list) {
+    if (!Array.isArray(list) || !list.length) return null;
+    const activeOrders = list.filter(o => o && o.orderId && o.status !== "delivered");
+    if (!activeOrders.length) return null;
+    activeOrders.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+    if (state.activeOrder && state.activeOrder.orderId) {
+        const mine = activeOrders.find(o => o.orderId === state.activeOrder.orderId);
+        if (mine) return mine;   // ออเดอร์ที่ติดตามอยู่แล้ว (ผ่านการตรวจรหัสลิงก์/เป็นของเบราว์เซอร์นี้มาก่อน) แค่รีเฟรชสถานะ
+    }
+    const myPhoneDigits = (state.customer && state.customer.identifier) ? String(state.customer.identifier).replace(/\D/g, "") : "";
+    if (myPhoneDigits.length >= 9) {
+        const mine = activeOrders.find(o => String(o.customerPhone || "").replace(/\D/g, "") === myPhoneDigits);
+        if (mine) return mine;
+    }
+    return null;   // ไม่ใช่ของเรา ไม่เอามาใส่ state.activeOrder (แค่ปล่อยให้ window._cachedFirebaseOrders ใช้ในหน้าแอดมิน/ฮับต่อไป)
+}
+window.pickMyOwnActiveOrder = pickMyOwnActiveOrder;
+
 async function syncLatestOrderFromCloud() {
     try {
         let syncedOrder = null;
@@ -784,12 +1343,9 @@ async function syncLatestOrderFromCloud() {
                     localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
                 } catch(e) {}
 
-                // หา grocery order ล่าสุดที่ยังไม่ delivered
-                const activeGroceries = ordersList.filter(o => o.orderType !== "MERCHANT_EXPRESS" && !o.orderId.startsWith("EXP-") && o.status !== "delivered");
-                if (activeGroceries.length > 0) {
-                    activeGroceries.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-                    syncedOrder = activeGroceries[0];
-                }
+                // หา grocery order "ของลูกค้าคนนี้เอง" ที่ยังไม่ delivered (ไม่ใช่ของใครก็ได้)
+                const groceryCandidates = ordersList.filter(o => o.orderType !== "MERCHANT_EXPRESS" && !o.orderId.startsWith("EXP-"));
+                syncedOrder = pickMyOwnActiveOrder(groceryCandidates);
             }
         }
 
@@ -894,13 +1450,10 @@ async function syncAdminOrdersFromCloud() {
                 localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
             } catch(e) {}
 
-            // Sync Active Grocery Order if none currently
+            // Sync Active Grocery Order if none currently (เฉพาะออเดอร์ของลูกค้าคนนี้เอง)
             if (!state.activeOrder || state.activeOrder.status === "delivered") {
-                const activeOrders = list.filter(o => o.status !== "delivered");
-                if (activeOrders.length > 0) {
-                    activeOrders.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-                    state.activeOrder = activeOrders[0];
-                }
+                const mine = pickMyOwnActiveOrder(list);
+                if (mine) state.activeOrder = mine;
             }
 
             // Merge into talathub_order_history so localStorage and reports stay updated
@@ -970,13 +1523,10 @@ function listenToFirebaseOrdersForAdmin() {
                     localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
                 } catch(e) {}
 
-                // Active order update
+                // Active order update (เฉพาะออเดอร์ของลูกค้าคนนี้เอง)
                 if (!state.activeOrder || state.activeOrder.status === "delivered") {
-                    const activeOrders = list.filter(o => o.status !== "delivered");
-                    if (activeOrders.length > 0) {
-                        activeOrders.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-                        state.activeOrder = activeOrders[0];
-                    }
+                    const mine = pickMyOwnActiveOrder(list);
+                    if (mine) state.activeOrder = mine;
                 }
 
                 // Update queue badge
@@ -1045,18 +1595,8 @@ function saveMarketDataToStorage() {
         } catch (storageErr) {
             console.warn("localStorage quota exceeded for custom_market_stalls:", storageErr);
         }
-        if (isFirebaseReady() && db) {
-            db.ref("custom_market_stalls").set(customOnly).catch(err => {
-                console.warn("Firebase save custom_market_stalls failed:", err);
-            });
-        }
-        try {
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/custom_market_stalls.json", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(customOnly)
-            }).catch(() => {});
-        } catch (e) {}
+        // ผู้ใช้ทั่วไปแก้แผงที่มีอยู่ได้ (เปิด/ปิดร้าน สินค้า) แต่ "เปิดแผงใหม่" หรือลบแผงเป็นสิทธิ์เจ้าของ
+        return syncListToCloud("custom_market_stalls", customOnly, _keyOfStall, { canCreate: isOwnerSignedIn() });
     } catch (e) { }
 }
 
@@ -1068,24 +1608,7 @@ async function saveMarketDataToStorageAsync() {
         } catch (storageErr) {
             console.warn("localStorage quota exceeded for custom_market_stalls:", storageErr);
         }
-        const promises = [];
-        if (isFirebaseReady() && db) {
-            promises.push(
-                db.ref("custom_market_stalls").set(customOnly).catch(err => {
-                    console.warn("Firebase save custom_market_stalls failed:", err);
-                })
-            );
-        }
-        try {
-            promises.push(
-                fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/custom_market_stalls.json", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(customOnly)
-                }).catch(e => console.warn("REST PUT custom_market_stalls failed:", e))
-            );
-        } catch (e) {}
-        await Promise.allSettled(promises);
+        await syncListToCloud("custom_market_stalls", customOnly, _keyOfStall, { canCreate: isOwnerSignedIn() });
     } catch (e) { }
 }
 window.saveMarketDataToStorageAsync = saveMarketDataToStorageAsync;
@@ -1098,12 +1621,8 @@ function initCustomStallsRealtimeSync() {
     db.ref("custom_market_stalls").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            let rawList = [];
-            if (Array.isArray(data)) {
-                rawList = data.filter(Boolean);
-            } else if (data && typeof data === "object") {
-                rawList = Object.values(data).filter(Boolean);
-            }
+            noteCloudSnapshot("custom_market_stalls", data, _keyOfStall);
+            const rawList = cloudValToList(data, _keyOfStall);
 
             if (rawList.length > 0) {
                 try {
@@ -1187,6 +1706,12 @@ const MARKET_ORIGIN = {
     shortName: "ตลาดวิศิษฐ์ชัย"
 };
 
+// ที่อยู่ปลอมที่เวอร์ชันเก่าใส่ให้เองตอนลูกค้ากดสั่งโดยยังไม่ระบุที่อยู่ (ห้ามใช้เป็นที่อยู่จริง)
+const _FAKE_DEFAULT_ADDRESS_PREFIX = "บ้านเลขที่ 12/3 ซอยเทศบาล 1";
+function isFakeDefaultDeliveryLocation(loc) {
+    return !!loc && typeof loc.fullAddress === "string" && loc.fullAddress.indexOf(_FAKE_DEFAULT_ADDRESS_PREFIX) === 0;
+}
+
 function loadSavedLocation() {
     try {
         const saved = localStorage.getItem("talathub_delivery_location");
@@ -1198,6 +1723,10 @@ function loadSavedLocation() {
                 !parsed.title ||
                 parsed.title.includes("สุรีย์")
             )) {
+                localStorage.removeItem("talathub_delivery_location");
+                return null;
+            }
+            if (parsed && isFakeDefaultDeliveryLocation(parsed)) {   // ที่อยู่ปลอมที่เวอร์ชันเก่าสร้างให้เองตอนกดสั่ง
                 localStorage.removeItem("talathub_delivery_location");
                 return null;
             }
@@ -2483,6 +3012,33 @@ function extractPlaceQueryFromGoogleUrl(urlStr) {
 }
 window.extractPlaceQueryFromGoogleUrl = extractPlaceQueryFromGoogleUrl;
 
+// 🔎 ระบบค้นหาสถานที่/ปักหมุด (Nominatim + Plus Code + ลิงก์ Google Maps) ใช้ร่วมกันได้ทั้งของลูกค้า
+//   (แผนที่หน้าแรก) และของแผงค้า (แผนที่ตอนเรียกไรเดอร์ไปส่งปลายทางอื่น) - ตัวแปรนี้บอกว่า "ตอนนี้กำลังใช้กับใคร"
+//   เพื่อให้ฟังก์ชันชุดเดียวกันรู้ว่าจะอ่าน/เขียนช่องไหน และปักหมุดลงแผนที่ไหนเมื่อเลือกผลลัพธ์
+let _activeLocationSearchTarget = "customer";
+const LOCATION_SEARCH_IDS = {
+    customer: {
+        input: "location-search-input",
+        dropdown: "location-search-dropdown",
+        list: "location-search-results-list",
+        spinner: "location-search-spinner",
+        clearBtn: "btn-clear-location-search"
+    },
+    merchant: {
+        input: "merchant-location-search-input",
+        dropdown: "merchant-location-search-dropdown",
+        list: "merchant-location-search-results-list",
+        spinner: "merchant-location-search-spinner",
+        clearBtn: "btn-clear-merchant-location-search"
+    }
+};
+function _lsId(key) {
+    return (LOCATION_SEARCH_IDS[_activeLocationSearchTarget] || LOCATION_SEARCH_IDS.customer)[key];
+}
+function _lsEl(key) {
+    return document.getElementById(_lsId(key));
+}
+
 function pinCoordinatesResult(lat, lng, label = "พิกัดระบุเอง") {
     if (typeof lat !== "number" || typeof lng !== "number" || isNaN(lat) || isNaN(lng)) return;
     const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
@@ -2519,7 +3075,7 @@ document.addEventListener("visibilitychange", async function () {
                     const pc = decodePlusCode(text);
                     if (coords || pc) {
                         _clipboardWatcherActive = false;
-                        const input = document.getElementById("location-search-input");
+                        const input = _lsEl("input");
                         if (input) input.value = text;
                         handleLocationSearchInput(text);
                         showToast("🎉 ตรวจพบพิกัดจากคลิปบอร์ดและปักหมุดให้อัตโนมัติแล้วครับ!");
@@ -2533,8 +3089,8 @@ document.addEventListener("visibilitychange", async function () {
 });
 
 async function renderGoogleMapsShortlinkHelper(rawInput) {
-    const dropdown = document.getElementById("location-search-dropdown");
-    const list = document.getElementById("location-search-results-list");
+    const dropdown = _lsEl("dropdown");
+    const list = _lsEl("list");
     if (!dropdown || !list) return;
 
     // 1. Direct coordinates
@@ -2783,11 +3339,11 @@ function handleLocationSearchInput(queryOrEvent) {
     } else if (queryOrEvent && queryOrEvent.target && typeof queryOrEvent.target.value === "string") {
         q = queryOrEvent.target.value.trim();
     } else {
-        const input = document.getElementById("location-search-input");
+        const input = _lsEl("input");
         q = (input?.value || "").trim();
     }
 
-    const clearBtn = document.getElementById("btn-clear-location-search");
+    const clearBtn = _lsEl("clearBtn");
     if (clearBtn) {
         if (q.length > 0) clearBtn.classList.remove("hidden");
         else clearBtn.classList.add("hidden");
@@ -2841,7 +3397,7 @@ function handleLocationSearchInput(queryOrEvent) {
 }
 
 async function fetchOnlineLocationSearch(query, existingMatches = []) {
-    const spinner = document.getElementById("location-search-spinner");
+    const spinner = _lsEl("spinner");
     if (spinner) spinner.classList.remove("hidden");
 
     if (_locSearchController) {
@@ -2916,7 +3472,7 @@ async function fetchOnlineLocationSearch(query, existingMatches = []) {
 }
 
 function executeLocationSearchNow() {
-    const input = document.getElementById("location-search-input");
+    const input = _lsEl("input");
     if (!input) return;
     const q = input.value.trim();
     if (q.length >= 1) {
@@ -2925,11 +3481,11 @@ function executeLocationSearchNow() {
 }
 
 function renderLocationSearchResults(results) {
-    const dropdown = document.getElementById("location-search-dropdown");
-    const list = document.getElementById("location-search-results-list");
+    const dropdown = _lsEl("dropdown");
+    const list = _lsEl("list");
     if (!dropdown || !list) return;
 
-    const currentQuery = (document.getElementById("location-search-input")?.value || "").trim();
+    const currentQuery = (_lsEl("input")?.value || "").trim();
 
     if (!Array.isArray(results) || results.length === 0) {
         list.innerHTML = `
@@ -2972,8 +3528,8 @@ function renderLocationSearchResults(results) {
                         <span class="material-symbols-outlined text-base">${iconName}</span>
                     </span>
                     <div class="min-w-0 flex-1">
-                        <div class="font-extrabold text-slate-900 group-hover:text-emerald-950 text-xs truncate">${item.shortTitle || item.title}</div>
-                        <div class="text-[10px] text-slate-500 truncate">${item.subdistrict || 'อ.บ้านบึง จ.ชลบุรี'}</div>
+                        <div class="font-extrabold text-slate-900 group-hover:text-emerald-950 text-xs truncate">${escapeHtml(item.shortTitle) || escapeHtml(item.title)}</div>
+                        <div class="text-[10px] text-slate-500 truncate">${escapeHtml(item.subdistrict) || 'อ.บ้านบึง จ.ชลบุรี'}</div>
                     </div>
                 </div>
                 <div class="text-right shrink-0">
@@ -2988,7 +3544,7 @@ function renderLocationSearchResults(results) {
 }
 
 function openGoogleMapsSearchHelper() {
-    const searchInput = document.getElementById("location-search-input");
+    const searchInput = _lsEl("input");
     const q = (searchInput?.value || "").trim();
     const queryParam = q ? encodeURIComponent(q + " บ้านบึง ชลบุรี") : encodeURIComponent("ตลาดวิศิษฐ์ชัย บ้านบึง ชลบุรี");
     window.open(`https://www.google.com/maps/search/?api=1&query=${queryParam}`, "_blank");
@@ -2997,6 +3553,10 @@ window.openGoogleMapsSearchHelper = openGoogleMapsSearchHelper;
 
 function selectLocationSearchResult(item) {
     if (!item || typeof item.lat !== "number" || typeof item.lng !== "number") return;
+    if (_activeLocationSearchTarget === "merchant") {
+        _applyLocationResultToMerchantMap(item);
+        return;
+    }
     const lat = item.lat;
     const lng = item.lng;
 
@@ -3035,9 +3595,43 @@ function selectLocationSearchResult(item) {
     updateModalAddressPreview();
 
     // 4. Update search input and hide dropdown
-    const searchInput = document.getElementById("location-search-input");
+    const searchInput = _lsEl("input");
     if (searchInput) searchInput.value = item.shortTitle || item.title;
-    const clearBtn = document.getElementById("btn-clear-location-search");
+    const clearBtn = _lsEl("clearBtn");
+    if (clearBtn) clearBtn.classList.remove("hidden");
+    hideLocationSearchDropdown();
+
+    const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+    const fee = calculateDeliveryFee(distKm);
+    showToast(`📍 ปักหมุดที่ "${item.shortTitle || item.title}" (~${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee})`);
+}
+
+// 🏪 นำผลลัพธ์ที่ค้นหาไปปักหมุดบนแผนที่ของแผงค้า (ตอนเรียกไรเดอร์ไปส่งปลายทางอื่นที่ไม่ใช่หน้าร้าน)
+//   ใช้ตัวแปร/ฟังก์ชันแผนที่ของร้านค้าที่มีอยู่แล้ว (merchantPickerMap/_onMerchantMapPinMoved) ไม่ได้สร้างแผนที่ใหม่
+function _applyLocationResultToMerchantMap(item) {
+    const lat = item.lat, lng = item.lng;
+    if (!merchantPickerMap) {
+        _initMerchantPickerMap();
+    }
+    if (merchantPickerMap && merchantPickerMarker) {
+        merchantPickerMap.setView([lat, lng], 17);
+        merchantPickerMarker.setLatLng([lat, lng]);
+        setTimeout(() => { if (merchantPickerMap) merchantPickerMap.invalidateSize(); }, 150);
+    }
+    _onMerchantMapPinMoved(lat, lng);
+
+    // เติมช่องบ้านเลขที่/จุดสังเกตให้อัตโนมัติถ้ายังว่างอยู่ (ไม่บังคับ ผู้ใช้แก้ต่อได้)
+    const addrInput = document.getElementById("merchant-map-addr-input");
+    if (addrInput && !addrInput.value.trim()) {
+        const placeName = item.shortTitle || item.title || "";
+        const road = item.soiRoad || "";
+        const parts = [placeName, road].filter(Boolean);
+        if (parts.length > 0) addrInput.value = parts.join(" ");
+    }
+
+    const searchInput = _lsEl("input");
+    if (searchInput) searchInput.value = item.shortTitle || item.title;
+    const clearBtn = _lsEl("clearBtn");
     if (clearBtn) clearBtn.classList.remove("hidden");
     hideLocationSearchDropdown();
 
@@ -3054,20 +3648,20 @@ function selectQuickLandmark(id) {
 }
 
 function clearLocationSearch() {
-    const input = document.getElementById("location-search-input");
+    const input = _lsEl("input");
     if (input) input.value = "";
-    const clearBtn = document.getElementById("btn-clear-location-search");
+    const clearBtn = _lsEl("clearBtn");
     if (clearBtn) clearBtn.classList.add("hidden");
     hideLocationSearchDropdown();
 }
 
 function hideLocationSearchDropdown() {
-    const dropdown = document.getElementById("location-search-dropdown");
+    const dropdown = _lsEl("dropdown");
     if (dropdown) dropdown.classList.add("hidden");
 }
 
 async function pasteFromClipboardToSearch() {
-    const input = document.getElementById("location-search-input");
+    const input = _lsEl("input");
     if (!input) return;
     try {
         if (navigator.clipboard && navigator.clipboard.readText) {
@@ -3100,10 +3694,41 @@ window.parseDMSCoordinates = parseDMSCoordinates;
 window.extractCoordinatesFromUrlOrText = extractCoordinatesFromUrlOrText;
 window.renderGoogleMapsShortlinkHelper = renderGoogleMapsShortlinkHelper;
 
-// Close search dropdown on click/pointerdown outside
+// 🏪 ตัวเรียกเข้าฟังก์ชันค้นหาชุดเดียวกันด้านบน แต่ตั้งเป้าหมายเป็น "แผนที่ของแผงค้า" ก่อนทำงาน
+//   (ตอนแผงค้าเรียกไรเดอร์ไปส่งปลายทางอื่นที่ไม่ใช่หน้าร้าน - ใช้ระบบค้นหาเดียวกับลูกค้าทุกอย่าง)
+function handleMerchantLocationSearchInput(queryOrEvent) {
+    _activeLocationSearchTarget = "merchant";
+    handleLocationSearchInput(queryOrEvent);
+}
+function executeMerchantLocationSearchNow() {
+    _activeLocationSearchTarget = "merchant";
+    executeLocationSearchNow();
+}
+function pasteFromClipboardToMerchantSearch() {
+    _activeLocationSearchTarget = "merchant";
+    return pasteFromClipboardToSearch();
+}
+function clearMerchantLocationSearch() {
+    _activeLocationSearchTarget = "merchant";
+    clearLocationSearch();
+}
+function openGoogleMapsSearchHelperMerchant() {
+    _activeLocationSearchTarget = "merchant";
+    openGoogleMapsSearchHelper();
+}
+window.handleMerchantLocationSearchInput = handleMerchantLocationSearchInput;
+window.executeMerchantLocationSearchNow = executeMerchantLocationSearchNow;
+window.pasteFromClipboardToMerchantSearch = pasteFromClipboardToMerchantSearch;
+window.clearMerchantLocationSearch = clearMerchantLocationSearch;
+window.openGoogleMapsSearchHelperMerchant = openGoogleMapsSearchHelperMerchant;
+
+// Close search dropdown on click/pointerdown outside (ทั้งของลูกค้าและของแผงค้า)
 document.addEventListener("pointerdown", function (e) {
     const wrapper = document.getElementById("location-search-wrapper");
-    if (wrapper && !wrapper.contains(e.target)) {
+    const merchantWrapper = document.getElementById("merchant-location-search-wrapper");
+    const insideCustomer = wrapper && wrapper.contains(e.target);
+    const insideMerchant = merchantWrapper && merchantWrapper.contains(e.target);
+    if (!insideCustomer && !insideMerchant) {
         hideLocationSearchDropdown();
     }
 });
@@ -3111,6 +3736,14 @@ document.addEventListener("pointerdown", function (e) {
 // =========================================================================
 // PERMANENT IN-PAGE LOCATION PICKER CONTROLLER (ถาวรบนหน้าแรกสำหรับทุกอุปกรณ์)
 // =========================================================================
+// ปุ่มทางลัดบนหน้าแรก: เลื่อนไปยังส่วนที่ต้องการ (ที่อยู่จัดส่ง / รายการสินค้า)
+function scrollToHomeSection(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+window.scrollToHomeSection = scrollToHomeSection;
+
 function showInPageLocationPicker(shouldShow = true) {
     const pickerView = document.getElementById("inpage-location-picker-view");
     const summaryView = document.getElementById("inpage-location-summary-view");
@@ -3169,6 +3802,7 @@ function collapseInPageLocationPicker() {
 window.collapseInPageLocationPicker = collapseInPageLocationPicker;
 
 function openLocationModal() {
+    _activeLocationSearchTarget = "customer";
     showInPageLocationPicker(true);
     const container = document.getElementById("inpage-location-container");
     if (container) {
@@ -3734,6 +4368,32 @@ function getMainCategories() {
     return Object.keys(CATEGORY_TAXONOMY_3TIER);
 }
 
+// 🏪 หมวดหมู่ "ร้านค้า" (stall.category) รวมให้ใช้ชุดเดียวกับหมวดหมู่ "สินค้า" 10 หมวด (+1 อื่นๆ) ด้านบนแล้ว
+//   (เดิมร้านค้าเคยมีชุดหมวดหมู่แยกต่างหากแค่ 5 แบบ: chicken/pork/veggie/curry/seafood - เจ้าของสังเกตเห็นว่า
+//   ช่องเลือกตอนสมัครร้านกับช่องเลือกตอนเพิ่มสินค้ามีจำนวนไม่เท่ากัน จึงรวมให้เป็นชุดเดียวกันทั้งระบบ 2026-09-23)
+const DEFAULT_STALL_CATEGORY = getMainCategories()[0];
+
+// สีป้ายของแต่ละหมวดหมู่ร้านค้า (ใช้ในแถบ "ร้านโปรด/ร้านค้าต่าง ๆ" หน้าแรก) - รองรับทั้งค่าใหม่ (ชื่อหมวดเต็ม)
+//   และค่าเก่าที่ยังหลงเหลืออยู่ (เช่น "chicken" ของร้านที่สมัครไว้ก่อนรวมหมวดหมู่) ผ่าน normalizeMainCategoryName
+function getStallCategoryColorClass(rawCategory) {
+    const cat = (typeof normalizeMainCategoryName === "function" ? normalizeMainCategoryName(rawCategory) : rawCategory) || "";
+    const colorMap = {
+        "🥩 เนื้อสัตว์และสัตว์ปีก": "bg-white hover:bg-orange-50 text-orange-950 border-orange-200",
+        "🦐 อาหารทะเลสดและแปรรูป": "bg-white hover:bg-cyan-50 text-cyan-950 border-cyan-200",
+        "🥬 ผักสด และเห็ด": "bg-white hover:bg-emerald-50 text-emerald-950 border-emerald-200",
+        "🍌 ผลไม้สด": "bg-white hover:bg-amber-50 text-amber-950 border-amber-200",
+        "🌾 ข้าวสาร ของชำ และไข่ไก่": "bg-white hover:bg-yellow-50 text-yellow-950 border-yellow-200",
+        "🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง": "bg-white hover:bg-sky-50 text-sky-950 border-sky-200",
+        "🍲 อาหารปรุงสุก ของทอด และพร้อมทาน": "bg-white hover:bg-red-50 text-red-950 border-red-200",
+        "🧋 เครื่องดื่ม ขนมหวาน และเบเกอรี่": "bg-white hover:bg-purple-50 text-purple-950 border-purple-200",
+        "💐 ดอกไม้สด และสังฆภัณฑ์": "bg-white hover:bg-pink-50 text-pink-950 border-pink-200",
+        "📦 บรรจุภัณฑ์ ของใช้ และอื่นๆ": "bg-white hover:bg-slate-100 text-slate-800 border-slate-300",
+        "🏷️ อื่นๆ": "bg-white hover:bg-slate-100 text-slate-800 border-slate-300"
+    };
+    return colorMap[cat] || "bg-white hover:bg-amber-50 text-slate-800 border-amber-200";
+}
+window.getStallCategoryColorClass = getStallCategoryColorClass;
+
 // ฟังก์ชันแปลงชื่อหมวดหมู่ให้เป็นชื่อหมวดหลักมาตรฐาน 10 หมวด (+1 อื่นๆ)
 function normalizeMainCategoryName(catName) {
     if (!catName || typeof catName !== "string") return "";
@@ -3748,7 +4408,7 @@ function normalizeMainCategoryName(catName) {
         return "🦐 อาหารทะเลสดและแปรรูป";
     }
     // 3. หมวดผักสดและเห็ด
-    if (clean.includes("ผักสด") || clean.includes("เห็ด") || clean.includes("สมุนไพร") || clean === "vegetable") {
+    if (clean.includes("ผักสด") || clean.includes("เห็ด") || clean.includes("สมุนไพร") || clean === "vegetable" || clean === "veggie") {
         return "🥬 ผักสด และเห็ด";
     }
     // 4. หมวดผลไม้สด
@@ -3764,7 +4424,7 @@ function normalizeMainCategoryName(catName) {
         return "🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง";
     }
     // 7. หมวดอาหารปรุงสุก ของทอด และพร้อมทาน (รวม อาหารสำเร็จรูป)
-    if (clean.includes("อาหารสำเร็จรูป") || clean.includes("อาหารปรุงสุก") || clean.includes("ของทอด") || clean.includes("ของย่าง") || clean.includes("พร้อมทาน") || clean.includes("แกงถุง") || clean.includes("อาหารจานเดียว") || clean === "cooked") {
+    if (clean.includes("อาหารสำเร็จรูป") || clean.includes("อาหารปรุงสุก") || clean.includes("ของทอด") || clean.includes("ของย่าง") || clean.includes("พร้อมทาน") || clean.includes("แกงถุง") || clean.includes("อาหารจานเดียว") || clean === "cooked" || clean === "curry") {
         return "🍲 อาหารปรุงสุก ของทอด และพร้อมทาน";
     }
     // 8. หมวดเครื่องดื่ม ขนมหวาน และเบเกอรี่
@@ -4009,6 +4669,73 @@ function updateHomeActiveOrderBanner() {
 }
 
 // ✅ จัดการ Deep Link สำหรับการติดตามสถานะออเดอร์สด (เช่น ลิงก์ที่ส่งไปใน LINE)
+// =================================================================
+// รหัสติดตามออเดอร์ (ไม่ต้องล็อกอิน) — กันคนอื่นเปิดดูออเดอร์ของคุณจากแค่เลขออเดอร์
+//   - สร้างครั้งเดียวตอนสั่งซื้อสำเร็จ ผูกกับ "ออเดอร์ใบนั้นใบเดียว" ไม่ใช่รหัสผ่านล็อกอินถาวร สั่งใหม่ได้รหัสใหม่เสมอ
+//   - ลิงก์ติดตามที่ส่งให้ลูกค้าทุกช่องทาง (LINE/SMS/QR) พกรหัสนี้ไปด้วยเสมอ (buildOrderTrackingUrl)
+//   - ข้อจำกัด (บอกเจ้าของไว้ตรง ๆ): ตรวจที่ฝั่งเว็บเท่านั้น เหมือนรหัสผ่านไรเดอร์/แผงค้า
+//     ไม่ได้ปิดกั้นคนที่ดึงข้อมูลตรงจากฐานข้อมูลจริง (Firebase REST) เพราะ orders ยังเป็นโหนดเปิด (ไม่มี Firebase Auth ให้ลูกค้า/ไรเดอร์)
+//     กันได้แค่ "เปิดลิงก์ดูจากหน้าเว็บ" โดยไม่รู้รหัส ซึ่งปิดช่องที่รั่วง่ายที่สุด (เดา/รู้แค่เลขออเดอร์)
+// =================================================================
+const ORDER_TRACK_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";   // 31 ตัว ตัดตัวที่อ่านสับสน (0 O 1 I L) เหมือนรหัสไรเดอร์
+const ORDER_TRACK_CODE_LENGTH = 6;
+function generateOrderTrackCode() {
+    const n = ORDER_TRACK_CODE_ALPHABET.length;
+    const limit = 256 - (256 % n);
+    const out = [];
+    while (out.length < ORDER_TRACK_CODE_LENGTH) {
+        const buf = new Uint8Array(8);
+        if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(buf);
+        else for (let i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256);
+        for (const b of buf) { if (b < limit && out.length < ORDER_TRACK_CODE_LENGTH) out.push(ORDER_TRACK_CODE_ALPHABET[b % n]); }
+    }
+    return out.join("");
+}
+function normalizeOrderTrackCode(v) {
+    return String(v == null ? "" : v).toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+function verifyOrderTrackCode(order, code) {
+    if (!order || !order.trackCode) return false;
+    return normalizeOrderTrackCode(order.trackCode) === normalizeOrderTrackCode(code);
+}
+// ลิงก์ติดตามออเดอร์ (พกรหัสไปด้วยเสมอถ้าออเดอร์นี้มีรหัส)
+function buildOrderTrackingUrl(order, baseOverride) {
+    if (!order || !order.orderId) return "";
+    const base = baseOverride || ((typeof window !== "undefined" && window.location) ? (window.location.origin + window.location.pathname) : "https://pisaen666.github.io/hsong/");
+    const clean = String(order.orderId).replace(/^#/, "");
+    let url = base + "?track=" + encodeURIComponent(clean);
+    if (order.trackCode) url += "&code=" + encodeURIComponent(order.trackCode);
+    return url;
+}
+// ตัดสินใจว่าลิงก์นี้เปิดดูออเดอร์ได้ไหม (แยกออกมาเป็นฟังก์ชันล้วน ๆ เพื่อทดสอบได้โดยไม่ต้องพึ่ง DOM/Firebase)
+//   order ที่ยังไม่เคยมีรหัส (สร้างไว้ก่อนระบบนี้จะมี) ให้ผ่านไปก่อน เพราะย้อนไปออกรหัสให้ไม่ได้ (ระบุไว้เป็นข้อจำกัดที่ทราบ)
+function resolveOrderTrackingAccess(order, providedCodeRaw) {
+    if (!order || !order.orderId) return { ok: false, reason: "not-found" };
+    if (!order.trackCode) return { ok: true, reason: "legacy-no-code" };
+    if (verifyOrderTrackCode(order, providedCodeRaw)) return { ok: true, reason: "ok" };
+    return { ok: false, reason: "bad-code" };
+}
+function copyTrackingLink() {
+    const order = state.activeOrder;
+    if (!order || !order.orderId) { showToast("⚠️ ไม่พบออเดอร์ที่จะสร้างลิงก์"); return; }
+    const url = buildOrderTrackingUrl(order);
+    const text = `ติดตามออเดอร์ ${order.orderId} ของฉัน: ${url}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast("📋 คัดลอกลิงก์ติดตามออเดอร์แล้ว! เก็บไว้เปิดดูภายหลังได้เลย");
+        }).catch(() => { copyTextToClipboard(text); showToast("📋 คัดลอกลิงก์ติดตามออเดอร์แล้ว!"); });
+    } else {
+        copyTextToClipboard(text);
+        showToast("📋 คัดลอกลิงก์ติดตามออเดอร์แล้ว!");
+    }
+}
+window.copyTrackingLink = copyTrackingLink;
+
+window.generateOrderTrackCode = generateOrderTrackCode;
+window.verifyOrderTrackCode = verifyOrderTrackCode;
+window.buildOrderTrackingUrl = buildOrderTrackingUrl;
+window.resolveOrderTrackingAccess = resolveOrderTrackingAccess;
+
 async function handleTrackingDeepLink() {
     try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -4021,6 +4748,7 @@ async function handleTrackingDeepLink() {
         if (trackId) {
             trackId = decodeURIComponent(trackId).trim();
             const cleanKey = trackId.replace(/^#/, '');
+            const providedTrackCode = urlParams.get("code") || (window.location.hash.includes("code=") ? window.location.hash.split("code=")[1] : "");
 
             // 1. ถ้ามีใน state.activeOrder อยู่แล้ว
             if (state.activeOrder && state.activeOrder.orderId && 
@@ -4054,6 +4782,15 @@ async function handleTrackingDeepLink() {
                 } catch(e) {
                     console.warn("Firebase deep link load error:", e);
                 }
+            }
+
+            // 🔒 ต้องมีรหัสติดตามที่ถูกต้องก่อนถึงจะเปิดดูออเดอร์ของคนอื่นได้ (กันแค่รู้/เดาเลขออเดอร์แล้วดูข้อมูลคนอื่น)
+            const access = resolveOrderTrackingAccess(state.activeOrder, providedTrackCode);
+            if (!access.ok) {
+                state.activeOrder = null;
+                try { localStorage.removeItem("talathub_active_order"); } catch (e) { }
+                showToast(access.reason === "bad-code" ? "🔒 ลิงก์นี้ไม่มีรหัสติดตาม หรือรหัสไม่ถูกต้อง กรุณาใช้ลิงก์ที่ได้รับตอนสั่งซื้อ" : "⚠️ ไม่พบข้อมูลออเดอร์นี้");
+                return;
             }
 
             // นำลูกค้าไปที่หน้า Tracking ทันที (รองรับ Guest เปิดดูจากลิงก์ LINE)
@@ -4129,19 +4866,28 @@ document.addEventListener("DOMContentLoaded", () => {
             const isRecent = newOrder.savedAt && (Date.now() - newOrder.savedAt) < 30000;
             if (!isRecent) return;
 
-            // อัปเดต state
-            state.activeOrder = newOrder;
-            try { localStorage.setItem("talathub_active_order", JSON.stringify(newOrder)); } catch(e) {}
+            // 🔒 แก้บั๊กความปลอดภัยที่พบ 2026-09-22: โค้ดเดิมเขียนทับ state.activeOrder ของ "ทุกคน" ที่เปิดเว็บอยู่
+            // ด้วยออเดอร์ใหม่ล่าสุดของใครก็ได้ ทำให้คนแปลกหน้าเห็นชื่อ/เบอร์/ที่อยู่ของลูกค้าคนอื่นบนหน้าติดตามออเดอร์ของตัวเอง
+            // ตอนนี้จะอัปเดต state.activeOrder เฉพาะกรณีเป็นออเดอร์ของ "ลูกค้าคนนี้เอง" ในเบราว์เซอร์นี้เท่านั้น
+            const myPhoneDigits = (state.customer && state.customer.identifier) ? String(state.customer.identifier).replace(/\D/g, "") : "";
+            const orderPhoneDigits = String(newOrder.customerPhone || "").replace(/\D/g, "");
+            const isMyOwnOrder = (state.activeOrder && state.activeOrder.orderId === newOrder.orderId) || (myPhoneDigits.length >= 9 && myPhoneDigits === orderPhoneDigits);
+            if (isMyOwnOrder) {
+                state.activeOrder = newOrder;
+                try { localStorage.setItem("talathub_active_order", JSON.stringify(newOrder)); } catch(e) {}
+                renderTrackingScreen();
+                updateHomeActiveOrderBanner();
+            }
 
-            // อัปเดต UI (Hub badge + เสียง + picking list)
-            const hubBadge = document.getElementById("hub-badge-count");
-            if (hubBadge) { hubBadge.classList.remove("hidden"); hubBadge.textContent = "NEW"; }
-            if (typeof renderHubPickingList === "function") renderHubPickingList();
-            if (typeof renderHubDeliveryView === "function") renderHubDeliveryView();
-            renderTrackingScreen();
-            updateHomeActiveOrderBanner();
-            playOrderAlertSound();
-            showToast(`🔔 ออเดอร์ใหม่ ${newOrder.orderId} เข้ามา! ฿${newOrder.grandTotal || newOrder.total}`);
+            // แจ้งเตือนฝั่งฮับ/แอดมิน (มีสิทธิ์เห็นออเดอร์ทุกใบอยู่แล้วผ่านการล็อกอินเจ้าของ) — ไม่เกี่ยวกับ state.activeOrder ของลูกค้า
+            if (isOwnerSignedIn()) {
+                const hubBadge = document.getElementById("hub-badge-count");
+                if (hubBadge) { hubBadge.classList.remove("hidden"); hubBadge.textContent = "NEW"; }
+                if (typeof renderHubPickingList === "function") renderHubPickingList();
+                if (typeof renderHubDeliveryView === "function") renderHubDeliveryView();
+                playOrderAlertSound();
+                showToast(`🔔 ออเดอร์ใหม่ ${newOrder.orderId} เข้ามา! ฿${newOrder.grandTotal || newOrder.total}`);
+            }
         });
 
         // 2. ฟัง order status update (มือถือลูกค้าจะเห็นสถานะ picking→delivering→delivered ทันที)
@@ -4372,8 +5118,8 @@ function renderHubMonitorBoard() {
                 <div class="flex items-center gap-2">
                     <span class="text-emerald-500 font-black text-sm">✅</span>
                     <div>
-                        <span class="font-bold text-slate-700">${o.orderId}</span>
-                        <span class="text-slate-400 ml-1">${o.customerName || o.customerPhone || "ลูกค้า"}</span>
+                        <span class="font-bold text-slate-700">${escapeHtml(o.orderId)}</span>
+                        <span class="text-slate-400 ml-1">${escapeHtml(o.customerName) || escapeHtml(o.customerPhone) || "ลูกค้า"}</span>
                     </div>
                 </div>
                 <span class="text-emerald-600 font-black">฿${o.grandTotal || o.total || 0}</span>
@@ -4474,15 +5220,15 @@ function _renderOrderCard(order, now) {
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full ${cfg.dot} shrink-0"></span>
-                <span class="font-extrabold text-slate-800">${order.orderId}</span>
-                <span class="text-slate-500">${order.customerName || order.customerPhone || "ลูกค้า"}</span>
+                <span class="font-extrabold text-slate-800">${escapeHtml(order.orderId)}</span>
+                <span class="text-slate-500">${escapeHtml(order.customerName) || escapeHtml(order.customerPhone) || "ลูกค้า"}</span>
             </div>
-            <span class="border px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.color}">${cfg.icon} ${cfg.label}</span>
+            <span class="border px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.color}">${cfg.icon} ${escapeHtml(cfg.label)}</span>
         </div>
 
         <div class="flex items-center justify-between text-slate-500">
-            <span>฿${order.grandTotal || order.total || 0} • ${order.address || "ที่อยู่ยังไม่ระบุ"}</span>
-            ${order.riderName ? `<span class="text-sky-600 font-bold">🛵 ${order.riderName}</span>` : ""}
+            <span>฿${order.grandTotal || order.total || 0} • ${escapeHtml(order.address) || "ที่อยู่ยังไม่ระบุ"}</span>
+            ${order.riderName ? `<span class="text-sky-600 font-bold">🛵 ${escapeHtml(order.riderName)}</span>` : ""}
         </div>
 
         ${isDispatched ? `
@@ -4491,12 +5237,12 @@ function _renderOrderCard(order, now) {
                 ${isStuck ? `🚨 ไม่มีไรเดอร์รับงาน! (${minutesAgo} นาทีแล้ว)` : `⏳ รอไรเดอร์รับงาน (${minutesAgo} นาที)`}
             </span>
             <div class="flex gap-1.5">
-                <button onclick="callRiderPhone(event, '${order.riderPhone || ''}')"
+                <button onclick="callRiderPhone(event, ${jsArg(order.riderPhone || '')})"
                     class="bg-sky-600 hover:bg-sky-700 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all flex items-center gap-1">
                     <span class="material-symbols-outlined text-xs">call</span>
                     <span>โทร</span>
                 </button>
-                <button onclick="reassignRiderForOrder('${order.orderId}')"
+                <button onclick="reassignRiderForOrder(${jsArg(order.orderId)})"
                     class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all flex items-center gap-1">
                     <span class="material-symbols-outlined text-xs">swap_horiz</span>
                     <span>Assign</span>
@@ -4508,7 +5254,7 @@ function _renderOrderCard(order, now) {
         <div class="flex items-center gap-1.5 text-sky-600 font-bold bg-sky-50 border border-sky-200 rounded-xl px-3 py-2">
             <span class="material-symbols-outlined text-sm animate-bounce">near_me</span>
             <span>ไรเดอร์กำลังเดินทางไปส่ง</span>
-            ${order.riderPhone ? `<button onclick="callRiderPhone(event, '${order.riderPhone}')" class="ml-auto bg-sky-600 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all text-[10px]">📞 โทรสอบถาม</button>` : ""}
+            ${order.riderPhone ? `<button onclick="callRiderPhone(event, ${jsArg(order.riderPhone)})" class="ml-auto bg-sky-600 text-white font-bold px-2 py-1 rounded-lg active:scale-95 transition-all text-[10px]">📞 โทรสอบถาม</button>` : ""}
         </div>` : ""}
     </div>`;
 }
@@ -4519,15 +5265,15 @@ function _renderStuckOrderCard(order, now) {
     return `
     <div class="flex items-center justify-between bg-white border border-rose-200 rounded-xl px-3 py-2">
         <div>
-            <span class="font-extrabold text-rose-800">${order.orderId}</span>
+            <span class="font-extrabold text-rose-800">${escapeHtml(order.orderId)}</span>
             <span class="text-rose-600 ml-1">(${minutesAgo} นาทีที่แล้ว)</span>
         </div>
         <div class="flex gap-1.5">
-            <button onclick="callRiderPhone(event, '${order.riderPhone || ''}')"
+            <button onclick="callRiderPhone(event, ${jsArg(order.riderPhone || '')})"
                 class="bg-sky-600 text-white font-bold px-2 py-1 rounded-lg text-[10px] active:scale-95 transition-all">
                 📞 โทร
             </button>
-            <button onclick="reassignRiderForOrder('${order.orderId}')"
+            <button onclick="reassignRiderForOrder(${jsArg(order.orderId)})"
                 class="bg-amber-500 text-white font-bold px-2 py-1 rounded-lg text-[10px] active:scale-95 transition-all">
                 🔁 Assign
             </button>
@@ -5042,7 +5788,7 @@ function renderHubDailyReport(targetDateKey) {
                     <p class="text-xs text-white/90 mt-0.5 font-medium">ผู้สมัครล่าสุด: <strong class="text-white underline">${escapeHtml(pendingRiderApps[0].fullName)}</strong> (${escapeHtml(pendingRiderApps[0].phone)}) • สมัครเข้ามาแล้ว</p>
                 </div>
             </div>
-            <button onclick="goToAdminToApproveRider('${pendingRiderApps[0].id}')" class="px-4 py-2.5 bg-white hover:bg-amber-50 text-orange-700 font-black rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer">
+            <button onclick="goToAdminToApproveRider(${jsArg(pendingRiderApps[0].id)})" class="px-4 py-2.5 bg-white hover:bg-amber-50 text-orange-700 font-black rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer">
                 <span class="material-symbols-outlined text-base font-bold">check_circle</span>
                 <span>ดูใบสมัครและกดอนุมัติทันที 🚀</span>
             </button>
@@ -5072,11 +5818,11 @@ function renderHubDailyReport(targetDateKey) {
 
             <!-- Action buttons -->
             <div class="flex items-center gap-1.5 flex-wrap">
-                <button onclick="renderHubDailyReport('${targetDateKey}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs">
+                <button onclick="renderHubDailyReport(${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs">
                     <span class="material-symbols-outlined text-sm">refresh</span>
                     <span>รีเฟรช</span>
                 </button>
-                <button onclick="exportDailyReportCSV('${targetDateKey}')" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs">
+                <button onclick="exportDailyReportCSV(${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs">
                     <span class="material-symbols-outlined text-sm">download</span>
                     <span>ส่งออก CSV</span>
                 </button>
@@ -5084,7 +5830,7 @@ function renderHubDailyReport(targetDateKey) {
                     <span class="material-symbols-outlined text-sm">print</span>
                     <span>พิมพ์รายงาน A4</span>
                 </button>
-                <button onclick="clearDailyOrdersAndReport('${targetDateKey}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="เคลียร์เฉพาะข้อมูลออเดอร์และรายงานของวันที่ ${thaiDateText} (ต้องใช้รหัสผ่าน Admin)">
+                <button onclick="clearDailyOrdersAndReport(${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl active:scale-95 transition-all flex items-center gap-1 shadow-2xs cursor-pointer" title="เคลียร์เฉพาะข้อมูลออเดอร์และรายงานของวันที่ ${thaiDateText} (ต้องใช้รหัสผ่าน Admin)">
                     <span class="material-symbols-outlined text-sm text-amber-700">event_busy</span>
                     <span>${isToday ? 'เคลียร์เฉพาะวันนี้' : 'เคลียร์เฉพาะวันที่เลือก (' + thaiDateText + ')'}</span>
                 </button>
@@ -5395,8 +6141,8 @@ function renderHubDailyReport(targetDateKey) {
                     ${report.riderSettlement.riders.map(r => `
                     <tr class="hover:bg-slate-50/70 transition-colors">
                         <td class="p-2.5">
-                            <div class="font-extrabold text-slate-800 text-xs">${r.riderName}</div>
-                            <div class="text-[10px] text-slate-400 font-mono">${r.riderPhone}</div>
+                            <div class="font-extrabold text-slate-800 text-xs">${escapeHtml(r.riderName)}</div>
+                            <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(r.riderPhone)}</div>
                         </td>
                         <td class="p-2.5 text-center font-bold text-slate-700">${r.tripsCount} เที่ยว</td>
                         <td class="p-2.5 text-right font-bold text-sky-700">฿${r.riderFeeEarned.toLocaleString()}</td>
@@ -5440,7 +6186,7 @@ function renderHubDailyReport(targetDateKey) {
                             </button>
                         </td>
                         <td class="p-2.5 text-center">
-                            <button onclick="printThermalRiderSlip('${r.riderName.replace(/'/g, "\\'")}', '${targetDateKey}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์สลิปเครื่องพิมพ์ความร้อน 80x80">
+                            <button onclick="printThermalRiderSlip(${jsArg(r.riderName)}, ${jsArg(targetDateKey)})" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์สลิปเครื่องพิมพ์ความร้อน 80x80">
                                 <span class="material-symbols-outlined text-xs">receipt</span>
                                 <span>พิมพ์สลิป</span>
                             </button>
@@ -5451,7 +6197,7 @@ function renderHubDailyReport(targetDateKey) {
         </div>`}
         <!-- ปุ่มพิมพ์สรุปกระดาษ A4 ตรงกลางด้านล่างหมวด 2 -->
         <div class="pt-3 border-t border-slate-100 flex justify-center">
-            <button onclick="printA4RidersSummary('${targetDateKey}')" class="px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
+            <button onclick="printA4RidersSummary(${jsArg(targetDateKey)})" class="px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
                 <span class="material-symbols-outlined text-sm">print</span>
                 <span>📄 พิมพ์สรุปเคลียร์เงินไรเดอร์ทั้งหมด (กระดาษ A4)</span>
             </button>
@@ -5474,7 +6220,7 @@ function renderHubDailyReport(targetDateKey) {
                     <span class="font-black text-rose-600 text-sm ml-1">฿${report.vendorSettlement.totalPendingAmount.toLocaleString()}</span>
                 </div>
                 ${report.vendorSettlement.pendingCount > 0 ? `
-                <button onclick="settleAllVendors('${targetDateKey}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 text-white font-extrabold rounded-xl text-[10px] shadow-2xs active:scale-95 transition-all flex items-center gap-1">
+                <button onclick="settleAllVendors(${jsArg(targetDateKey)})" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 text-white font-extrabold rounded-xl text-[10px] shadow-2xs active:scale-95 transition-all flex items-center gap-1">
                     <span class="material-symbols-outlined text-xs">done_all</span>
                     <span>โอนเคลียร์ทุกแผงที่เหลือ</span>
                 </button>` : ''}
@@ -5505,13 +6251,13 @@ function renderHubDailyReport(targetDateKey) {
                     ${report.vendorSettlement.stalls.map(s => `
                     <tr class="hover:bg-slate-50/70 transition-colors">
                         <td class="p-2.5">
-                            <div class="font-extrabold text-slate-800 text-xs">${s.stallName}</div>
-                            <span class="text-[9px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.2 rounded">${s.stallNumber} (โซน ${s.zone})</span>
+                            <div class="font-extrabold text-slate-800 text-xs">${escapeHtml(s.stallName)}</div>
+                            <span class="text-[9px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.2 rounded">${escapeHtml(s.stallNumber)} (โซน ${escapeHtml(s.zone)})</span>
                         </td>
                         <td class="p-2.5">
-                            <div class="font-bold text-slate-700">${s.ownerName}</div>
+                            <div class="font-bold text-slate-700">${escapeHtml(s.ownerName)}</div>
                             <div class="text-[10px] text-emerald-700 font-mono font-bold flex items-center gap-1">
-                                <span>📱 ${s.phone}</span>
+                                <span>📱 ${escapeHtml(s.phone)}</span>
                             </div>
                         </td>
                         <td class="p-2.5 text-center">
@@ -5539,13 +6285,13 @@ function renderHubDailyReport(targetDateKey) {
                             </span>`}
                         </td>
                         <td class="p-2.5 text-center">
-                            <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', ${(s.payoutAmount !== undefined ? s.payoutAmount : s.totalAmount)}, '${s.phone}', '${s.ownerName.replace(/'/g, "\\'")}', '${s.stallNumber}', ${s.totalAmount}, ${s.gpAmount || 0}, ${s.gpRate || 10})" class="px-2.5 py-1.5 ${s.isSettled ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'} font-bold rounded-xl text-[10px] active:scale-95 transition-all flex items-center gap-1 mx-auto">
+                            <button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, ${(s.payoutAmount !== undefined ? s.payoutAmount : s.totalAmount)}, ${jsArg(s.phone)}, ${jsArg(s.ownerName)}, ${jsArg(s.stallNumber)}, ${s.totalAmount}, ${s.gpAmount || 0}, ${s.gpRate || 10})" class="px-2.5 py-1.5 ${s.isSettled ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'} font-bold rounded-xl text-[10px] active:scale-95 transition-all flex items-center gap-1 mx-auto">
                                 <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                 <span>${s.isSettled ? 'ดู QR / โอนซ้ำ' : '💳 โอนพร้อมเพย์'}</span>
                             </button>
                         </td>
                         <td class="p-2.5 text-center">
-                            <button onclick="printThermalVendorSlip('${s.stallId}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์สลิปเครื่องพิมพ์ความร้อน 80x80">
+                            <button onclick="printThermalVendorSlip(${jsArg(s.stallId)}, ${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 mx-auto cursor-pointer" title="พิมพ์สลิปเครื่องพิมพ์ความร้อน 80x80">
                                 <span class="material-symbols-outlined text-xs">receipt</span>
                                 <span>พิมพ์สลิป</span>
                             </button>
@@ -5556,7 +6302,7 @@ function renderHubDailyReport(targetDateKey) {
         </div>`}
         <!-- ปุ่มพิมพ์สรุปกระดาษ A4 ตรงกลางด้านล่างหมวด 3 -->
         <div class="pt-3 border-t border-slate-100 flex justify-center">
-            <button onclick="printA4VendorsSummary('${targetDateKey}')" class="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-700 hover:to-orange-800 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
+            <button onclick="printA4VendorsSummary(${jsArg(targetDateKey)})" class="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-700 hover:to-orange-800 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
                 <span class="material-symbols-outlined text-sm">print</span>
                 <span>📄 พิมพ์สรุปยอดเคลียร์เงินแผงค้าทั้งหมด (กระดาษ A4)</span>
             </button>
@@ -5596,9 +6342,9 @@ function renderHubDailyReport(targetDateKey) {
             </div>
             <div class="flex items-center gap-1.5 flex-wrap shrink-0">
                 ${pendingVerifyOrders.slice(0, 3).map(p => `
-                    <button onclick="openOrderSlipVerificationModal('${p.orderId}')" class="px-3 py-1.5 bg-white hover:bg-orange-50 text-orange-950 font-black rounded-xl text-[11px] shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button onclick="openOrderSlipVerificationModal(${jsArg(p.orderId)})" class="px-3 py-1.5 bg-white hover:bg-orange-50 text-orange-950 font-black rounded-xl text-[11px] shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-xs text-orange-600">receipt_long</span>
-                        <span>ตรวจ ${p.orderId} (฿${p.payAmountExact !== undefined && p.payAmountExact !== null ? Number(p.payAmountExact).toFixed(2) : (p.grandTotal || p.total || 0).toLocaleString()})</span>
+                        <span>ตรวจ ${escapeHtml(p.orderId)} (฿${p.payAmountExact !== undefined && p.payAmountExact !== null ? Number(p.payAmountExact).toFixed(2) : (p.grandTotal || p.total || 0).toLocaleString()})</span>
                     </button>
                 `).join("")}
             </div>
@@ -5636,12 +6382,12 @@ function renderHubDailyReport(targetDateKey) {
                         return `
                         <tr class="hover:bg-slate-50/70 transition-colors">
                             <td class="p-2.5">
-                                <div class="font-mono font-black text-slate-900 text-xs">${o.orderId}</div>
+                                <div class="font-mono font-black text-slate-900 text-xs">${escapeHtml(o.orderId)}</div>
                                 <div class="text-[10px] text-slate-400">${timeStr} น.</div>
                             </td>
                             <td class="p-2.5">
-                                <div class="font-bold text-slate-800">${o.customerName || "ลูกค้าทั่วไป"}</div>
-                                <div class="text-[10px] text-slate-500 font-mono">${o.customerPhone || "-"}</div>
+                                <div class="font-bold text-slate-800">${escapeHtml(o.customerName) || "ลูกค้าทั่วไป"}</div>
+                                <div class="text-[10px] text-slate-500 font-mono">${escapeHtml(o.customerPhone) || "-"}</div>
                             </td>
                             <td class="p-2.5">
                                 <div class="font-bold text-slate-700">${payChannelLabel}</div>
@@ -5654,7 +6400,7 @@ function renderHubDailyReport(targetDateKey) {
                                             <span>เงินเข้าแล้ว</span>
                                         </span>
                                     ` : `
-                                        <button onclick="openOrderSlipVerificationModal('${o.orderId}')" class="inline-flex items-center gap-0.5 text-[9.5px] bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.2 rounded-full border border-amber-300 animate-pulse cursor-pointer">
+                                        <button onclick="openOrderSlipVerificationModal(${jsArg(o.orderId)})" class="inline-flex items-center gap-0.5 text-[9.5px] bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.2 rounded-full border border-amber-300 animate-pulse cursor-pointer">
                                             <span class="material-symbols-outlined text-[10px]">hourglass_top</span>
                                             <span>รอยืนยันเงิน</span>
                                         </button>
@@ -5666,30 +6412,30 @@ function renderHubDailyReport(targetDateKey) {
                                 ${o.payAmountExact ? '<div class="text-[8.5px] font-bold text-amber-600">(เศษสตางค์)</div>' : `<div class="text-[9px] text-slate-400">(ค่าส่ง ฿${o.deliveryFee || 20})</div>`}
                             </td>
                             <td class="p-2.5">
-                                <div class="font-bold text-sky-700">${o.riderName || "ยังไม่ได้ assign"}</div>
+                                <div class="font-bold text-sky-700">${escapeHtml(o.riderName) || "ยังไม่ได้ assign"}</div>
                             </td>
                             <td class="p-2.5 text-center">
                                 <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.color}">
-                                    ${cfg.icon} ${cfg.label}
+                                    ${cfg.icon} ${escapeHtml(cfg.label)}
                                 </span>
                             </td>
                             <td class="p-2.5 text-center">
                                 <div class="flex items-center justify-center gap-1.5 flex-wrap">
                                     ${o.paymentType !== 'cod' ? `
-                                        <button onclick="openOrderSlipVerificationModal('${o.orderId}')" class="px-2 py-1.5 ${isPaymentVerified ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black animate-pulse'} font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ตรวจสอบสลิปและยืนยันยอดเงิน">
+                                        <button onclick="openOrderSlipVerificationModal(${jsArg(o.orderId)})" class="px-2 py-1.5 ${isPaymentVerified ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black animate-pulse'} font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ตรวจสอบสลิปและยืนยันยอดเงิน">
                                             <span class="material-symbols-outlined text-xs">${isPaymentVerified ? 'check_circle' : 'receipt_long'}</span>
                                             <span>${isPaymentVerified ? 'ดูสลิป' : 'ตรวจสลิป'}</span>
                                         </button>
                                     ` : ''}
-                                    <button onclick="printThermalOrderSlip('${o.orderId}', '${targetDateKey}')" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเสร็จ/ใบส่งของเครื่องพิมพ์ความร้อน 80x80">
+                                    <button onclick="printThermalOrderSlip(${jsArg(o.orderId)}, ${jsArg(targetDateKey)})" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเสร็จ/ใบส่งของเครื่องพิมพ์ความร้อน 80x80">
                                         <span class="material-symbols-outlined text-xs">print</span>
                                         <span>สลิป</span>
                                     </button>
-                                    <button onclick="openOrderLineNoticeModal('${o.orderId}')" class="px-2 py-1.5 bg-[#06C755]/15 hover:bg-[#06C755]/25 text-[#04883b] border border-[#06C755]/40 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ส่งข้อมูลสรุปออเดอร์ให้ลูกค้าทาง LINE">
+                                    <button onclick="openOrderLineNoticeModal(${jsArg(o.orderId)})" class="px-2 py-1.5 bg-[#06C755]/15 hover:bg-[#06C755]/25 text-[#04883b] border border-[#06C755]/40 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ส่งข้อมูลสรุปออเดอร์ให้ลูกค้าทาง LINE">
                                         <span class="text-xs">💬</span>
                                         <span>LINE</span>
                                     </button>
-                                    <button onclick="deleteSingleOrder('${o.orderId}', '${targetDateKey}')" class="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ลบออเดอร์นี้ออกจากระบบ (ต้องใช้รหัสผ่าน Admin)">
+                                    <button onclick="deleteSingleOrder(${jsArg(o.orderId)}, ${jsArg(targetDateKey)})" class="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ลบออเดอร์นี้ออกจากระบบ (ต้องใช้รหัสผ่าน Admin)">
                                         <span class="material-symbols-outlined text-xs">delete</span>
                                         <span>ลบ</span>
                                     </button>
@@ -5702,7 +6448,7 @@ function renderHubDailyReport(targetDateKey) {
         </div>`}
         <!-- ปุ่มพิมพ์สมุดบัญชีออเดอร์กระดาษ A4 ตรงกลางด้านล่างหมวด 4 -->
         <div class="pt-3 border-t border-slate-100 flex justify-center">
-            <button onclick="printA4OrdersAuditLedger('${targetDateKey}')" class="px-4 py-2 bg-gradient-to-r from-slate-700 to-slate-900 hover:from-slate-800 hover:to-black text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
+            <button onclick="printA4OrdersAuditLedger(${jsArg(targetDateKey)})" class="px-4 py-2 bg-gradient-to-r from-slate-700 to-slate-900 hover:from-slate-800 hover:to-black text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
                 <span class="material-symbols-outlined text-sm">print</span>
                 <span>📄 พิมพ์สมุดบัญชีออเดอร์ประจำวันทั้งหมด (กระดาษ A4)</span>
             </button>
@@ -5921,7 +6667,7 @@ function openVendorSlipViewerModal(stallIdOrName, dateKey) {
     // ตรวจสอบว่าแผงค้านี้มีสลิปที่เคยแนบไว้แล้วหรือไม่
     const dateKeyForSlip = _activeReportDateKey || getReportDateKey(Date.now());
     const settledMapForSlip = _loadVendorSettlementState(dateKeyForSlip);
-    const existingRecForSlip = settledMapForSlip[finalStallId] || settledMapForSlip[finalStallName] || (meta ? settledMapForSlip[meta.stallId] : null);
+    const existingRecForSlip = settledMapForSlip[record.stallId || stallIdOrName] || settledMapForSlip[record.stallName] || (meta ? settledMapForSlip[meta.stallId] : null);   // (เดิมอ้างตัวแปรที่ไม่มีอยู่ ทำให้เปิดดูสลิปโอนเงินร้านค้าไม่ได้)
 
     _currentPayoutSlipBase64 = (existingRecForSlip && existingRecForSlip.slipImage) ? existingRecForSlip.slipImage : null;
     _currentPayoutSlipNote = (existingRecForSlip && existingRecForSlip.slipNote) ? existingRecForSlip.slipNote : "";
@@ -6801,7 +7547,7 @@ function executePrintHtml(title, bodyContent, isThermal = false) {
         <html lang="th">
         <head>
             <meta charset="utf-8">
-            <title>${title}</title>
+            <title>${escapeHtml(title)}</title>
             <style>
                 * { box-sizing: border-box; }
                 @page {
@@ -6992,8 +7738,8 @@ function printThermalRiderSlip(riderIdentifier, dateKey) {
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
         <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
-        <div class="slip-row"><span class="slip-label">ไรเดอร์:</span><span class="slip-value">${r.riderName}</span></div>
-        <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${r.riderPhone}</span></div>
+        <div class="slip-row"><span class="slip-label">ไรเดอร์:</span><span class="slip-value">${escapeHtml(r.riderName)}</span></div>
+        <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${escapeHtml(r.riderPhone)}</span></div>
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">1. จำนวนเที่ยวส่งสำเร็จ:</span><span class="slip-value">${r.tripsCount} เที่ยว</span></div>
         <div class="slip-row"><span class="slip-label">2. ค่ารอบสะสม (+฿40/เที่ยว):</span><span class="slip-value">+฿${r.riderFeeEarned.toLocaleString()}</span></div>
@@ -7011,7 +7757,7 @@ function printThermalRiderSlip(riderIdentifier, dateKey) {
         <div class="sig-container">
             <div class="sig-col">
                 <div class="sig-line"></div>
-                <div class="sig-name">( ${r.riderName} )</div>
+                <div class="sig-name">( ${escapeHtml(r.riderName)} )</div>
                 <div class="sig-role">ไรเดอร์ผู้ส่งมอบเงิน</div>
             </div>
             <div class="sig-col">
@@ -7066,16 +7812,16 @@ function printThermalRiderSlipFromFleet(riderId) {
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
         <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
-        <div class="slip-row"><span class="slip-label">รหัสไรเดอร์:</span><span class="slip-value font-mono font-bold">${rider.id}</span></div>
-        <div class="slip-row"><span class="slip-label">ชื่อไรเดอร์:</span><span class="slip-value font-bold">${rider.name}</span></div>
-        <div class="slip-row"><span class="slip-label">เบอร์โทรศัพท์:</span><span class="slip-value font-mono">${rider.phone}</span></div>
-        <div class="slip-row"><span class="slip-label">ทะเบียนรถ:</span><span class="slip-value font-mono font-bold">${rider.plate || '-'}</span></div>
-        <div class="slip-row"><span class="slip-label">รุ่นจักรยานยนต์:</span><span class="slip-value">${rider.motorcycleModel || '-'}</span></div>
-        <div class="slip-row"><span class="slip-label">พร้อมเพย์:</span><span class="slip-value font-mono">${rider.promptPay || rider.phone || '-'}</span></div>
+        <div class="slip-row"><span class="slip-label">รหัสไรเดอร์:</span><span class="slip-value font-mono font-bold">${escapeHtml(rider.id)}</span></div>
+        <div class="slip-row"><span class="slip-label">ชื่อไรเดอร์:</span><span class="slip-value font-bold">${escapeHtml(rider.name)}</span></div>
+        <div class="slip-row"><span class="slip-label">เบอร์โทรศัพท์:</span><span class="slip-value font-mono">${escapeHtml(rider.phone)}</span></div>
+        <div class="slip-row"><span class="slip-label">ทะเบียนรถ:</span><span class="slip-value font-mono font-bold">${escapeHtml(rider.plate) || '-'}</span></div>
+        <div class="slip-row"><span class="slip-label">รุ่นจักรยานยนต์:</span><span class="slip-value">${escapeHtml(rider.motorcycleModel) || '-'}</span></div>
+        <div class="slip-row"><span class="slip-label">พร้อมเพย์:</span><span class="slip-value font-mono">${escapeHtml(rider.promptPay) || escapeHtml(rider.phone) || '-'}</span></div>
         <div class="slip-row"><span class="slip-label">สถานะปัจจุบัน:</span><span class="slip-value font-bold">${rider.status === 'available' ? '🟢 พร้อมรับงาน' : rider.status === 'on_delivery' ? '🟡 กำลังส่งของ' : '🔴 พักรอบ'}</span></div>
         <div class="settle-box" style="background: #f0fdf4; border-color: #86efac; margin-top: 6px;">
             <div class="settle-title" style="color: #166534;">รหัสเข้าสู่ระบบไรเดอร์ (PIN)</div>
-            <div class="settle-amount" style="font-family: monospace; font-size: 18px; letter-spacing: 2px;">${rider.accessCode || rider.pin || rider.id.slice(-6).toUpperCase()}</div>
+            <div class="settle-amount" style="font-family: monospace; font-size: 18px; letter-spacing: 2px;">${escapeHtml(rider.accessCode) || escapeHtml(rider.pin) || rider.id.slice(-6).toUpperCase()}</div>
             <div class="settle-sub">ใช้รหัส 6 หลักนี้เพื่อ Login เข้า Role 4 ไรเดอร์</div>
         </div>
         <div class="divider-dashed" style="margin-top: 8px;"></div>
@@ -7120,10 +7866,10 @@ function printThermalVendorSlip(stallId, dateKey) {
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
         <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
-        <div class="slip-row"><span class="slip-label">แผงค้า:</span><span class="slip-value">${s.stallName}</span></div>
-        <div class="slip-row"><span class="slip-label">ตำแหน่ง:</span><span class="slip-value">${s.stallNumber} (โซน ${s.zone})</span></div>
-        <div class="slip-row"><span class="slip-label">เจ้าของแผง:</span><span class="slip-value">${s.ownerName}</span></div>
-        <div class="slip-row"><span class="slip-label">เบอร์พร้อมเพย์:</span><span class="slip-value">${s.phone}</span></div>
+        <div class="slip-row"><span class="slip-label">แผงค้า:</span><span class="slip-value">${escapeHtml(s.stallName)}</span></div>
+        <div class="slip-row"><span class="slip-label">ตำแหน่ง:</span><span class="slip-value">${escapeHtml(s.stallNumber)} (โซน ${escapeHtml(s.zone)})</span></div>
+        <div class="slip-row"><span class="slip-label">เจ้าของแผง:</span><span class="slip-value">${escapeHtml(s.ownerName)}</span></div>
+        <div class="slip-row"><span class="slip-label">เบอร์พร้อมเพย์:</span><span class="slip-value">${escapeHtml(s.phone)}</span></div>
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">จำนวนออเดอร์ที่เข้ารับ:</span><span class="slip-value">${s.orderCount} บิล</span></div>
         <div class="slip-row"><span class="slip-label">จำนวนสินค้าที่ขายได้จริง:</span><span class="slip-value">${s.itemsCount} ชิ้น</span></div>
@@ -7132,7 +7878,7 @@ function printThermalVendorSlip(stallId, dateKey) {
         <div class="settle-box">
             <div class="settle-title">ยอดเงินโอนสุทธิให้แผงค้า</div>
             <div class="settle-amount">฿${(s.payoutAmount !== undefined ? s.payoutAmount : Math.max(0, s.totalAmount - (s.gpAmount || 0))).toLocaleString()}</div>
-            <div class="settle-sub">โอนผ่าน PromptPay: ${s.phone}</div>
+            <div class="settle-sub">โอนผ่าน PromptPay: ${escapeHtml(s.phone)}</div>
         </div>
         <div class="slip-row" style="margin-top: 4px;">
             <span class="slip-label">สถานะการโอน:</span>
@@ -7141,7 +7887,7 @@ function printThermalVendorSlip(stallId, dateKey) {
         <div class="sig-container">
             <div class="sig-col">
                 <div class="sig-line"></div>
-                <div class="sig-name">( ${s.ownerName || 'เจ้าของแผงค้า'} )</div>
+                <div class="sig-name">( ${escapeHtml(s.ownerName) || 'เจ้าของแผงค้า'} )</div>
                 <div class="sig-role">ผู้รับเงิน / เจ้าของแผง</div>
             </div>
             <div class="sig-col">
@@ -7207,10 +7953,10 @@ function printThermalOrderSlip(orderId, dateKey) {
             return `
                 <div style="margin: 2.5px 0; font-size: 10px;">
                     <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                        <span style="max-width: 72%; word-break: break-word;">• ${it.name} x${itQty}</span>
+                        <span style="max-width: 72%; word-break: break-word;">• ${escapeHtml(it.name)} x${itQty}</span>
                         <span style="font-weight: bold;">฿${sub.toLocaleString()}</span>
                     </div>
-                    ${it.stallName ? `<div style="font-size: 8.5px; color: #555; padding-left: 8px;">(${it.stallName})</div>` : ''}
+                    ${it.stallName ? `<div style="font-size: 8.5px; color: #555; padding-left: 8px;">(${escapeHtml(it.stallName)})</div>` : ''}
                 </div>
             `;
         }).join("");
@@ -7233,15 +7979,15 @@ function printThermalOrderSlip(orderId, dateKey) {
             <div class="doc-badge">[ ใบเสร็จรับเงิน & ใบส่งของ ]</div>
         </div>
         <div class="divider-dashed"></div>
-        <div class="slip-row"><span class="slip-label">เลขที่บิล:</span><span class="slip-value" style="font-size: 11px;">${o.orderId}</span></div>
+        <div class="slip-row"><span class="slip-label">เลขที่บิล:</span><span class="slip-value" style="font-size: 11px;">${escapeHtml(o.orderId)}</span></div>
         <div class="slip-row"><span class="slip-label">วันที่-เวลา:</span><span class="slip-value">${thaiDate} (${orderTimeStr} น.)</span></div>
-        <div class="slip-row"><span class="slip-label">ผู้รับสินค้า:</span><span class="slip-value">${o.customerName || 'ลูกค้าทั่วไป'}</span></div>
-        <div class="slip-row"><span class="slip-label">โทรศัพท์:</span><span class="slip-value">${o.customerPhone || '-'}</span></div>
+        <div class="slip-row"><span class="slip-label">ผู้รับสินค้า:</span><span class="slip-value">${escapeHtml(o.customerName) || 'ลูกค้าทั่วไป'}</span></div>
+        <div class="slip-row"><span class="slip-label">โทรศัพท์:</span><span class="slip-value">${escapeHtml(o.customerPhone) || '-'}</span></div>
         <div style="margin: 3px 0; font-size: 10px; line-height: 1.3;">
-            <span style="color: #333;">ที่อยู่จัดส่ง: </span><strong>${o.address || 'ที่อยู่จัดส่งในเขตบริการ'}</strong>
+            <span style="color: #333;">ที่อยู่จัดส่ง: </span><strong>${escapeHtml(o.address) || 'ที่อยู่จัดส่งในเขตบริการ'}</strong>
         </div>
-        ${o.landmark ? `<div style="margin: 2px 0 3px; font-size: 9.5px; color: #444;">จุดสังเกต: ${o.landmark}</div>` : ''}
-        <div class="slip-row"><span class="slip-label">ไรเดอร์นำส่ง:</span><span class="slip-value">${o.riderName || 'ไรเดอร์ส่งของ'}</span></div>
+        ${o.landmark ? `<div style="margin: 2px 0 3px; font-size: 9.5px; color: #444;">จุดสังเกต: ${escapeHtml(o.landmark)}</div>` : ''}
+        <div class="slip-row"><span class="slip-label">ไรเดอร์นำส่ง:</span><span class="slip-value">${escapeHtml(o.riderName) || 'ไรเดอร์ส่งของ'}</span></div>
         <div class="divider-dashed"></div>
         <div style="font-weight: bold; margin-bottom: 3px; font-size: 10.5px;">รายการสินค้าที่จัดส่ง:</div>
         ${itemsHtml}
@@ -7289,7 +8035,7 @@ function printStallPickingSlip(orderId, stallIndex) {
         const picked = it.picked ? ' <span style="color:#059669; font-weight:bold;">✓</span>' : '';
         return `
             <div style="margin: 3.5px 0; font-size: 10.5px; display: flex; justify-content: space-between; align-items: baseline;">
-                <span style="max-width: 75%;">• ${it.name} x${it.qty || 1}${picked}${oos}</span>
+                <span style="max-width: 75%;">• ${escapeHtml(it.name)} x${it.qty || 1}${picked}${oos}</span>
                 <span style="font-weight: bold;">฿${pr}</span>
             </div>
         `;
@@ -7306,10 +8052,10 @@ function printStallPickingSlip(orderId, stallIndex) {
             </div>
         </div>
         <div class="divider-dashed"></div>
-        <div class="slip-row"><span class="slip-label">แผงค้า:</span><span class="slip-value" style="font-size: 11.5px; font-weight: bold; color: #047857;">${stall.name} (${stall.tag || stall.stallNumber || 'แผงค้า'})</span></div>
-        <div class="slip-row"><span class="slip-label">เลขที่ออเดอร์:</span><span class="slip-value" style="font-size: 11px; font-weight: bold;">${o.orderId}</span></div>
+        <div class="slip-row"><span class="slip-label">แผงค้า:</span><span class="slip-value" style="font-size: 11.5px; font-weight: bold; color: #047857;">${escapeHtml(stall.name)} (${escapeHtml(stall.tag) || escapeHtml(stall.stallNumber) || 'แผงค้า'})</span></div>
+        <div class="slip-row"><span class="slip-label">เลขที่ออเดอร์:</span><span class="slip-value" style="font-size: 11px; font-weight: bold;">${escapeHtml(o.orderId)}</span></div>
         <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${thaiDate} ${timeStr} น.</span></div>
-        <div class="slip-row"><span class="slip-label">ลูกค้าปลายทาง:</span><span class="slip-value">${o.customerName || 'ลูกค้า'}</span></div>
+        <div class="slip-row"><span class="slip-label">ลูกค้าปลายทาง:</span><span class="slip-value">${escapeHtml(o.customerName) || 'ลูกค้า'}</span></div>
         <div class="divider-dashed"></div>
         <div style="font-weight: bold; margin-bottom: 4px; font-size: 11px; color: #111;">รายการของสดที่ต้องหยิบ:</div>
         ${itemsHtml}
@@ -7340,8 +8086,8 @@ function printA4RidersSummary(dateKey) {
         tableRows += `
             <tr>
                 <td class="text-center">${idx + 1}</td>
-                <td><strong>${r.riderName}</strong></td>
-                <td class="text-center">${r.riderPhone}</td>
+                <td><strong>${escapeHtml(r.riderName)}</strong></td>
+                <td class="text-center">${escapeHtml(r.riderPhone)}</td>
                 <td class="text-center">${r.tripsCount}</td>
                 <td class="text-right font-bold">฿${r.riderFeeEarned.toLocaleString()}</td>
                 <td class="text-right font-bold">฿${r.codCollected.toLocaleString()}</td>
@@ -7443,10 +8189,10 @@ function printA4VendorsSummary(dateKey) {
         tableRows += `
             <tr>
                 <td class="text-center">${idx + 1}</td>
-                <td><strong>${s.stallName}</strong></td>
-                <td class="text-center">${s.stallNumber} (โซน ${s.zone})</td>
-                <td>${s.ownerName}</td>
-                <td class="text-center">${s.phone}</td>
+                <td><strong>${escapeHtml(s.stallName)}</strong></td>
+                <td class="text-center">${escapeHtml(s.stallNumber)} (โซน ${escapeHtml(s.zone)})</td>
+                <td>${escapeHtml(s.ownerName)}</td>
+                <td class="text-center">${escapeHtml(s.phone)}</td>
                 <td class="text-center">${s.itemsCount} ชิ้น</td>
                 <td class="text-center">${s.orderCount} บิล</td>
                 <td class="text-right font-medium">฿${s.totalAmount.toLocaleString()}</td>
@@ -7557,14 +8303,14 @@ function printA4OrdersAuditLedger(dateKey) {
         tableRows += `
             <tr>
                 <td class="text-center">${idx + 1}</td>
-                <td><strong>${o.orderId}</strong></td>
+                <td><strong>${escapeHtml(o.orderId)}</strong></td>
                 <td class="text-center">${timeStr} น.</td>
-                <td>${o.customerName || 'ลูกค้าทั่วไป'}</td>
-                <td class="text-center">${o.customerPhone || '-'}</td>
+                <td>${escapeHtml(o.customerName) || 'ลูกค้าทั่วไป'}</td>
+                <td class="text-center">${escapeHtml(o.customerPhone) || '-'}</td>
                 <td class="text-center">${pLabel} <span style="font-size: 8.5px; color: ${o.paymentVerified ? '#047857' : '#b45309'};">${verifyA4}</span></td>
                 <td class="text-right font-bold">${exactAmtA4}</td>
                 <td class="text-center">${o.deliveryFee ? `฿${o.deliveryFee}` : '฿20'}</td>
-                <td>${o.riderName || '-'}</td>
+                <td>${escapeHtml(o.riderName) || '-'}</td>
                 <td class="text-center font-bold">${statusLabel}</td>
             </tr>
         `;
@@ -7730,7 +8476,7 @@ function printDailyReport(dateKey) {
             <tbody>
                 ${report.riderSettlement.riders.map(r => `
                     <tr>
-                        <td><strong>${r.riderName}</strong> (${r.riderPhone})</td>
+                        <td><strong>${escapeHtml(r.riderName)}</strong> (${escapeHtml(r.riderPhone)})</td>
                         <td class="text-center">${r.tripsCount}</td>
                         <td class="text-right">฿${r.riderFeeEarned.toLocaleString()}</td>
                         <td class="text-right">฿${r.codCollected.toLocaleString()}</td>
@@ -7755,8 +8501,8 @@ function printDailyReport(dateKey) {
             <tbody>
                 ${report.vendorSettlement.stalls.map(s => `
                     <tr>
-                        <td><strong>${s.stallName}</strong> (${s.stallNumber})</td>
-                        <td>${s.ownerName} (${s.phone})</td>
+                        <td><strong>${escapeHtml(s.stallName)}</strong> (${escapeHtml(s.stallNumber)})</td>
+                        <td>${escapeHtml(s.ownerName)} (${escapeHtml(s.phone)})</td>
                         <td class="text-center">${s.itemsCount} ชิ้น</td>
                         <td class="text-right font-bold" style="color: #047857;">฿${s.totalAmount.toLocaleString()}</td>
                         <td class="text-center font-bold">${s.isSettled ? '✅ โอนแล้ว' : '⏳ รอโอน'}</td>
@@ -8139,7 +8885,7 @@ function renderPeriodAnalysisModalContent() {
                 <td class="py-2 px-2.5 border-b border-slate-100">
                     <div class="flex items-center gap-1">
                         <span class="w-2 h-2 rounded-full ${d.orders > 0 ? 'bg-emerald-500' : 'bg-slate-300'}"></span>
-                        <span>${d.thaiDate} (${d.dayName})</span>
+                        <span>${d.thaiDate} (${escapeHtml(d.dayName)})</span>
                         ${isCurrentDay ? '<span class="text-[9px] bg-emerald-100 text-emerald-800 px-1 rounded font-black">วันนี้</span>' : ''}
                     </div>
                 </td>
@@ -8153,7 +8899,7 @@ function renderPeriodAnalysisModalContent() {
                     ฿${d.hubNetMargin.toLocaleString()}
                 </td>
                 <td class="py-2 px-2 text-center border-b border-slate-100">
-                    <button onclick="changeReportDate('${d.dateKey}'); closePeriodAnalysisModal();" class="px-2 py-1 bg-white hover:bg-emerald-600 hover:text-white text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-bold active:scale-95 transition-all shadow-2xs flex items-center gap-0.5 mx-auto cursor-pointer" title="เปิดดูรายงานประจำวันนี้">
+                    <button onclick="changeReportDate(${jsArg(d.dateKey)}); closePeriodAnalysisModal();" class="px-2 py-1 bg-white hover:bg-emerald-600 hover:text-white text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-bold active:scale-95 transition-all shadow-2xs flex items-center gap-0.5 mx-auto cursor-pointer" title="เปิดดูรายงานประจำวันนี้">
                         <span class="material-symbols-outlined text-[12px]">visibility</span>
                         <span>ดูวันนี้</span>
                     </button>
@@ -8175,8 +8921,8 @@ function renderPeriodAnalysisModalContent() {
                             ${idx + 1}
                         </span>
                         <div class="truncate">
-                            <div class="font-bold text-slate-800 truncate">${s.stallName}</div>
-                            <div class="text-[10px] text-slate-500">${s.stallNumber || 'แผงตลาด'} • ${s.orderCount} ออเดอร์ (${s.itemsCount} ชิ้น)</div>
+                            <div class="font-bold text-slate-800 truncate">${escapeHtml(s.stallName)}</div>
+                            <div class="text-[10px] text-slate-500">${escapeHtml(s.stallNumber) || 'แผงตลาด'} • ${s.orderCount} ออเดอร์ (${s.itemsCount} ชิ้น)</div>
                         </div>
                     </div>
                     <div class="text-right shrink-0 ml-2">
@@ -8201,8 +8947,8 @@ function renderPeriodAnalysisModalContent() {
                             ${idx + 1}
                         </span>
                         <div class="truncate">
-                            <div class="font-bold text-slate-800 truncate">${r.riderName}</div>
-                            <div class="text-[10px] text-slate-500">${r.riderPhone} • วิ่งส่ง ${r.tripsCount} เที่ยว</div>
+                            <div class="font-bold text-slate-800 truncate">${escapeHtml(r.riderName)}</div>
+                            <div class="text-[10px] text-slate-500">${escapeHtml(r.riderPhone)} • วิ่งส่ง ${r.tripsCount} เที่ยว</div>
                         </div>
                     </div>
                     <div class="text-right shrink-0 ml-2">
@@ -8235,7 +8981,7 @@ function renderPeriodAnalysisModalContent() {
                             </button>
                         </div>
                     </div>
-                    <p class="text-xs text-indigo-200/90 mt-0.5 font-medium">${data.periodTitle} • <span class="text-white font-bold">${data.periodSubtitle}</span></p>
+                    <p class="text-xs text-indigo-200/90 mt-0.5 font-medium">${escapeHtml(data.periodTitle)} • <span class="text-white font-bold">${escapeHtml(data.periodSubtitle)}</span></p>
                 </div>
             </div>
 
@@ -8582,7 +9328,7 @@ function printPeriodAnalysis() {
     data.dailyBreakdown.forEach(d => {
         dailyRowsHtml += `
             <tr>
-                <td>${d.thaiDate} (${d.dayName})</td>
+                <td>${d.thaiDate} (${escapeHtml(d.dayName)})</td>
                 <td class="text-center">${d.orders}</td>
                 <td class="text-right">฿${d.gmv.toLocaleString()}</td>
                 <td class="text-right">฿${d.delFee.toLocaleString()}</td>
@@ -8597,7 +9343,7 @@ function printPeriodAnalysis() {
     data.stallsRanked.slice(0, 10).forEach((s, idx) => {
         stallsRowsHtml += `
             <tr>
-                <td>${idx + 1}. ${s.stallName} (${s.stallNumber || 'แผงค้า'})</td>
+                <td>${idx + 1}. ${escapeHtml(s.stallName)} (${escapeHtml(s.stallNumber) || 'แผงค้า'})</td>
                 <td class="text-center">${s.orderCount}</td>
                 <td class="text-right">฿${s.totalAmount.toLocaleString()}</td>
                 <td class="text-right font-bold">฿${s.payoutAmount.toLocaleString()}</td>
@@ -8609,7 +9355,7 @@ function printPeriodAnalysis() {
         <div class="a4-header">
             <div class="a4-title">รายงานวิเคราะห์ผลการดำเนินงาน${modeLabel}</div>
             <div class="a4-meta">
-                ตลาดสดฮับวิศิษฐ์ชัย • ${data.periodTitle} (${data.periodSubtitle}) • พิมพ์เมื่อ: ${printTime}
+                ตลาดสดฮับวิศิษฐ์ชัย • ${escapeHtml(data.periodTitle)} (${escapeHtml(data.periodSubtitle)}) • พิมพ์เมื่อ: ${printTime}
             </div>
         </div>
 
@@ -8708,15 +9454,15 @@ function printA4RiderApplication(appId) {
         <div class="a4-header">
             <div class="a4-title">ใบสมัครและประวัติไรเดอร์ร่วมทีม (Rider Profile & Application)</div>
             <div class="a4-meta">
-                ตลาดสดฮับวิศิษฐ์ชัย • รหัสใบสมัคร: ${app.id} • วันที่ยื่น: ${thaiDate}
+                ตลาดสดฮับวิศิษฐ์ชัย • รหัสใบสมัคร: ${escapeHtml(app.id)} • วันที่ยื่น: ${thaiDate}
             </div>
         </div>
 
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <span style="font-size: 16px; font-weight: bold; color: #1e293b;">${app.fullName} ${app.nickname ? `(${app.nickname})` : ''}</span>
-                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เบอร์โทรศัพท์: <strong>${app.phone}</strong> | LINE ID: <strong>${app.lineId || '-'}</strong></div>
+                    <span style="font-size: 16px; font-weight: bold; color: #1e293b;">${escapeHtml(app.fullName)} ${app.nickname ? `(${app.nickname})` : ''}</span>
+                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เบอร์โทรศัพท์: <strong>${escapeHtml(app.phone)}</strong> | LINE ID: <strong>${escapeHtml(app.lineId) || '-'}</strong></div>
                 </div>
                 <div style="text-align: right;">
                     <span style="display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; background: ${app.status === 'approved' ? '#dcfce7; color: #166534;' : '#fef3c7; color: #92400e;'}">
@@ -8735,19 +9481,19 @@ function printA4RiderApplication(appId) {
             <tbody>
                 <tr>
                     <td style="width: 35%; font-weight: bold;">ชื่อ-นามสกุล (ชื่อเล่น):</td>
-                    <td>${app.fullName} ${app.nickname ? `(${app.nickname})` : ''}</td>
+                    <td>${escapeHtml(app.fullName)} ${app.nickname ? `(${app.nickname})` : ''}</td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">หมายเลขบัตรประจำตัวประชาชน:</td>
-                    <td>${app.idCard || '-'}</td>
+                    <td>${escapeHtml(app.idCard) || '-'}</td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">ที่อยู่พักอาศัยปัจจุบัน:</td>
-                    <td>${app.address || 'อำเภอบ้านบึง จังหวัดชลบุรี'}</td>
+                    <td>${escapeHtml(app.address) || 'อำเภอบ้านบึง จังหวัดชลบุรี'}</td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">โซนพื้นที่ที่สะดวกจัดส่ง:</td>
-                    <td>${app.zone || 'รอบตลาดสดวิศิษฐ์ชัย ชุมชนหนองชาก และอำเภอบ้านบึง'}</td>
+                    <td>${escapeHtml(app.zone) || 'รอบตลาดสดวิศิษฐ์ชัย ชุมชนหนองชาก และอำเภอบ้านบึง'}</td>
                 </tr>
             </tbody>
         </table>
@@ -8761,15 +9507,15 @@ function printA4RiderApplication(appId) {
             <tbody>
                 <tr>
                     <td style="width: 35%; font-weight: bold;">รุ่นรถจักรยานยนต์ / สี:</td>
-                    <td>${app.motorcycleModel || '-'} ${app.motorcycleColor ? `(สี ${app.motorcycleColor})` : ''}</td>
+                    <td>${escapeHtml(app.motorcycleModel) || '-'} ${app.motorcycleColor ? `(สี ${app.motorcycleColor})` : ''}</td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">หมายเลขทะเบียนรถ:</td>
-                    <td><strong>${app.plate || '-'}</strong></td>
+                    <td><strong>${escapeHtml(app.plate) || '-'}</strong></td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">ใบอนุญาตขับขี่รถจักรยานยนต์:</td>
-                    <td>${app.drivingLicense || 'มีใบอนุญาตขับขี่ถูกต้อง'}</td>
+                    <td>${escapeHtml(app.drivingLicense) || 'มีใบอนุญาตขับขี่ถูกต้อง'}</td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">อุปกรณ์ประจำตัวสำหรับวิ่งงาน:</td>
@@ -8791,7 +9537,7 @@ function printA4RiderApplication(appId) {
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">บัญชีพร้อมเพย์รับเงินค่ารอบ (0% GP):</td>
-                    <td><strong>${app.promptPayNumber || app.phone || '-'}</strong> (${app.promptPayBank || 'พร้อมเพย์'})</td>
+                    <td><strong>${escapeHtml(app.promptPayNumber) || escapeHtml(app.phone) || '-'}</strong> (${escapeHtml(app.promptPayBank) || 'พร้อมเพย์'})</td>
                 </tr>
             </tbody>
         </table>
@@ -8804,7 +9550,7 @@ function printA4RiderApplication(appId) {
             <div style="display: flex; justify-content: space-between; margin-top: 30px; padding: 0 35px; font-size: 11px;">
                 <div style="text-align: center;">
                     <div>ลงชื่อ............................................................</div>
-                    <div style="margin-top: 4px;">(${app.fullName})</div>
+                    <div style="margin-top: 4px;">(${escapeHtml(app.fullName)})</div>
                     <div style="color: #64748b; font-size: 10px;">ผู้สมัคร</div>
                 </div>
                 <div style="text-align: center;">
@@ -8830,12 +9576,12 @@ function printA4RiderRosterDirectory() {
         tableRows += `
             <tr>
                 <td class="text-center">${idx + 1}</td>
-                <td><strong>${r.name}</strong> ${r.rating ? `(⭐${r.rating})` : ''}</td>
-                <td class="text-center">${r.phone}</td>
-                <td class="text-center font-bold font-mono">${r.plate || '-'}</td>
-                <td>${r.motorcycleModel || '-'}</td>
-                <td>${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}</td>
-                <td class="text-center font-mono">${r.promptPay || r.phone || '-'}</td>
+                <td><strong>${escapeHtml(r.name)}</strong> ${r.rating ? `(⭐${r.rating})` : ''}</td>
+                <td class="text-center">${escapeHtml(r.phone)}</td>
+                <td class="text-center font-bold font-mono">${escapeHtml(r.plate) || '-'}</td>
+                <td>${escapeHtml(r.motorcycleModel) || '-'}</td>
+                <td>${escapeHtml(r.zone) || 'รอบตลาดวิศิษฐ์ชัย'}</td>
+                <td class="text-center font-mono">${escapeHtml(r.promptPay) || escapeHtml(r.phone) || '-'}</td>
                 <td class="text-center font-bold">
                     ${r.status === 'available' ? '🟢 พร้อมรับงาน' : r.status === 'on_delivery' ? '🟡 กำลังส่งของ' : '🔴 พักรอบ'}
                 </td>
@@ -9002,6 +9748,17 @@ function generateSampleDailyOrders() {
 // RANDOMIZED STALL DISPLAY SYSTEM (ระบบสุ่มหมุนเวียนร้านค้าตามหมวดหมู่)
 // ==========================================
 
+// สลับลำดับอาเรย์แบบสุ่มจริง ๆ (Fisher-Yates) - ไม่ใช้ .sort(() => 0.5 - Math.random()) เพราะเป็นวิธีที่รู้กันว่า
+//   สุ่มไม่เท่าเทียมกันจริง (บางตำแหน่งมีโอกาสถูกเลือกมากกว่าอันอื่นตามการทำงานภายในของ .sort แต่ละเอนจิน)
+function shuffleArray(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+}
+
 function selectRandomStallBatch() {
     let pool = MARKET_DATA;
 
@@ -9016,7 +9773,7 @@ function selectRandomStallBatch() {
     if (state.currentCategoryFilter && state.currentCategoryFilter !== "all") {
         const catPool = pool.filter(s => s.category === state.currentCategoryFilter);
         if (catPool.length > 0) {
-            const shuffled = [...catPool].sort(() => 0.5 - Math.random());
+            const shuffled = shuffleArray(catPool);
             state.stallRotation.displayedStallIds = shuffled.map(s => s.stallId);
             return;
         }
@@ -9025,9 +9782,9 @@ function selectRandomStallBatch() {
     const selectedStalls = [...customApproved];
     const maxToPick = Math.max(3, selectedStalls.length);
 
-    // สุ่มเลือก 2 ถึง 3 ร้านค้าจากหมวดหมู่ที่แตกต่างกันเพื่อกระจายความหลากหลาย
-    const categories = ["chicken", "pork", "veggie", "curry", "seafood"];
-    const shuffledCats = [...categories].sort(() => 0.5 - Math.random());
+    // สุ่มเลือก 2 ถึง 3 ร้านค้าจากหมวดหมู่ที่แตกต่างกันเพื่อกระจายความหลากหลาย (ใช้ชุดหมวดหมู่เดียวกับสินค้าทั้งระบบ)
+    const categories = getMainCategories();
+    const shuffledCats = shuffleArray(categories);
 
     for (const cat of shuffledCats) {
         if (selectedStalls.length >= maxToPick) break;
@@ -9040,7 +9797,7 @@ function selectRandomStallBatch() {
 
     if (selectedStalls.length < maxToPick) {
         const remaining = pool.filter(s => !selectedStalls.some(sel => sel.stallId === s.stallId));
-        const shuffledRemaining = [...remaining].sort(() => 0.5 - Math.random());
+        const shuffledRemaining = shuffleArray(remaining);
         selectedStalls.push(...shuffledRemaining.slice(0, maxToPick - selectedStalls.length));
     }
 
@@ -9335,7 +10092,7 @@ function renderCatalog() {
         container.innerHTML = `
             <div class="text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
                 <span class="material-symbols-outlined text-4xl mb-1 text-slate-300">manage_search</span>
-                <p class="text-xs font-bold text-slate-700">ไม่พบสินค้า "${state.searchQuery}" ในตลาดสด</p>
+                <p class="text-xs font-bold text-slate-700">ไม่พบสินค้า "${escapeHtml(state.searchQuery)}" ในตลาดสด</p>
                 <p class="text-[11px] text-slate-400 mt-1">ลองค้นหาด้วยคำง่ายๆ เช่น อกไก่, ซี่โครงหมู, ผักกาดขาว, กุ้งสด</p>
                 <div class="flex flex-wrap items-center justify-center gap-1.5 mt-3.5">
                     <button onclick="handleQuickSearch('อกไก่')" class="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold hover:bg-emerald-100">🍗 อกไก่</button>
@@ -9360,7 +10117,7 @@ function renderCatalog() {
                         <span class="material-symbols-outlined text-emerald-700 text-lg">check_circle</span>
                         <div>
                             <span class="font-bold">ผลการค้นหา: </span>
-                            <span class="font-extrabold text-emerald-800">"${state.searchQuery}"</span>
+                            <span class="font-extrabold text-emerald-800">"${escapeHtml(state.searchQuery)}"</span>
                             <span class="text-slate-500 text-[11px] block sm:inline"> (พบใน ${filteredStalls.length} ร้านค้า พร้อมกดสั่งซื้อได้ทันที)</span>
                         </div>
                     </div>
@@ -9376,7 +10133,7 @@ function renderCatalog() {
                     <div class="flex items-center gap-2">
                         <span class="material-symbols-outlined text-amber-600 text-lg">lightbulb</span>
                         <div>
-                            <span class="font-bold">ไม่พบชื่อตรงตัว "${state.searchQuery}"</span>
+                            <span class="font-bold">ไม่พบชื่อตรงตัว "${escapeHtml(state.searchQuery)}"</span>
                             <span class="text-amber-800 text-[11px] block">เราพบ <strong>สินค้าใกล้เคียงที่เกี่ยวข้อง</strong> จาก ${filteredStalls.length} ร้านค้าให้คุณเลือก:</span>
                         </div>
                     </div>
@@ -9448,38 +10205,38 @@ function renderCatalog() {
                 <div class="bg-gradient-to-b from-slate-50/90 to-white border-b border-slate-200/70">
                     
                     <!-- 🌟 HERO BANNER CAROUSEL (สลับ 1-3 ภาพหน้าร้านค้า & ภาพเจ้าของร้าน รวม ${totalBannerSlides} สไลด์) -->
-                    <div id="stall-banner-container-${stall.stallId}" class="relative h-44 sm:h-52 w-full overflow-hidden bg-slate-950 group select-none">
+                    <div id="stall-banner-container-${escapeHtml(stall.stallId)}" class="relative h-44 sm:h-52 w-full overflow-hidden bg-slate-950 group select-none">
                         <!-- Slides Track -->
-                        <div id="stall-carousel-track-${stall.stallId}" class="flex transition-transform duration-500 ease-out h-full w-full">
+                        <div id="stall-carousel-track-${escapeHtml(stall.stallId)}" class="flex transition-transform duration-500 ease-out h-full w-full">
                             ${stallPhotosList.map((photoUrl, pIdx) => `
                                 <!-- Slide ${pIdx + 1}: ภาพแผงค้า/หน้าร้าน ${pIdx + 1} -->
-                                <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
-                                    <img src="${photoUrl}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
-                                    <img src="${photoUrl}" alt="ภาพร้านค้า ${stall.stallName} (รูปที่ ${pIdx + 1})" class="relative w-full h-full object-cover object-center">
+                                <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide(${jsArg(stall.stallId)}, event)">
+                                    <img src="${escapeHtml(photoUrl)}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
+                                    <img src="${escapeHtml(photoUrl)}" alt="ภาพร้านค้า ${escapeHtml(stall.stallName)} (รูปที่ ${pIdx + 1})" class="relative w-full h-full object-cover object-center">
                                     <div class="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none"></div>
                                 </div>
                             `).join('')}
 
                             <!-- Slide ${ownerSlideIdx + 1}: ภาพเจ้าของแผงค้า (Composite Owner Template & Name Badge) -->
-                            <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide('${stall.stallId}', event)">
-                                <img id="stall-owner-banner-blur-${stall.stallId}" src="${ownerBannerUrl || ownerImg}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
-                                <img id="stall-owner-banner-img-${stall.stallId}" src="${ownerBannerUrl || ownerImg}" alt="ภาพเจ้าของร้าน ${ownerNm}" class="relative w-full h-full object-contain sm:object-cover object-center">
+                            <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextStallBannerSlide(${jsArg(stall.stallId)}, event)">
+                                <img id="stall-owner-banner-blur-${escapeHtml(stall.stallId)}" src="${escapeHtml(ownerBannerUrl) || escapeHtml(ownerImg)}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
+                                <img id="stall-owner-banner-img-${escapeHtml(stall.stallId)}" src="${escapeHtml(ownerBannerUrl) || escapeHtml(ownerImg)}" alt="ภาพเจ้าของร้าน ${escapeHtml(ownerNm)}" class="relative w-full h-full object-contain sm:object-cover object-center">
                                 <div class="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none"></div>
                             </div>
                         </div>
 
                         <!-- 1. ปุ่มเลื่อนภาพไปข้างหน้าถอยหลัง (Prev & Next Chevrons) -->
-                        <button type="button" onclick="prevStallBannerSlide('${stall.stallId}', event)" class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md" title="รูปก่อนหน้า">
+                        <button type="button" onclick="prevStallBannerSlide(${jsArg(stall.stallId)}, event)" class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md" title="รูปก่อนหน้า">
                             <span class="material-symbols-outlined text-base">chevron_left</span>
                         </button>
-                        <button type="button" onclick="nextStallBannerSlide('${stall.stallId}', event)" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md" title="รูปถัดไป">
+                        <button type="button" onclick="nextStallBannerSlide(${jsArg(stall.stallId)}, event)" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-all z-20 opacity-80 hover:opacity-100 active:scale-90 shadow-md" title="รูปถัดไป">
                             <span class="material-symbols-outlined text-base">chevron_right</span>
                         </button>
 
                         <!-- Indicator Dots -->
-                        <div id="stall-dots-${stall.stallId}" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 pointer-events-auto bg-black/40 px-2 py-0.5 rounded-full backdrop-blur-xs">
+                        <div id="stall-dots-${escapeHtml(stall.stallId)}" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 pointer-events-auto bg-black/40 px-2 py-0.5 rounded-full backdrop-blur-xs">
                             ${Array.from({ length: totalBannerSlides }).map((_, dIdx) => `
-                                <button type="button" onclick="goToStallBannerSlide('${stall.stallId}', ${dIdx}, event)" class="stall-banner-dot ${dIdx === 0 ? 'w-4 h-1.5 rounded-full bg-emerald-400' : 'w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white'} transition-all cursor-pointer" title="สไลด์ที่ ${dIdx + 1}"></button>
+                                <button type="button" onclick="goToStallBannerSlide(${jsArg(stall.stallId)}, ${dIdx}, event)" class="stall-banner-dot ${dIdx === 0 ? 'w-4 h-1.5 rounded-full bg-emerald-400' : 'w-1.5 h-1.5 rounded-full bg-white/60 hover:bg-white'} transition-all cursor-pointer" title="สไลด์ที่ ${dIdx + 1}"></button>
                             `).join('')}
                         </div>
 
@@ -9491,11 +10248,11 @@ function renderCatalog() {
                             <!-- Shop Name + ปุ่มบันทึกเป็นร้านโปรดวางต่อกับชื่อร้าน -->
                             <div class="flex items-center gap-2 flex-wrap">
                                 <h3 class="font-extrabold text-[16px] text-slate-900 leading-snug flex items-center gap-1.5">
-                                    <span>${stall.stallName}</span>
+                                    <span>${escapeHtml(stall.stallName)}</span>
                                     ${stall.isHub ? `<span class="bg-orange-100 text-orange-700 text-[9px] font-bold px-1.5 py-0.2 rounded border border-orange-200">Hub กลาง</span>` : ''}
                                 </h3>
                                 <!-- ปุ่มบันทึกเป็นร้านโปรด (ยังไม่บันทึก=สีส้ม, บันทึกแล้ว=สีเขียว วางต่อกับชื่อร้าน) -->
-                                <button type="button" onclick="toggleFavoriteStall('${stall.stallId}')" class="pointer-events-auto text-[11px] font-black px-3 py-1 rounded-full shadow-xs transition-all flex items-center gap-1 active:scale-95 ${isFav ? 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500 shadow-emerald-950/20' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-xs'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
+                                <button type="button" onclick="toggleFavoriteStall(${jsArg(stall.stallId)})" class="pointer-events-auto text-[11px] font-black px-3 py-1 rounded-full shadow-xs transition-all flex items-center gap-1 active:scale-95 ${isFav ? 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500 shadow-emerald-950/20' : 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-400 shadow-xs'}" title="${isFav ? 'อยู่ในร้านโปรดแล้ว (แตะเพื่อยกเลิก)' : 'แตะเพื่อบันทึกเป็นร้านโปรด'}">
                                     <span class="material-symbols-outlined text-[14px] ${isFav ? 'text-yellow-300' : 'text-white'} font-bold">star</span>
                                     <span>${isFav ? 'ร้านโปรดแล้ว ⭐' : 'บันทึกเป็นร้านโปรด'}</span>
                                 </button>
@@ -9503,12 +10260,12 @@ function renderCatalog() {
 
                             <!-- เจ้าของแผงค้า (ปุ่มสลับรูป) -->
                             <div class="flex items-center gap-2 text-[11px] text-slate-600">
-                                <button type="button" onclick="toggleOwnerBannerSlide('${stall.stallId}', ${ownerSlideIdx}, event)" class="inline-flex items-center gap-1.5 hover:text-emerald-700 transition-colors group/owner text-left bg-slate-100/90 hover:bg-emerald-50 px-2 py-0.5 rounded-lg border border-slate-200/80 cursor-pointer" title="แตะเพื่อสลับดูรูปเจ้าของร้านบนแบนเนอร์">
+                                <button type="button" onclick="toggleOwnerBannerSlide(${jsArg(stall.stallId)}, ${ownerSlideIdx}, event)" class="inline-flex items-center gap-1.5 hover:text-emerald-700 transition-colors group/owner text-left bg-slate-100/90 hover:bg-emerald-50 px-2 py-0.5 rounded-lg border border-slate-200/80 cursor-pointer" title="แตะเพื่อสลับดูรูปเจ้าของร้านบนแบนเนอร์">
                                     <span class="relative w-5 h-5 rounded-full ring-1 ring-emerald-500 overflow-hidden shrink-0 inline-block align-middle bg-white">
-                                        <img src="${ownerImg}" alt="${ownerNm}" class="w-full h-full object-cover">
+                                        <img src="${escapeHtml(ownerImg)}" alt="${escapeHtml(ownerNm)}" class="w-full h-full object-cover">
                                     </span>
                                     <span class="font-bold text-slate-700 group-hover/owner:text-emerald-700 flex items-center gap-0.5">
-                                        <span>${ownerNm}</span>
+                                        <span>${escapeHtml(ownerNm)}</span>
                                         <span class="material-symbols-outlined text-[13px] text-emerald-600 font-bold" title="ยืนยันตัวตนแล้ว">verified</span>
                                     </span>
                                     <span class="text-[9px] text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded font-bold">สลับรูป ↺</span>
@@ -9557,7 +10314,7 @@ function renderCatalog() {
                         สินค้าสดแนะนำ (${stallProducts.length} รายการ)
                     </span>
                     ${hasExtraCatalog ? `
-                        <button onclick="openStallCatalogModal('${stall.stallId}')" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-1 rounded-xl border border-emerald-300/80 flex items-center gap-1 transition-all active:scale-95 shadow-xs">
+                        <button onclick="openStallCatalogModal(${jsArg(stall.stallId)})" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-1 rounded-xl border border-emerald-300/80 flex items-center gap-1 transition-all active:scale-95 shadow-xs">
                             <span class="material-symbols-outlined text-xs text-emerald-600">list_alt</span>
                             <span>ดูเพิ่มเติม (${extraItemsCount} รายการ)</span>
                             <span class="material-symbols-outlined text-xs">chevron_right</span>
@@ -9571,7 +10328,7 @@ function renderCatalog() {
                         <div class="py-6 px-4 bg-slate-50/90 border border-dashed border-emerald-300/80 rounded-2xl text-center space-y-2">
                             <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-lg font-bold">🏪</div>
                             <p class="text-xs font-bold text-slate-800">แผงค้าใหม่กำลังเตรียมรายการสินค้าลงระบบ</p>
-                            <p class="text-[11px] text-slate-500">สามารถโทรติดต่อสอบถามหรือสั่งซื้อตรงได้ที่ <a href="tel:${phoneNum}" class="text-emerald-700 font-black underline">${phoneNum}</a></p>
+                            <p class="text-[11px] text-slate-500">สามารถโทรติดต่อสอบถามหรือสั่งซื้อตรงได้ที่ <a href="tel:${escapeHtml(phoneNum)}" class="text-emerald-700 font-black underline">${escapeHtml(phoneNum)}</a></p>
                             ${(state.activeMerchant && state.activeMerchant.stallId === stall.stallId) ? `
                                 <div class="pt-1">
                                     <button onclick="openActiveStallEditor()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm inline-flex items-center gap-1 cursor-pointer active:scale-95 transition-all">
@@ -9606,8 +10363,8 @@ function renderCatalog() {
 
                                     <!-- 2. ชื่อรายการสินค้า -->
                                     <div class="flex-1 min-w-0 flex items-center gap-1.5 pl-1 leading-none">
-                                        <span class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug" title="${product.name}">
-                                            ${product.name}
+                                        <span class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug" title="${escapeHtml(product.name)}">
+                                            ${escapeHtml(product.name)}
                                         </span>
                                         ${product.badge ? `
                                             <span class="text-[8px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200 px-1 py-0.2 rounded shrink-0 hidden sm:inline-block leading-none">
@@ -9620,7 +10377,7 @@ function renderCatalog() {
                                     <div class="flex items-center gap-1.5 shrink-0">
                                         <!-- 3. หน่วย -->
                                         <span class="w-9 text-center text-[10px] sm:text-[11px] font-bold text-slate-500 bg-slate-100/90 px-1 py-0.5 rounded shrink-0 whitespace-nowrap leading-none">
-                                            ${product.unit || 'กก.'}
+                                            ${escapeHtml(product.unit) || 'กก.'}
                                         </span>
 
                                         <!-- 4. ราคา -->
@@ -9634,13 +10391,13 @@ function renderCatalog() {
                                         ${qtyInCart > 0 ? `
                                             <!-- เมื่อหยิบใส่แล้ว: แสดงปุ่มปรับจำนวนสีเขียวขนาดกะทัดรัด -->
                                             <div class="flex items-center gap-0.5 bg-emerald-600 text-white rounded-lg px-1 py-0.5 text-[10px] shadow-sm ring-1 ring-emerald-400 h-6">
-                                                <button type="button" onclick="changeCartQty('${product.id}', -1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="ลดจำนวน">-</button>
+                                                <button type="button" onclick="changeCartQty(${jsArg(product.id)}, -1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="ลดจำนวน">-</button>
                                                 <span class="px-0.5 text-[10px] font-black min-w-[8px] text-center leading-none">${qtyInCart}</span>
-                                                <button type="button" onclick="changeCartQty('${product.id}', 1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
+                                                <button type="button" onclick="changeCartQty(${jsArg(product.id)}, 1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
                                             </div>
                                         ` : `
                                             <!-- ปุ่มสัญลักษณ์ตะกร้าสีส้มขนาดกะทัดรัด -->
-                                            <button type="button" onclick="addToCart('${stall.stallId}', '${product.id}')" class="w-6 h-6 rounded-lg bg-orange-500 hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer shrink-0" title="เพิ่ม ${product.name} ลงตะกร้า">
+                                            <button type="button" onclick="addToCart(${jsArg(stall.stallId)}, ${jsArg(product.id)})" class="w-6 h-6 rounded-lg bg-orange-500 hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer shrink-0" title="เพิ่ม ${escapeHtml(product.name)} ลงตะกร้า">
                                                 <span class="material-symbols-outlined text-[15px] font-bold">shopping_cart</span>
                                             </button>
                                         `}
@@ -9654,7 +10411,7 @@ function renderCatalog() {
                 ${hasExtraCatalog ? `
                     <!-- Bottom Full-Width "ดูเพิ่มเติม" Action Button (แสดงเฉพาะเมื่อมีสินค้าเพิ่มเติมในข้อ 4) -->
                     <div class="px-3.5 pt-1">
-                        <button onclick="openStallCatalogModal('${stall.stallId}')" class="w-full py-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/70 hover:from-emerald-100 hover:to-teal-100 border border-emerald-300/80 rounded-xl text-emerald-900 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs hover:shadow transition-all active:scale-[0.99]">
+                        <button onclick="openStallCatalogModal(${jsArg(stall.stallId)})" class="w-full py-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/70 hover:from-emerald-100 hover:to-teal-100 border border-emerald-300/80 rounded-xl text-emerald-900 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs hover:shadow transition-all active:scale-[0.99]">
                             <span class="material-symbols-outlined text-base text-emerald-700">menu_book</span>
                             <span>ดูเพิ่มเติม: ตารางรายการสินค้าทั้งหมดของแผงนี้ (${extraItemsCount} รายการ)</span>
                             <span class="material-symbols-outlined text-sm text-emerald-600">chevron_right</span>
@@ -9710,12 +10467,7 @@ function renderFavoriteStallsBar() {
         const stall = (typeof ALL_100_STALLS !== "undefined" ? ALL_100_STALLS.find(s => s.stallId === stallId) : null) || MARKET_DATA.find(s => s.stallId === stallId);
         if (!stall) return;
 
-        let colorClass = "bg-white hover:bg-amber-50 text-slate-800 border-amber-200";
-        if (stall.category === "chicken") colorClass = "bg-white hover:bg-orange-50 text-orange-950 border-orange-200";
-        else if (stall.category === "veggie") colorClass = "bg-white hover:bg-emerald-50 text-emerald-950 border-emerald-200";
-        else if (stall.category === "pork") colorClass = "bg-white hover:bg-pink-50 text-pink-950 border-pink-200";
-        else if (stall.category === "curry") colorClass = "bg-white hover:bg-red-50 text-red-950 border-red-200";
-        else if (stall.category === "seafood") colorClass = "bg-white hover:bg-cyan-50 text-cyan-950 border-cyan-200";
+        let colorClass = getStallCategoryColorClass(stall.category);
 
         const isCurrentlySelected = state.currentSingleStall === stallId;
         const activeRing = isCurrentlySelected ? "ring-2 ring-amber-500 bg-amber-100/90 font-extrabold shadow-sm" : "font-bold";
@@ -9725,9 +10477,9 @@ function renderFavoriteStallsBar() {
         const shortName = (stall.stallName || "").replace("แผง", "").replace("ร้าน", "").trim();
 
         html += `
-            <button onclick="filterBySingleStall('${stall.stallId}')" class="${colorClass} ${activeRing} border px-2.5 py-1 rounded-xl whitespace-nowrap text-[11px] flex items-center gap-1 shadow-xs shrink-0 active:scale-95 transition-all cursor-pointer" title="${stall.stallName}">
+            <button onclick="filterBySingleStall(${jsArg(stall.stallId)})" class="${colorClass} ${activeRing} border px-2.5 py-1 rounded-xl whitespace-nowrap text-[11px] flex items-center gap-1 shadow-xs shrink-0 active:scale-95 transition-all cursor-pointer" title="${escapeHtml(stall.stallName)}">
                 <span>${emoji}</span>
-                <span>${stall.stallNumber || ''} (${shortName})</span>
+                <span>${escapeHtml(stall.stallNumber) || ''} (${shortName})</span>
             </button>
         `;
     });
@@ -9833,7 +10585,7 @@ function filterByCategory(category) {
 
         subs.forEach(sName => {
             subHtml += `
-                <button type="button" onclick="selectSubCategory('${sName.replace(/'/g, "\\'")}')"
+                <button type="button" onclick="selectSubCategory(${jsArg(sName)})"
                     class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200/90 shrink-0 hover:bg-slate-50 transition-all cursor-pointer">
                     <span>${sName}</span>
                 </button>
@@ -9901,7 +10653,7 @@ function selectSubCategory(subCat) {
 
         micros.forEach(mName => {
             microHtml += `
-                <button type="button" onclick="selectMicroCategory('${mName.replace(/'/g, "\\'")}')"
+                <button type="button" onclick="selectMicroCategory(${jsArg(mName)})"
                     class="microcat-pill px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200/90 shrink-0 hover:bg-teal-50 hover:text-teal-800 transition-all cursor-pointer">
                     <span>${mName}</span>
                 </button>
@@ -10294,10 +11046,10 @@ function renderSubCategoryProductView() {
             <div class="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white rounded-2xl p-3 sm:p-3.5 shadow-md flex items-center justify-between flex-wrap gap-2">
                 <div>
                     <div class="flex items-center gap-1.5 text-[11px] text-emerald-200 font-medium flex-wrap">
-                        <button type="button" onclick="filterByCategory('${mainCat.replace(/'/g, "\\'")}')" class="hover:underline text-emerald-200">${mainCat}</button>
+                        <button type="button" onclick="filterByCategory(${jsArg(mainCat)})" class="hover:underline text-emerald-200">${mainCat}</button>
                         ${subCatDisplayTitle ? `
                             <span class="material-symbols-outlined text-xs">chevron_right</span>
-                            <button type="button" onclick="selectSubCategory('${subCat.replace(/'/g, "\\'")}')" class="hover:underline text-white font-bold">${subCatDisplayTitle}</button>
+                            <button type="button" onclick="selectSubCategory(${jsArg(subCat)})" class="hover:underline text-white font-bold">${subCatDisplayTitle}</button>
                         ` : ''}
                         ${microCatDisplayTitle ? `
                             <span class="material-symbols-outlined text-xs">chevron_right</span>
@@ -10323,7 +11075,7 @@ function renderSubCategoryProductView() {
             <div class="relative flex items-center">
                 <span class="material-symbols-outlined absolute left-3 text-emerald-700 text-base">search</span>
                 <input type="text"
-                    value="${state.subCategorySearchQuery || ''}"
+                    value="${escapeHtml(state.subCategorySearchQuery) || ''}"
                     oninput="handleSubCategorySearch(this.value)"
                     placeholder="ค้นหาใน ${microCatDisplayTitle || subCatDisplayTitle} (เช่น อกไก่, น่อง, โครงไก่)..."
                     class="w-full pl-9 pr-8 py-2 rounded-xl bg-white text-slate-800 placeholder-slate-400 text-xs font-bold border border-emerald-600/30 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-xs transition-all">
@@ -10385,17 +11137,17 @@ function renderSubCategoryProductView() {
 
                 <!-- 2. ชื่อรายการสินค้า + ป้าย + ร้านค้า -->
                 <div class="flex-1 min-w-0 flex items-center gap-1.5 pl-1.5 leading-none">
-                    <span class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug" title="${item.name}">
-                        ${item.name}
+                    <span class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug" title="${escapeHtml(item.name)}">
+                        ${escapeHtml(item.name)}
                     </span>
                     ${item.badge ? `
                         <span class="text-[8px] sm:text-[9px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.2 rounded shrink-0 leading-none">
                             ${item.badge}
                         </span>
                     ` : ''}
-                    <button type="button" onclick="filterBySingleStall('${item.stallId}')" class="text-[9px] sm:text-[10px] text-slate-400 hover:text-emerald-700 font-medium shrink-0 flex items-center gap-0.5 truncate transition-colors" title="${item.stallName}">
+                    <button type="button" onclick="filterBySingleStall(${jsArg(item.stallId)})" class="text-[9px] sm:text-[10px] text-slate-400 hover:text-emerald-700 font-medium shrink-0 flex items-center gap-0.5 truncate transition-colors" title="${escapeHtml(item.stallName)}">
                         <span>${isStallFav ? '⭐' : '🏪'}</span>
-                        <span class="underline decoration-slate-200">${item.stallNumber || ''} ${stallShort}</span>
+                        <span class="underline decoration-slate-200">${escapeHtml(item.stallNumber) || ''} ${stallShort}</span>
                     </button>
                     ${item.sourceTier === 2 ? `
                         <span class="text-[8px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1 py-0.2 rounded shrink-0 hidden sm:inline-block leading-none">
@@ -10408,7 +11160,7 @@ function renderSubCategoryProductView() {
                 <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
                     <!-- 3. หน่วย -->
                     <span class="w-10 text-center text-[10px] sm:text-[11px] font-bold text-slate-500 bg-slate-100/90 px-1 py-0.5 rounded-lg shrink-0 whitespace-nowrap leading-none">
-                        ${item.unit || 'กก.'}
+                        ${escapeHtml(item.unit) || 'กก.'}
                     </span>
 
                     <!-- 4. ราคา -->
@@ -10423,12 +11175,12 @@ function renderSubCategoryProductView() {
                         <span class="text-[9px] text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">พัก</span>
                     ` : qtyInCart > 0 ? `
                         <div class="flex items-center gap-0.5 bg-emerald-600 text-white rounded-lg px-1 py-0.5 text-[10px] shadow-sm ring-1 ring-emerald-400 h-6">
-                            <button type="button" onclick="changeCartQty('${item.id}', -1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="ลดจำนวน">-</button>
+                            <button type="button" onclick="changeCartQty(${jsArg(item.id)}, -1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="ลดจำนวน">-</button>
                             <span class="px-0.5 text-[10px] font-black min-w-[8px] text-center leading-none">${qtyInCart}</span>
-                            <button type="button" onclick="changeCartQty('${item.id}', 1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
+                            <button type="button" onclick="changeCartQty(${jsArg(item.id)}, 1)" class="w-3.5 h-3.5 flex items-center justify-center hover:bg-emerald-700 active:scale-90 rounded font-black text-[10px] transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
                         </div>
                     ` : `
-                        <button type="button" onclick="addToCartFromModal('${item.stallId}', '${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price}, '${item.unit || 'กก.'}')" class="w-7 h-7 rounded-lg bg-orange-500 hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer shrink-0" title="เพิ่ม ${item.name} ลงตะกร้า">
+                        <button type="button" onclick="addToCartFromModal(${jsArg(item.stallId)}, ${jsArg(item.id)}, ${jsArg(item.name)}, ${item.price}, ${jsArg(item.unit || 'กก.')})" class="w-7 h-7 rounded-lg bg-orange-500 hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer shrink-0" title="เพิ่ม ${escapeHtml(item.name)} ลงตะกร้า">
                             <span class="material-symbols-outlined text-[16px] font-bold">shopping_cart</span>
                         </button>
                     `}
@@ -10681,17 +11433,17 @@ function renderDirectoryList() {
     stalls.forEach(stall => {
         const isHub = stall.isHub;
         html += `
-            <div onclick="filterBySingleStall('${stall.stallId}')" class="p-2.5 rounded-xl border ${isHub ? 'border-orange-300 bg-orange-50/60' : 'border-slate-200 bg-slate-50 hover:bg-emerald-50/50'} flex items-center justify-between cursor-pointer transition-colors text-xs">
+            <div onclick="filterBySingleStall(${jsArg(stall.stallId)})" class="p-2.5 rounded-xl border ${isHub ? 'border-orange-300 bg-orange-50/60' : 'border-slate-200 bg-slate-50 hover:bg-emerald-50/50'} flex items-center justify-between cursor-pointer transition-colors text-xs">
                 <div class="flex items-center gap-2">
                     <span class="font-bold text-[10px] px-1.5 py-0.5 rounded ${stall.badgeColor}">
-                        ${stall.stallNumber}
+                        ${escapeHtml(stall.stallNumber)}
                     </span>
                     <div>
                         <div class="font-bold text-slate-800 flex items-center gap-1">
-                            <span>${stall.stallName}</span>
+                            <span>${escapeHtml(stall.stallName)}</span>
                             ${isHub ? '<span class="text-[9px] bg-orange-500 text-white px-1 rounded font-bold">Hub ร้านเรา</span>' : ''}
                         </div>
-                        <div class="text-[10px] text-slate-400">${stall.stallTag} • โซน ${stall.zone}</div>
+                        <div class="text-[10px] text-slate-400">${escapeHtml(stall.stallTag)} • โซน ${escapeHtml(stall.zone)}</div>
                     </div>
                 </div>
                 <span class="material-symbols-outlined text-sm text-slate-400">chevron_right</span>
@@ -10715,42 +11467,15 @@ function loadSavedStallCatalogDatabase() {
 function saveStallCatalogDatabaseToStorage() {
     try {
         localStorage.setItem("talathub_stall_catalog_database", JSON.stringify(STALL_CATALOG_DATABASE));
-        if (isFirebaseReady() && db) {
-            db.ref("stall_catalog_database").set(STALL_CATALOG_DATABASE).catch(err => {
-                console.warn("Firebase save stall_catalog_database failed:", err);
-            });
-        }
-        try {
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/stall_catalog_database.json", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(STALL_CATALOG_DATABASE)
-            }).catch(() => {});
-        } catch (e) {}
+        // แผงค้าแก้สินค้าของตัวเองได้ แต่สร้างแคตตาล็อกของแผงใหม่ (ตอนอนุมัติ) เป็นสิทธิ์เจ้าของ
+        return syncKeyedToCloud("stall_catalog_database", STALL_CATALOG_DATABASE, { canCreate: isOwnerSignedIn() });
     } catch (e) {}
 }
 
 async function saveStallCatalogDatabaseToStorageAsync() {
     try {
         localStorage.setItem("talathub_stall_catalog_database", JSON.stringify(STALL_CATALOG_DATABASE));
-        const promises = [];
-        if (isFirebaseReady() && db) {
-            promises.push(
-                db.ref("stall_catalog_database").set(STALL_CATALOG_DATABASE).catch(err => {
-                    console.warn("Firebase save stall_catalog_database failed:", err);
-                })
-            );
-        }
-        try {
-            promises.push(
-                fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/stall_catalog_database.json", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(STALL_CATALOG_DATABASE)
-                }).catch(e => console.warn("REST PUT stall_catalog_database failed:", e))
-            );
-        } catch(e) {}
-        await Promise.allSettled(promises);
+        await syncKeyedToCloud("stall_catalog_database", STALL_CATALOG_DATABASE, { canCreate: isOwnerSignedIn() });
     } catch (e) {}
 }
 window.saveStallCatalogDatabaseToStorageAsync = saveStallCatalogDatabaseToStorageAsync;
@@ -10763,6 +11488,7 @@ function initCatalogDbRealtimeSync() {
     db.ref("stall_catalog_database").on("value", snapshot => {
         try {
             const data = snapshot.val();
+            noteCloudSnapshot("stall_catalog_database", data);
             if (data && typeof data === "object") {
                 Object.assign(STALL_CATALOG_DATABASE, data);
                 localStorage.setItem("talathub_stall_catalog_database", JSON.stringify(STALL_CATALOG_DATABASE));
@@ -10896,8 +11622,8 @@ function renderStallCatalogModal() {
         catalog.forEach(group => {
             const isAct = currentModalCategory === group.groupName;
             pillsHtml += `
-                <button onclick="filterModalStallCategory('${group.groupName}')" class="px-3 py-1 rounded-xl whitespace-nowrap font-bold shrink-0 transition-all ${isAct ? 'bg-emerald-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'}">
-                    ${group.groupName} (${group.items.length})
+                <button onclick="filterModalStallCategory(${jsArg(group.groupName)})" class="px-3 py-1 rounded-xl whitespace-nowrap font-bold shrink-0 transition-all ${isAct ? 'bg-emerald-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'}">
+                    ${escapeHtml(group.groupName)} (${group.items.length})
                 </button>
             `;
         });
@@ -10956,7 +11682,7 @@ function renderStallCatalogModal() {
                     <!-- Group Category Title -->
                     <div class="bg-slate-100/80 px-3.5 py-2 border-b border-slate-200 flex items-center justify-between">
                         <span class="font-extrabold text-xs text-slate-800 flex items-center gap-1">
-                            <span>${group.groupName}</span>
+                            <span>${escapeHtml(group.groupName)}</span>
                         </span>
                         <span class="text-[10px] text-slate-500 font-bold bg-white px-2 py-0.5 rounded-full border border-slate-200">
                             ${group.items.length} รายการ
@@ -10977,10 +11703,10 @@ function renderStallCatalogModal() {
                                         <span class="text-[10px] font-bold text-slate-400 w-4 shrink-0 pt-0.5">${idx + 1}.</span>
                                         <div>
                                             <div class="font-bold text-xs text-slate-900 leading-snug flex items-center gap-1.5 flex-wrap">
-                                                <span>${item.name}</span>
-                                                ${qty > 0 ? `<span class="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-1.5 py-0.2 rounded">ในตะกร้า ${qty} ${item.unit}</span>` : ''}
+                                                <span>${escapeHtml(item.name)}</span>
+                                                ${qty > 0 ? `<span class="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-1.5 py-0.2 rounded">ในตะกร้า ${qty} ${escapeHtml(item.unit)}</span>` : ''}
                                             </div>
-                                            <div class="text-[10px] text-slate-500 mt-0.5 leading-tight">${item.spec}</div>
+                                            <div class="text-[10px] text-slate-500 mt-0.5 leading-tight">${escapeHtml(item.spec)}</div>
                                         </div>
                                     </div>
 
@@ -10988,19 +11714,19 @@ function renderStallCatalogModal() {
                                     <div class="flex items-center gap-3 shrink-0">
                                         <div class="text-right">
                                             <div class="font-extrabold text-sm text-orange-600">฿${item.price}</div>
-                                            <div class="text-[9px] text-slate-400">/${item.unit}</div>
+                                            <div class="text-[9px] text-slate-400">/${escapeHtml(item.unit)}</div>
                                         </div>
 
                                         <!-- Cart Counter / Add Button -->
                                         <div>
                                             ${qty > 0 ? `
                                                 <div class="flex items-center gap-1 bg-emerald-700 text-white rounded-xl p-1 text-xs shadow-xs">
-                                                    <button onclick="changeCartQty('${item.id}', -1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-800 rounded-lg font-bold transition-colors">-</button>
+                                                    <button onclick="changeCartQty(${jsArg(item.id)}, -1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-800 rounded-lg font-bold transition-colors">-</button>
                                                     <span class="px-1.5 text-xs font-bold">${qty}</span>
-                                                    <button onclick="changeCartQty('${item.id}', 1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-800 rounded-lg font-bold transition-colors">+</button>
+                                                    <button onclick="changeCartQty(${jsArg(item.id)}, 1)" class="w-6 h-6 flex items-center justify-center hover:bg-emerald-800 rounded-lg font-bold transition-colors">+</button>
                                                 </div>
                                             ` : `
-                                                <button onclick="addToCartFromModal('${currentModalStallId}', '${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price}, '${item.unit}')" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-sm transition-all">
+                                                <button onclick="addToCartFromModal(${jsArg(currentModalStallId)}, ${jsArg(item.id)}, ${jsArg(item.name)}, ${item.price}, ${jsArg(item.unit)})" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-sm transition-all">
                                                     <span class="material-symbols-outlined text-sm">add_shopping_cart</span>
                                                     <span>ใส่ตะกร้า</span>
                                                 </button>
@@ -11312,6 +12038,8 @@ function updateCartUI() {
 // CHECKOUT PAGE RENDERING & PAYMENT LOGIC
 // ==========================================
 function renderCheckoutPage() {
+    syncCheckoutContactField();
+    showCheckoutError("");
     const container = document.getElementById("checkout-stalls-group");
     if (!container) return;
 
@@ -11366,9 +12094,9 @@ function renderCheckoutPage() {
                 <div class="flex items-center justify-between pb-2 border-b border-slate-100">
                     <span class="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
                         <span class="${badgeStyle} text-[10px] font-black px-2 py-0.5 rounded-md border">
-                            ${stallGroup.stallNumber}
+                            ${escapeHtml(stallGroup.stallNumber)}
                         </span>
-                        <span>${stallGroup.stallName}</span>
+                        <span>${escapeHtml(stallGroup.stallName)}</span>
                     </span>
                     <span class="text-[10px] text-slate-400 font-medium">${stallGroup.items.length} รายการ</span>
                 </div>
@@ -11382,18 +12110,18 @@ function renderCheckoutPage() {
                         return `
                         <div class="flex items-center justify-between text-xs pt-2 first:pt-0">
                             <div class="flex-1 pr-2">
-                                <div class="font-extrabold text-slate-800 leading-snug">${item.name}</div>
-                                <div class="text-[10px] text-slate-400 mt-0.5">฿${itemPrice} / ${item.unit || 'หน่วย'}</div>
+                                <div class="font-extrabold text-slate-800 leading-snug">${escapeHtml(item.name)}</div>
+                                <div class="text-[10px] text-slate-400 mt-0.5">฿${itemPrice} / ${escapeHtml(item.unit) || 'หน่วย'}</div>
                             </div>
                             <div class="flex items-center gap-2.5 shrink-0">
                                 <!-- Minus/Plus Qty Buttons with Active Animations -->
                                 <div class="flex items-center gap-1 bg-slate-100 rounded-xl p-0.5 border border-slate-200 shadow-2xs">
-                                    <button type="button" onclick="changeCartQty('${pId}', -1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform cursor-pointer" title="ลดจำนวน">-</button>
+                                    <button type="button" onclick="changeCartQty(${jsArg(pId)}, -1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform cursor-pointer" title="ลดจำนวน">-</button>
                                     <span class="px-1.5 text-xs font-black text-slate-900 min-w-[14px] text-center">${itemQty}</span>
-                                    <button type="button" onclick="changeCartQty('${pId}', 1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
+                                    <button type="button" onclick="changeCartQty(${jsArg(pId)}, 1)" class="w-6 h-6 flex items-center justify-center font-black text-slate-700 hover:bg-slate-200 active:scale-90 rounded-lg transition-transform cursor-pointer" title="เพิ่มจำนวน">+</button>
                                 </div>
                                 <span class="font-black text-slate-900 w-12 text-right text-xs">฿${itemTotal}</span>
-                                <button type="button" onclick="removeSingleCartItem('${pId}')" class="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer" title="ลบรายการนี้ออกจากตะกร้า">
+                                <button type="button" onclick="removeSingleCartItem(${jsArg(pId)})" class="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer" title="ลบรายการนี้ออกจากตะกร้า">
                                     <span class="material-symbols-outlined text-sm">delete_outline</span>
                                 </button>
                             </div>
@@ -11564,43 +12292,91 @@ function selectPaymentMethod(method) {
 }
 
 // Order Checkout Processor
-function processOrderCheckout() {
-    if (!state.customer || !state.customer.isLoggedIn) {
-        state.customer = {
-            name: "คุณลูกค้าทั่วไป",
-            phone: "089-123-4567",
-            identifier: "0891234567",
-            isLoggedIn: true,
-            loggedInAt: Date.now()
-        };
-        saveCustomerToStorage(state.customer);
-        updateCustomerRoleButtonUI();
-        renderAuthHeaderButtons();
+// เบอร์โทรติดต่อลูกค้า (9-10 หลัก): จากบัญชีที่ล็อกอินด้วยเบอร์ หรือจากช่องกรอกในหน้าชำระเงิน (กรณีล็อกอินด้วย LINE ID)
+function getCustomerContactPhone() {
+    const c = state.customer;
+    const digits = v => String(v == null ? "" : v).replace(/\D/g, "");
+    if (c && c.isLoggedIn) {
+        if (c.phone && digits(c.phone).length >= 9) return digits(c.phone);
+        if (c.type !== "line" && digits(c.identifier).length >= 9) return digits(c.identifier);
     }
+    const inp = document.getElementById("checkout-contact-phone-input");
+    const d = inp ? digits(inp.value) : "";
+    return (d.length >= 9 && d.length <= 10) ? d : "";
+}
+function formatThaiPhone(d) {
+    return d.length === 10 ? `${d.substring(0, 3)}-${d.substring(3, 6)}-${d.substring(6)}` : d;
+}
+window.getCustomerContactPhone = getCustomerContactPhone;
+
+// แสดงช่องกรอกเบอร์ในหน้าชำระเงิน เมื่อบัญชีที่ล็อกอินอยู่ไม่มีเบอร์ (หรือยังไม่ล็อกอิน)
+function syncCheckoutContactField() {
+    const wrap = document.getElementById("checkout-contact-phone-wrap");
+    if (!wrap) return;
+    const c = state.customer;
+    const accountHasPhone = !!(c && c.isLoggedIn && (c.type !== "line") && String(c.identifier || "").replace(/\D/g, "").length >= 9);
+    wrap.classList.toggle("hidden", accountHasPhone);
+}
+
+function showCheckoutError(msg) {
+    const box = document.getElementById("checkout-error-box");
+    if (!box) return;
+    box.textContent = msg || "";
+    box.classList.toggle("hidden", !msg);
+}
+
+// ตรวจความพร้อมก่อนสั่งซื้อ: ต้องมีสินค้า, ร้านต้องเปิด, ต้องล็อกอิน, ต้องมีเบอร์โทร, ต้องระบุที่อยู่จริง
+// (เวอร์ชันเก่าใส่ชื่อ "คุณลูกค้าทั่วไป" เบอร์และที่อยู่ปลอมให้เอง ทำให้ไรเดอร์ส่งผิดที่และติดต่อลูกค้าไม่ได้)
+function validateOrderPrerequisites() {
+    const totals = calculateCartTotals();
+    if (!state.cart || totals.itemsCount === 0) {
+        return { ok: false, message: "⚠️ ยังไม่มีสินค้าในตะกร้า กรุณาเลือกสินค้าก่อนสั่งซื้อ" };
+    }
+    const closed = [];
+    state.cart.forEach(item => {
+        const st = MARKET_DATA.find(s => s.stallId === item.stallId) || ALL_100_STALLS.find(s => s.stallId === item.stallId);
+        if (st && st.isClosed) {
+            const nm = st.stallName || item.stallName || item.stallId;
+            if (!closed.includes(nm)) closed.push(nm);
+        }
+    });
+    if (closed.length) {
+        return { ok: false, message: `🔴 ร้าน "${closed.join('", "')}" พักรับออเดอร์ชั่วคราว กรุณานำสินค้าของร้านนี้ออกจากตะกร้าก่อน แล้วสั่งซื้อใหม่` };
+    }
+    if (!state.customer || !state.customer.isLoggedIn || !state.customer.identifier) {
+        return { ok: false, action: "login", message: "⚠️ กรุณาเข้าสู่ระบบด้วยเบอร์โทรของคุณก่อนสั่งซื้อ เพื่อให้ไรเดอร์ติดต่อได้" };
+    }
+    if (!getCustomerContactPhone()) {
+        return { ok: false, focusId: "checkout-contact-phone-input", message: "⚠️ กรุณากรอกเบอร์โทรที่ไรเดอร์โทรหาได้ (9-10 หลัก) ในช่องเบอร์โทรด้านบน" };
+    }
+    const loc = state.deliveryLocation;
+    if (!loc || !loc.isSet || isFakeDefaultDeliveryLocation(loc) || typeof loc.lat !== "number" || typeof loc.lng !== "number") {
+        if (isFakeDefaultDeliveryLocation(loc)) { state.deliveryLocation = null; saveLocationToStorage(null); updateDeliveryLocationUI(); }
+        return { ok: false, action: "location", message: "⚠️ กรุณาระบุที่อยู่จัดส่งของคุณ (ปักหมุดบนแผนที่) ก่อนสั่งซื้อ เพื่อให้ไรเดอร์ไปส่งถูกที่" };
+    }
+    return { ok: true };
+}
+window.validateOrderPrerequisites = validateOrderPrerequisites;
+
+// คืน true ถ้าผ่าน ถ้าไม่ผ่านจะแสดงกล่องแดง + พาไปแก้จุดนั้น
+function enforceOrderPrerequisites() {
+    const check = validateOrderPrerequisites();
+    if (check.ok) { showCheckoutError(""); return true; }
+    showCheckoutError(check.message);
+    showToast(check.message);
+    if (check.action === "login") openCustomerLoginModal();
+    else if (check.action === "location") openLocationModal();
+    else if (check.focusId) {
+        const el = document.getElementById(check.focusId);
+        if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus(); }
+    }
+    return false;
+}
+
+function processOrderCheckout() {
+    if (!enforceOrderPrerequisites()) return;
 
     const totals = calculateCartTotals();
-    if (totals.itemsCount === 0) {
-        showToast("กรุณาเลือกสินค้าลงตะกร้าก่อนทำรายการ");
-        return;
-    }
-
-    // Default delivery location fallback if not set
-    if (!state.deliveryLocation || !state.deliveryLocation.isSet) {
-        state.deliveryLocation = {
-            title: "บ้านลูกค้า (โซนตัวอำเภอบ้านบึง)",
-            fullAddress: "บ้านเลขที่ 12/3 ซอยเทศบาล 1 ต.บ้านบึง อ.บ้านบึง จ.ชลบุรี",
-            detail: "ห่างจากตลาดวิศิษฐ์ชัย 1.2 กม. • ค่าส่ง ฿20",
-            distance: "1.2 กม.",
-            distFromMarketText: "ห่างจากตลาดวิศิษฐ์ชัย 1.2 กม.",
-            fee: 20,
-            lat: 13.3105,
-            lng: 101.1142,
-            isRealGPS: true,
-            isSet: true
-        };
-        saveLocationToStorage(state.deliveryLocation);
-        updateDeliveryLocationUI();
-    }
 
     const selectedRadio = document.querySelector('input[name="payment_method"]:checked');
     const selectedPayment = selectedRadio ? selectedRadio.value : "promptpay";
@@ -11800,6 +12576,8 @@ function confirmSCBPayment() {
 
 // Payment Success Simulation & Order Creation
 function simulatePaymentSuccess(paymentType = "promptpay") {
+    // ตรวจซ้ำก่อนสร้างออเดอร์ (ร้านอาจเพิ่งพักร้าน / ผู้ใช้ปิดหน้าต่างชำระเงินไปแก้ข้อมูล)
+    if (!enforceOrderPrerequisites()) { closePromptPayModal(); closeSCBModal(); return; }
     // 🛡️ Safeguard: ถ้าโอนเงินผ่าน PromptPay หรือ SCB ต้องแนบสลิปก่อน
     if (paymentType === "promptpay" || paymentType === "bank_transfer") {
         if (!state.currentUploadedSlip) {
@@ -11837,7 +12615,7 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
     }
 
     const noteInput = document.getElementById("delivery-note-input");
-    const noteVal = noteInput ? noteInput.value.trim() : "อยู่ติดกับ 7-11";
+    const noteVal = noteInput ? noteInput.value.trim() : "";
 
     const stallsMap = {};
     state.cart.forEach(item => {
@@ -11870,11 +12648,14 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
     const loc = state.deliveryLocation;
     const orderLat = (loc && loc.lat) ? loc.lat : MARKET_ORIGIN.lat;
     const orderLng = (loc && loc.lng) ? loc.lng : MARKET_ORIGIN.lng;
-    const orderHouse = (loc && loc.houseNumber) ? loc.houseNumber : "";
+    const quickHouseEl = document.getElementById("checkout-quick-house-no");
+    const quickHouse = quickHouseEl ? quickHouseEl.value.trim() : "";   // ช่อง "บ้านเลขที่/ซอย" ในหน้าชำระเงิน (เดิมกรอกแล้วไม่ถูกใช้)
+    const orderHouse = (loc && loc.houseNumber) ? loc.houseNumber : quickHouse;
     const orderSoi = (loc && loc.soiRoad) ? loc.soiRoad : "";
     const orderSub = (loc && loc.subdistrict) ? loc.subdistrict : "";
     const orderLandmark = noteVal || (loc && loc.landmark) || "";
-    const orderAddress = (loc && loc.fullAddress) ? loc.fullAddress : (loc && loc.title ? loc.title : "ตามพิกัดที่ลูกค้าระบุ");
+    const orderAddressBase = (loc && loc.fullAddress) ? loc.fullAddress : (loc && loc.title ? loc.title : "ตามพิกัดที่ลูกค้าระบุ");
+    const orderAddress = (quickHouse && !(loc && loc.houseNumber)) ? `${quickHouse} ${orderAddressBase}` : orderAddressBase;
 
     const nowTime = Date.now();
     const timeStr = new Date(nowTime).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.";
@@ -11901,7 +12682,7 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         total: Number(totals.grandTotal || 0),
         grandTotal: Number(totals.grandTotal || 0),
         deliveryFee: Number(totals.deliveryFee || 20),
-        payAmountExact: exactPayAmount,
+        payAmountExact: paymentType === "cod" ? Number(totals.grandTotal || 0) : exactPayAmount,   // เก็บเงินปลายทางไม่ต้องมีเศษสตางค์สุ่ม
         paymentType: paymentType,
         paymentDesc: paymentDesc,
         paymentStatus: paymentStatus,
@@ -11912,7 +12693,8 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         paymentVerifiedBy: null,
         deliveryNote: orderLandmark,
         customerName: (state.customer && state.customer.isLoggedIn) ? state.customer.identifier : "ลูกค้าทั่วไป",
-        customerPhone: (state.customer && state.customer.phone) ? state.customer.phone : ((state.customer && state.customer.identifier && /^\d+$/.test(state.customer.identifier.replace(/-/g,''))) ? state.customer.identifier : "-"),
+        customerPhone: formatThaiPhone(getCustomerContactPhone()) || "-",
+        trackCode: generateOrderTrackCode(),   // รหัสติดตามออเดอร์นี้ (ไม่ต้องล็อกอิน) — ดู resolveOrderTrackingAccess
         address: orderAddress,
         houseNumber: orderHouse,
         soiRoad: orderSoi,
@@ -11974,6 +12756,16 @@ function renderTrackingScreen() {
     const order = state.activeOrder;
     const isCustomerLoggedIn = state.customer && state.customer.isLoggedIn;
 
+    const shareBox = document.getElementById("tracking-share-box");
+    const shareBtn = document.getElementById("tracking-share-btn");
+    const showShare = !!(order && order.orderId && order.trackCode);
+    if (shareBox) shareBox.classList.toggle("hidden", !showShare);
+    if (shareBtn) shareBtn.classList.toggle("hidden", !showShare);
+    if (showShare) {
+        const codeEl = document.getElementById("tracking-share-code");
+        if (codeEl) codeEl.textContent = order.trackCode;
+    }
+
     const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
     // ถ้าไม่มีออเดอร์ หรือลูกค้าออกจากระบบแล้ว (ยกเว้นกรณี Express Order หรือเปิดผ่านลิงก์ ?track=) ให้เคลียร์หน้าจอติดตาม
@@ -12003,12 +12795,14 @@ function renderTrackingScreen() {
 
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} น.`;
-    const exactPayStr = (order.payAmountExact !== undefined && order.payAmountExact !== null)
+    const exactPayStr = (order.paymentType !== "cod" && order.payAmountExact !== undefined && order.payAmountExact !== null)
         ? Number(order.payAmountExact).toFixed(2)
-        : Number(order.total || 0).toLocaleString();
-    const payStatusNote = order.paymentVerified
-        ? " • ✓ เงินเข้าแล้ว"
-        : (order.paymentType === "cod" ? " • 💵 เก็บเงินสด COD" : " • ⏳ แนบสลิปแล้ว/รอตรวจยอด");
+        : Number(order.total || 0).toLocaleString();   // เก็บเงินปลายทาง: แสดงยอดจริง ไม่มีเศษสตางค์สุ่ม
+    // (เคยหายไปจากโค้ดตั้งแต่การแก้เรื่องเศษสตางค์ ทำให้หน้าติดตามออเดอร์ error ทุกครั้งที่มีออเดอร์)
+    const payMethodText = order.paymentType === "bank_transfer" ? "โอน SCB" : (order.paymentType === "cod" ? "COD" : "พร้อมเพย์");
+    const payStatusNote = order.paymentType === "cod"
+        ? " • 💵 เก็บเงินสดปลายทาง"
+        : (order.paymentVerified ? " • ✓ เงินเข้าแล้ว" : " • ⏳ แนบสลิปแล้ว/รอตรวจยอด");
 
     setVal("tracking-step1-subtitle", `${timeStr} • ยอดรวม ฿${exactPayStr} (${payMethodText}${payStatusNote})`);
 
@@ -12245,7 +13039,7 @@ function renderTrackingScreen() {
                     <div class="flex items-center justify-between text-xs py-0.5 ${isOOS ? 'text-rose-700 bg-rose-50/50 px-2 py-1 rounded-lg' : 'text-slate-700'}">
                         <div class="flex items-center gap-1.5">
                             <span class="text-xs ${isOOS ? 'text-rose-500 font-bold' : 'text-emerald-600'}">${isOOS ? '✕' : '✓'}</span>
-                            <span class="${isOOS ? 'line-through text-slate-400 font-medium' : 'font-semibold'}">${item.name}</span>
+                            <span class="${isOOS ? 'line-through text-slate-400 font-medium' : 'font-semibold'}">${escapeHtml(item.name)}</span>
                             ${isOOS ? '<span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.2 rounded font-black">ของหมด • คืนเงินสดใส่ซอง</span>' : ''}
                         </div>
                         <span class="font-bold ${isOOS ? 'text-rose-600' : 'text-slate-800'} text-xs">
@@ -12265,7 +13059,7 @@ function renderTrackingScreen() {
                             ${isReady ? '✓' : '⏳'}
                         </div>
                         <div>
-                            <div class="font-extrabold text-slate-800 text-xs leading-tight">${stall.name}</div>
+                            <div class="font-extrabold text-slate-800 text-xs leading-tight">${escapeHtml(stall.name)}</div>
                             <div class="text-[10px] text-slate-400 mt-0.5 font-medium">จำนวน ${stall.itemsCount} รายการ ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length} คืน ฿${oosItems.reduce((s,i)=>s+(i.actualPrice||i.price),0)})</span>` : ''}</div>
                         </div>
                     </div>
@@ -12951,7 +13745,7 @@ function openRatingModal() {
         if (order && order.stalls && order.stalls.length > 0) {
             container.innerHTML = order.stalls.map((s, idx) => `
                 <div class="flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs">
-                    <span class="font-bold text-slate-800 text-[11px] truncate max-w-[150px]">🏪 ${s.name}</span>
+                    <span class="font-bold text-slate-800 text-[11px] truncate max-w-[150px]">🏪 ${escapeHtml(s.name)}</span>
                     <div class="flex items-center gap-1.5 shrink-0">
                         <div class="flex items-center text-amber-400 cursor-pointer" id="stall-stars-${idx}">
                             <span class="material-symbols-outlined fill-1 text-base hover:scale-125 transition-transform" onclick="setStallRating(${idx}, 1)">star</span>
@@ -13133,7 +13927,7 @@ function openCustomerWalletModal() {
             container.innerHTML = `
                 <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-2">
                     <div class="flex items-center justify-between text-[11px]">
-                        <span class="font-extrabold text-slate-800" id="wallet-recent-order-id">ออเดอร์ ${lastOrder.orderId}</span>
+                        <span class="font-extrabold text-slate-800" id="wallet-recent-order-id">ออเดอร์ ${escapeHtml(lastOrder.orderId)}</span>
                         <span class="font-black text-orange-600">฿${total} (${itemCount} รายการ)</span>
                     </div>
                     <div class="text-[10px] text-slate-500 leading-tight">
@@ -13329,9 +14123,9 @@ function openReceiptModal() {
                 itemsHtml += `
                     <div class="flex justify-between py-1.5 ${isOOS ? 'bg-rose-50/80 px-2 rounded-lg border border-rose-200' : ''}">
                         <div>
-                            <div class="font-bold ${isOOS ? 'text-rose-800 line-through' : 'text-slate-800'} text-xs">${item.name}</div>
+                            <div class="font-bold ${isOOS ? 'text-rose-800 line-through' : 'text-slate-800'} text-xs">${escapeHtml(item.name)}</div>
                             <div class="text-[10px] ${isOOS ? 'text-rose-600 font-bold' : 'text-slate-400'}">
-                                ${stall.name} • ${isOOS ? '⚠️ สินค้าหมด (คืนเงินสดใส่ซอง)' : `x${item.qty || 1}`}
+                                ${escapeHtml(stall.name)} • ${isOOS ? '⚠️ สินค้าหมด (คืนเงินสดใส่ซอง)' : `x${item.qty || 1}`}
                             </div>
                         </div>
                         <span class="font-bold ${isOOS ? 'text-rose-600' : 'text-slate-800'} text-xs">
@@ -13736,10 +14530,10 @@ function renderMerchantSettlement() {
                         <span class="text-[11px] font-semibold text-slate-500 hidden sm:inline">(${thaiDateText})</span>
                     </div>
                     <div class="flex items-center gap-1.5">
-                        <button onclick="changeMerchantSettlementDate('${getReportDateKey(Date.now())}')" class="px-2.5 py-1 rounded-xl text-xs font-bold ${isToday ? 'bg-orange-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} transition-all cursor-pointer">
+                        <button onclick="changeMerchantSettlementDate(${jsArg(getReportDateKey(Date.now()))})" class="px-2.5 py-1 rounded-xl text-xs font-bold ${isToday ? 'bg-orange-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} transition-all cursor-pointer">
                             วันนี้
                         </button>
-                        <button onclick="changeMerchantSettlementDate('${getReportDateKey(Date.now() - 86400000)}')" class="px-2.5 py-1 rounded-xl text-xs font-bold ${targetDateKey === getReportDateKey(Date.now() - 86400000) ? 'bg-orange-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} transition-all cursor-pointer">
+                        <button onclick="changeMerchantSettlementDate(${jsArg(getReportDateKey(Date.now() - 86400000))})" class="px-2.5 py-1 rounded-xl text-xs font-bold ${targetDateKey === getReportDateKey(Date.now() - 86400000) ? 'bg-orange-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} transition-all cursor-pointer">
                             เมื่อวาน
                         </button>
                         <button onclick="renderMerchantSettlement(); showToast('🔄 อัปเดตข้อมูลการโอนเงินล่าสุดเรียบร้อย');" class="p-1 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-all cursor-pointer" title="รีเฟรชสถานะ">
@@ -13775,7 +14569,7 @@ function renderMerchantSettlement() {
                         <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
                             <div class="text-[10px] text-emerald-200">ยอดเงินสุทธิที่ฮับโอนเข้าบัญชี:</div>
                             <div class="text-2xl font-black text-amber-300">฿${finalPayoutAmount.toLocaleString()}</div>
-                            <div class="text-[10px] text-emerald-300/80">โอนผ่าน PromptPay ไปยัง ${bank.accountNo}</div>
+                            <div class="text-[10px] text-emerald-300/80">โอนผ่าน PromptPay ไปยัง ${escapeHtml(bank.accountNo)}</div>
                         </div>
                         <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
                             <div class="text-[10px] text-emerald-200">วัน-เวลาที่ฮับยืนยันการโอนเงิน:</div>
@@ -13799,15 +14593,15 @@ function renderMerchantSettlement() {
                             </div>
                             
                             <div class="flex flex-col sm:flex-row items-center gap-3 bg-white/5 p-2.5 rounded-xl border border-white/10">
-                                <div class="relative cursor-pointer group shrink-0" onclick="openVendorSlipViewerModal('${currentStallId}', '${targetDateKey}')">
-                                    <img src="${settledInfo.slipImage}" alt="สลิปโอนเงิน" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border-2 border-emerald-400 shadow-md group-hover:scale-105 transition-all">
+                                <div class="relative cursor-pointer group shrink-0" onclick="openVendorSlipViewerModal(${jsArg(currentStallId)}, ${jsArg(targetDateKey)})">
+                                    <img src="${escapeHtml(settledInfo.slipImage)}" alt="สลิปโอนเงิน" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border-2 border-emerald-400 shadow-md group-hover:scale-105 transition-all">
                                     <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center transition-all">
                                         <span class="material-symbols-outlined text-white text-xl">zoom_in</span>
                                     </div>
                                 </div>
                                 <div class="space-y-1 text-xs text-left flex-1 min-w-0">
                                     <div class="text-[11px] text-emerald-200">
-                                        โอนให้: <strong>${currentStallName}</strong> (${stall.stallNumber || 'แผงตลาด'})
+                                        โอนให้: <strong>${currentStallName}</strong> (${escapeHtml(stall.stallNumber) || 'แผงตลาด'})
                                     </div>
                                     <div class="text-[11px] text-white font-mono">
                                         ยอดโอนสุทธิ: <strong class="text-amber-300 text-sm">฿${finalPayoutAmount.toLocaleString()}</strong>
@@ -13815,13 +14609,13 @@ function renderMerchantSettlement() {
                                     <div class="text-[10px] text-slate-300">
                                         เวลาที่โอน: ${formatSettledDate(settledInfo.settledAt)} ${settledInfo.settledBy ? `• ผู้โอน: ${settledInfo.settledBy}` : ''}
                                     </div>
-                                    ${settledInfo.slipNote ? `<div class="text-[10px] text-amber-200 italic truncate">บันทึก: ${settledInfo.slipNote}</div>` : ''}
+                                    ${settledInfo.slipNote ? `<div class="text-[10px] text-amber-200 italic truncate">บันทึก: ${escapeHtml(settledInfo.slipNote)}</div>` : ''}
                                     <div class="pt-1 flex items-center gap-2 flex-wrap">
-                                        <button onclick="openVendorSlipViewerModal('${currentStallId}', '${targetDateKey}')" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer">
+                                        <button onclick="openVendorSlipViewerModal(${jsArg(currentStallId)}, ${jsArg(targetDateKey)})" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer">
                                             <span class="material-symbols-outlined text-xs">zoom_in</span>
                                             <span>🔍 ดูรูปสลิปเต็มจอ</span>
                                         </button>
-                                        <a href="${settledInfo.slipImage}" download="slip_talathub_${targetDateKey}_${currentStallId}.jpg" class="px-3 py-1 bg-white/20 hover:bg-white/30 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                                        <a href="${escapeHtml(settledInfo.slipImage)}" download="slip_talathub_${targetDateKey}_${currentStallId}.jpg" class="px-3 py-1 bg-white/20 hover:bg-white/30 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
                                             <span class="material-symbols-outlined text-xs">download</span>
                                             <span>บันทึกรูปสลิป</span>
                                         </a>
@@ -13843,7 +14637,7 @@ function renderMerchantSettlement() {
                             <span class="material-symbols-outlined text-xs">verified</span>
                             <span>ยืนยันโดยฝ่ายการเงินและบัญชีประจำฮับ</span>
                         </div>
-                        <button onclick="printThermalVendorSlip('${currentStallId}', '${targetDateKey}')" class="px-3.5 py-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/20 rounded-xl font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                        <button onclick="printThermalVendorSlip(${jsArg(currentStallId)}, ${jsArg(targetDateKey)})" class="px-3.5 py-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/20 rounded-xl font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-sm">receipt</span>
                             <span>📄 พิมพ์สลิปเคลียร์เงินแผงค้า (80mm)</span>
                         </button>
@@ -13940,15 +14734,15 @@ function renderMerchantSettlement() {
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                             <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                 <div class="text-[10px] text-slate-400">ธนาคาร:</div>
-                                <div class="font-black text-slate-800">${bank.bankName}</div>
+                                <div class="font-black text-slate-800">${escapeHtml(bank.bankName)}</div>
                             </div>
                             <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                 <div class="text-[10px] text-slate-400">เลขที่บัญชี / เบอร์พร้อมเพย์:</div>
-                                <div class="font-mono font-black text-emerald-700 text-sm">${bank.accountNo}</div>
+                                <div class="font-mono font-black text-emerald-700 text-sm">${escapeHtml(bank.accountNo)}</div>
                             </div>
                             <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                 <div class="text-[10px] text-slate-400">ชื่อบัญชี:</div>
-                                <div class="font-bold text-slate-800">${bank.accountName}</div>
+                                <div class="font-bold text-slate-800">${escapeHtml(bank.accountName)}</div>
                             </div>
                         </div>
                     </div>
@@ -13963,15 +14757,15 @@ function renderMerchantSettlement() {
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                             <div class="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/60">
                                 <div class="text-[10px] text-slate-400">ธนาคาร:</div>
-                                <div class="font-black text-slate-800">${bank2.bankName || '-'}</div>
+                                <div class="font-black text-slate-800">${escapeHtml(bank2.bankName) || '-'}</div>
                             </div>
                             <div class="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/60">
                                 <div class="text-[10px] text-slate-400">เลขที่บัญชี / เบอร์พร้อมเพย์:</div>
-                                <div class="font-mono font-black text-amber-900 text-sm">${bank2.accountNo || '-'}</div>
+                                <div class="font-mono font-black text-amber-900 text-sm">${escapeHtml(bank2.accountNo) || '-'}</div>
                             </div>
                             <div class="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/60">
                                 <div class="text-[10px] text-slate-400">ชื่อบัญชี:</div>
-                                <div class="font-bold text-slate-800">${bank2.accountName || '-'}</div>
+                                <div class="font-bold text-slate-800">${escapeHtml(bank2.accountName) || '-'}</div>
                             </div>
                         </div>
                     </div>
@@ -13997,7 +14791,7 @@ function renderMerchantSettlement() {
                             <div class="flex items-center justify-between pt-2.5 text-xs">
                                 <div class="space-y-0.5">
                                     <div class="flex items-center gap-2">
-                                        <span class="font-mono font-black bg-slate-100 px-2 py-0.5 rounded text-slate-800">${b.orderId}</span>
+                                        <span class="font-mono font-black bg-slate-100 px-2 py-0.5 rounded text-slate-800">${escapeHtml(b.orderId)}</span>
                                         <span class="text-[10px] text-slate-400">${b.time}</span>
                                     </div>
                                     <div class="text-[10px] text-slate-500">
@@ -14254,8 +15048,8 @@ function renderMerchantIncomingOrders() {
                         🏪
                     </div>
                     <div>
-                        <div class="text-[11px] text-amber-100 font-bold">แผงค้าของฉัน • ${stall ? (stall.stallNumber || 'แผงค้า') : 'แผงค้า'} (${stall ? (stall.zone || 'ตลาดสด') : 'ตลาดสด'})</div>
-                        <h3 class="text-base sm:text-lg font-black leading-tight">${stall ? stall.stallName : 'แผงค้า'}</h3>
+                        <div class="text-[11px] text-amber-100 font-bold">แผงค้าของฉัน • ${stall ? (escapeHtml(stall.stallNumber) || 'แผงค้า') : 'แผงค้า'} (${stall ? (escapeHtml(stall.zone) || 'ตลาดสด') : 'ตลาดสด'})</div>
+                        <h3 class="text-base sm:text-lg font-black leading-tight">${stall ? escapeHtml(stall.stallName) : 'แผงค้า'}</h3>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -14263,7 +15057,7 @@ function renderMerchantIncomingOrders() {
                         <span class="material-symbols-outlined text-sm">edit</span>
                         <span>แก้ไขข้อมูลร้าน</span>
                     </button>
-                    <button onclick="switchRole('customer'); goToMarketScreen(); if (typeof filterBySingleStall === 'function') filterBySingleStall('${stall ? stall.stallId : ''}');" class="px-3 py-1.5 bg-black/20 hover:bg-black/30 text-white rounded-xl font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                    <button onclick="switchRole('customer'); goToMarketScreen(); if (typeof filterBySingleStall === 'function') filterBySingleStall(${jsArg(stall ? stall.stallId : '')});" class="px-3 py-1.5 bg-black/20 hover:bg-black/30 text-white rounded-xl font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">storefront</span>
                         <span>ดูหน้าร้านในตลาด</span>
                     </button>
@@ -14288,7 +15082,7 @@ function renderMerchantIncomingOrders() {
                             <span>เปิดรับออเดอร์ปกติ</span>
                         </div>
                     </div>
-                    <span class="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-mono font-bold">${stall ? (stall.stallNumber || '-') : '-'}</span>
+                    <span class="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-mono font-bold">${stall ? (escapeHtml(stall.stallNumber) || '-') : '-'}</span>
                 </div>
             </div>
         </div>
@@ -14306,7 +15100,7 @@ function renderMerchantIncomingOrders() {
                         <span class="bg-white text-emerald-900 text-[10px] font-black px-2 py-0.2 rounded-full">โอนแล้ว ✓</span>
                     </div>
                     <div class="text-[10.5px] text-emerald-100">
-                        ยอดเงินโอน <strong>฿${Number(settledInfo.amount || totalSales).toLocaleString()}</strong> (${formatSettledDate(settledInfo.settledAt)}) เข้าบัญชี ${stall ? (stall.accountNo || stall.bankAccountNo || stall.phone || '') : ''}
+                        ยอดเงินโอน <strong>฿${Number(settledInfo.amount || totalSales).toLocaleString()}</strong> (${formatSettledDate(settledInfo.settledAt)}) เข้าบัญชี ${stall ? (escapeHtml(stall.accountNo) || escapeHtml(stall.bankAccountNo) || escapeHtml(stall.phone) || '') : ''}
                     </div>
                 </div>
             </div>
@@ -14343,13 +15137,13 @@ function renderMerchantIncomingOrders() {
                 ${[{key:'today',label:'📅 วันนี้'},{key:'yesterday',label:'🗓️ เมื่อวาน'},{key:'week',label:'📆 รายสัปดาห์'},{key:'month',label:'📊 รายเดือน'}].map(btn => {
                     const isActive = currentPeriod === btn.key;
                     return `<button
-                        onclick="setMerchantOrderFilter('${btn.key}')"
+                        onclick="setMerchantOrderFilter(${jsArg(btn.key)})"
                         class="px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer active:scale-95 ${
                             isActive
                             ? 'bg-orange-500 text-white shadow-sm'
                             : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                         }">
-                        ${btn.label}
+                        ${escapeHtml(btn.label)}
                     </button>`;
                 }).join('')}
             </div>
@@ -14390,7 +15184,7 @@ function renderMerchantIncomingOrders() {
                 <div class="bg-white rounded-2xl border ${isStallReady ? 'border-emerald-400/80 shadow-md ring-1 ring-emerald-400/40' : 'border-slate-200/80 shadow-xs'} p-3.5 sm:p-4 space-y-3 hover:shadow-md transition-all">
                     <div class="flex items-center justify-between pb-2 border-b border-slate-100">
                         <div class="flex items-center gap-2">
-                            <span class="font-mono font-black text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">${o.orderId}</span>
+                            <span class="font-mono font-black text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">${escapeHtml(o.orderId)}</span>
                             <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900 border border-${statusColor}-200">${statusText}</span>
                             ${isStallReady ? '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-2xs">✓ แม่ค้าเตรียมเสร็จแล้ว</span>' : ''}
                         </div>
@@ -14412,13 +15206,13 @@ function renderMerchantIncomingOrders() {
                                     <div class="flex items-center justify-between pt-1.5 text-xs ${isOos ? 'opacity-60 line-through' : ''}">
                                         <div class="font-bold text-slate-800 flex items-center gap-1.5">
                                             <span class="${isOos ? 'text-rose-500' : 'text-emerald-600'} font-black">${isOos ? '✕' : '✓'}</span>
-                                            <span>${it.name || 'สินค้า'}</span>
+                                            <span>${escapeHtml(it.name) || 'สินค้า'}</span>
                                             <span class="text-slate-400 font-normal">x${it.qty || 1}</span>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <div class="font-mono font-bold text-slate-700">฿${(it.price || 0).toLocaleString()}</div>
                                             ${o.status !== 'delivered' ? `
-                                                <button type="button" onclick="merchantToggleItemOutOfStock('${o.orderId}', '${currentStallId}', ${itIdx})" class="px-1.5 py-0.5 ${isOos ? 'bg-slate-200 text-slate-700' : 'bg-rose-50 text-rose-700 border border-rose-200'} rounded text-[10px] font-bold hover:opacity-80 active:scale-95 transition-all" title="${isOos ? 'กู้คืนสินค้า' : 'แจ้งสินค้าหมด คืนเงินสดใส่ซอง'}">
+                                                <button type="button" onclick="merchantToggleItemOutOfStock(${jsArg(o.orderId)}, ${jsArg(currentStallId)}, ${itIdx})" class="px-1.5 py-0.5 ${isOos ? 'bg-slate-200 text-slate-700' : 'bg-rose-50 text-rose-700 border border-rose-200'} rounded text-[10px] font-bold hover:opacity-80 active:scale-95 transition-all" title="${isOos ? 'กู้คืนสินค้า' : 'แจ้งสินค้าหมด คืนเงินสดใส่ซอง'}">
                                                     ${isOos ? 'กู้คืน' : 'แจ้งหมด'}
                                                 </button>
                                             ` : ''}
@@ -14431,10 +15225,10 @@ function renderMerchantIncomingOrders() {
 
                     <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex-wrap gap-2">
                         <div>
-                            <span>ลูกค้า: <strong>${o.customerName}</strong> (${o.customerPhone})</span>
+                            <span>ลูกค้า: <strong>${escapeHtml(o.customerName)}</strong> (${escapeHtml(o.customerPhone)})</span>
                         </div>
                         <div class="text-slate-400 text-[10px]">
-                            <span>จุดส่ง: ${o.deliveryAddress}</span>
+                            <span>จุดส่ง: ${escapeHtml(o.deliveryAddress)}</span>
                         </div>
                     </div>
 
@@ -14442,7 +15236,7 @@ function renderMerchantIncomingOrders() {
                     <div class="flex items-center justify-between pt-2 border-t border-slate-100 gap-2 flex-wrap">
                         <div class="flex items-center gap-1.5">
                             ${!isStallReady && o.status !== 'delivered' ? `
-                                <button type="button" onclick="merchantMarkStallReady('${o.orderId}', '${currentStallId}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer">
+                                <button type="button" onclick="merchantMarkStallReady(${jsArg(o.orderId)}, ${jsArg(currentStallId)})" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer">
                                     <span class="material-symbols-outlined text-sm">done_all</span>
                                     <span>✓ รับออเดอร์ & เตรียมของเสร็จแล้ว</span>
                                 </button>
@@ -14454,7 +15248,7 @@ function renderMerchantIncomingOrders() {
                             `}
                         </div>
                         <div class="flex items-center gap-1.5">
-                            <button type="button" onclick="merchantPrintStallSlip('${o.orderId}', '${currentStallId}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเตรียมของหน้าเขียง 80mm">
+                            <button type="button" onclick="merchantPrintStallSlip(${jsArg(o.orderId)}, ${jsArg(currentStallId)})" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบเตรียมของหน้าเขียง 80mm">
                                 <span class="material-symbols-outlined text-xs">print</span>
                                 <span>🖨️ สลิปหน้าเขียง 80mm</span>
                             </button>
@@ -14580,7 +15374,7 @@ function renderMerchantView() {
         let html = "";
         MARKET_DATA.forEach(s => {
             const isSel = s.stallId === stall.stallId ? "selected" : "";
-            html += `<option value="${s.stallId}" ${isSel}>${s.stallName} (${s.stallNumber || 'แผงค้า'} • โซน ${s.zone || 'A'})</option>`;
+            html += `<option value="${escapeHtml(s.stallId)}" ${isSel}>${escapeHtml(s.stallName)} (${escapeHtml(s.stallNumber) || 'แผงค้า'} • โซน ${escapeHtml(s.zone) || 'A'})</option>`;
         });
         selectEl.innerHTML = html;
     }
@@ -14658,6 +15452,9 @@ function openMerchantDestinationMap() {
     const modal = document.getElementById("merchant-map-modal");
     if (!modal) { console.error("merchant-map-modal not found in DOM"); return; }
 
+    // ระบบค้นหาสถานที่ (ช่องพิมพ์/วาง/Google Maps) ให้ทำงานกับแผนที่ของแผงค้าตั้งแต่เปิดหน้าต่างนี้
+    _activeLocationSearchTarget = "merchant";
+
     // Show modal
     modal.classList.remove("hidden");
     document.body.style.overflow = "hidden";
@@ -14673,6 +15470,9 @@ function closeMerchantMapModal() {
     const modal = document.getElementById("merchant-map-modal");
     if (modal) modal.classList.add("hidden");
     document.body.style.overflow = "";
+    hideLocationSearchDropdown();
+    // สลับระบบค้นหากลับไปเป็นของลูกค้า (ค่าเริ่มต้น) กันปนกันถ้าลูกค้าเปิดแผนที่หน้าแรกต่อ
+    _activeLocationSearchTarget = "customer";
 }
 
 function _initMerchantPickerMap() {
@@ -15266,9 +16066,9 @@ function renderMerchantActiveDeliveries() {
                     const isSel = o.orderId === order.orderId;
                     const stIcon = o.status === 'delivered' ? '✅' : (o.status === 'delivering' ? '📦' : (o.status === 'cancelled' ? '🚫' : '🛵'));
                     return `
-                        <button type="button" onclick="selectMerchantExpressOrder('${o.orderId}')" class="px-2.5 py-1 rounded-full text-[10px] font-extrabold shrink-0 transition-all cursor-pointer flex items-center gap-1 ${isSel ? 'bg-orange-500 text-white shadow-md ring-2 ring-orange-300/60' : 'bg-white/10 text-slate-300 hover:bg-white/20'}">
+                        <button type="button" onclick="selectMerchantExpressOrder(${jsArg(o.orderId)})" class="px-2.5 py-1 rounded-full text-[10px] font-extrabold shrink-0 transition-all cursor-pointer flex items-center gap-1 ${isSel ? 'bg-orange-500 text-white shadow-md ring-2 ring-orange-300/60' : 'bg-white/10 text-slate-300 hover:bg-white/20'}">
                             <span>${stIcon}</span>
-                            <span>${o.orderId} (${o.customerName || 'ลูกค้า'})</span>
+                            <span>${escapeHtml(o.orderId)} (${escapeHtml(o.customerName) || 'ลูกค้า'})</span>
                         </button>
                     `;
                 }).join('')}
@@ -15295,10 +16095,10 @@ function renderMerchantActiveDeliveries() {
                     <span class="w-8 h-8 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-md">⚡</span>
                     <div>
                         <div class="flex items-center gap-1.5">
-                            <span class="text-[10px] bg-white/20 text-orange-200 font-mono px-2 py-0.5 rounded-full">${order.orderId}</span>
+                            <span class="text-[10px] bg-white/20 text-orange-200 font-mono px-2 py-0.5 rounded-full">${escapeHtml(order.orderId)}</span>
                             <span class="text-[10px] text-slate-300">${order.time || 'เมื่อสักครู่'}</span>
                         </div>
-                        <h4 class="font-extrabold text-sm text-white mt-0.5">งานส่งของแผงคุณ (${order.originStall?.stallName || 'แผงค้า'})</h4>
+                        <h4 class="font-extrabold text-sm text-white mt-0.5">งานส่งของแผงคุณ (${escapeHtml(order.originStall?.stallName) || 'แผงค้า'})</h4>
                     </div>
                 </div>
                 <span class="text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${statusClass}">
@@ -15364,10 +16164,10 @@ function renderMerchantActiveDeliveries() {
                     </div>
                     <div class="text-right">
                         <div class="text-[10px] text-slate-400">ผู้รับ:</div>
-                        <div class="font-bold text-emerald-300 text-xs">${order.customerName || 'ลูกค้า'} (${order.customerPhone || '-'})</div>
+                        <div class="font-bold text-emerald-300 text-xs">${escapeHtml(order.customerName) || 'ลูกค้า'} (${escapeHtml(order.customerPhone) || '-'})</div>
                     </div>
                 </div>
-                <div class="text-[10px] text-slate-300 truncate">📍 ที่อยู่จัดส่ง: ${order.address}</div>
+                <div class="text-[10px] text-slate-300 truncate">📍 ที่อยู่จัดส่ง: ${escapeHtml(order.address)}</div>
                 <div class="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-white/10">
                     <span>ระยะทาง ~${distDisplay} กม. • ค่าส่ง ฿${order.deliveryFee || 20}</span>
                     <span class="text-emerald-400 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -15386,15 +16186,15 @@ function renderMerchantActiveDeliveries() {
                 <div class="flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2.5 min-w-0">
                         <div class="w-10 h-10 rounded-full bg-emerald-700 text-white font-black flex items-center justify-center text-lg shrink-0 shadow-md">
-                            ${rider.avatar || '🛵'}
+                            ${escapeHtml(rider.avatar) || '🛵'}
                         </div>
                         <div class="truncate">
-                            <div class="font-black text-white text-xs truncate">${rider.name}</div>
-                            <div class="text-[10px] text-slate-300">ทะเบียน: ${rider.plate || 'รถตลาดวิศิษฐ์ชัย'} • เบอร์โทร: ${rider.phone || '-'}</div>
+                            <div class="font-black text-white text-xs truncate">${escapeHtml(rider.name)}</div>
+                            <div class="text-[10px] text-slate-300">ทะเบียน: ${escapeHtml(rider.plate) || 'รถตลาดวิศิษฐ์ชัย'} • เบอร์โทร: ${escapeHtml(rider.phone) || '-'}</div>
                         </div>
                     </div>
                     ${order.status === "delivered" ? `
-                        <button type="button" onclick="viewMerchantDeliveryProof('${order.orderId}')" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer shrink-0">
+                        <button type="button" onclick="viewMerchantDeliveryProof(${jsArg(order.orderId)})" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer shrink-0">
                             <span class="material-symbols-outlined text-sm">photo_camera</span>
                             <span>ดูรูปหลักฐาน</span>
                         </button>
@@ -15405,32 +16205,32 @@ function renderMerchantActiveDeliveries() {
             <!-- Main Action Bar: Call Rider, Call Customer, Chat, Radar, Slip + Share to LINE -->
             <div class="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-1 text-xs">
                 <!-- 1. โทรหาลูกค้าผู้รับ -->
-                <button type="button" onclick="callCustomerFromMerchant('${order.orderId}')" class="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="โทรหาลูกค้าผู้รับพัสดุ">
+                <button type="button" onclick="callCustomerFromMerchant(${jsArg(order.orderId)})" class="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="โทรหาลูกค้าผู้รับพัสดุ">
                     <span class="material-symbols-outlined text-sm">phone_forwarded</span>
                     <span>โทรหาผู้รับ</span>
                 </button>
                 <!-- 2. โทรหาไรเดอร์ -->
-                <button type="button" onclick="callRiderFromMerchant('${order.orderId}')" class="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
+                <button type="button" onclick="callRiderFromMerchant(${jsArg(order.orderId)})" class="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">call</span>
                     <span>โทรหาไรเดอร์</span>
                 </button>
                 <!-- 3. แชร์ LINE ให้ลูกค้า -->
-                <button type="button" onclick="shareMerchantTrackingToLine('${order.orderId}')" class="p-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-black flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="ส่งลิงก์ติดตามไรเดอร์ให้ลูกค้าทาง LINE">
+                <button type="button" onclick="shareMerchantTrackingToLine(${jsArg(order.orderId)})" class="p-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-black flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer" title="ส่งลิงก์ติดตามไรเดอร์ให้ลูกค้าทาง LINE">
                     <span class="material-symbols-outlined text-sm">send</span>
                     <span>แชร์ LINE</span>
                 </button>
                 <!-- 4. แชทไรเดอร์ -->
-                <button type="button" onclick="openMerchantRiderChat('${order.orderId}')" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
+                <button type="button" onclick="openMerchantRiderChat(${jsArg(order.orderId)})" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">chat</span>
                     <span>แชทไรเดอร์</span>
                 </button>
                 <!-- 5. ดูเรดาร์สด -->
-                <button type="button" onclick="viewOrderOnRadar('${order.orderId}')" class="p-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
+                <button type="button" onclick="viewOrderOnRadar(${jsArg(order.orderId)})" class="p-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">radar</span>
                     <span>ดูเรดาร์สด</span>
                 </button>
                 <!-- 6. สลิป 80mm -->
-                <button type="button" onclick="printMerchantExpressSlip('${order.orderId}')" class="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all text-[11px] cursor-pointer">
+                <button type="button" onclick="printMerchantExpressSlip(${jsArg(order.orderId)})" class="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all text-[11px] cursor-pointer">
                     <span class="material-symbols-outlined text-sm">print</span>
                     <span>สลิป 80mm</span>
                 </button>
@@ -15440,7 +16240,7 @@ function renderMerchantActiveDeliveries() {
             <div class="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                 <div>
                     ${(order.status === "waiting_rider" || order.status === "assigned") ? `
-                        <button type="button" onclick="cancelMerchantExpressOrder('${order.orderId}')" class="text-[11px] text-rose-300 hover:text-rose-100 hover:underline flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                        <button type="button" onclick="cancelMerchantExpressOrder(${jsArg(order.orderId)})" class="text-[11px] text-rose-300 hover:text-rose-100 hover:underline flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-sm">cancel</span>
                             <span>ขอยกเลิกคำขอเรียกไรเดอร์</span>
                         </button>
@@ -15477,7 +16277,7 @@ function shareMerchantTrackingToLine(orderId) {
 
     const origin = order.originStall || {};
     const rider = order.assignedRider || { name: "ฮับกำลังจัดสรรไรเดอร์", phone: "-" };
-    const trackingUrl = `${window.location.origin}${window.location.pathname}?track=${order.orderId}`;
+    const trackingUrl = buildOrderTrackingUrl(order);
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(trackingUrl)}`;
 
     const text = `🛵 [ตลาดฮับวิศิษฐ์ชัย] แจ้งสถานะการจัดส่งของสด\n` +
@@ -15506,7 +16306,7 @@ function shareMerchantTrackingToLine(orderId) {
                     <span class="w-8 h-8 rounded-xl bg-[#06C755] text-white flex items-center justify-center font-bold text-base shadow-sm">💬</span>
                     <div>
                         <h3 class="font-extrabold text-sm text-slate-900">แชร์สถานะให้ลูกค้าทาง LINE</h3>
-                        <div class="text-[10px] text-slate-500 font-mono">รหัสงาน: ${order.orderId}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">รหัสงาน: ${escapeHtml(order.orderId)}</div>
                     </div>
                 </div>
                 <button type="button" onclick="document.getElementById('merchant-share-line-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold">✕</button>
@@ -15515,11 +16315,11 @@ function shareMerchantTrackingToLine(orderId) {
             <!-- Customer Card -->
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 space-y-1">
                 <div class="flex items-center justify-between font-bold">
-                    <span class="text-slate-800">👤 คุณ${order.customerName || 'ลูกค้า'}</span>
-                    <span class="text-emerald-600 font-mono text-[11px]">${order.customerPhone || '-'}</span>
+                    <span class="text-slate-800">👤 คุณ${escapeHtml(order.customerName) || 'ลูกค้า'}</span>
+                    <span class="text-emerald-600 font-mono text-[11px]">${escapeHtml(order.customerPhone) || '-'}</span>
                 </div>
-                <div class="text-[11px] text-slate-500 truncate">📍 ${order.address}</div>
-                <div class="text-[10px] text-slate-400">🛵 ไรเดอร์: ${rider.name} (${rider.phone || '-'})</div>
+                <div class="text-[11px] text-slate-500 truncate">📍 ${escapeHtml(order.address)}</div>
+                <div class="text-[10px] text-slate-400">🛵 ไรเดอร์: ${escapeHtml(rider.name)} (${escapeHtml(rider.phone) || '-'})</div>
             </div>
 
             <!-- Pre-formatted text box -->
@@ -15536,7 +16336,7 @@ function shareMerchantTrackingToLine(orderId) {
 
             <!-- Action buttons -->
             <div class="space-y-2 pt-1">
-                <button type="button" onclick="if(isMobileDevice()){ window.open('${lineUrl}','_blank'); } else { document.getElementById('merchant-share-line-modal').classList.add('hidden'); showLinePcModal('แชร์สถานะให้ลูกค้าทาง LINE', document.getElementById('merchant-share-textarea').value); }" class="w-full py-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
+                <button type="button" onclick="if(isMobileDevice()){ window.open(${jsArg(lineUrl)},'_blank'); } else { document.getElementById('merchant-share-line-modal').classList.add('hidden'); showLinePcModal('แชร์สถานะให้ลูกค้าทาง LINE', document.getElementById('merchant-share-textarea').value); }" class="w-full py-2.5 bg-[#06C755] hover:bg-[#05a847] text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
                     <span class="material-symbols-outlined text-base">send</span>
                     <span>เปิด LINE เพื่อส่งให้ลูกค้าทันที</span>
                 </button>
@@ -15613,18 +16413,18 @@ function viewMerchantDeliveryProof(orderId) {
                 <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80" alt="หลักฐานการจัดส่ง" class="w-full h-full object-cover">
                 <div class="absolute bottom-2 left-2 right-2 bg-black/70 backdrop-blur-md rounded-xl p-2 text-white text-[10px] space-y-0.5">
                     <div class="font-bold flex items-center justify-between">
-                        <span>${order.orderId} • ส่งมอบแล้ว</span>
+                        <span>${escapeHtml(order.orderId)} • ส่งมอบแล้ว</span>
                         <span class="text-emerald-400">✓ ยืนยัน GPS</span>
                     </div>
-                    <div class="text-slate-300 truncate">📍 ${order.address}</div>
+                    <div class="text-slate-300 truncate">📍 ${escapeHtml(order.address)}</div>
                 </div>
             </div>
             <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-xs space-y-1">
                 <div class="font-bold text-emerald-900 flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm text-emerald-600">verified</span>
-                    <span>ผู้รับของ: คุณ${order.customerName || 'ลูกค้า'}</span>
+                    <span>ผู้รับของ: คุณ${escapeHtml(order.customerName) || 'ลูกค้า'}</span>
                 </div>
-                <div class="text-[11px] text-slate-600">ไรเดอร์ผู้จัดส่ง: ${rider.name} (${rider.plate || '-'})</div>
+                <div class="text-[11px] text-slate-600">ไรเดอร์ผู้จัดส่ง: ${escapeHtml(rider.name)} (${escapeHtml(rider.plate) || '-'})</div>
                 <div class="text-[10px] text-slate-500">เวลาจัดส่งเสร็จสิ้น: ${order.deliveredAt || order.time || 'วันนี้'}</div>
             </div>
             <button type="button" onclick="document.getElementById('merchant-proof-modal').classList.add('hidden')" class="w-full py-2.5 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
@@ -15697,18 +16497,18 @@ function callRiderFromMerchant(param) {
                 </div>
                 <div>
                     <h3 class="font-extrabold text-base text-slate-900">โทรติดต่อไรเดอร์ผู้จัดส่ง</h3>
-                    <p class="text-slate-500 text-[11px] mt-0.5">${rider ? rider.name : 'ไรเดอร์ประจำตลาด'} (${rider ? (rider.plate || 'รถจัดส่ง') : 'รถจัดส่ง'})</p>
+                    <p class="text-slate-500 text-[11px] mt-0.5">${rider ? escapeHtml(rider.name) : 'ไรเดอร์ประจำตลาด'} (${rider ? (escapeHtml(rider.plate) || 'รถจัดส่ง') : 'รถจัดส่ง'})</p>
                 </div>
                 <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
                     <div class="text-[10px] text-emerald-800 font-bold">เบอร์โทรศัพท์ไรเดอร์:</div>
-                    <div class="text-xl font-black text-emerald-700 tracking-wider font-mono mt-0.5">${phone}</div>
+                    <div class="text-xl font-black text-emerald-700 tracking-wider font-mono mt-0.5">${escapeHtml(phone)}</div>
                 </div>
                 <div class="space-y-2 pt-1">
                     <a href="tel:${cleanPhone}" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
                         <span class="material-symbols-outlined text-base">call</span>
                         <span>แตะเพื่อโทรออกทันที</span>
                     </a>
-                    <button type="button" onclick="navigator.clipboard.writeText('${phone}'); showToast('📋 คัดลอกเบอร์ ${phone} สำเร็จ!');" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs">
+                    <button type="button" onclick="navigator.clipboard.writeText(${jsArg(phone)}); showToast('📋 คัดลอกเบอร์ ${phone} สำเร็จ!');" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs">
                         คัดลอกเบอร์โทร
                     </button>
                     <button type="button" onclick="document.getElementById('merchant-call-rider-modal').classList.add('hidden')" class="w-full py-2 text-slate-400 hover:text-slate-600 font-medium text-xs">
@@ -15799,8 +16599,8 @@ function openMerchantRiderChat(orderId) {
             <button type="button" onclick="sendQuickRiderMessage('📦 ของสดแพ็คเสร็จแล้ว มารับหน้าร้านได้เลยครับ')" class="shrink-0 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold border border-emerald-200 transition-colors active:scale-95">
                 📦 แพ็คเสร็จแล้ว มารับได้เลย
             </button>
-            <button type="button" onclick="sendQuickRiderMessage('🏪 ร้านอยู่โซน ${order.originStall?.zone || 'A'} แผง ${order.originStall?.stallNumber || 'แผงค้า'} ครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
-                🏪 พิกัดแผง ${order.originStall?.stallNumber || 'แผงค้า'}
+            <button type="button" onclick="sendQuickRiderMessage('🏪 ร้านอยู่โซน ${order.originStall?.zone || 'A'} แผง ${escapeHtml(order.originStall?.stallNumber) || 'แผงค้า'} ครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
+                🏪 พิกัดแผง ${escapeHtml(order.originStall?.stallNumber) || 'แผงค้า'}
             </button>
             <button type="button" onclick="sendQuickRiderMessage('📞 ลูกค้าฝากแจ้งว่าช่วยโทรหาก่อนถึง 5 นาทีครับ')" class="shrink-0 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[10px] font-medium border border-slate-200 transition-colors active:scale-95">
                 📞 โทรหาลูกค้าก่อนถึง 5 นาที
@@ -15817,13 +16617,13 @@ function openMerchantRiderChat(orderId) {
         chatMessages.innerHTML = `
             <div class="text-center my-3">
                 <span class="bg-slate-200/70 text-slate-600 text-[10px] px-2.5 py-1 rounded-full">
-                    เชื่อมต่อห้องแชทตรงกับไรเดอร์สำหรับงาน ${order.orderId}
+                    เชื่อมต่อห้องแชทตรงกับไรเดอร์สำหรับงาน ${escapeHtml(order.orderId)}
                 </span>
             </div>
             <div class="flex items-start gap-2 max-w-[85%] animate-fade-in">
                 <div class="w-7 h-7 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs shrink-0 shadow">🛵</div>
                 <div class="bg-white p-2.5 rounded-2xl rounded-tl-xs shadow-xs border border-slate-100 text-xs text-slate-800">
-                    สวัสดีครับแผงค้า ${order.originStall?.stallName || ''}! กำลังเตรียมเข้าไปรับของที่แผงนะครับ มีโน้ตอะไรแจ้งเพิ่มเติมพิมพ์บอกตรงนี้ได้เลยครับ 🙏
+                    สวัสดีครับแผงค้า ${escapeHtml(order.originStall?.stallName) || ''}! กำลังเตรียมเข้าไปรับของที่แผงนะครับ มีโน้ตอะไรแจ้งเพิ่มเติมพิมพ์บอกตรงนี้ได้เลยครับ 🙏
                 </div>
             </div>
         `;
@@ -15894,7 +16694,7 @@ function viewOrderOnRadar(orderId) {
                     <div>
                         <div class="font-extrabold text-sm flex items-center gap-1.5">
                             <span>เรดาร์สด GPS ติดตามไรเดอร์</span>
-                            <span class="text-[10px] bg-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full font-mono font-bold">${order.orderId}</span>
+                            <span class="text-[10px] bg-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full font-mono font-bold">${escapeHtml(order.orderId)}</span>
                         </div>
                         <div class="text-[10px] text-slate-300">ติดตามพิกัดการจัดส่งของสดแบบเรียลไทม์</div>
                     </div>
@@ -15906,7 +16706,7 @@ function viewOrderOnRadar(orderId) {
             <div class="bg-black/40 px-3 py-2 border-b border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs shrink-0">
                 <div class="bg-white/5 p-1.5 rounded-xl">
                     <div class="text-[9px] text-slate-400">ไรเดอร์ผู้ส่ง</div>
-                    <div class="font-bold text-emerald-300 truncate text-[11px]">🛵 ${rider.name}</div>
+                    <div class="font-bold text-emerald-300 truncate text-[11px]">🛵 ${escapeHtml(rider.name)}</div>
                 </div>
                 <div class="bg-white/5 p-1.5 rounded-xl">
                     <div class="text-[9px] text-slate-400">สถานะงาน</div>
@@ -15929,10 +16729,10 @@ function viewOrderOnRadar(orderId) {
                 <div class="absolute bottom-3 left-3 right-3 z-20 bg-black/75 backdrop-blur-md rounded-2xl p-2.5 border border-white/15 text-[11px] flex items-center justify-between gap-2 shadow-lg">
                     <div class="flex items-center gap-2 truncate min-w-0">
                         <span class="w-6 h-6 rounded-lg bg-orange-500 text-white flex items-center justify-center font-bold text-xs shrink-0">🏪</span>
-                        <span class="truncate font-bold">${origin.stallName || 'แผงค้า'}</span>
+                        <span class="truncate font-bold">${escapeHtml(origin.stallName) || 'แผงค้า'}</span>
                         <span class="text-slate-400">➔</span>
                         <span class="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0">📍</span>
-                        <span class="truncate font-bold text-emerald-300">${order.customerName || 'ลูกค้า'}</span>
+                        <span class="truncate font-bold text-emerald-300">${escapeHtml(order.customerName) || 'ลูกค้า'}</span>
                     </div>
                     <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold shrink-0">~${distDisplay} กม.</span>
                 </div>
@@ -15941,11 +16741,11 @@ function viewOrderOnRadar(orderId) {
             <!-- Actions Footer -->
             <div class="p-3 bg-slate-800/95 border-t border-white/10 flex items-center justify-between gap-2 shrink-0">
                 <div class="flex items-center gap-2">
-                    <button type="button" onclick="callRiderFromMerchant('${order.orderId}')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="callRiderFromMerchant(${jsArg(order.orderId)})" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">call</span>
                         <span>โทรหาไรเดอร์</span>
                     </button>
-                    <button type="button" onclick="closeMerchantRadarModal(); openMerchantRiderChat('${order.orderId}')" class="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="closeMerchantRadarModal(); openMerchantRiderChat(${jsArg(order.orderId)})" class="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">chat</span>
                         <span>แชทไรเดอร์</span>
                     </button>
@@ -15991,7 +16791,7 @@ function viewOrderOnRadar(orderId) {
             iconSize: [34, 34],
             iconAnchor: [17, 17]
         });
-        L.marker([startLat, startLng], { icon: stallIcon }).addTo(map).bindPopup(`<b>🏪 ${origin.stallName || 'แผงค้า'}</b><br>จุดรับของสด`);
+        L.marker([startLat, startLng], { icon: stallIcon }).addTo(map).bindPopup(`<b>🏪 ${escapeHtml(origin.stallName) || 'แผงค้า'}</b><br>จุดรับของสด`);
 
         // Destination Pin
         const destIcon = L.divIcon({
@@ -16000,7 +16800,7 @@ function viewOrderOnRadar(orderId) {
             iconSize: [34, 34],
             iconAnchor: [17, 17]
         });
-        L.marker([destLat, destLng], { icon: destIcon }).addTo(map).bindPopup(`<b>📍 บ้านคุณ${order.customerName || 'ลูกค้า'}</b><br>${order.address}`);
+        L.marker([destLat, destLng], { icon: destIcon }).addTo(map).bindPopup(`<b>📍 บ้านคุณ${escapeHtml(order.customerName) || 'ลูกค้า'}</b><br>${escapeHtml(order.address)}`);
 
         // Rider Position (moving along the route)
         let riderProgress = order.status === 'delivered' ? 1.0 : (order.status === 'delivering' ? 0.65 : (order.status === 'assigned' ? 0.25 : 0.05));
@@ -16016,7 +16816,7 @@ function viewOrderOnRadar(orderId) {
             iconSize: [40, 40],
             iconAnchor: [20, 20]
         });
-        L.marker([riderLat, riderLng], { icon: riderIcon }).addTo(map).bindPopup(`<b>🛵 ${rider.name}</b><br>สถานะ: ${statusDesc}`);
+        L.marker([riderLat, riderLng], { icon: riderIcon }).addTo(map).bindPopup(`<b>🛵 ${escapeHtml(rider.name)}</b><br>สถานะ: ${statusDesc}`);
 
         // Route Polyline
         const routeCoords = [
@@ -16075,14 +16875,14 @@ function callContactDirect(phone, name, subtitle) {
             </div>
             <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-2.5">
                 <div class="text-[10px] text-emerald-800 font-bold">หมายเลขโทรศัพท์:</div>
-                <div class="text-lg font-black text-emerald-700 tracking-wider font-mono mt-0.5">${phone}</div>
+                <div class="text-lg font-black text-emerald-700 tracking-wider font-mono mt-0.5">${escapeHtml(phone)}</div>
             </div>
             <div class="space-y-2 pt-1">
                 <a href="tel:${clean}" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
                     <span class="material-symbols-outlined text-sm">call</span>
                     <span>แตะเพื่อโทรออกทันที</span>
                 </a>
-                <button type="button" onclick="navigator.clipboard.writeText('${phone}'); showToast('📋 คัดลอกเบอร์ ${phone} สำเร็จ!');" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs cursor-pointer">
+                <button type="button" onclick="navigator.clipboard.writeText(${jsArg(phone)}); showToast('📋 คัดลอกเบอร์ ${phone} สำเร็จ!');" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs cursor-pointer">
                     คัดลอกเบอร์โทร
                 </button>
                 <button type="button" onclick="document.getElementById('hub-call-contact-modal').classList.add('hidden')" class="w-full py-1 text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer">
@@ -16128,17 +16928,17 @@ function openAssignRiderModal(orderId) {
             <div class="p-3 rounded-2xl border ${isCurrent ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-200 bg-white hover:border-emerald-300'} flex items-center justify-between gap-3 transition-all">
                 <div class="flex items-center gap-2.5 min-w-0">
                     <div class="w-10 h-10 rounded-full bg-emerald-700 text-white font-bold flex items-center justify-center text-lg shrink-0 shadow-sm">
-                        ${r.avatar || '🛵'}
+                        ${escapeHtml(r.avatar) || '🛵'}
                     </div>
                     <div class="truncate">
                         <div class="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 truncate">
-                            <span>${r.name}</span>
+                            <span>${escapeHtml(r.name)}</span>
                             ${isCurrent ? '<span class="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded-full font-bold">กำลังรับงานนี้</span>' : ''}
                         </div>
-                        <div class="text-[10px] text-slate-500">ทะเบียน: ${r.plate || '-'} • โทร: ${r.phone || '-'}</div>
+                        <div class="text-[10px] text-slate-500">ทะเบียน: ${escapeHtml(r.plate) || '-'} • โทร: ${escapeHtml(r.phone) || '-'}</div>
                     </div>
                 </div>
-                <button type="button" onclick="selectAndAssignRider('${targetOrder.orderId}', '${encodeURIComponent(JSON.stringify(r))}')" class="px-3 py-1.5 ${isCurrent ? 'bg-slate-200 text-slate-600' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} rounded-xl text-xs font-bold shrink-0 active:scale-95 transition-all shadow-xs cursor-pointer">
+                <button type="button" onclick="selectAndAssignRider(${jsArg(targetOrder.orderId)}, ${jsArg(encodeURIComponent(JSON.stringify(r)))})" class="px-3 py-1.5 ${isCurrent ? 'bg-slate-200 text-slate-600' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} rounded-xl text-xs font-bold shrink-0 active:scale-95 transition-all shadow-xs cursor-pointer">
                     ${isCurrent ? 'จ่ายงานอยู่' : 'เลือกคนนี้ 🚀'}
                 </button>
             </div>
@@ -16152,7 +16952,7 @@ function openAssignRiderModal(orderId) {
                     <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">🛵</span>
                     <div>
                         <h3 class="font-extrabold text-sm text-slate-900">จัดสรรงานให้ไรเดอร์ในระบบ</h3>
-                        <div class="text-[10px] text-slate-500 font-mono">รหัสงาน: ${targetOrder.orderId}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">รหัสงาน: ${escapeHtml(targetOrder.orderId)}</div>
                     </div>
                 </div>
                 <button type="button" onclick="closeAssignRiderModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold cursor-pointer">✕</button>
@@ -16160,10 +16960,10 @@ function openAssignRiderModal(orderId) {
 
             <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 shrink-0 space-y-1 text-[11px]">
                 <div class="flex items-center justify-between font-bold text-slate-800">
-                    <span>🏪 รับที่: ${targetOrder.originStall?.stallName || 'แผงค้า'}</span>
-                    <span class="text-emerald-700">➔ 📍 ส่ง: ${targetOrder.customerName || 'ลูกค้า'}</span>
+                    <span>🏪 รับที่: ${escapeHtml(targetOrder.originStall?.stallName) || 'แผงค้า'}</span>
+                    <span class="text-emerald-700">➔ 📍 ส่ง: ${escapeHtml(targetOrder.customerName) || 'ลูกค้า'}</span>
                 </div>
-                <div class="text-[10px] text-slate-500 truncate">${targetOrder.address}</div>
+                <div class="text-[10px] text-slate-500 truncate">${escapeHtml(targetOrder.address)}</div>
             </div>
 
             <div class="text-[11px] font-bold text-slate-700 shrink-0 flex items-center justify-between">
@@ -16276,7 +17076,7 @@ function assignExpressOrderToRider(param1 = "R1", param2 = null) {
             rider = communityRiders.find(r => r.id === riderChoice || r.name.includes(riderChoice));
         }
         if (!rider) {
-            rider = communityRiders.find(r => r.status === 'available') || communityRiders[0] || (RIDER_DATABASE && RIDER_DATABASE.length > 0 ? RIDER_DATABASE[0] : {
+            rider = communityRiders.find(r => r.status === 'available') || communityRiders[0] || (typeof RIDER_DATABASE !== "undefined" && RIDER_DATABASE && RIDER_DATABASE.length > 0 ? RIDER_DATABASE[0] : {
                 id: "R1",
                 name: "สมศักดิ์ ขับไว (Rider ประจำฮับ)",
                 phone: "082-111-2233",
@@ -16337,7 +17137,7 @@ function printMerchantExpressSlip(orderId) {
     const origin = order.originStall || {};
     const rider = order.assignedRider || { name: "กำลังจัดสรรไรเดอร์", plate: "-", phone: "-" };
     const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
-    const trackingUrl = `${window.location.origin}${window.location.pathname}?track=${order.orderId}`;
+    const trackingUrl = buildOrderTrackingUrl(order);
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(trackingUrl)}`;
 
     let distDisplay = "0.8";
@@ -16351,7 +17151,7 @@ function printMerchantExpressSlip(orderId) {
     <html>
     <head>
         <meta charset="utf-8">
-        <title>ใบส่งของด่วน 80mm - ${order.orderId}</title>
+        <title>ใบส่งของด่วน 80mm - ${escapeHtml(order.orderId)}</title>
         <style>
             @page { size: 80mm auto; margin: 0; }
             body { font-family: 'Sarabun', 'Tahoma', sans-serif; width: 72mm; margin: 0 auto; padding: 4mm 0; font-size: 11px; line-height: 1.35; color: #000; background: #fff; page-break-inside: avoid; }
@@ -16374,7 +17174,7 @@ function printMerchantExpressSlip(orderId) {
         <div class="text-center">
             <div class="title">⚡ ใบส่งของสดด่วน (Express)</div>
             <div>ศูนย์กระจายสินค้าตลาดวิศิษฐ์ชัย อ.บ้านบึง</div>
-            <div class="badge"># ${order.orderId}</div>
+            <div class="badge"># ${escapeHtml(order.orderId)}</div>
             <div style="font-size:10px; color:#555;">วันที่ ${dateStr} • เวลา ${order.time || ''}</div>
         </div>
 
@@ -16383,16 +17183,16 @@ function printMerchantExpressSlip(orderId) {
         <!-- 1. จุดรับของ (แผงค้า) -->
         <div class="box">
             <div class="font-bold">🏪 จุดรับของ (แผงค้าผู้ส่ง):</div>
-            <div>${origin.stallName || 'แผงค้า'} (${origin.stallNumber || 'แผงทั่วไป'})</div>
-            <div>ผู้ส่ง: ${origin.ownerName || 'เจ้าของแผง'} (โทร ${origin.ownerPhone || '-'})</div>
+            <div>${escapeHtml(origin.stallName) || 'แผงค้า'} (${escapeHtml(origin.stallNumber) || 'แผงทั่วไป'})</div>
+            <div>ผู้ส่ง: ${escapeHtml(origin.ownerName) || 'เจ้าของแผง'} (โทร ${escapeHtml(origin.ownerPhone) || '-'})</div>
         </div>
 
         <!-- 2. จุดส่งของ (ลูกค้า) -->
         <div class="box">
             <div class="font-bold">📍 จุดส่งของ (ลูกค้าปลายทาง):</div>
-            <div>ผู้รับ: คุณ${order.customerName || 'ลูกค้า'}</div>
-            <div>โทร: ${order.customerPhone || '-'}</div>
-            <div style="font-size:10px;">${order.address}</div>
+            <div>ผู้รับ: คุณ${escapeHtml(order.customerName) || 'ลูกค้า'}</div>
+            <div>โทร: ${escapeHtml(order.customerPhone) || '-'}</div>
+            <div style="font-size:10px;">${escapeHtml(order.address)}</div>
         </div>
 
         <div class="divider"></div>
@@ -16428,11 +17228,11 @@ function printMerchantExpressSlip(orderId) {
         <!-- ไรเดอร์ -->
         <div class="row">
             <span class="label">ไรเดอร์ผู้จัดส่ง:</span>
-            <span class="value">${rider.name}</span>
+            <span class="value">${escapeHtml(rider.name)}</span>
         </div>
         <div class="row">
             <span class="label">เบอร์โทร / ทะเบียน:</span>
-            <span class="value">${rider.phone} (${rider.plate})</span>
+            <span class="value">${escapeHtml(rider.phone)} (${escapeHtml(rider.plate)})</span>
         </div>
 
         <div class="divider"></div>
@@ -16819,17 +17619,17 @@ function updateCustomerRoleButtonUI() {
     if (isCustLoggedIn) {
         btn.classList.add("logged-in");
         if (isCustomerView) {
-            btn.className = "role-btn active logged-in py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
+            btn.className = "role-btn active logged-in py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
         } else {
-            btn.className = "role-btn logged-in py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-emerald-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
+            btn.className = "role-btn logged-in py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-emerald-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
         }
     } else {
         btn.classList.remove("logged-in");
         // ลูกค้ายังไม่ได้ล็อกอิน: ไม่เป็นสีเขียว
         if (isCustomerView) {
-            btn.className = "role-btn active py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-white bg-slate-800/90 border border-white/20 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
+            btn.className = "role-btn active py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-white bg-slate-800/90 border border-white/20 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
         } else {
-            btn.className = "role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
+            btn.className = "role-btn py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
         }
     }
 }
@@ -16936,19 +17736,19 @@ function setActiveRoleView(role) {
         if (btn) {
             if (r === role) {
                 if (r === "admin") {
-                    btn.className = "role-btn active py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
+                    btn.className = "role-btn active py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center relative shrink-0 cursor-pointer";
                 } else if (r === "customer") {
                     // Update via updateCustomerRoleButtonUI
                 } else {
-                    btn.className = "role-btn active py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
+                    btn.className = "role-btn active py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold bg-emerald-600 text-white shadow-md flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center relative shrink-0 cursor-pointer";
                 }
             } else {
                 if (r === "admin") {
-                    btn.className = "role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-purple-200 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
+                    btn.className = "role-btn py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-purple-200 hover:text-white hover:bg-purple-900/40 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center relative shrink-0 cursor-pointer";
                 } else if (r === "customer") {
                     // Update via updateCustomerRoleButtonUI
                 } else {
-                    btn.className = "role-btn py-1.5 px-2 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center shrink-0 cursor-pointer";
+                    btn.className = "role-btn py-1.5 px-1.5 sm:px-3 md:px-3.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/15 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-xs md:text-sm transition-all duration-200 text-center relative shrink-0 cursor-pointer";
                 }
             }
         }
@@ -16967,6 +17767,22 @@ function setActiveRoleView(role) {
     }
     if (typeof updateAdminRiderBadges === "function") {
         updateAdminRiderBadges();
+    }
+
+    // 📱 บนจอแคบปุ่มทั้ง 5 อาจล้นแถบ (โดยเฉพาะปุ่มที่กำลังเลือกซึ่งตัวหนา/กว้างกว่าปกติ)
+    //   เลื่อนแถบให้ปุ่มที่กำลังเลือกอยู่เห็นเต็มปุ่มเสมอ กันปัญหา "กดแล้วปุ่มโผล่ไม่เต็ม"
+    const activeRoleBtn = document.getElementById(`role-btn-${role}`);
+    const roleBar = document.getElementById("main-role-selector-bar");
+    if (activeRoleBtn && roleBar) {
+        requestAnimationFrame(() => {
+            const barRect = roleBar.getBoundingClientRect();
+            const btnRect = activeRoleBtn.getBoundingClientRect();
+            if (btnRect.right > barRect.right) {
+                roleBar.scrollLeft += (btnRect.right - barRect.right) + 8;
+            } else if (btnRect.left < barRect.left) {
+                roleBar.scrollLeft -= (barRect.left - btnRect.left) + 8;
+            }
+        });
     }
 
     if (role === "hub") {
@@ -17280,7 +18096,7 @@ function renderAdminAnalytics() {
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl">
                         <div class="text-xs font-bold text-blue-900">📱 พร้อมเพย์ (PromptPay)</div>
-                        <div class="text-lg font-black text-blue-950 mt-1">${paymentCounts.promptpay} ออเดอร์</div>
+                        <div class="text-lg font-black text-blue-950 mt-1">${escapeHtml(paymentCounts.promptpay)} ออเดอร์</div>
                     </div>
                     <div class="p-3 bg-purple-50 border border-purple-200 rounded-xl">
                         <div class="text-xs font-bold text-purple-900">🏦 โอนผ่านธนาคาร (SCB)</div>
@@ -17305,18 +18121,23 @@ let _adminStallRosterView = "roster"; // 'roster' | 'applications'
 let _adminMerchantAppFilter = "all"; // 'all' | 'pending' | 'approved' | 'rejected'
 
 function loadMarketStallSettings() {
+    let s = null;
     try {
         const raw = localStorage.getItem("talathub_market_stall_settings");
-        if (raw) return JSON.parse(raw);
+        if (raw) s = JSON.parse(raw);
     } catch(e) {}
-    return {
-        gpRate: 0,
-        rushMode: false,
-        openHour: "04:00",
-        closeHour: "18:00",
-        alertPrepMinutes: 15,
-        refundPolicy: "cash_envelope"
-    };
+    if (!s || typeof s !== "object") {
+        s = {
+            rushMode: false,
+            openHour: "04:00",
+            closeHour: "18:00",
+            alertPrepMinutes: 15,
+            refundPolicy: "cash_envelope"
+        };
+    }
+    // อัตรา GP มีแหล่งเดียวคือ hubSettings.merchantGP (ค่าเริ่มต้น 10%) ทุกหน้าจอจึงเห็นตรงกัน
+    s.gpRate = loadSavedHubSettings().merchantGP;
+    return s;
 }
 
 function saveMarketStallSettings(settings) {
@@ -17380,15 +18201,40 @@ function toggleMarketRushMode() {
 }
 window.toggleMarketRushMode = toggleMarketRushMode;
 
+// พบ 2026-09-23 ระหว่างเพิ่มปุ่มแก้หมวดหมู่ร้านค้า: ALL_100_STALLS กับ MARKET_DATA เก็บคนละอ็อบเจกต์กัน
+//   (ไม่ใช่ reference เดียวกัน) ฟังก์ชันนี้เคยแก้แค่ตัวที่เจอก่อน (มักเป็น ALL_100_STALLS เพราะเช็คก่อน) ทำให้
+//   บนจอ "ดูเหมือน" ปิด/เปิดร้านสำเร็จ (เพราะตารางแอดมินอ่านจาก ALL_100_STALLS) แต่ค่าที่บันทึกจริงไม่เปลี่ยน
+//   เพราะ saveMarketDataToStorage() อ่านจาก MARKET_DATA - พอโหลดหน้าใหม่/ซิงก์จากคลาวด์ค่าจะเด้งกลับที่เดิม
 function toggleStallOpenStatusByAdmin(stallId) {
-    const s = ALL_100_STALLS.find(x => x.stallId === stallId) || MARKET_DATA.find(x => x.stallId === stallId);
-    if (!s) return;
-    s.isClosed = !s.isClosed;
+    const s1 = ALL_100_STALLS.find(x => x.stallId === stallId);
+    const s2 = MARKET_DATA.find(x => x.stallId === stallId);
+    if (!s1 && !s2) return;
+    const newState = !((s1 || s2).isClosed);
+    if (s1) s1.isClosed = newState;
+    if (s2) s2.isClosed = newState;
     saveMarketDataToStorage();
-    showToast(`${s.isClosed ? '🔴 ปิด/พักร้าน' : '🟢 เปิดรับออเดอร์ปกติ'} แผง ${s.stallName || stallId} สำเร็จ`);
+    const stallName = (s1 && s1.stallName) || (s2 && s2.stallName) || stallId;
+    showToast(`${newState ? '🔴 ปิด/พักร้าน' : '🟢 เปิดรับออเดอร์ปกติ'} แผง ${stallName} สำเร็จ`);
     renderAdminStalls();
 }
 window.toggleStallOpenStatusByAdmin = toggleStallOpenStatusByAdmin;
+
+// 🏷️ ให้แอดมินแก้ไขหมวดหมู่ร้านค้าได้เองจากหน้ารายชื่อร้านค้า (เผื่อร้านค้าเลือกผิดตอนสมัคร หรือขายหลายอย่าง)
+//   ⚠️ ALL_100_STALLS กับ MARKET_DATA เก็บคนละอ็อบเจกต์กัน (ไม่ใช่ reference เดียวกัน) แม้ stallId เดียวกัน
+//   ต้องแก้ทั้งคู่ ไม่งั้นค่าที่บันทึกจริง (saveMarketDataToStorage อ่านจาก MARKET_DATA) จะไม่ถูกอัปเดต
+function adminUpdateStallCategory(stallId, newCategory) {
+    if (!newCategory) return;
+    const s1 = ALL_100_STALLS.find(x => x.stallId === stallId);
+    const s2 = MARKET_DATA.find(x => x.stallId === stallId);
+    if (!s1 && !s2) return;
+    if (s1) s1.category = newCategory;
+    if (s2) s2.category = newCategory;
+    saveMarketDataToStorage();
+    const stallName = (s1 && s1.stallName) || (s2 && s2.stallName) || stallId;
+    showToast(`✅ เปลี่ยนหมวดหมู่ร้าน "${stallName}" เป็น "${newCategory}" แล้ว`);
+    renderAdminStalls();
+}
+window.adminUpdateStallCategory = adminUpdateStallCategory;
 
 function adminMarkStallReady(orderId, stallId) {
     let orders = [];
@@ -17541,8 +18387,10 @@ function saveMarketStallSettingsFromForm() {
     const settings = loadMarketStallSettings();
     if (gpInput) {
         const gVal = Number(gpInput.value);
-        settings.gpRate = (!isNaN(gVal) && gVal >= 0) ? gVal : 0;
-        // ซิงค์ไปยัง hubSettings ด้วย เพื่อให้ทุกระบบใช้อัตรา GP เดียวกัน
+        const gpValid = !isNaN(gVal) && gVal > 0;
+        settings.gpRate = gpValid ? gVal : 10;
+        if (!gpValid) showToast("⚠️ GP ต้องมากกว่า 0% จึงตั้งเป็น 10% ให้");
+        // เก็บที่ hubSettings.merchantGP ที่เดียว (แหล่งเดียวของอัตรา GP)
         try {
             const hSettings = loadSavedHubSettings();
             hSettings.merchantGP = settings.gpRate;
@@ -17570,7 +18418,7 @@ function printA4VendorSettlementsReport(targetDateKey) {
     const totalDue = report && report.vendorSettlement ? (report.vendorSettlement.totalVendorAmount || 0) : 0;
     const settledAmt = report && report.vendorSettlement ? (report.vendorSettlement.totalSettledAmount || 0) : 0;
     const unsettledAmt = report && report.vendorSettlement ? (report.vendorSettlement.totalPendingAmount || 0) : 0;
-    const gpRate = report && report.vendorSettlement ? (report.vendorSettlement.gpRate || 0) : 0;
+    const gpRate = report && report.vendorSettlement ? (report.vendorSettlement.gpRate || 10) : 10;
 
     let rowsHtml = "";
     if (vendors.length === 0) {
@@ -17579,13 +18427,13 @@ function printA4VendorSettlementsReport(targetDateKey) {
         rowsHtml = vendors.map((v, idx) => `
             <tr>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
-                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${v.stallNumber || '-'} (${v.zone || '-'})</td>
-                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${v.stallName}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(v.stallNumber) || '-'} (${escapeHtml(v.zone) || '-'})</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(v.stallName)}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${v.orderCount} ออเดอร์</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: right; color: #475569;">฿${Number(v.totalAmount || 0).toLocaleString()}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: right; color: #b91c1c;">${(v.gpAmount || 0) > 0 ? `-฿${Number(v.gpAmount || 0).toLocaleString()}` : '฿0'}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold; text-align: right; color: #047857;">฿${Number(v.payoutAmount !== undefined ? v.payoutAmount : v.totalAmount).toLocaleString()}</td>
-                <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${v.phone || '-'}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${escapeHtml(v.phone) || '-'}</td>
                 <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: ${v.isSettled ? '#047857' : '#d97706'};">
                     ${v.isSettled ? 'โอนแล้ว ✓' : 'รอโอน'}
                 </td>
@@ -17656,8 +18504,8 @@ function printA4MerchantRules() {
                 การชั่งน้ำหนักสินค้าต้องใช้ตาชั่งมาตรฐานที่ผ่านการตรวจรับรอง กรณีสินค้าบางรายการหมด ให้แจ้งในระบบทันทีและนำเงินสดส่วนต่างใส่ซองแนบไปกับถุงสินค้าเพื่อส่งคืนลูกค้าอย่างซื่อสัตย์
             </div>
             <div style="margin-bottom: 12px; padding: 10px; background: #eff6ff; border-left: 4px solid #2563eb; border-radius: 4px;">
-                <strong>ข้อที่ 4: การรับเงินโอนค่าสินค้าผ่านระบบพร้อมเพย์ (0% GP)</strong><br>
-                ตลาดฮับวิศิษฐ์ชัยสนับสนุนเศรษฐกิจชุมชน ไม่มีการหักค่าธรรมเนียม GP (${settings.gpRate || 0}% GP) เงินค่าสินค้าจะถูกโอนตรงเข้าบัญชีพร้อมเพย์ของเจ้าของแผงค้าทุกวันหลังตัดรอบ
+                <strong>ข้อที่ 4: การรับเงินโอนค่าสินค้าผ่านระบบพร้อมเพย์ (หัก GP ${settings.gpRate}%)</strong><br>
+                ตลาดฮับวิศิษฐ์ชัยหักค่าบริการแพลตฟอร์ม (GP) ${settings.gpRate}% จากยอดขายสินค้า ส่วนที่เหลือจะถูกโอนเข้าบัญชีพร้อมเพย์ของเจ้าของแผงค้าทุกวันหลังตัดรอบ
             </div>
             <div style="margin-bottom: 12px; padding: 10px; background: #fdf2f8; border-left: 4px solid #db2777; border-radius: 4px;">
                 <strong>ข้อที่ 5: เวลาทำการเปิด-ปิดแผงค้า</strong><br>
@@ -17870,7 +18718,7 @@ function renderAdminStalls() {
                     </div>
                     <div class="text-xl sm:text-2xl font-black text-emerald-700">฿${todayStallSalesTotal.toLocaleString()}</div>
                     <div class="text-[10px] sm:text-[11px] text-slate-500">
-                        ยอดสินค้าของสด 100 แผงค้าวันนี้ (0% GP)
+                        ยอดสินค้าของสด 100 แผงค้าวันนี้ (ก่อนหัก GP)
                     </div>
                 </div>
 
@@ -17902,7 +18750,7 @@ function renderAdminStalls() {
                         ทั้งหมด (${ALL_100_STALLS.length})
                     </button>
                     <button onclick="filterAdminStallsByStatus('active_orders')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminStallStatusFilter === 'active_orders' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
-                        🔴 มีออเดอร์ค้างทำ (${stallsWithOrdersIds.size})
+                        🔴 มีออเดอร์ค้างทำ (${escapeHtml(stallsWithOrdersIds.size)})
                     </button>
                     <button onclick="filterAdminStallsByStatus('open')" class="px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all ${_adminStallStatusFilter === 'open' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
                         🟢 เปิดร้าน (${openStallsCount})
@@ -17944,16 +18792,16 @@ function renderAdminStalls() {
                                     </div>
                                     <div>
                                         <div class="flex items-center gap-1.5 flex-wrap">
-                                            <span class="font-black text-sm text-slate-900">${task.stallName}</span>
-                                            <span class="bg-slate-100 text-slate-700 text-[10px] font-mono px-2 py-0.5 rounded-md font-bold">${task.stallNumber}</span>
-                                            <span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded-md">โซน ${task.zone}</span>
+                                            <span class="font-black text-sm text-slate-900">${escapeHtml(task.stallName)}</span>
+                                            <span class="bg-slate-100 text-slate-700 text-[10px] font-mono px-2 py-0.5 rounded-md font-bold">${escapeHtml(task.stallNumber)}</span>
+                                            <span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded-md">โซน ${escapeHtml(task.zone)}</span>
                                         </div>
                                         <div class="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap mt-0.5">
-                                            <span>เจ้าของ: <strong>${task.ownerName}</strong></span>
+                                            <span>เจ้าของ: <strong>${escapeHtml(task.ownerName)}</strong></span>
                                             <span>•</span>
-                                            <a href="tel:${task.phone}" class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
+                                            <a href="tel:${escapeHtml(task.phone)}" class="text-emerald-700 font-bold hover:underline flex items-center gap-0.5">
                                                 <span class="material-symbols-outlined text-xs">call</span>
-                                                <span>${task.phone}</span>
+                                                <span>${escapeHtml(task.phone)}</span>
                                             </a>
                                         </div>
                                     </div>
@@ -17969,7 +18817,7 @@ function renderAdminStalls() {
                             <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-2">
                                 <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                                     <span>ขั้นตอนการจัดการออเดอร์แผงค้า (Order Pipeline):</span>
-                                    <span class="font-mono text-slate-500 font-black">#${task.orderId}</span>
+                                    <span class="font-mono text-slate-500 font-black">#${escapeHtml(task.orderId)}</span>
                                 </div>
                                 <div class="grid grid-cols-4 gap-1 text-center text-[10.5px]">
                                     <div class="p-1.5 rounded-lg font-bold ${task.stage >= 1 ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-white text-slate-400 border border-slate-200'}">
@@ -17998,7 +18846,7 @@ function renderAdminStalls() {
                                         <div class="p-1.5 flex items-center justify-between">
                                             <div class="flex items-center gap-1.5">
                                                 <span class="text-emerald-600 font-black">✓</span>
-                                                <span class="font-bold text-slate-800">${it.name || 'สินค้า'}</span>
+                                                <span class="font-bold text-slate-800">${escapeHtml(it.name) || 'สินค้า'}</span>
                                                 <span class="text-slate-400 font-normal">x${it.qty || 1}</span>
                                             </div>
                                             <div class="font-mono font-bold text-slate-700">฿${Number(it.price || 0).toLocaleString()}</div>
@@ -18009,15 +18857,15 @@ function renderAdminStalls() {
 
                             <!-- Customer & Address Summary -->
                             <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex-wrap gap-2">
-                                <div>ลูกค้า: <strong>${task.customerName}</strong> (${task.customerPhone})</div>
-                                <div class="text-slate-400 text-[10px]">ปลายทาง: ${task.deliveryAddress}</div>
+                                <div>ลูกค้า: <strong>${escapeHtml(task.customerName)}</strong> (${escapeHtml(task.customerPhone)})</div>
+                                <div class="text-slate-400 text-[10px]">ปลายทาง: ${escapeHtml(task.deliveryAddress)}</div>
                             </div>
 
                             <!-- Card Action Buttons -->
                             <div class="flex items-center justify-between pt-2 border-t border-slate-100 gap-2 flex-wrap">
                                 <div class="flex items-center gap-1.5">
                                     ${!task.isReady && task.stage <= 2 ? `
-                                        <button onclick="adminMarkStallReady('${task.orderId}', '${task.stallId}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                                        <button onclick="adminMarkStallReady(${jsArg(task.orderId)}, ${jsArg(task.stallId)})" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
                                             <span class="material-symbols-outlined text-sm font-bold">check_circle</span>
                                             <span>✓ ช่วยยืนยันเตรียมเสร็จ</span>
                                         </button>
@@ -18027,13 +18875,13 @@ function renderAdminStalls() {
                                             <span>เตรียมเสร็จแล้ว รอไรเดอร์มารับ</span>
                                         </span>
                                     `}
-                                    <button onclick="loginAsMerchantStall('${task.stallId}')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าร้านนี้">
+                                    <button onclick="loginAsMerchantStall(${jsArg(task.stallId)})" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าร้านนี้">
                                         <span class="material-symbols-outlined text-xs">store</span>
                                         <span>เข้าร้าน</span>
                                     </button>
                                 </div>
                                 <div class="flex items-center gap-1.5">
-                                    <button onclick="printStallOrderThermalSlip('${task.orderId}', '${task.stallId}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสั่งของสด 80mm">
+                                    <button onclick="printStallOrderThermalSlip(${jsArg(task.orderId)}, ${jsArg(task.stallId)})" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสั่งของสด 80mm">
                                         <span class="material-symbols-outlined text-xs">print</span>
                                         <span>สลิป 80mm</span>
                                     </button>
@@ -18075,12 +18923,12 @@ function renderAdminStalls() {
                                             ${zoneStalls.slice(0, 20).map(s => {
                                                 const hasOrder = stallsWithOrdersIds.has(s.stallId);
                                                 return `
-                                                    <button onclick="handleAdminStallSearch('${s.stallNumber}')" title="${s.stallNumber}: ${s.stallName} (${hasOrder ? 'มีออเดอร์ค้างทำ!' : (s.isClosed ? 'พักร้าน' : 'เปิดปกติ')})" class="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold transition-all active:scale-95 cursor-pointer ${
+                                                    <button onclick="handleAdminStallSearch(${jsArg(s.stallNumber)})" title="${escapeHtml(s.stallNumber)}: ${escapeHtml(s.stallName)} (${hasOrder ? 'มีออเดอร์ค้างทำ!' : (s.isClosed ? 'พักร้าน' : 'เปิดปกติ')})" class="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold transition-all active:scale-95 cursor-pointer ${
                                                         hasOrder
                                                         ? 'bg-amber-400 text-slate-950 font-black animate-pulse border border-amber-500 shadow-2xs'
                                                         : (s.isClosed ? 'bg-slate-200 text-slate-400 opacity-60' : 'bg-white hover:bg-emerald-50 text-slate-700 border border-slate-200')
                                                     }">
-                                                        ${s.stallNumber}
+                                                        ${escapeHtml(s.stallNumber)}
                                                     </button>
                                                 `;
                                             }).join('')}
@@ -18108,11 +18956,11 @@ function renderAdminStalls() {
                                 ${urgentItemsList.map(it => `
                                     <div class="p-2 bg-amber-50/60 rounded-xl border border-amber-200/80 flex items-center justify-between">
                                         <div>
-                                            <span class="font-bold text-slate-800">${it.name}</span>
+                                            <span class="font-bold text-slate-800">${escapeHtml(it.name)}</span>
                                             <span class="text-slate-500 font-normal"> x${it.qty}</span>
                                         </div>
                                         <div class="text-[10px] font-bold text-amber-900 bg-white px-2 py-0.5 rounded-lg border border-amber-200">
-                                            ${it.stallNumber} (${it.stallName})
+                                            ${escapeHtml(it.stallNumber)} (${escapeHtml(it.stallName)})
                                         </div>
                                     </div>
                                 `).join('')}
@@ -18183,9 +19031,9 @@ function renderAdminStalls() {
                         </div>
                     ` : displayedApps.map(app => {
                         const stall = app.stallData || {};
-                        const productsList = (stall.products || []).slice(0, 3).map(p => `<span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold">✓ ${p.name || 'สินค้า'} ฿${p.price || 0}</span>`).join('');
+                        const productsList = (stall.products || []).slice(0, 3).map(p => `<span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold">✓ ${escapeHtml(p.name) || 'สินค้า'} ฿${p.price || 0}</span>`).join('');
                         return `
-                            <div id="merchant-app-card-${app.id}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
+                            <div id="merchant-app-card-${escapeHtml(app.id)}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
                                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
                                     <div class="flex items-start gap-3">
                                         <div class="w-11 h-11 rounded-2xl bg-gradient-to-br ${app.status === 'pending' ? 'from-amber-400 to-orange-500' : app.status === 'approved' ? 'from-emerald-500 to-teal-600' : 'from-rose-400 to-red-600'} text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
@@ -18194,7 +19042,7 @@ function renderAdminStalls() {
                                         <div>
                                             <div class="flex items-center gap-2 flex-wrap">
                                                 <span class="font-black text-sm text-slate-900">${escapeHtml(stall.stallName || 'แผงค้าใหม่')}</span>
-                                                <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${stall.stallNumber || app.id}</span>
+                                                <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${escapeHtml(stall.stallNumber) || escapeHtml(app.id)}</span>
                                                 ${app.status === 'pending' ? `
                                                     <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⏳ รอการอนุมัติ</span>
                                                 ` : app.status === 'approved' ? `
@@ -18202,11 +19050,12 @@ function renderAdminStalls() {
                                                 ` : `
                                                     <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✕ ปฏิเสธ</span>
                                                 `}
-                                                ${app.accessCode ? `
+                                                ${app.status === 'approved' ? `
                                                     <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 text-[10px] font-mono font-black px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
-                                                        <span>🔑 รหัส:</span>
-                                                        <span class="tracking-widest">${app.accessCode}</span>
+                                                        <span>🏪 รหัสร้าน:</span>
+                                                        <span class="tracking-widest">${escapeHtml(stall.stallId || app.id)}</span>
                                                     </span>
+                                                    <button onclick="resetMerchantLoginSecret(${jsArg(stall.stallId || app.id)})" class="text-[10px] font-bold px-2 py-0.5 rounded-lg cursor-pointer ${app.loginHash ? 'bg-slate-100 text-slate-700 border border-slate-300' : 'bg-amber-100 text-amber-900 border border-amber-300'}">🔑 ${app.loginHash ? 'สร้างรหัสผ่านใหม่' : 'สร้างรหัสผ่าน'}</button>
                                                 ` : ''}
                                             </div>
                                             <div class="text-[11px] text-slate-500 flex items-center gap-2.5 flex-wrap mt-0.5 font-mono">
@@ -18221,24 +19070,24 @@ function renderAdminStalls() {
                                     </div>
 
                                     <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
-                                        <button onclick="printA4MerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
+                                        <button onclick="printA4MerchantApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
                                             <span class="material-symbols-outlined text-xs">print</span>
                                             <span>พิมพ์ A4</span>
                                         </button>
-                                        <button onclick="viewMerchantAppDetail('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                        <button onclick="viewMerchantAppDetail(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                                             <span class="material-symbols-outlined text-xs">visibility</span>
                                             <span>ดูรายละเอียด</span>
                                         </button>
-                                        <button onclick="loginAsMerchantStall('${stall.stallId}')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้">
+                                        <button onclick="loginAsMerchantStall(${jsArg(stall.stallId)})" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้">
                                             <span class="material-symbols-outlined text-xs">store</span>
                                             <span>สลับเข้าร้าน</span>
                                         </button>
                                         ${app.status === 'pending' ? `
-                                            <button onclick="approveMerchantApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                            <button onclick="approveMerchantApplication(${jsArg(app.id)})" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                                                 <span class="material-symbols-outlined text-xs font-bold">check_circle</span>
                                                 <span>อนุมัติ</span>
                                             </button>
-                                            <button onclick="rejectMerchantApplication('${app.id}')" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all cursor-pointer">
+                                            <button onclick="rejectMerchantApplication(${jsArg(app.id)})" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all cursor-pointer">
                                                 ✕ ปฏิเสธ
                                             </button>
                                         ` : ''}
@@ -18283,37 +19132,41 @@ function renderAdminStalls() {
                                     ${filteredStalls.slice(0, 80).map(s => `
                                         <tr class="hover:bg-slate-50 transition-colors">
                                             <td class="p-3 font-mono font-bold text-slate-700">
-                                                <span class="bg-slate-100 px-2 py-0.5 rounded">${s.stallNumber || 'แผงตลาด'}</span>
-                                                <span class="text-[10px] text-slate-400 ml-1">โซน ${s.zone || '-'}</span>
+                                                <span class="bg-slate-100 px-2 py-0.5 rounded">${escapeHtml(s.stallNumber) || 'แผงตลาด'}</span>
+                                                <span class="text-[10px] text-slate-400 ml-1">โซน ${escapeHtml(s.zone) || '-'}</span>
                                             </td>
                                             <td class="p-3">
-                                                <div class="font-extrabold text-slate-900">${s.stallName}</div>
-                                                <div class="text-[10px] text-slate-400">${s.stallTag || s.category || ''}</div>
+                                                <div class="font-extrabold text-slate-900">${escapeHtml(s.stallName)}</div>
+                                                ${s.stallTag ? `<div class="text-[10px] text-slate-400">${escapeHtml(s.stallTag)}</div>` : ''}
+                                                <select onchange="adminUpdateStallCategory(${jsArg(s.stallId)}, this.value)" title="แก้ไขหมวดหมู่ร้านค้า" class="mt-1 text-[10px] text-slate-600 border border-slate-200 rounded-lg px-1.5 py-0.5 bg-white max-w-[150px] cursor-pointer">
+                                                    ${getMainCategories().map(c => `<option value="${escapeHtml(c)}" ${normalizeMainCategoryName(s.category) === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+                                                </select>
                                             </td>
-                                            <td class="p-3 text-slate-700 font-medium">${s.ownerName || 'เจ้าของแผง'}</td>
-                                            <td class="p-3 font-mono font-bold text-emerald-700">📱 ${s.phone || '-'}</td>
+                                            <td class="p-3 text-slate-700 font-medium">${escapeHtml(s.ownerName) || 'เจ้าของแผง'}</td>
+                                            <td class="p-3 font-mono font-bold text-emerald-700">📱 ${escapeHtml(s.phone) || '-'}</td>
                                             <td class="p-3">
-                                                ${s.accessCode ? `
-                                                    <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-lg font-mono font-bold text-xs tracking-wider inline-flex items-center gap-1 cursor-pointer" onclick="navigator.clipboard.writeText('${s.accessCode}'); showToast('📋 คัดลอกรหัส ${s.accessCode} แล้ว');" title="คลิกเพื่อคัดลอกรหัส">
-                                                        <span>🔑</span>
-                                                        <span>${s.accessCode}</span>
+                                                ${s.stallId ? `
+                                                    <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-lg font-mono font-bold text-xs tracking-wider inline-flex items-center gap-1">
+                                                        <span>🏪</span>
+                                                        <span>${escapeHtml(s.stallId)}</span>
                                                     </span>
+                                                    <button onclick="resetMerchantLoginSecret(${jsArg(s.stallId)})" class="mt-1 px-2 py-0.5 rounded-lg text-[10px] font-bold ${s.loginHash ? 'bg-slate-100 text-slate-700 border border-slate-300' : 'bg-amber-100 text-amber-900 border border-amber-300'} cursor-pointer">🔑 ${s.loginHash ? 'สร้างรหัสใหม่' : 'สร้างรหัสผ่าน'}</button>
                                                 ` : '<span class="text-slate-400 text-[11px] italic">- ไม่มีรหัส -</span>'}
                                             </td>
                                             <td class="p-3 text-center">
-                                                <button onclick="toggleStallOpenStatusByAdmin('${s.stallId}')" class="px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer ${s.isClosed ? 'bg-slate-100 text-slate-500 border border-slate-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}">
+                                                <button onclick="toggleStallOpenStatusByAdmin(${jsArg(s.stallId)})" class="px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer ${s.isClosed ? 'bg-slate-100 text-slate-500 border border-slate-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}">
                                                     ${s.isClosed ? '⚪ พักร้าน' : '🟢 เปิดร้าน'}
                                                 </button>
                                             </td>
                                             <td class="p-3 text-center">
                                                 <div class="flex items-center justify-center gap-1">
-                                                    <button onclick="openVendorPayoutModal('${s.stallId}', '${s.stallName.replace(/'/g, "\\'")}', 500, '${s.phone || '089-123-4567'}', '${s.ownerName || 'เจ้าของแผง'}', '${s.stallNumber || 'แผงตลาด'}')" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
+                                                    <button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, 500, ${jsArg(s.phone || '089-123-4567')}, ${jsArg(s.ownerName || 'เจ้าของแผง')}, ${jsArg(s.stallNumber || 'แผงตลาด')})" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
                                                         QR โอน
                                                     </button>
-                                                    <button onclick="loginAsMerchantStall('${s.stallId}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
+                                                    <button onclick="loginAsMerchantStall(${jsArg(s.stallId)})" class="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
                                                         เข้าร้าน
                                                     </button>
-                                                    <button onclick="deleteStallByAdmin('${s.stallId}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer" title="ลบแผงค้านี้">
+                                                    <button onclick="deleteStallByAdmin(${jsArg(s.stallId)})" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer" title="ลบแผงค้านี้">
                                                         ลบร้าน
                                                     </button>
                                                 </div>
@@ -18387,7 +19240,7 @@ function renderAdminStalls() {
                     </span>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
-                    <button onclick="printA4VendorSettlementsReport('${targetDateKey}')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
+                    <button onclick="printA4VendorSettlementsReport(${jsArg(targetDateKey)})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">print</span>
                         <span>📄 พิมพ์สรุปส่งฝ่ายบัญชี A4</span>
                     </button>
@@ -18431,12 +19284,12 @@ function renderAdminStalls() {
                                 return `
                                 <tr class="hover:bg-slate-50 transition-colors">
                                     <td class="p-3 font-mono font-bold text-slate-700">
-                                        <span class="bg-slate-100 px-2 py-0.5 rounded">${v.stallNumber || 'แผง'}</span>
-                                        <span class="text-[10px] text-slate-400 ml-1">โซน ${v.zone || '-'}</span>
+                                        <span class="bg-slate-100 px-2 py-0.5 rounded">${escapeHtml(v.stallNumber) || 'แผง'}</span>
+                                        <span class="text-[10px] text-slate-400 ml-1">โซน ${escapeHtml(v.zone) || '-'}</span>
                                     </td>
                                     <td class="p-3">
-                                        <div class="font-extrabold text-slate-900">${v.stallName}</div>
-                                        <div class="text-[10px] text-slate-400">เจ้าของ: ${v.ownerName || '-'}</div>
+                                        <div class="font-extrabold text-slate-900">${escapeHtml(v.stallName)}</div>
+                                        <div class="text-[10px] text-slate-400">เจ้าของ: ${escapeHtml(v.ownerName) || '-'}</div>
                                     </td>
                                     <td class="p-3 text-center font-bold text-slate-700">
                                         ${v.orderCount} งาน
@@ -18451,7 +19304,7 @@ function renderAdminStalls() {
                                         ฿${stallPayout.toLocaleString()}
                                     </td>
                                     <td class="p-3 font-mono text-slate-600">
-                                        ${v.phone || '-'}
+                                        ${escapeHtml(v.phone) || '-'}
                                     </td>
                                     <td class="p-3 text-center">
                                         ${v.isSettled ? `
@@ -18460,7 +19313,7 @@ function renderAdminStalls() {
                                             </span>
                                             ${v.slipImage ? `
                                                 <div class="mt-1">
-                                                    <button type="button" onclick="openVendorSlipViewerModal('${v.stallId || v.stallName}', '${targetDateKey}')" class="bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[9.5px] font-bold inline-flex items-center gap-0.5 cursor-pointer shadow-2xs transition-all mx-auto">
+                                                    <button type="button" onclick="openVendorSlipViewerModal(${jsArg(v.stallId || v.stallName)}, ${jsArg(targetDateKey)})" class="bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[9.5px] font-bold inline-flex items-center gap-0.5 cursor-pointer shadow-2xs transition-all mx-auto">
                                                         <span class="material-symbols-outlined text-[11px]">receipt_long</span>
                                                         <span>มีสลิปหลักฐาน</span>
                                                     </button>
@@ -18478,17 +19331,17 @@ function renderAdminStalls() {
                                     </td>
                                     <td class="p-3 text-center">
                                         <div class="flex items-center justify-center gap-1.5 flex-wrap">
-                                            <button onclick="openVendorPayoutModal('${v.stallId}', '${v.stallName.replace(/'/g, "\\'")}', ${stallPayout}, '${v.phone}', '${v.ownerName.replace(/'/g, "\\'")}', '${v.stallNumber}', ${stallGross}, ${stallGP}, ${currentGPRate}, ${v.orderCount})" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                                            <button onclick="openVendorPayoutModal(${jsArg(v.stallId)}, ${jsArg(v.stallName)}, ${stallPayout}, ${jsArg(v.phone)}, ${jsArg(v.ownerName)}, ${jsArg(v.stallNumber)}, ${stallGross}, ${stallGP}, ${currentGPRate}, ${v.orderCount})" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1">
                                                 <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                                 <span>${v.isSettled ? 'ดู QR ซ้ำ' : '💸 สแกน QR โอน'}</span>
                                             </button>
                                             ${v.slipImage ? `
-                                                <button onclick="openVendorSlipViewerModal('${v.stallId || v.stallName}', '${targetDateKey}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1" title="ดูสลิปหลักฐานการโอน">
+                                                <button onclick="openVendorSlipViewerModal(${jsArg(v.stallId || v.stallName)}, ${jsArg(targetDateKey)})" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1" title="ดูสลิปหลักฐานการโอน">
                                                     <span class="material-symbols-outlined text-xs">image</span>
                                                     <span>ดูสลิปโอน</span>
                                                 </button>
                                             ` : `
-                                                <button onclick="openVendorDirectSlipUploadModal('${v.stallId}', '${v.stallName.replace(/'/g, "\\'")}', ${stallPayout}, '${v.phone}', '${v.ownerName.replace(/'/g, "\\'")}', '${v.stallNumber}', '${targetDateKey}')" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-lg text-[11px] shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1" title="แนบสลิปโอนเงิน">
+                                                <button onclick="openVendorDirectSlipUploadModal(${jsArg(v.stallId)}, ${jsArg(v.stallName)}, ${stallPayout}, ${jsArg(v.phone)}, ${jsArg(v.ownerName)}, ${jsArg(v.stallNumber)}, ${jsArg(targetDateKey)})" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-lg text-[11px] shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1" title="แนบสลิปโอนเงิน">
                                                     <span class="material-symbols-outlined text-xs">attach_file</span>
                                                     <span>แนบสลิป</span>
                                                 </button>
@@ -18526,7 +19379,7 @@ function renderAdminStalls() {
                                 <span>ค่าธรรมเนียม GP ตลาด (% GP)</span>
                                 <span class="text-purple-700 font-bold">ปัจจุบัน ${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || 10)}%</span>
                             </label>
-                            <input id="admin-market-gp-input" type="number" min="0" max="30" value="${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || 10)}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            <input id="admin-market-gp-input" type="number" min="1" max="30" value="${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || 10)}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
                             <p class="text-[10.5px] text-slate-400">อัตราค่าธรรมเนียมส่วนแบ่งยอดขายร้านค้า (GP) คำนวณหักอัตโนมัติก่อนโอนเคลียร์เงินรอบวัน</p>
                         </div>
 
@@ -18590,7 +19443,7 @@ function renderAdminStalls() {
                             </div>
                             <div class="p-2 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-2">
                                 <span class="font-black text-purple-700 shrink-0">4.</span>
-                                <span>รับเงินโอนค่าสินค้า 100% เต็มจำนวนแบบ 0% GP ทุกวันผ่านพร้อมเพย์</span>
+                                <span>รับเงินโอนค่าสินค้าหลังหัก GP ${marketSettings.gpRate}% ทุกวันผ่านพร้อมเพย์</span>
                             </div>
                         </div>
                     </div>
@@ -18672,7 +19525,7 @@ function renderAdminStalls() {
             <div class="bg-white p-6 rounded-3xl border border-rose-200 shadow-sm text-center space-y-3">
                 <div class="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto text-xl font-black">⚠️</div>
                 <div class="font-extrabold text-slate-800 text-sm">เกิดข้อผิดพลาดในการแสดงผลหน้าจัดการร้านค้า</div>
-                <div class="text-xs text-slate-500 font-mono">${err && err.message}</div>
+                <div class="text-xs text-slate-500 font-mono">${err && escapeHtml(err.message)}</div>
                 <button onclick="renderAdminStalls()" class="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
                     🔄 ลองโหลดใหม่อีกครั้ง
                 </button>
@@ -18745,7 +19598,7 @@ function viewMerchantAppDetail(appId) {
                     </div>
                     <div>
                         <h4 class="font-black text-base text-slate-900">${escapeHtml(stall.stallName || 'แผงค้าใหม่')}</h4>
-                        <div class="text-slate-500 font-mono text-[11px]">${c1.phone || stall.phone || '-'} • LINE: ${c1.line || stall.lineId || stall.phone || '-'}</div>
+                        <div class="text-slate-500 font-mono text-[11px]">${escapeHtml(c1.phone) || escapeHtml(stall.phone) || '-'} • LINE: ${c1.line || escapeHtml(stall.lineId) || escapeHtml(stall.phone) || '-'}</div>
                     </div>
                 </div>
                 <div>${statusBadge}</div>
@@ -18758,26 +19611,18 @@ function viewMerchantAppDetail(appId) {
                     <div class="flex items-center gap-2.5">
                         <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">🔑</span>
                         <div>
-                            <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">รหัสผ่าน 6 หลักสำหรับเข้าสู่ระบบ (ACCESS CODE)</div>
-                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${app.accessCode || '-'}</div>
+                            <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">รหัสร้าน (ใช้คู่กับรหัสผ่านลับที่เจ้าของส่งให้)</div>
+                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${escapeHtml(stall.stallId || app.id)}</div>
                         </div>
                     </div>
-                    <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">พร้อมใช้งาน</span>
+                    <span class="text-[10px] ${app.loginHash ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-bold px-2 py-0.5 rounded-md">${app.loginHash ? 'มีรหัสผ่านแล้ว' : 'ยังไม่มีรหัสผ่าน'}</span>
                 </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-emerald-200/60">
-                    <button type="button" onclick="sendRealSmsToApplicant(${jsArg(c1.phone || stall.phone)}, ${jsArg(app.accessCode)}, ${jsArg(stall.stallName)}, 'merchant')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
-                        <span class="material-symbols-outlined text-sm">sms</span>
-                        <span>ส่ง SMS จริง</span>
+                <div class="grid grid-cols-2 gap-1.5 pt-1 border-t border-emerald-200/60">
+                    <button type="button" onclick="resetMerchantLoginSecret(${jsArg(stall.stallId || app.id)})" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                        <span>🔑</span>
+                        <span>${app.loginHash ? 'สร้างรหัสผ่านใหม่' : 'สร้างรหัสผ่าน'} (แล้วส่งให้ร้านค้า)</span>
                     </button>
-                    <button type="button" onclick="sendLineNotificationToApplicant(${jsArg(c1.line || stall.lineId || stall.phone)}, ${jsArg(app.accessCode)}, ${jsArg(stall.stallName)}, 'merchant')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
-                        <span>💬</span>
-                        <span>ส่งแจ้ง LINE</span>
-                    </button>
-                    <button type="button" onclick="copyApprovalNotificationMessage(${jsArg(c1.phone || stall.phone)}, ${jsArg(app.accessCode)}, ${jsArg(stall.stallName)}, 'merchant')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
-                        <span class="material-symbols-outlined text-sm">content_copy</span>
-                        <span>คัดลอกข้อความ</span>
-                    </button>
-                    <a href="tel:${c1.phone || stall.phone}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
+                    <a href="tel:${escapeHtml(c1.phone) || escapeHtml(stall.phone)}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-sm">call</span>
                         <span>โทรหา</span>
                     </a>
@@ -18798,16 +19643,16 @@ function viewMerchantAppDetail(appId) {
                     </div>
                     <div>
                         <span class="text-[10px] text-slate-400">โซนตลาด:</span>
-                        <div class="font-bold text-purple-700">${stall.zone ? 'โซน ' + stall.zone : '-'}</div>
+                        <div class="font-bold text-purple-700">${stall.zone ? 'โซน ' + escapeHtml(stall.zone) : '-'}</div>
                     </div>
                     <div>
                         <span class="text-[10px] text-slate-400">หมวดหมู่สินค้า:</span>
-                        <div class="font-bold text-slate-700">${stall.category || stall.stallTag || 'ของสด'}</div>
+                        <div class="font-bold text-slate-700">${escapeHtml(stall.category) || escapeHtml(stall.stallTag) || 'ของสด'}</div>
                     </div>
                 </div>
                 ${stall.highlight ? `
                 <div class="pt-1 text-[11px] text-slate-600 border-t border-slate-200/60 mt-1">
-                    <span class="font-bold text-slate-500">จุดเด่น:</span> ${stall.highlight}
+                    <span class="font-bold text-slate-500">จุดเด่น:</span> ${escapeHtml(stall.highlight)}
                 </div>
                 ` : ''}
             </div>
@@ -18828,9 +19673,9 @@ function viewMerchantAppDetail(appId) {
                             <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                             <span>ผู้ติดต่อที่ 1 (หลัก)</span>
                         </div>
-                        <div><span class="text-slate-400 text-[10px]">ชื่อ-นามสกุล:</span> <strong class="text-slate-800">${c1.name || stall.ownerName || '-'}</strong></div>
-                        <div><span class="text-slate-400 text-[10px]">เบอร์โทร:</span> <a href="tel:${c1.phone || stall.phone || ''}" class="font-mono font-bold text-blue-700 hover:underline">📱 ${c1.phone || stall.phone || '-'}</a></div>
-                        <div><span class="text-slate-400 text-[10px]">LINE ID:</span> <span class="font-mono text-slate-700">${c1.line || stall.lineId || stall.phone || '-'}</span></div>
+                        <div><span class="text-slate-400 text-[10px]">ชื่อ-นามสกุล:</span> <strong class="text-slate-800">${escapeHtml(c1.name) || escapeHtml(stall.ownerName) || '-'}</strong></div>
+                        <div><span class="text-slate-400 text-[10px]">เบอร์โทร:</span> <a href="tel:${escapeHtml(c1.phone) || escapeHtml(stall.phone) || ''}" class="font-mono font-bold text-blue-700 hover:underline">📱 ${escapeHtml(c1.phone) || escapeHtml(stall.phone) || '-'}</a></div>
+                        <div><span class="text-slate-400 text-[10px]">LINE ID:</span> <span class="font-mono text-slate-700">${c1.line || escapeHtml(stall.lineId) || escapeHtml(stall.phone) || '-'}</span></div>
                     </div>
 
                     <!-- Contact 2 -->
@@ -18840,8 +19685,8 @@ function viewMerchantAppDetail(appId) {
                             <span>ผู้ติดต่อที่ 2 (สำรอง)</span>
                         </div>
                         ${hasContact2 ? `
-                        <div><span class="text-slate-400 text-[10px]">ชื่อ-นามสกุล:</span> <strong class="text-slate-800">${c2.name || '-'}</strong></div>
-                        <div><span class="text-slate-400 text-[10px]">เบอร์โทร:</span> ${c2.phone ? `<a href="tel:${c2.phone}" class="font-mono font-bold text-blue-700 hover:underline">📱 ${c2.phone}</a>` : '<span class="text-slate-400">-</span>'}</div>
+                        <div><span class="text-slate-400 text-[10px]">ชื่อ-นามสกุล:</span> <strong class="text-slate-800">${escapeHtml(c2.name) || '-'}</strong></div>
+                        <div><span class="text-slate-400 text-[10px]">เบอร์โทร:</span> ${c2.phone ? `<a href="tel:${escapeHtml(c2.phone)}" class="font-mono font-bold text-blue-700 hover:underline">📱 ${escapeHtml(c2.phone)}</a>` : '<span class="text-slate-400">-</span>'}</div>
                         <div><span class="text-slate-400 text-[10px]">LINE ID:</span> <span class="font-mono text-slate-700">${c2.line || '-'}</span></div>
                         ` : `
                         <div class="py-2 text-center text-slate-400 text-[11px] italic">
@@ -18860,7 +19705,7 @@ function viewMerchantAppDetail(appId) {
                 </div>
                 <div class="flex flex-wrap gap-1.5">
                     ${(stall.products || []).length > 0 ? (stall.products || []).map(p => `
-                        <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px]">✓ ${p.name || 'สินค้า'} (฿${p.price || 0}${p.unit ? `/${p.unit}` : ''})</span>
+                        <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg font-bold text-[11px]">✓ ${escapeHtml(p.name) || 'สินค้า'} (฿${p.price || 0}${p.unit ? `/${p.unit}` : ''})</span>
                     `).join('') : '<span class="text-slate-400 text-xs italic">- ยังไม่ได้บันทึกสินค้า -</span>'}
                 </div>
             </div>
@@ -18882,15 +19727,15 @@ function viewMerchantAppDetail(appId) {
                                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                                 <span>บัญชีหลักที่ 1</span>
                             </span>
-                            <span class="bg-emerald-200 text-emerald-900 text-[9px] font-black px-1.5 py-0.2 rounded">${bank1.bankName || 'ธนาคาร'}</span>
+                            <span class="bg-emerald-200 text-emerald-900 text-[9px] font-black px-1.5 py-0.2 rounded">${escapeHtml(bank1.bankName) || 'ธนาคาร'}</span>
                         </div>
                         <div class="pt-0.5">
                             <span class="text-[10px] text-emerald-800">เลขที่บัญชี:</span>
-                            <div class="font-mono font-black text-sm text-emerald-950">${bank1.accountNo || '-'}</div>
+                            <div class="font-mono font-black text-sm text-emerald-950">${escapeHtml(bank1.accountNo) || '-'}</div>
                         </div>
                         <div>
                             <span class="text-[10px] text-emerald-800">ชื่อบัญชี:</span>
-                            <strong class="text-slate-800 text-xs">${bank1.accountName || '-'}</strong>
+                            <strong class="text-slate-800 text-xs">${escapeHtml(bank1.accountName) || '-'}</strong>
                         </div>
                     </div>
 
@@ -18902,17 +19747,17 @@ function viewMerchantAppDetail(appId) {
                                 <span>บัญชีสำรองที่ 2</span>
                             </span>
                             ${hasBank2 && bank2.bankName ? `
-                            <span class="bg-amber-200 text-amber-900 text-[9px] font-black px-1.5 py-0.2 rounded">${bank2.bankName}</span>
+                            <span class="bg-amber-200 text-amber-900 text-[9px] font-black px-1.5 py-0.2 rounded">${escapeHtml(bank2.bankName)}</span>
                             ` : ''}
                         </div>
                         ${hasBank2 ? `
                         <div class="pt-0.5">
                             <span class="text-[10px] text-amber-800">เลขที่บัญชี:</span>
-                            <div class="font-mono font-black text-sm text-amber-950">${bank2.accountNo || '-'}</div>
+                            <div class="font-mono font-black text-sm text-amber-950">${escapeHtml(bank2.accountNo) || '-'}</div>
                         </div>
                         <div>
                             <span class="text-[10px] text-amber-800">ชื่อบัญชี:</span>
-                            <strong class="text-slate-800 text-xs">${bank2.accountName || '-'}</strong>
+                            <strong class="text-slate-800 text-xs">${escapeHtml(bank2.accountName) || '-'}</strong>
                         </div>
                         ` : `
                         <div class="py-2 text-center text-slate-400 text-[11px] italic">
@@ -18928,37 +19773,37 @@ function viewMerchantAppDetail(appId) {
     if (footer) {
         footer.innerHTML = `
             <div class="flex items-center gap-1.5 flex-wrap">
-                <button type="button" onclick="openEditMerchantAppModal('${app.id}'); closeMerchantAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลแผงค้านี้">
+                <button type="button" onclick="openEditMerchantAppModal(${jsArg(app.id)}); closeMerchantAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลแผงค้านี้">
                     <span class="material-symbols-outlined text-sm">edit</span>
                     <span>แก้ไขข้อมูล</span>
                 </button>
                 ${app.status === 'rejected' ? `
-                    <button type="button" onclick="reconsiderMerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button type="button" onclick="reconsiderMerchantApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>พิจารณาใหม่</span>
                     </button>
                 ` : app.status === 'approved' ? `
-                    <button type="button" onclick="reconsiderMerchantApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button type="button" onclick="reconsiderMerchantApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>ย้อนกลับไปรอพิจารณา</span>
                     </button>
                 ` : ''}
-                <button type="button" onclick="deleteMerchantApplication('${app.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
+                <button type="button" onclick="deleteMerchantApplication(${jsArg(app.id)})" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
                     <span class="material-symbols-outlined text-base">delete</span>
                 </button>
             </div>
 
             <div class="flex items-center gap-1.5 flex-wrap">
                 ${app.status === 'pending' ? `
-                    <button type="button" onclick="rejectMerchantApplication('${app.id}')" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="rejectMerchantApplication(${jsArg(app.id)})" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
                         ปฏิเสธ
                     </button>
-                    <button type="button" onclick="approveMerchantApplication('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสร้างรหัสผ่าน 6 หลัก">
+                    <button type="button" onclick="approveMerchantApplication(${jsArg(app.id)})" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสร้างรหัสผ่าน 6 หลัก">
                         <span class="material-symbols-outlined text-sm font-bold">check_circle</span>
                         <span>อนุมัติ & รหัส 6 หลัก</span>
                     </button>
                 ` : `
-                    <button type="button" onclick="closeMerchantAppDetailModal(); loginAsMerchantStall('${stall.stallId}');" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้ทันที">
+                    <button type="button" onclick="closeMerchantAppDetailModal(); loginAsMerchantStall(${jsArg(stall.stallId)});" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าเป็นร้านค้านี้ทันที">
                         <span class="material-symbols-outlined text-sm font-bold">store</span>
                         <span>เข้าสู่ระบบร้านค้านี้ทันที 🚀</span>
                     </button>
@@ -19086,7 +19931,7 @@ function handleMerchantAppEditSubmit(e) {
     app.stallData.zone = zone;
     app.stallData.promptPayNumber = promptPay || bankNo || phone;
     app.stallData.highlight = highlight;
-    app.accessCode = accessCode || null;
+    app.accessCode = app.accessCode || accessCode || null;   // รหัสอ้างอิงเดิมไม่ถูกแก้ (ไม่ใช่รหัสผ่านแล้ว)
     app.status = status;
     app.updatedAt = new Date().toISOString();
 
@@ -19115,7 +19960,7 @@ function handleMerchantAppEditSubmit(e) {
     const stallId = app.stallData?.stallId || app.id;
     const sName = app.stallData?.stallName;
     if (status === "approved") {
-        const stallObj = { ...app.stallData, accessCode: app.accessCode };
+        const stallObj = stallFromApp(app);
         const mIdx = MARKET_DATA.findIndex(s => s.stallId === stallObj.stallId || s.phone === phone);
         if (mIdx >= 0) MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...stallObj };
         else MARKET_DATA.push(stallObj);
@@ -19150,6 +19995,7 @@ function handleMerchantAppEditSubmit(e) {
 window.handleMerchantAppEditSubmit = handleMerchantAppEditSubmit;
 
 function reconsiderMerchantApplication(appId) {
+    if (!requireOwnerAction()) return;
     const apps = loadMerchantApplications();
     const app = apps.find(a => a.id === appId);
     if (!app) return;
@@ -19185,6 +20031,7 @@ function reconsiderMerchantApplication(appId) {
 window.reconsiderMerchantApplication = reconsiderMerchantApplication;
 
 function deleteMerchantApplication(appId) {
+    if (!requireOwnerAction()) return;
     if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบใบสมัครนี้?")) return;
     let apps = loadMerchantApplications();
     const appToDelete = apps.find(a => a.id === appId);
@@ -19220,6 +20067,7 @@ function deleteMerchantApplication(appId) {
 window.deleteMerchantApplication = deleteMerchantApplication;
 
 function deleteStallByAdmin(stallId) {
+    if (!requireOwnerAction()) return;
     if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบแผงค้านี้ออกจากทำเนียบแผงค้า?")) return;
 
     for (let i = MARKET_DATA.length - 1; i >= 0; i--) {
@@ -19264,19 +20112,19 @@ function printA4MerchantApplication(appId) {
         <div class="a4-header">
             <div class="a4-title">ใบสมัครและทะเบียนประวัติแผงค้า (Merchant Application & Profile)</div>
             <div class="a4-meta">
-                ตลาดสดฮับวิศิษฐ์ชัย • รหัสใบสมัคร: ${app.id} • วันที่ยื่น: ${thaiDate}
+                ตลาดสดฮับวิศิษฐ์ชัย • รหัสใบสมัคร: ${escapeHtml(app.id)} • วันที่ยื่น: ${thaiDate}
             </div>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
-            <div style="font-size: 16px; font-weight: bold; color: #1e293b;">${stall.stallName || 'แผงค้าใหม่'} (เลขแผง: ${stall.stallNumber || '-'})</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เจ้าของแผง: <strong>${stall.ownerName || '-'}</strong> | เบอร์โทรศัพท์: <strong>${stall.phone || '-'}</strong> | LINE: <strong>${stall.lineId || stall.phone || '-'}</strong></div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">โซน: <strong>โซน ${stall.zone || '-'}</strong> | หมวดหมู่: <strong>${stall.category || stall.stallTag || 'ของสด'}</strong> | สถานะ: <strong>${statusThai}</strong></div>
-            ${app.accessCode ? `<div style="font-size: 12px; color: #047857; font-weight: bold; margin-top: 4px;">รหัสผ่าน 6 หลักเข้าสู่ระบบ (ACCESS CODE): ${app.accessCode}</div>` : ''}
+            <div style="font-size: 16px; font-weight: bold; color: #1e293b;">${escapeHtml(stall.stallName) || 'แผงค้าใหม่'} (เลขแผง: ${escapeHtml(stall.stallNumber) || '-'})</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">เจ้าของแผง: <strong>${escapeHtml(stall.ownerName) || '-'}</strong> | เบอร์โทรศัพท์: <strong>${escapeHtml(stall.phone) || '-'}</strong> | LINE: <strong>${escapeHtml(stall.lineId) || escapeHtml(stall.phone) || '-'}</strong></div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">โซน: <strong>โซน ${escapeHtml(stall.zone) || '-'}</strong> | หมวดหมู่: <strong>${escapeHtml(stall.category) || escapeHtml(stall.stallTag) || 'ของสด'}</strong> | สถานะ: <strong>${statusThai}</strong></div>
+            ${app.status === 'approved' ? `<div style="font-size: 12px; color: #047857; font-weight: bold; margin-top: 4px;">รหัสร้าน: ${escapeHtml(stall.stallId || app.id)} (รหัสผ่านเข้าระบบเป็นความลับ เจ้าของแจ้งให้ทางข้อความ ไม่พิมพ์ในเอกสาร)</div>` : ''}
         </div>
         <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
             <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; color: #334155;">จุดเด่นและรายละเอียดร้านค้า</div>
-            <div style="font-size: 11px; color: #475569;">${stall.highlight || '-'}</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">${stall.description || stall.story || '-'}</div>
+            <div style="font-size: 11px; color: #475569;">${escapeHtml(stall.highlight) || '-'}</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">${escapeHtml(stall.description) || escapeHtml(stall.story) || '-'}</div>
         </div>
         <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
             <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; color: #334155;">รายการสินค้าตัวอย่าง & เมนู</div>
@@ -19284,7 +20132,7 @@ function printA4MerchantApplication(appId) {
         </div>
         <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
             <div style="font-weight: bold; font-size: 12px; margin-bottom: 4px; color: #334155;">ข้อมูลการรับเงินเคลียร์ยอด (พร้อมเพย์)</div>
-            <div style="font-size: 11px; color: #475569;">เบอร์พร้อมเพย์: <strong>${stall.promptPayNumber || stall.phone || '-'}</strong> | ธนาคาร: <strong>${stall.promptPayBank || 'พร้อมเพย์'}</strong></div>
+            <div style="font-size: 11px; color: #475569;">เบอร์พร้อมเพย์: <strong>${escapeHtml(stall.promptPayNumber) || escapeHtml(stall.phone) || '-'}</strong> | ธนาคาร: <strong>${escapeHtml(stall.promptPayBank) || 'พร้อมเพย์'}</strong></div>
         </div>
         <div style="margin-top: 40px; display: flex; justify-content: space-between;">
             <div style="text-align: center; width: 200px;">
@@ -19308,12 +20156,12 @@ function printA4MerchantDirectory() {
     let rowsHtml = stalls.slice(0, 100).map((s, idx) => `
         <tr>
             <td style="padding: 6px; border: 1px solid #cbd5e1; text-align: center;">${idx + 1}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${s.stallNumber || '-'}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${s.stallName}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1;">โซน ${s.zone || '-'}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1;">${s.ownerName || '-'}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${s.phone || '-'}</td>
-            <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #047857;">${s.accessCode || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(s.stallNumber) || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-weight: bold;">${escapeHtml(s.stallName)}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1;">โซน ${escapeHtml(s.zone) || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1;">${escapeHtml(s.ownerName) || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace;">${escapeHtml(s.phone) || '-'}</td>
+            <td style="padding: 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #047857;">${escapeHtml(s.accessCode) || '-'}</td>
         </tr>
     `).join('');
 
@@ -19418,11 +20266,19 @@ function reconcileApprovedRiders(apps, currentRiders) {
                 motorcycleModel: app.motorcycleModel || "",
                 promptPay: app.promptPayNumber || app.phone || "",
                 accessCode: app.accessCode || app.id,
+                loginSalt: app.loginSalt,
+                loginHash: app.loginHash,
                 codSettledToday: 0
             });
             changed = true;
         } else {
             let r = riders[existingIdx];
+            // เจ้าของเท่านั้นที่คัดลอกรหัสผ่าน (hash) จากใบสมัครลงไรเดอร์ที่มีอยู่ (ผู้ใช้ทั่วไปแก้ hash บนคลาวด์ไม่ได้อยู่แล้ว)
+            if (isOwnerSignedIn() && app.loginHash && r.loginHash !== app.loginHash) {
+                r.loginSalt = app.loginSalt;
+                r.loginHash = app.loginHash;
+                changed = true;
+            }
             if (!r.name || r.name !== displayName || !r.accessCode) {
                 r.name = displayName;
                 r.accessCode = app.accessCode || app.id || r.accessCode;
@@ -19436,6 +20292,31 @@ function reconcileApprovedRiders(apps, currentRiders) {
     return { riders, changed };
 }
 window.reconcileApprovedRiders = reconcileApprovedRiders;
+
+// ถอนสิทธิ์ไรเดอร์ที่ผูกกับใบสมัครนี้ (ตอนปฏิเสธ / ย้อนกลับไปรอพิจารณา) — ไม่ให้รับงานต่อ
+// ต้องเรียกหลังเปลี่ยนสถานะใบสมัครเป็นไม่ใช่ "approved" แล้ว ไม่งั้น reconcileApprovedRiders จะกู้ไรเดอร์กลับมา
+function revokeRiderAccessForApplication(app) {
+    if (!app) return false;
+    const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
+    const matches = (r) => {
+        if (!r) return false;
+        const rPhone = (r.phone || "").replace(/[-\s]/g, "");
+        return (cleanPhone && rPhone === cleanPhone) ||
+            (app.accessCode && r.accessCode === app.accessCode) ||
+            (app.id && r.id === app.id);
+    };
+    const riders = loadCommunityRiders();
+    const remaining = riders.filter(r => !matches(r));
+    const removed = remaining.length !== riders.length;
+    if (removed) saveCommunityRiders(remaining);
+    try {
+        const saved = localStorage.getItem("talathub_logged_in_rider");
+        if (saved && matches(JSON.parse(saved))) localStorage.removeItem("talathub_logged_in_rider");
+    } catch (e) { }
+    if (state.activeRider && matches(state.activeRider)) state.activeRider = null;
+    return removed;
+}
+window.revokeRiderAccessForApplication = revokeRiderAccessForApplication;
 
 function loadCommunityRiders() {
     try {
@@ -19467,25 +20348,23 @@ function saveCommunityRiders(list) {
     try {
         const cleaned = (list || []).filter(r => r && !isMockCommunityRider(r));
         localStorage.setItem("talathub_community_riders", JSON.stringify(stripRiderPrivateList(cleaned)));
-        if (isFirebaseReady() && db) {
-            db.ref("community_riders").set(stripRiderPrivateList(cleaned)).catch(err => {
-                console.warn("Firebase save community_riders failed:", err);
-            });
-        }
-        try {
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/community_riders.json", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(stripRiderPrivateList(cleaned))
-            }).catch(() => {});
-        } catch (e) {}
+        // การ "เป็นไรเดอร์" เกิดจากเจ้าของอนุมัติเท่านั้น: ผู้ใช้ทั่วไปอัปเดตข้อมูลไรเดอร์ที่มีอยู่ได้ แต่สร้าง/ลบรายการไม่ได้
+        return syncListToCloud("community_riders", stripRiderPrivateList(cleaned), _keyOfCommunityRider, { canCreate: isOwnerSignedIn() });
     } catch (e) {
         console.error("Error saving community riders:", e);
     }
 }
 
 async function cleanRiderDatabase(skipToast) {
+    if (!requireOwnerAction()) return;   // ล้างฐานข้อมูลไรเดอร์ = เจ้าของเท่านั้น
     try {
+        // เก็บรายชื่อ id ไว้ก่อนล้าง local เพื่อไปลบทีละ id บนคลาวด์ (เหมือน clearFleetTestData) -
+        //   community_riders/rider_applications/rider_documents/rider_private ไม่มี .write ที่ตัวโหนดแม่เอง
+        //   ตามกฎ v2 (มีแค่ระดับ $id/$riderId) ดังนั้น .remove() ทั้งก้อนที่โหนดแม่จะโดนปฏิเสธเสมอ แม้ล็อกอินเป็นเจ้าของ
+        const riderIdsForCleanup = Array.from(new Set([
+            ...loadCommunityRiders().map(r => r && r.id).filter(Boolean),
+            ...loadRiderApplications().map(a => a && a.id).filter(Boolean)
+        ]));
         localStorage.removeItem("talathub_community_riders");
         localStorage.removeItem("talathub_rider_applications");
         localStorage.removeItem("talathub_logged_in_rider");
@@ -19499,23 +20378,19 @@ async function cleanRiderDatabase(skipToast) {
         wipeAllRiderDocuments();
 
         if (typeof isFirebaseReady === "function" && isFirebaseReady() && db) {
-            db.ref("rider_documents").remove().catch(() => {});
-            db.ref("rider_private").remove().catch(() => {});
-            db.ref("community_riders").remove().catch(() => {});
-            db.ref("rider_applications").remove().catch(() => {});
+            // โหนดที่กฎ v2 ล็อกไว้ระดับ $id/$riderId เท่านั้น: ต้องลบทีละ id ห้าม .remove()/.set() ทั้งก้อนที่โหนดแม่
+            riderIdsForCleanup.forEach(id => {
+                db.ref("rider_documents/" + id).remove().catch(() => {});
+                db.ref("rider_private/" + id).remove().catch(() => {});
+                db.ref("community_riders/" + id).remove().catch(() => {});
+                db.ref("rider_applications/" + id).remove().catch(() => {});
+            });
+            // โหนดที่เปิดกว้างอยู่แล้ว (.write: true ที่ตัวโหนดแม่เอง) - ลบทั้งก้อนได้ตามปกติ
             db.ref("active_rider").remove().catch(() => {});
             db.ref("rider_locations").remove().catch(() => {});
             db.ref("rider_status").remove().catch(() => {});
             db.ref("riders").remove().catch(() => {});
         }
-        try {
-            const endpoints = ["community_riders", "rider_applications", "rider_documents", "rider_private", "active_rider", "rider_locations", "rider_status", "riders"];
-            endpoints.forEach(ep => {
-                fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/${ep}.json`, {
-                    method: "DELETE"
-                }).catch(() => {});
-            });
-        } catch(e) {}
 
         if (!skipToast) {
             showToast("🧹 ล้างฐานข้อมูลไรเดอร์ทั้งหมดสะอาดเรียบร้อยแล้ว!");
@@ -19589,18 +20464,6 @@ function saveRiderApplications(apps) {
             return a;
         });
         localStorage.setItem("talathub_rider_applications", JSON.stringify(stripRiderPrivateList(cleaned)));
-        if (isFirebaseReady() && db) {
-            db.ref("rider_applications").set(stripRiderPrivateList(cleaned)).catch(err => {
-                console.warn("Firebase save rider_applications failed:", err);
-            });
-        }
-        try {
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/rider_applications.json", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(stripRiderPrivateList(cleaned))
-            }).catch(() => {});
-        } catch (e) {}
 
         // เจ้าของแก้ไข/อนุมัติใบสมัคร: ถ้าข้อมูลส่วนตัวเปลี่ยน (หรือยังไม่เคยย้ายไป rider_private) ให้บันทึกลงที่เก็บลับ
         if (isOwnerSignedIn()) {
@@ -19611,6 +20474,9 @@ function saveRiderApplications(apps) {
                 if (JSON.stringify(priv) !== JSON.stringify(cached)) saveRiderPrivate(a.id, priv);
             });
         }
+
+        // เขียนขึ้นคลาวด์เฉพาะใบสมัครที่เปลี่ยน (ทีละ id) — กฎ Firebase อนุญาตให้ผู้ใช้ทั่วไปสร้างได้เฉพาะสถานะ pending
+        return syncListToCloud("rider_applications", stripRiderPrivateList(cleaned), _keyOfRiderApp);
     } catch (e) {
         console.error("Error saving rider applications:", e);
     }
@@ -19628,7 +20494,7 @@ function initRiderRealtimeSync() {
         ]).then(([appsData, ridersData]) => {
             let apps = [];
             if (appsData) {
-                const rawApps = Array.isArray(appsData) ? appsData.filter(Boolean) : Object.values(appsData).filter(Boolean);
+                const rawApps = cloudValToList(appsData, _keyOfRiderApp);
                 apps = rawApps.filter(a => a && !isMockRiderApplication(a)).map(a => {
                     if (a.id) a.id = normalizeRiderCode(a.id);
                     if (a.accessCode) a.accessCode = normalizeRiderCode(a.accessCode);
@@ -19644,7 +20510,7 @@ function initRiderRealtimeSync() {
 
             let riders = [];
             if (ridersData) {
-                const rawRiders = Array.isArray(ridersData) ? ridersData.filter(Boolean) : Object.values(ridersData).filter(Boolean);
+                const rawRiders = cloudValToList(ridersData, _keyOfCommunityRider);
                 riders = rawRiders.filter(r => r && !isMockCommunityRider(r));
             } else {
                 riders = loadCommunityRiders();
@@ -19652,7 +20518,7 @@ function initRiderRealtimeSync() {
 
             // Auto-reconcile: If application is approved, guarantee rider is in community_riders
             const { riders: reconciledRiders, changed } = reconcileApprovedRiders(apps, riders);
-            if (changed || (reconciledRiders.length > 0 && (!ridersData || ridersData.length === 0))) {
+            if (changed || (reconciledRiders.length > 0 && !ridersData)) {
                 saveCommunityRiders(reconciledRiders);
             } else if (riders.length > 0) {
                 localStorage.setItem("talathub_community_riders", JSON.stringify(stripRiderPrivateList(riders)));
@@ -19672,12 +20538,8 @@ function initRiderRealtimeSync() {
     db.ref("rider_applications").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            let rawList = [];
-            if (Array.isArray(data)) {
-                rawList = data.filter(Boolean);
-            } else if (data && typeof data === "object") {
-                rawList = Object.values(data).filter(Boolean);
-            }
+            noteCloudSnapshot("rider_applications", data, _keyOfRiderApp);
+            const rawList = cloudValToList(data, _keyOfRiderApp);
 
             let cleaned = rawList.filter(a => a && !isMockRiderApplication(a)).map(a => {
                 if (a.id) a.id = normalizeRiderCode(a.id);
@@ -19691,9 +20553,7 @@ function initRiderRealtimeSync() {
                 const localApps = loadRiderApplications();
                 if (localApps && localApps.length > 0) {
                     cleaned = localApps;
-                    if (isFirebaseReady() && db) {
-                        db.ref("rider_applications").set(stripRiderPrivateList(cleaned)).catch(() => {});
-                    }
+                    syncListToCloud("rider_applications", stripRiderPrivateList(cleaned), _keyOfRiderApp);
                 }
             } else {
                 // Merge any pending local applications that have not reached Firebase yet
@@ -19732,25 +20592,17 @@ function initRiderRealtimeSync() {
     db.ref("community_riders").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            let rawList = [];
-            if (Array.isArray(data)) {
-                rawList = data.filter(Boolean);
-            } else if (data && typeof data === "object") {
-                rawList = Object.values(data).filter(Boolean);
-            }
+            noteCloudSnapshot("community_riders", data, _keyOfCommunityRider);
+            const rawList = cloudValToList(data, _keyOfCommunityRider);
 
             let cleaned = rawList.filter(r => r && !isMockCommunityRider(r));
-
-
 
             // Reconcile with approved applications
             const apps = loadRiderApplications();
             const { riders: reconciledRiders, changed } = reconcileApprovedRiders(apps, cleaned);
             if (changed) {
                 cleaned = reconciledRiders;
-                if (isFirebaseReady() && db) {
-                    db.ref("community_riders").set(stripRiderPrivateList(cleaned)).catch(() => {});
-                }
+                syncListToCloud("community_riders", stripRiderPrivateList(cleaned), _keyOfCommunityRider, { canCreate: isOwnerSignedIn() });
             }
 
             localStorage.setItem("talathub_community_riders", JSON.stringify(stripRiderPrivateList(cleaned)));
@@ -19775,12 +20627,8 @@ function initMerchantRealtimeSync() {
     db.ref("merchant_applications").on("value", snapshot => {
         try {
             const data = snapshot.val();
-            let rawList = [];
-            if (Array.isArray(data)) {
-                rawList = data.filter(Boolean);
-            } else if (data && typeof data === "object") {
-                rawList = Object.values(data).filter(Boolean);
-            }
+            noteCloudSnapshot("merchant_applications", data, _keyOfMerchantApp);
+            const rawList = cloudValToList(data, _keyOfMerchantApp);
 
             localStorage.setItem("talathub_merchant_applications", JSON.stringify(rawList));
             updateAdminStallsBadge();
@@ -19792,7 +20640,7 @@ function initMerchantRealtimeSync() {
                 const sName = app?.stallData?.stallName;
 
                 if (app && app.status === "approved" && app.stallData) {
-                    const sData = { ...app.stallData, accessCode: app.accessCode || app.stallData.accessCode };
+                    const sData = stallFromApp(app);
                     const mIdx = MARKET_DATA.findIndex(s => s.stallId === sData.stallId);
                     if (mIdx >= 0) {
                         MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...sData };
@@ -19963,10 +20811,10 @@ function goToAdminRiderSettlementFromComplete() {
 window.goToAdminRiderSettlementFromComplete = goToAdminRiderSettlementFromComplete;
 
 function goToAdminRiderSettlement(riderId) {
-    // 🔒 SECURITY: ตรวจสอบสถานะการเข้าสู่ระบบแอดมิน (ต้องใส่ PIN เท่านั้น ไม่อนุญาต Auto-login ข้ามบทบาท)
+    // 🔒 SECURITY: ตรวจสอบสถานะการเข้าสู่ระบบแอดมิน (ต้องล็อกอินเจ้าของเท่านั้น ไม่อนุญาต Auto-login ข้ามบทบาท)
     if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
         openAdminLoginModal();
-        showToast("🔒 กรุณากรอกรหัส PIN ผู้ดูแลระบบ (Admin) เพื่อเข้าสู่ระบบเคลียร์เงิน");
+        showToast("🔒 กรุณาล็อกอินด้วยอีเมลและรหัสผ่านเจ้าของ เพื่อเข้าสู่ระบบเคลียร์เงิน");
         return;
     }
     renderAuthHeaderButtons();
@@ -20033,6 +20881,13 @@ const RIDER_DOC_SLOTS = [
 const RIDER_BANK_OPTIONS = ["พร้อมเพย์ (PromptPay)", "กสิกรไทย (KBank)", "ไทยพาณิชย์ (SCB)", "กรุงเทพ (BBL)", "กรุงไทย (KTB)", "ออมสิน (GSB)", "กรุงศรี (BAY)", "ทหารไทยธนชาต (ttb)"];
 const RIDER_EMERGENCY_RELATIONS = ["บิดา / มารดา", "คู่สมรส / แฟน", "พี่น้อง", "ญาติ", "เพื่อน", "อื่น ๆ"];
 const RIDER_MAX_ACCOUNTS = 3;
+// 🔍 เอกสารที่ยัง "ไม่ครบ" ตาม RIDER_DOC_SLOTS ที่ required:true (selfie/license/registration; ไม่รวม vehicle ที่ไม่บังคับ)
+//   ใช้กันไม่ให้เจ้าของกดอนุมัติไรเดอร์ที่ยังไม่ได้ส่งเอกสารครบ (เดิม approveRiderApplication ไม่เคยตรวจเรื่องนี้เลย)
+function getMissingRequiredRiderDocs(app) {
+    const flags = (app && app.docFlags) || {};
+    return RIDER_DOC_SLOTS.filter(s => s.required && !flags[s.key]).map(s => s.label);
+}
+window.getMissingRequiredRiderDocs = getMissingRequiredRiderDocs;
 const RIDER_DB_BASE_URL = "https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app";
 const RIDER_FORM_FIELD_IDS = {
     onpage: { fullName: "onpage-rider-fullname", phone: "onpage-rider-phone" },
@@ -20124,26 +20979,26 @@ function renderRiderRegExtras(prefix, opts) {
             <p class="text-xs text-slate-500">ระบบจะย่อรูปให้อัตโนมัติ ถ่ายในที่สว่างและให้เห็นตัวหนังสือชัดเจน</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 ${RIDER_DOC_SLOTS.map(s => `
-                <div id="${prefix}-doc-card-${s.key}" class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
+                <div id="${prefix}-doc-card-${escapeHtml(s.key)}" class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
                     <div class="flex items-start gap-2">
                         <span class="material-symbols-outlined text-xl text-sky-600 shrink-0">${s.icon}</span>
                         <div class="min-w-0">
-                            <div class="font-extrabold text-sm text-slate-800">${s.label} ${s.required ? req : `<span class="text-slate-400 font-bold text-xs">(ไม่บังคับ)</span>`}</div>
+                            <div class="font-extrabold text-sm text-slate-800">${escapeHtml(s.label)} ${s.required ? req : `<span class="text-slate-400 font-bold text-xs">(ไม่บังคับ)</span>`}</div>
                             <div class="text-xs text-slate-500">${s.hint}</div>
                         </div>
                     </div>
                     <div class="rounded-xl bg-slate-50 border border-dashed border-slate-300 overflow-hidden flex items-center justify-center min-h-[110px]">
-                        <img id="${prefix}-doc-${s.key}-img" class="hidden w-full max-h-48 object-contain" alt="${s.label}">
-                        <span id="${prefix}-doc-${s.key}-empty" class="text-xs text-slate-400 font-bold py-6">ยังไม่ได้เลือกรูป</span>
+                        <img id="${prefix}-doc-${escapeHtml(s.key)}-img" class="hidden w-full max-h-48 object-contain" alt="${escapeHtml(s.label)}">
+                        <span id="${prefix}-doc-${escapeHtml(s.key)}-empty" class="text-xs text-slate-400 font-bold py-6">ยังไม่ได้เลือกรูป</span>
                     </div>
                     <div class="flex items-center gap-2">
                         <label class="flex-1 text-center px-3 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-sm font-extrabold cursor-pointer active:scale-95 transition-all">
                             <span>📷 เลือกรูป / ถ่ายรูป</span>
-                            <input type="file" accept="image/*" class="hidden" onchange="handleRiderDocUpload('${prefix}', '${s.key}', this)">
+                            <input type="file" accept="image/*" class="hidden" onchange="handleRiderDocUpload(${jsArg(prefix)}, ${jsArg(s.key)}, this)">
                         </label>
-                        <button type="button" id="${prefix}-doc-${s.key}-remove" onclick="removeRiderDoc('${prefix}', '${s.key}')" class="hidden px-3 py-2.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-sm font-bold cursor-pointer">ลบรูป</button>
+                        <button type="button" id="${prefix}-doc-${escapeHtml(s.key)}-remove" onclick="removeRiderDoc(${jsArg(prefix)}, ${jsArg(s.key)})" class="hidden px-3 py-2.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-sm font-bold cursor-pointer">ลบรูป</button>
                     </div>
-                    <div id="${prefix}-doc-${s.key}-status" class="text-xs font-bold text-slate-500"></div>
+                    <div id="${prefix}-doc-${escapeHtml(s.key)}-status" class="text-xs font-bold text-slate-500"></div>
                 </div>`).join("")}
             </div>
         </div>`;
@@ -20178,33 +21033,33 @@ function renderRiderAccountRows(prefix) {
         <div class="rounded-2xl border ${isPrimary ? "border-emerald-400 bg-emerald-50/60" : "border-slate-200 bg-white"} p-3 space-y-2.5">
             <div class="flex items-center justify-between gap-2">
                 <label class="flex items-center gap-2 font-extrabold text-sm text-slate-800 cursor-pointer">
-                    <input type="radio" name="${prefix}-acct-primary" ${isPrimary ? "checked" : ""} onchange="setRiderPrimaryAccount('${prefix}', ${i})" class="accent-emerald-600 w-4 h-4">
+                    <input type="radio" name="${prefix}-acct-primary" ${isPrimary ? "checked" : ""} onchange="setRiderPrimaryAccount(${jsArg(prefix)}, ${i})" class="accent-emerald-600 w-4 h-4">
                     <span>บัญชีที่ ${i + 1}${isPrimary ? " (บัญชีหลัก)" : ""}</span>
                 </label>
-                ${st.accounts.length > 1 ? `<button type="button" onclick="removeRiderAccount('${prefix}', ${i})" class="text-xs font-bold text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg cursor-pointer">ลบบัญชีนี้</button>` : ""}
+                ${st.accounts.length > 1 ? `<button type="button" onclick="removeRiderAccount(${jsArg(prefix)}, ${i})" class="text-xs font-bold text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg cursor-pointer">ลบบัญชีนี้</button>` : ""}
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                     <label class="${labelCls}">ธนาคาร / ช่องทาง ${i === 0 ? '<span class="text-rose-500">*</span>' : ""}</label>
-                    <select id="${prefix}-acct-bank-${i}" onchange="updateRiderAccount('${prefix}', ${i}, 'bank', this.value)" class="${inputCls}">
+                    <select id="${prefix}-acct-bank-${i}" onchange="updateRiderAccount(${jsArg(prefix)}, ${i}, 'bank', this.value)" class="${inputCls}">
                         ${RIDER_BANK_OPTIONS.map(b => `<option value="${b}" ${a.bank === b ? "selected" : ""}>${b}</option>`).join("")}
                     </select>
                 </div>
                 <div>
                     <div class="flex items-center justify-between mb-1">
                         <label class="font-bold text-slate-700 text-xs sm:text-[13px]">เลขบัญชี / เลขพร้อมเพย์ ${i === 0 ? '<span class="text-rose-500">*</span>' : ""}</label>
-                        <button type="button" onclick="fillRiderAccountWithPhone('${prefix}', ${i})" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer">⚡ ใช้เบอร์มือถือ</button>
+                        <button type="button" onclick="fillRiderAccountWithPhone(${jsArg(prefix)}, ${i})" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer">⚡ ใช้เบอร์มือถือ</button>
                     </div>
-                    <input type="text" id="${prefix}-acct-no-${i}" inputmode="numeric" maxlength="20" value="${escapeHtml(a.accountNo)}" placeholder="เฉพาะตัวเลข" oninput="updateRiderAccount('${prefix}', ${i}, 'accountNo', this.value)" class="${inputCls} font-mono">
+                    <input type="text" id="${prefix}-acct-no-${i}" inputmode="numeric" maxlength="20" value="${escapeHtml(a.accountNo)}" placeholder="เฉพาะตัวเลข" oninput="updateRiderAccount(${jsArg(prefix)}, ${i}, 'accountNo', this.value)" class="${inputCls} font-mono">
                 </div>
                 <div>
                     <label class="${labelCls}">ชื่อบัญชี</label>
-                    <input type="text" id="${prefix}-acct-name-${i}" value="${escapeHtml(a.accountName)}" placeholder="เว้นว่าง = ใช้ชื่อผู้สมัคร" oninput="updateRiderAccount('${prefix}', ${i}, 'accountName', this.value)" class="${inputCls}">
+                    <input type="text" id="${prefix}-acct-name-${i}" value="${escapeHtml(a.accountName)}" placeholder="เว้นว่าง = ใช้ชื่อผู้สมัคร" oninput="updateRiderAccount(${jsArg(prefix)}, ${i}, 'accountName', this.value)" class="${inputCls}">
                 </div>
             </div>
         </div>`;
     }).join("") + (st.accounts.length < RIDER_MAX_ACCOUNTS ? `
-        <button type="button" onclick="addRiderAccount('${prefix}')" class="w-full py-2.5 border-2 border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50 font-extrabold rounded-2xl text-sm cursor-pointer transition-all">+ เพิ่มบัญชีรับเงิน</button>` : "");
+        <button type="button" onclick="addRiderAccount(${jsArg(prefix)})" class="w-full py-2.5 border-2 border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50 font-extrabold rounded-2xl text-sm cursor-pointer transition-all">+ เพิ่มบัญชีรับเงิน</button>` : "");
 }
 
 function updateRiderAccount(prefix, idx, field, value) {
@@ -20579,9 +21434,9 @@ async function hydrateRiderAppDocs(app) {
         return;
     }
     el.innerHTML = RIDER_DOC_SLOTS.map(s => docs[s.key] ? `
-        <button type="button" onclick="openRiderDocLightbox(${jsArg(app.id)}, '${s.key}')" class="text-left rounded-xl border border-slate-200 bg-white overflow-hidden cursor-zoom-in">
-            <img src="${docs[s.key]}" alt="${s.label}" class="w-full h-24 object-cover">
-            <div class="px-1.5 py-1 text-[11px] font-bold text-slate-700 leading-tight">${s.label}</div>
+        <button type="button" onclick="openRiderDocLightbox(${jsArg(app.id)}, ${jsArg(s.key)})" class="text-left rounded-xl border border-slate-200 bg-white overflow-hidden cursor-zoom-in">
+            <img src="${docs[s.key]}" alt="${escapeHtml(s.label)}" class="w-full h-24 object-cover">
+            <div class="px-1.5 py-1 text-[11px] font-bold text-slate-700 leading-tight">${escapeHtml(s.label)}</div>
         </button>` : "").join("");
 }
 
@@ -20660,6 +21515,23 @@ Object.assign(window, {
     handleRiderDocUpload, removeRiderDoc, openRiderDocLightbox, loadRiderDocuments, saveRiderDocuments, removeRiderDocuments,
     fillRiderRegExtrasSample, collectRiderRegExtras, resetRiderRegExtras, mountRiderRegExtras
 });
+
+// ผู้สมัครไรเดอร์ทั่วไป = "pending" รอเจ้าของอนุมัติ (กฎ Firebase บังคับด้วย)
+// เจ้าของที่ล็อกอินอยู่ (เช่น ทดสอบปุ่ม 1-Click) อนุมัติทันทีได้ และเท่านั้นที่สร้างไรเดอร์เข้าระบบได้
+function _newRiderAppStatusFields() {
+    return isOwnerSignedIn()
+        ? { status: "approved", approvedAt: new Date().toISOString(), notes: "อนุมัติอัตโนมัติ (เจ้าของล็อกอินอยู่)" }
+        : { status: "pending" };
+}
+
+// ผู้สมัครทั่วไปสมัครซ้ำด้วยเบอร์ที่ได้รับอนุมัติแล้วไม่ได้ (จะทับใบสมัครที่อนุมัติ) — คืน true ถ้าต้องหยุด
+function _blockReapplyOverApproved(existingApp) {
+    if (!isOwnerSignedIn() && existingApp && existingApp.status === "approved") {
+        showToast("⚠️ เบอร์นี้ได้รับอนุมัติเป็นไรเดอร์แล้ว กรุณาเข้าสู่ระบบด้วยรหัสเดิม หรือติดต่อแอดมิน");
+        return true;
+    }
+    return false;
+}
 
 async function handleRiderRegisterSubmit(e) {
     if (e && e.preventDefault) e.preventDefault();
@@ -20782,10 +21654,10 @@ async function handleRiderRegisterSubmit(e) {
         docFlags: extras.docFlags,
         consentAt: extras.consentAt,
         appliedAt: new Date().toISOString(),
-        status: "approved",
-        approvedAt: new Date().toISOString(),
-        notes: "อนุมัติอัตโนมัติ (Fast-Track)"
+        ..._newRiderAppStatusFields()
     };
+
+    if (_blockReapplyOverApproved(existingIndex >= 0 ? apps[existingIndex] : null)) return;
 
     // รูปเอกสารเก็บแยกจากใบสมัคร (ต้องบันทึกสำเร็จอย่างน้อยหนึ่งที่ก่อนสร้างใบสมัคร)
     const docResult = await saveRiderDocumentsGuarded("reg", riderCode, extras.docs, {
@@ -20812,7 +21684,7 @@ async function handleRiderRegisterSubmit(e) {
     saveRiderApplications(apps);
     _lastSubmittedRiderApp = newApp;
 
-    // Immediately create community rider record so they are ready to receive orders & login
+    // สร้างไรเดอร์เข้าระบบทันทีเฉพาะเมื่อเจ้าของล็อกอินอยู่ — ผู้สมัครทั่วไปต้องรอเจ้าของอนุมัติ (approveRiderApplication จะสร้างให้)
     const displayName = nickname ? `${fullName} (${nickname})` : fullName;
     const newRiderObj = {
         id: riderCode,
@@ -20833,16 +21705,19 @@ async function handleRiderRegisterSubmit(e) {
         accessCode: riderCode,
         codSettledToday: 0
     };
-    const curRiders = loadCommunityRiders();
-    const rIdx = curRiders.findIndex(r => (r.phone || "").replace(/[-\s]/g, "") === phone);
-    if (rIdx >= 0) curRiders[rIdx] = newRiderObj;
-    else curRiders.unshift(newRiderObj);
-    saveCommunityRiders(curRiders);
+    if (isOwnerSignedIn()) {
+        const curRiders = loadCommunityRiders();
+        const rIdx = curRiders.findIndex(r => (r.phone || "").replace(/[-\s]/g, "") === phone);
+        if (rIdx >= 0) curRiders[rIdx] = newRiderObj;
+        else curRiders.unshift(newRiderObj);
+        saveCommunityRiders(curRiders);
+    }
     // Reset form inputs for next time
     document.getElementById("rider-register-form")?.reset();
     resetRiderRegExtras("reg");
 
     // Show step 2 (Success and next step options)
+    if (!isOwnerSignedIn()) rememberRiderApplicationNotice(newApp.id, displayName);
     populateRiderSuccessView(newApp);
     updateAdminRiderBadges();
 
@@ -20886,10 +21761,10 @@ function goToAdminToApproveRider(appId) {
     closeRiderRegisterModal();
     closeRiderLoginModal();
 
-    // 🔒 SECURITY: Require Admin PIN authentication (No auto-login)
+    // 🔒 SECURITY: Require owner sign-in (No auto-login)
     if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
         openAdminLoginModal();
-        showToast("🔒 กรุณากรอกรหัส PIN ผู้ดูแลระบบ เพื่อตรวจสอบและอนุมัติใบสมัคร");
+        showToast("🔒 กรุณาล็อกอินด้วยอีเมลและรหัสผ่านเจ้าของ เพื่อตรวจสอบและอนุมัติใบสมัคร");
         return;
     }
     renderAuthHeaderButtons();
@@ -20932,6 +21807,7 @@ window.goToAdminToApproveRiderFromSuccess = goToAdminToApproveRiderFromSuccess;
 
 // Fast-track 1-click approval for tester / admin directly from success screen
 function approveAndLoginCurrentSubmittedRider() {
+    if (!requireOwnerAction()) return;
     let app = _lastSubmittedRiderApp;
     if (!app) {
         const apps = loadRiderApplications();
@@ -20980,6 +21856,15 @@ function checkCurrentRiderApprovalAndLogin() {
             statusBadge.textContent = "✅ ได้รับอนุมัติแล้ว";
         }
 
+        // ผู้สมัครทั่วไป: อนุมัติแล้วก็ต้องเข้าด้วยเลขไรเดอร์ + รหัสผ่านที่เจ้าของส่งให้ (ไม่พาเข้าเองโดยไม่ใช้รหัส)
+        if (!isOwnerSignedIn()) {
+            closeRiderRegisterModal();
+            switchRole("rider");
+            if (typeof switchRiderGuestTab === "function") switchRiderGuestTab("login");
+            showToast("✅ ใบสมัครได้รับอนุมัติแล้ว! เข้าสู่ระบบด้วยเลขไรเดอร์และรหัสผ่านที่เจ้าของส่งให้");
+            return;
+        }
+
         let targetRider = approvedRider;
         if (!targetRider && currentApp) {
             const displayName = currentApp.nickname ? `${currentApp.fullName} (${currentApp.nickname})` : currentApp.fullName;
@@ -21021,15 +21906,10 @@ function checkCurrentRiderApprovalAndLogin() {
 window.checkCurrentRiderApprovalAndLogin = checkCurrentRiderApprovalAndLogin;
 
 function loginRiderById(riderId) {
-    const riders = loadCommunityRiders();
-    const clean = String(riderId || "").trim().toUpperCase();
-    let r = riders.find(x => 
-        x.id === riderId || 
-        (x.id && x.id.trim().toUpperCase() === clean) ||
-        (x.accessCode && x.accessCode.trim().toUpperCase() === clean) ||
-        (x.phone && x.phone.replace(/[-\s]/g, "") === clean.replace(/[-\s]/g, "")) ||
-        (x.name && x.name.trim().toLowerCase().includes(String(riderId || "").trim().toLowerCase()))
-    );
+    // เข้าสู่ระบบเป็นไรเดอร์โดยไม่ใช้รหัส = เครื่องมือของเจ้าของ (ปุ่ม "สลับเข้ารับงาน" ในหน้าแอดมิน) เท่านั้น
+    if (!requireOwnerAction()) return;
+    const clean = normalizeRiderCode(String(riderId || "").trim());
+    const r = loadCommunityRiders().find(x => (x.id && normalizeRiderCode(x.id) === clean) || (x.accessCode && normalizeRiderCode(x.accessCode) === clean));
     if (!r) {
         showToast("⚠️ ไม่พบข้อมูลไรเดอร์คนนี้ในระบบ");
         return;
@@ -21038,13 +21918,30 @@ function loginRiderById(riderId) {
 }
 window.loginRiderById = loginRiderById;
 
-function approveAndLoginRider(appId) {
-    approveRiderApplication(appId);
-    const apps = loadRiderApplications();
+async function approveAndLoginRider(appId) {
     const cleanId = String(appId || "").trim();
-    const app = apps.find(x => x.id === cleanId || (x.phone || "").replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, ""));
-    if (!app) return;
-    const riders = loadCommunityRiders();
+    const findApp = () => loadRiderApplications().find(x => x.id === cleanId || (x.phone || "").replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, ""));
+    const before = findApp();
+    let justApproved = false;
+    if (before && before.status === "approved") {
+        // อนุมัติแล้ว: เข้าระบบโดยไม่ต้องใช้รหัสได้เฉพาะเจ้าของ (สลับเข้ารับงาน) — ไรเดอร์ทั่วไปต้องใช้เลขไรเดอร์ + รหัสผ่าน
+        if (!isOwnerSignedIn()) {
+            if (typeof closeStatusCheckModal === "function") closeStatusCheckModal();
+            closeRiderRegisterModal();
+            switchRole("rider");
+            if (typeof switchRiderGuestTab === "function") switchRiderGuestTab("login");
+            showToast("🔑 กรุณาเข้าสู่ระบบด้วยเลขไรเดอร์และรหัสผ่านที่เจ้าของส่งให้");
+            return;
+        }
+    } else {
+        // ยังไม่อนุมัติ: การอนุมัติเป็นสิทธิ์เจ้าของเท่านั้น (ไรเดอร์ที่รออยู่อนุมัติตัวเองไม่ได้)
+        if (!requireOwnerAction()) return;
+        await approveRiderApplication(appId);
+        justApproved = true;
+    }
+    const app = findApp();
+    if (!app || app.status !== "approved") return;
+    const riders = loadCommunityRiders();   // รวมไรเดอร์ที่กู้จากใบสมัครที่อนุมัติแล้ว (reconcile) ให้อยู่ในรายการแล้ว
     const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
     const r = riders.find(x => (x.phone || "").replace(/[-\s]/g, "") === cleanPhone) ||
               riders.find(x => (x.accessCode && app.accessCode && x.accessCode === app.accessCode));
@@ -21053,9 +21950,10 @@ function approveAndLoginRider(appId) {
         if (typeof closeStatusCheckModal === "function") closeStatusCheckModal();
         closeRiderAppDetailModal();
         closeRiderRegisterModal();
-        closeSimulatedSmsModal();
+        // เพิ่งอนุมัติ: ต้องเปิดกล่องรหัสผ่านที่เพิ่งสร้างค้างไว้ให้เจ้าของคัดลอก (เห็นได้ครั้งเดียว)
+        if (!justApproved) closeSimulatedSmsModal();
         loginRiderWithProfile(r);
-        showToast(`🎉 อนุมัติและเข้าสู่ระบบเป็น ${r.name} เรียบร้อยแล้ว! (รหัส: ${app.accessCode || r.accessCode})`);
+        showToast(`🎉 ${justApproved ? "อนุมัติและ" : ""}เข้าสู่ระบบเป็น ${r.name} เรียบร้อยแล้ว (เจ้าของสลับเข้ารับงาน)`);
     }
 }
 window.approveAndLoginRider = approveAndLoginRider;
@@ -21066,17 +21964,42 @@ function toggleAdminRiderAppsHistory() {
 }
 window.toggleAdminRiderAppsHistory = toggleAdminRiderAppsHistory;
 
-function approveRiderApplication(appId) {
+async function approveRiderApplication(appId) {
+    if (!requireOwnerAction()) return;
     const apps = loadRiderApplications();
     const cleanId = String(appId || "").trim();
     const cleanNorm = typeof normalizeRiderCode === "function" ? normalizeRiderCode(cleanId) : cleanId;
-    const app = apps.find(x => x.id === cleanId || (x.id && normalizeRiderCode(x.id) === cleanNorm)) || 
+    const app = apps.find(x => x.id === cleanId || (x.id && normalizeRiderCode(x.id) === cleanNorm)) ||
                 apps.find(x => (x.phone || "").replace(/[-\s]/g, "") === cleanId.replace(/[-\s]/g, ""));
 
     if (!app) {
         showToast("⚠️ ไม่พบข้อมูลใบสมัคร (" + (appId || "ไม่มีรหัส") + ")");
         return;
     }
+
+    // 🔒 ต้องส่งเอกสารครบก่อนถึงจะอนุมัติได้ (เดิมกดอนุมัติได้เลยแม้ไม่มีเอกสารสักใบ)
+    const missingDocs = getMissingRequiredRiderDocs(app);
+    if (missingDocs.length > 0) {
+        showToast("⚠️ อนุมัติไม่ได้ ยังขาดเอกสาร: " + missingDocs.join(", "));
+        if (typeof viewRiderAppDetail === "function") viewRiderAppDetail(app.id);
+        return;
+    }
+    // 🔒 บังคับให้เจ้าของยืนยันว่า "เปิดดู" เอกสารแล้วจริง ก่อนอนุมัติทุกครั้งที่ยังไม่เคยยืนยัน (กันกดอนุมัติมั่ว ๆ จากรายการโดยไม่เปิดดูรูป)
+    if (!app.docsVerifiedAt) {
+        const displayName = app.nickname ? `${app.fullName} (${app.nickname})` : app.fullName;
+        const confirmed = confirm(`ก่อนอนุมัติ "${displayName}" กรุณายืนยัน:\n\n✓ เปิดดูรูปเอกสารทั้ง ${RIDER_DOC_SLOTS.filter(s => s.required).length} รายการแล้ว (หน้าตรง, ใบขับขี่, ทะเบียนรถ)\n✓ หน้าในรูปตรงกับชื่อ-นามสกุลที่สมัคร\n✓ อ่านตัวเลข/วันหมดอายุในเอกสารได้ชัดเจน ไม่เบลอ\n\nยืนยันว่าตรวจสอบแล้วและจะอนุมัติใช่หรือไม่?`);
+        if (!confirmed) {
+            showToast("ยกเลิกการอนุมัติ (ยังไม่ได้ยืนยันว่าตรวจสอบเอกสารแล้ว)");
+            return;
+        }
+        app.docsVerifiedAt = new Date().toISOString();
+        app.docsVerifiedBy = (state.activeAdmin && state.activeAdmin.name) || "เจ้าของ";
+    }
+
+    // รหัสผ่านลับสำหรับเข้าระบบ: สร้างใหม่ทุกครั้งที่อนุมัติ เจ้าของเห็นครั้งเดียวในกล่องข้อความท้ายฟังก์ชัน
+    let cred;
+    try { cred = await makeRiderLoginCredential(); }
+    catch (e) { showToast("⚠️ สร้างรหัสผ่านไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return; }
 
     if (!app.accessCode) {
         if (/^[A-Z]{2}\d{4}$/.test(app.id)) {
@@ -21089,6 +22012,8 @@ function approveRiderApplication(appId) {
     }
     app.status = "approved";
     app.approvedAt = new Date().toISOString();
+    app.loginSalt = cred.loginSalt;
+    app.loginHash = cred.loginHash;
     saveRiderApplications(apps);
 
     // Update _lastSubmittedRiderApp if matching
@@ -21126,6 +22051,8 @@ function approveRiderApplication(appId) {
             motorcycleModel: app.motorcycleModel || "",
             promptPay: app.promptPayNumber || app.phone || "",
             accessCode: app.accessCode,
+            loginSalt: cred.loginSalt,
+            loginHash: cred.loginHash,
             codSettledToday: 0
         };
         riders.unshift(riderTarget);
@@ -21134,27 +22061,35 @@ function approveRiderApplication(appId) {
         riderTarget.plate = app.plate || riderTarget.plate;
         riderTarget.zone = app.zone || riderTarget.zone;
         riderTarget.accessCode = app.accessCode;
+        riderTarget.loginSalt = cred.loginSalt;
+        riderTarget.loginHash = cred.loginHash;
     }
     saveCommunityRiders(riders);
 
     updateAdminRiderBadges();
-    showToast(`🎉 อนุมัติ ${displayName} เป็นไรเดอร์สำเร็จ! รหัสผ่าน: ${app.accessCode}`);
+    showToast(`🎉 อนุมัติ ${displayName} เป็นไรเดอร์สำเร็จ! ดูรหัสผ่านเข้าระบบในกล่องข้อความ (ส่งให้ไรเดอร์ด้วย)`);
     closeRiderAppDetailModal();
     renderAdminRiders();
-    openSimulatedSmsModal(app.phone, app.accessCode, displayName, "rider", app.lineId);
+    openSimulatedSmsModal(app.phone, cred.secret, displayName, "rider", app.lineId, app.accessCode);
     setTimeout(() => initAdminRiderRadarMap(), 150);
 }
 window.approveRiderApplication = approveRiderApplication;
 
 function rejectRiderApplication(appId) {
+    if (!requireOwnerAction()) return;
     const apps = loadRiderApplications();
     const app = apps.find(x => x.id === appId);
     if (!app) return;
 
-    if (confirm(`ยืนยันการปฏิเสธใบสมัครของ "${app.fullName}" ใช่หรือไม่?`)) {
+    const wasApproved = app.status === "approved";
+    const confirmMsg = wasApproved
+        ? `"${app.fullName}" เป็นไรเดอร์ที่อนุมัติแล้ว\nถ้าปฏิเสธ จะถูกถอนสิทธิ์และรับงานไม่ได้อีก\n\nยืนยันการปฏิเสธใช่หรือไม่?`
+        : `ยืนยันการปฏิเสธใบสมัครของ "${app.fullName}" ใช่หรือไม่?`;
+    if (confirm(confirmMsg)) {
         app.status = "rejected";
         app.rejectedAt = new Date().toISOString();
         saveRiderApplications(apps);
+        if (wasApproved) revokeRiderAccessForApplication(app);
         updateAdminRiderBadges();
         showToast(`❌ ปฏิเสธใบสมัครของ ${app.fullName} เรียบร้อยแล้ว`);
         closeRiderAppDetailModal();
@@ -21378,27 +22313,27 @@ function renderAdminRiders() {
                             <div class="flex items-start justify-between gap-3">
                                 <div class="flex items-center gap-3">
                                     <div class="w-12 h-12 rounded-2xl bg-gradient-to-br ${r.status === 'available' ? 'from-emerald-100 to-emerald-200 text-emerald-800' : r.status === 'on_delivery' ? 'from-amber-100 to-amber-200 text-amber-800' : 'from-slate-100 to-slate-200 text-slate-600'} flex items-center justify-center text-2xl font-bold shadow-xs shrink-0">
-                                        ${r.avatar || '🛵'}
+                                        ${escapeHtml(r.avatar) || '🛵'}
                                     </div>
                                     <div class="min-w-0">
                                         <div class="font-extrabold text-sm sm:text-base text-slate-900 truncate flex items-center gap-1.5 flex-wrap">
-                                            <span>${r.name}</span>
+                                            <span>${escapeHtml(r.name)}</span>
                                             <span class="bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded-md text-[10px] font-extrabold">⭐ ${r.rating || '4.9'}</span>
-                                            ${r.motorcycleModel ? `<span class="bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.2 rounded-md text-[10px] font-bold">🏍️ ${r.motorcycleModel}</span>` : ''}
+                                            ${r.motorcycleModel ? `<span class="bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.2 rounded-md text-[10px] font-bold">🏍️ ${escapeHtml(r.motorcycleModel)}</span>` : ''}
                                         </div>
                                         <div class="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap font-mono mt-0.5">
-                                            <span class="bg-slate-100 px-1.5 py-0.5 rounded font-bold text-slate-700">${r.plate || '-'}</span>
+                                            <span class="bg-slate-100 px-1.5 py-0.5 rounded font-bold text-slate-700">${escapeHtml(r.plate) || '-'}</span>
                                             <span>•</span>
-                                            <a href="tel:${r.phone}" class="text-purple-700 font-bold hover:underline flex items-center gap-0.5">
-                                                <span>📱 ${r.phone}</span>
+                                            <a href="tel:${escapeHtml(r.phone)}" class="text-purple-700 font-bold hover:underline flex items-center gap-0.5">
+                                                <span>📱 ${escapeHtml(r.phone)}</span>
                                             </a>
                                             <span>•</span>
-                                            <span class="text-emerald-700 font-bold">💳 ${r.promptPay || r.phone || '-'}</span>
+                                            <span class="text-emerald-700 font-bold">💳 ${escapeHtml(r.promptPay) || escapeHtml(r.phone) || '-'}</span>
                                             <span>•</span>
-                                            <span class="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded font-bold font-mono text-[10px]">🔑 PIN: ${r.accessCode || r.pin || r.id.slice(-6).toUpperCase()}</span>
+                                            <span class="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded font-bold font-mono text-[10px]">🔑 PIN: ${escapeHtml(r.accessCode) || escapeHtml(r.pin) || r.id.slice(-6).toUpperCase()}</span>
                                         </div>
                                         <div class="text-[11px] text-slate-400 mt-0.5">
-                                            📍 ${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}
+                                            📍 ${escapeHtml(r.zone) || 'รอบตลาดวิศิษฐ์ชัย'}
                                         </div>
                                     </div>
                                 </div>
@@ -21416,13 +22351,13 @@ function renderAdminRiders() {
                                     </span>
                                     
                                     <div class="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[10px]">
-                                        <button onclick="setRiderStatus('${r.id}', 'available')" title="เปลี่ยนเป็นพร้อมรับงาน" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'available' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
+                                        <button onclick="setRiderStatus(${jsArg(r.id)}, 'available')" title="เปลี่ยนเป็นพร้อมรับงาน" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'available' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
                                             พร้อม
                                         </button>
-                                        <button onclick="setRiderStatus('${r.id}', 'on_delivery')" title="เปลี่ยนเป็นกำลังส่งของ" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'on_delivery' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
+                                        <button onclick="setRiderStatus(${jsArg(r.id)}, 'on_delivery')" title="เปลี่ยนเป็นกำลังส่งของ" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'on_delivery' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
                                             ส่งของ
                                         </button>
-                                        <button onclick="setRiderStatus('${r.id}', 'offline')" title="เปลี่ยนเป็นพักรอบ" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'offline' ? 'bg-slate-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
+                                        <button onclick="setRiderStatus(${jsArg(r.id)}, 'offline')" title="เปลี่ยนเป็นพักรอบ" class="px-1.5 py-0.5 rounded font-bold transition-all ${r.status === 'offline' ? 'bg-slate-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'}">
                                             พัก
                                         </button>
                                     </div>
@@ -21452,7 +22387,7 @@ function renderAdminRiders() {
                                         <span class="material-symbols-outlined text-rose-600 text-sm">warning</span>
                                         <span>เงินสดในมือเกินเกณฑ์ ฿${settings.maxCodLimit.toLocaleString()}! ต้องนำส่งฮับทันที</span>
                                     </div>
-                                    <button onclick="settleRiderCod('${r.id}')" class="px-2 py-0.5 bg-rose-600 text-white font-bold rounded-lg text-[10px] hover:bg-rose-700 whitespace-nowrap">
+                                    <button onclick="settleRiderCod(${jsArg(r.id)})" class="px-2 py-0.5 bg-rose-600 text-white font-bold rounded-lg text-[10px] hover:bg-rose-700 whitespace-nowrap">
                                         รับเคลียร์เงิน
                                     </button>
                                 </div>
@@ -21461,30 +22396,30 @@ function renderAdminRiders() {
                             <!-- Card Action Buttons -->
                             <div class="flex items-center justify-between pt-1 border-t border-slate-100 text-xs flex-wrap gap-2">
                                 <div class="flex items-center gap-1.5 flex-wrap">
-                                    <button onclick="dispatchOrderToRider('${r.id}')" class="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-extrabold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-xs" title="จ่ายออเดอร์ของสดให้ไรเดอร์คนนี้ทันที">
+                                    <button onclick="dispatchOrderToRider(${jsArg(r.id)})" class="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-extrabold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-xs" title="จ่ายออเดอร์ของสดให้ไรเดอร์คนนี้ทันที">
                                         <span class="material-symbols-outlined text-xs font-bold">send</span>
                                         <span>📦 จ่ายงานด่วน</span>
                                     </button>
-                                    <button onclick="loginRiderById('${r.id}')" class="px-2.5 py-1 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="เข้าสู่ระบบเป็นไรเดอร์คนนี้เพื่อรับงานทันที">
+                                    <button onclick="loginRiderById(${jsArg(r.id)})" class="px-2.5 py-1 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="เข้าสู่ระบบเป็นไรเดอร์คนนี้เพื่อรับงานทันที">
                                         <span class="material-symbols-outlined text-xs">two_wheeler</span>
                                         <span>เข้าสู่ระบบรับงาน</span>
                                     </button>
-                                    <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="พิมพ์สลิปสรุปยอด 80x80">
+                                    <button onclick="printThermalRiderSlipFromFleet(${jsArg(r.id)})" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="พิมพ์สลิปสรุปยอด 80x80">
                                         <span class="material-symbols-outlined text-xs text-sky-700">receipt_long</span>
                                         <span>สลิป 80mm</span>
                                     </button>
-                                    <button onclick="settleRiderCod('${r.id}')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="บันทึกการส่งมอบเงินสด COD เข้าฮับ">
+                                    <button onclick="settleRiderCod(${jsArg(r.id)})" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all shadow-2xs" title="บันทึกการส่งมอบเงินสด COD เข้าฮับ">
                                         <span class="material-symbols-outlined text-xs text-emerald-700">account_balance_wallet</span>
                                         <span>เคลียร์ COD</span>
                                     </button>
                                 </div>
 
                                 <div class="flex items-center gap-1">
-                                    <button onclick="openEditRiderModal('${r.id}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all" title="แก้ไขข้อมูลไรเดอร์">
+                                    <button onclick="openEditRiderModal(${jsArg(r.id)})" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all" title="แก้ไขข้อมูลไรเดอร์">
                                         <span class="material-symbols-outlined text-xs">edit</span>
                                         <span>แก้ไข</span>
                                     </button>
-                                    <button onclick="deleteCommunityRider('${r.id}')" class="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg active:scale-95 transition-all" title="ลบไรเดอร์">
+                                    <button onclick="deleteCommunityRider(${jsArg(r.id)})" class="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg active:scale-95 transition-all" title="ลบไรเดอร์">
                                         <span class="material-symbols-outlined text-base">delete</span>
                                     </button>
                                 </div>
@@ -21597,11 +22532,11 @@ function renderAdminRiders() {
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="flex items-center gap-2.5">
                                         <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-100 to-indigo-100 text-purple-800 flex items-center justify-center text-xl font-black shadow-2xs shrink-0">
-                                            ${r.avatar || '🛵'}
+                                            ${escapeHtml(r.avatar) || '🛵'}
                                         </div>
                                         <div>
-                                            <div class="font-extrabold text-sm text-slate-900">${r.name}</div>
-                                            <div class="text-[11px] text-slate-500 font-mono">📱 ${r.phone}</div>
+                                            <div class="font-extrabold text-sm text-slate-900">${escapeHtml(r.name)}</div>
+                                            <div class="text-[11px] text-slate-500 font-mono">📱 ${escapeHtml(r.phone)}</div>
                                         </div>
                                     </div>
                                     <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full ${r.status === 'available' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : r.status === 'on_delivery' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-600'}">
@@ -21612,19 +22547,19 @@ function renderAdminRiders() {
                                 <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[11px] space-y-1">
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">ทะเบียนรถ:</span>
-                                        <span class="font-mono font-black text-slate-800">${r.plate || '-'}</span>
+                                        <span class="font-mono font-black text-slate-800">${escapeHtml(r.plate) || '-'}</span>
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">รุ่นจักรยานยนต์:</span>
-                                        <span class="font-bold text-slate-700">${r.motorcycleModel || '-'}</span>
+                                        <span class="font-bold text-slate-700">${escapeHtml(r.motorcycleModel) || '-'}</span>
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">พร้อมเพย์:</span>
-                                        <span class="font-mono font-bold text-emerald-700">${r.promptPay || r.phone || '-'}</span>
+                                        <span class="font-mono font-bold text-emerald-700">${escapeHtml(r.promptPay) || escapeHtml(r.phone) || '-'}</span>
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">โซนที่สะดวก:</span>
-                                        <span class="font-medium text-slate-600 truncate max-w-[150px]">${r.zone || 'รอบตลาดวิศิษฐ์ชัย'}</span>
+                                        <span class="font-medium text-slate-600 truncate max-w-[150px]">${escapeHtml(r.zone) || 'รอบตลาดวิศิษฐ์ชัย'}</span>
                                     </div>
                                     <div class="flex justify-between items-center pt-1.5 border-t border-slate-200/80 mt-1">
                                         <span class="text-purple-900 font-bold flex items-center gap-1 text-[11px]">
@@ -21632,22 +22567,22 @@ function renderAdminRiders() {
                                             <span>รหัสเข้าสู่ระบบ (PIN):</span>
                                         </span>
                                         <span class="font-mono font-black text-xs text-purple-950 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md tracking-wider shadow-2xs">
-                                            ${r.accessCode || r.pin || r.id.slice(-6).toUpperCase()}
+                                            ${escapeHtml(r.accessCode) || escapeHtml(r.pin) || r.id.slice(-6).toUpperCase()}
                                         </span>
                                     </div>
                                 </div>
 
                                 <div class="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
-                                    <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1" title="พิมพ์สลิป 80mm">
+                                    <button onclick="printThermalRiderSlipFromFleet(${jsArg(r.id)})" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[11px] flex items-center gap-1" title="พิมพ์สลิป 80mm">
                                         <span class="material-symbols-outlined text-xs">receipt_long</span>
                                         <span>สลิป 80mm</span>
                                     </button>
                                     <div class="flex items-center gap-1">
-                                        <button onclick="openEditRiderModal('${r.id}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1">
+                                        <button onclick="openEditRiderModal(${jsArg(r.id)})" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1">
                                             <span class="material-symbols-outlined text-xs">edit</span>
                                             <span>แก้ไข</span>
                                         </button>
-                                        <button onclick="deleteCommunityRider('${r.id}')" class="p-1 text-rose-500 hover:bg-rose-50 rounded-lg" title="ลบไรเดอร์">
+                                        <button onclick="deleteCommunityRider(${jsArg(r.id)})" class="p-1 text-rose-500 hover:bg-rose-50 rounded-lg" title="ลบไรเดอร์">
                                             <span class="material-symbols-outlined text-base">delete</span>
                                         </button>
                                     </div>
@@ -21684,7 +22619,7 @@ function renderAdminRiders() {
                     ` : `
                         <div class="space-y-3">
                             ${displayedApps.map(app => `
-                                <div id="rider-app-card-${app.id}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
+                                <div id="rider-app-card-${escapeHtml(app.id)}" class="bg-white rounded-2xl border ${app.status === 'pending' ? 'border-amber-300' : app.status === 'approved' ? 'border-emerald-200' : 'border-rose-200'} shadow-sm p-4 space-y-3 hover:shadow-md transition-all">
                                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
                                         <div class="flex items-start gap-3">
                                             <div class="w-11 h-11 rounded-2xl bg-gradient-to-br ${app.status === 'pending' ? 'from-amber-400 to-orange-500' : app.status === 'approved' ? 'from-emerald-500 to-teal-600' : 'from-rose-400 to-red-600'} text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
@@ -21693,7 +22628,7 @@ function renderAdminRiders() {
                                             <div>
                                                 <div class="flex items-center gap-2 flex-wrap">
                                                     <span class="font-black text-sm text-slate-900">${escapeHtml(app.fullName)} ${app.nickname ? `(${escapeHtml(app.nickname)})` : ''}</span>
-                                                    <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${app.id}</span>
+                                                    <span class="bg-slate-100 text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-lg font-bold">${escapeHtml(app.id)}</span>
                                                     ${app.status === 'pending' ? `
                                                         <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⏳ รอการอนุมัติ</span>
                                                     ` : app.status === 'approved' ? `
@@ -21701,6 +22636,9 @@ function renderAdminRiders() {
                                                     ` : `
                                                         <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✕ ปฏิเสธ</span>
                                                     `}
+                                                    ${app.status === 'pending' && getMissingRequiredRiderDocs(app).length ? `
+                                                        <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⚠️ เอกสารไม่ครบ</span>
+                                                    ` : ''}
                                                 </div>
                                                 <div class="text-[11px] text-slate-500 flex items-center gap-2.5 flex-wrap mt-0.5 font-mono">
                                                     <a href="tel:${escapeHtml(app.phone)}" class="text-sky-700 font-bold hover:underline flex items-center gap-0.5">
@@ -21719,43 +22657,47 @@ function renderAdminRiders() {
                                         </div>
 
                                         <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
-                                            <button onclick="printA4RiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
+                                            <button onclick="printA4RiderApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="พิมพ์ใบสมัครฉบับเต็ม A4">
                                                 <span class="material-symbols-outlined text-xs">print</span>
                                                 <span>พิมพ์ A4</span>
                                             </button>
-                                            <button onclick="viewRiderAppDetail('${app.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                            <button onclick="viewRiderAppDetail(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                                                 <span class="material-symbols-outlined text-xs">visibility</span>
                                                 <span>ดูรายละเอียด</span>
                                             </button>
 
                                             ${app.status === 'pending' ? `
-                                                <button onclick="approveRiderApplication('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                                <button onclick="approveRiderApplication(${jsArg(app.id)})" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                                                     <span class="material-symbols-outlined text-xs font-bold">check_circle</span>
                                                     <span>อนุมัติ</span>
                                                 </button>
-                                                <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                                                <button onclick="approveAndLoginRider(${jsArg(app.id)})" class="px-3 py-1.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                                                     <span class="material-symbols-outlined text-xs font-bold">sports_motorsports</span>
                                                     <span>อนุมัติ & รับงานทันที 🚀</span>
                                                 </button>
-                                                <button onclick="rejectRiderApplication('${app.id}')" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all">
+                                                <button onclick="rejectRiderApplication(${jsArg(app.id)})" class="px-2 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-bold rounded-xl text-xs border border-slate-200 active:scale-95 transition-all">
                                                     <span>ปฏิเสธ</span>
                                                 </button>
                                             ` : app.status === 'approved' ? `
-                                                <button onclick="approveAndLoginRider('${app.id}')" class="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
+                                                <button onclick="approveAndLoginRider(${jsArg(app.id)})" class="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
                                                     <span class="material-symbols-outlined text-xs">two_wheeler</span>
                                                     <span>สลับเข้ารับงาน</span>
                                                 </button>
-                                                <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all">
+                                                <button onclick="resetRiderLoginSecret(${jsArg(app.id)})" class="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all" title="สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์คนนี้">
+                                                    <span class="material-symbols-outlined text-xs">key</span>
+                                                    <span>รหัสเข้าระบบ</span>
+                                                </button>
+                                                <button onclick="reconsiderRiderApplication(${jsArg(app.id)})" class="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-0.5 active:scale-95 transition-all">
                                                     <span class="material-symbols-outlined text-xs">replay</span>
                                                     <span>รอพิจารณา</span>
                                                 </button>
                                             ` : `
-                                                <button onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
+                                                <button onclick="reconsiderRiderApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all">
                                                     <span class="material-symbols-outlined text-xs">replay</span>
                                                     <span>พิจารณาใหม่</span>
                                                 </button>
                                             `}
-                                            <button onclick="deleteRiderApplication('${app.id}')" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="ลบประวัติ">
+                                            <button onclick="deleteRiderApplication(${jsArg(app.id)})" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="ลบประวัติ">
                                                 <span class="material-symbols-outlined text-sm">delete</span>
                                             </button>
                                         </div>
@@ -21766,7 +22708,7 @@ function renderAdminRiders() {
                                             <span class="text-slate-400 font-bold block">🏍️ ข้อมูลรถ & ทะเบียน:</span>
                                             <div class="font-bold text-slate-800">${escapeHtml(app.motorcycleModel || '-')} ${app.motorcycleColor ? `(${escapeHtml(app.motorcycleColor)})` : ''}</div>
                                             <div class="font-mono font-black text-slate-700">ทะเบียน: ${escapeHtml(app.plate || '-')}</div>
-                                            <div class="text-[10px] text-slate-500">ใบขับขี่: ${app.drivingLicense || '-'}</div>
+                                            <div class="text-[10px] text-slate-500">ใบขับขี่: ${escapeHtml(app.drivingLicense) || '-'}</div>
                                         </div>
                                         <div>
                                             <span class="text-slate-400 font-bold block">📍 โซนที่สะดวก:</span>
@@ -21782,8 +22724,8 @@ function renderAdminRiders() {
                                         </div>
                                         <div>
                                             <span class="text-slate-400 font-bold block">💵 บัญชีรับเงินค่ารอบ:</span>
-                                            <div class="font-mono font-black text-emerald-800 text-xs">${app.promptPayNumber || '-'}</div>
-                                            <div class="text-[10px] text-slate-600">ธนาคาร: ${app.promptPayBank || 'พร้อมเพย์'}</div>
+                                            <div class="font-mono font-black text-emerald-800 text-xs">${escapeHtml(app.promptPayNumber) || '-'}</div>
+                                            <div class="text-[10px] text-slate-600">ธนาคาร: ${escapeHtml(app.promptPayBank) || 'พร้อมเพย์'}</div>
                                             <div class="text-[9px] text-slate-400 mt-1">ส่งเมื่อ: ${formatRiderAppDate(app.appliedAt)}</div>
                                         </div>
                                     </div>
@@ -21814,7 +22756,7 @@ function renderAdminRiders() {
                     </div>
 
                     <div class="flex items-center gap-2 flex-wrap">
-                        <button onclick="printA4RidersSummary('${targetDateKey}')" class="px-3 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold rounded-xl text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer" title="พิมพ์ใบสรุปค่ารอบไรเดอร์ A4 ส่งฝ่ายบัญชี">
+                        <button onclick="printA4RidersSummary(${jsArg(targetDateKey)})" class="px-3 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold rounded-xl text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer" title="พิมพ์ใบสรุปค่ารอบไรเดอร์ A4 ส่งฝ่ายบัญชี">
                             <span class="material-symbols-outlined text-sm">description</span>
                             <span>📄 พิมพ์สรุป A4 (ส่งบัญชี)</span>
                         </button>
@@ -21851,15 +22793,15 @@ function renderAdminRiders() {
                         <div class="p-4 rounded-2xl border ${r.isCodExceeded ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 bg-slate-50/50'} flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all hover:bg-white hover:shadow-xs">
                             <div class="flex items-center gap-3">
                                 <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-black text-base shrink-0">
-                                    ${r.avatar || '🛵'}
+                                    ${escapeHtml(r.avatar) || '🛵'}
                                 </div>
                                 <div>
                                     <div class="font-extrabold text-sm text-slate-900 flex items-center gap-1.5">
-                                        <span>${r.name}</span>
-                                        <span class="font-mono text-slate-400 text-xs">(${r.plate || '-'})</span>
+                                        <span>${escapeHtml(r.name)}</span>
+                                        <span class="font-mono text-slate-400 text-xs">(${escapeHtml(r.plate) || '-'})</span>
                                     </div>
                                     <div class="text-[11px] text-slate-500 font-mono mt-0.5">
-                                        📱 ${r.phone} • 💳 พร้อมเพย์: ${r.promptPay || r.phone || '-'}
+                                        📱 ${escapeHtml(r.phone)} • 💳 พร้อมเพย์: ${escapeHtml(r.promptPay) || escapeHtml(r.phone) || '-'}
                                     </div>
                                 </div>
                             </div>
@@ -21885,7 +22827,7 @@ function renderAdminRiders() {
                                         </span>
                                         ${r.slipImage ? `
                                             <div class="mt-1">
-                                                <button type="button" onclick="openRiderSlipViewerModal('${r.id || r.name}', '${targetDateKey}')" class="bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[9px] font-bold inline-flex items-center gap-0.5 cursor-pointer shadow-2xs transition-all mx-auto">
+                                                <button type="button" onclick="openRiderSlipViewerModal(${jsArg(r.id || r.name)}, ${jsArg(targetDateKey)})" class="bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[9px] font-bold inline-flex items-center gap-0.5 cursor-pointer shadow-2xs transition-all mx-auto">
                                                     <span class="material-symbols-outlined text-[11px]">receipt_long</span>
                                                     <span>มีสลิปหลักฐาน</span>
                                                 </button>
@@ -21904,27 +22846,27 @@ function renderAdminRiders() {
                             </div>
 
                             <div class="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
-                                <button onclick="openSingleRiderPayoutModal('${r.id}', ${r.totalPayout}, '${r.promptPay || r.phone}', '${r.name.replace(/'/g, "\\'")}', '${r.plate || '-'}', ${r.trips}, ${r.baseEarned}, ${r.bonus})" class="px-2.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="โอนค่ารอบให้ไรเดอร์ผ่านพร้อมเพย์">
+                                <button onclick="openSingleRiderPayoutModal(${jsArg(r.id)}, ${r.totalPayout}, ${jsArg(r.promptPay || r.phone)}, ${jsArg(r.name)}, ${jsArg(r.plate || '-')}, ${r.trips}, ${r.baseEarned}, ${r.bonus})" class="px-2.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="โอนค่ารอบให้ไรเดอร์ผ่านพร้อมเพย์">
                                     <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                     <span>${r.isSettled ? 'ดู QR ซ้ำ' : '💸 สแกน QR โอน'}</span>
                                 </button>
                                 ${r.slipImage ? `
-                                    <button onclick="openRiderSlipViewerModal('${r.id || r.name}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="ดูสลิปหลักฐานการโอนค่ารอบ">
+                                    <button onclick="openRiderSlipViewerModal(${jsArg(r.id || r.name)}, ${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="ดูสลิปหลักฐานการโอนค่ารอบ">
                                         <span class="material-symbols-outlined text-xs">image</span>
                                         <span>ดูสลิปโอน</span>
                                     </button>
                                 ` : `
-                                    <button onclick="openRiderDirectSlipUploadModal('${r.id}', ${r.totalPayout}, '${r.promptPay || r.phone}', '${r.name.replace(/'/g, "\\'")}', '${r.plate || '-'}', '${targetDateKey}')" class="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-xl text-xs flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="แนบสลิปโอนค่ารอบ">
+                                    <button onclick="openRiderDirectSlipUploadModal(${jsArg(r.id)}, ${r.totalPayout}, ${jsArg(r.promptPay || r.phone)}, ${jsArg(r.name)}, ${jsArg(r.plate || '-')}, ${jsArg(targetDateKey)})" class="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-xl text-xs flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="แนบสลิปโอนค่ารอบ">
                                         <span class="material-symbols-outlined text-xs">attach_file</span>
                                         <span>แนบสลิป</span>
                                     </button>
                                 `}
-                                <button onclick="printThermalRiderSlipFromFleet('${r.id}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์สลิปสรุปยอดความร้อน 80mm ให้ไรเดอร์">
+                                <button onclick="printThermalRiderSlipFromFleet(${jsArg(r.id)})" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์สลิปสรุปยอดความร้อน 80mm ให้ไรเดอร์">
                                     <span class="material-symbols-outlined text-xs text-sky-700">receipt_long</span>
                                     <span>🧾 สลิป 80mm</span>
                                 </button>
                                 ${r.inHandCod > 0 ? `
-                                    <button onclick="settleRiderCod('${r.id}')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-xl text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer" title="รับมอบเงินสด COD จากไรเดอร์เข้าฮับ">
+                                    <button onclick="settleRiderCod(${jsArg(r.id)})" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-xl text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer" title="รับมอบเงินสด COD จากไรเดอร์เข้าฮับ">
                                         <span class="material-symbols-outlined text-xs">payments</span>
                                         <span>💵 เคลียร์ COD</span>
                                     </button>
@@ -22049,7 +22991,7 @@ function renderAdminRiders() {
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     ${pendingApps.map(app => `
-                        <div class="bg-white rounded-2xl p-4 border border-amber-200 shadow-xs hover:shadow-md transition-all space-y-3 text-xs flex flex-col justify-between" id="rider-app-card-${app.id}">
+                        <div class="bg-white rounded-2xl p-4 border border-amber-200 shadow-xs hover:shadow-md transition-all space-y-3 text-xs flex flex-col justify-between" id="rider-app-card-${escapeHtml(app.id)}">
                             <div class="space-y-2.5">
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="flex items-center gap-2.5">
@@ -22065,11 +23007,16 @@ function renderAdminRiders() {
                                         ⏳ รออนุมัติ
                                     </span>
                                 </div>
+                                ${getMissingRequiredRiderDocs(app).length ? `
+                                <div class="bg-rose-50 border border-rose-300 text-rose-800 text-[10px] font-bold px-2 py-1 rounded-lg">
+                                    ⚠️ เอกสารไม่ครบ: ${escapeHtml(getMissingRequiredRiderDocs(app).join(", "))}
+                                </div>
+                                ` : ''}
 
                                 <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[11px] space-y-1">
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">รหัสใบสมัคร:</span>
-                                        <span class="font-mono font-bold text-slate-800">${app.id}</span>
+                                        <span class="font-mono font-bold text-slate-800">${escapeHtml(app.id)}</span>
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-slate-500">รถ / ทะเบียน:</span>
@@ -22084,21 +23031,21 @@ function renderAdminRiders() {
 
                             <div class="space-y-1.5 pt-2 border-t border-slate-100">
                                 <div class="grid grid-cols-2 gap-1.5">
-                                    <button type="button" onclick="approveRiderApplication('${app.id}')" class="py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer" title="อนุมัติและสร้างรหัสผ่าน 6 หลัก">
+                                    <button type="button" onclick="approveRiderApplication(${jsArg(app.id)})" class="py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer" title="อนุมัติและสร้างรหัสผ่าน 6 หลัก">
                                         <span class="material-symbols-outlined text-sm">check_circle</span>
                                         <span>อนุมัติ & สร้างรหัส</span>
                                     </button>
-                                    <button type="button" onclick="approveAndLoginRider('${app.id}')" class="py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
+                                    <button type="button" onclick="approveAndLoginRider(${jsArg(app.id)})" class="py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
                                         <span class="material-symbols-outlined text-sm">sports_motorsports</span>
                                         <span>อนุมัติ & รับงาน 🚀</span>
                                     </button>
                                 </div>
                                 <div class="flex items-center gap-1.5">
-                                    <button type="button" onclick="viewRiderAppDetail('${app.id}')" class="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                                    <button type="button" onclick="viewRiderAppDetail(${jsArg(app.id)})" class="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
                                         <span class="material-symbols-outlined text-xs">visibility</span>
                                         <span>ดูใบสมัครฉบับเต็ม</span>
                                     </button>
-                                    <button type="button" onclick="rejectRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[11px] active:scale-95 transition-all cursor-pointer">
+                                    <button type="button" onclick="rejectRiderApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[11px] active:scale-95 transition-all cursor-pointer">
                                         ปฏิเสธ
                                     </button>
                                 </div>
@@ -22294,9 +23241,9 @@ function printThermalRiderSlipFromFleet(riderId) {
             <div class="divider-dashed"></div>
             <div class="slip-row"><span class="slip-label">วันที่:</span><span class="slip-value">${thaiDate}</span></div>
             <div class="slip-row"><span class="slip-label">เวลาพิมพ์:</span><span class="slip-value">${printTime} น.</span></div>
-            <div class="slip-row"><span class="slip-label">ไรเดอร์:</span><span class="slip-value">${r.name}</span></div>
-            <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${r.phone}</span></div>
-            <div class="slip-row"><span class="slip-label">ทะเบียน:</span><span class="slip-value">${r.plate || '-'}</span></div>
+            <div class="slip-row"><span class="slip-label">ไรเดอร์:</span><span class="slip-value">${escapeHtml(r.name)}</span></div>
+            <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${escapeHtml(r.phone)}</span></div>
+            <div class="slip-row"><span class="slip-label">ทะเบียน:</span><span class="slip-value">${escapeHtml(r.plate) || '-'}</span></div>
             <div class="slip-row"><span class="slip-label">สถานะ:</span><span class="slip-value">${r.status === 'available' ? '🟢 พร้อมรับงาน' : r.status === 'on_delivery' ? '🟡 กำลังส่งของ' : '🔴 พักรอบ'}</span></div>
             <div class="divider-dashed"></div>
             <div class="slip-row"><span class="slip-label">จำนวนเที่ยวส่งวันนี้:</span><span class="slip-value">0 เที่ยว</span></div>
@@ -22565,7 +23512,7 @@ function initAdminRiderRadarMap() {
                 className: "custom-rider-marker",
                 html: `
                     <div style="background: ${bgColor}; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; border: 2.5px solid #fff; box-shadow: 0 3px 8px rgba(0,0,0,0.3); position: relative;">
-                        ${r.avatar || '🛵'}
+                        ${escapeHtml(r.avatar) || '🛵'}
                         ${r.status === 'on_delivery' ? '<span style="position: absolute; top:-2px; right:-2px; width: 9px; height: 9px; background: #ef4444; border-radius: 50%; border: 1.5px solid #fff;"></span>' : ''}
                     </div>
                 `,
@@ -22577,13 +23524,13 @@ function initAdminRiderRadarMap() {
             const marker = L.marker([rLat, rLng], { icon: riderIcon }).addTo(_adminRiderRadarMap);
             marker.bindPopup(`
                 <div style="font-family: 'Prompt', sans-serif; font-size: 11px; line-height: 1.5; min-width: 160px;">
-                    <div style="font-weight: 800; font-size: 12px; color: #0f172a;">${r.avatar || '🛵'} ${r.name}</div>
-                    <div style="color: #64748b; font-family: monospace;">ทะเบียน: ${r.plate || '-'} ${r.motorcycleModel ? `• ${r.motorcycleModel}` : ''}</div>
+                    <div style="font-weight: 800; font-size: 12px; color: #0f172a;">${escapeHtml(r.avatar) || '🛵'} ${escapeHtml(r.name)}</div>
+                    <div style="color: #64748b; font-family: monospace;">ทะเบียน: ${escapeHtml(r.plate) || '-'} ${r.motorcycleModel ? `• ${r.motorcycleModel}` : ''}</div>
                     <div style="font-weight: bold; margin-top: 2px;">สถานะ: ${statusText}</div>
                     <div style="color: #b45309; font-weight: bold;">เงินสด COD: ฿${inHandCod.toLocaleString()}</div>
                     <div style="margin-top: 6px;">
-                        <a href="tel:${r.phone}" style="background: #059669; color: white; padding: 3px 8px; border-radius: 6px; font-weight: bold; text-decoration: none; display: inline-block; font-size: 10px;">
-                            📞 โทร ${r.phone}
+                        <a href="tel:${escapeHtml(r.phone)}" style="background: #059669; color: white; padding: 3px 8px; border-radius: 6px; font-weight: bold; text-decoration: none; display: inline-block; font-size: 10px;">
+                            📞 โทร ${escapeHtml(r.phone)}
                         </a>
                     </div>
                 </div>
@@ -22618,7 +23565,7 @@ function initAdminRiderRadarMap() {
                     .bindPopup(`
                         <div style="font-family: 'Prompt', sans-serif; font-size: 11px;">
                             <b style="color: #b91c1c;">🏠 ปลายทางส่งของสด</b><br>
-                            ไรเดอร์: ${r.name}<br>
+                            ไรเดอร์: ${escapeHtml(r.name)}<br>
                             <span style="color: #64748b;">กำลังเดินทางจัดส่ง</span>
                         </div>
                     `);
@@ -22700,24 +23647,17 @@ function viewRiderAppDetail(appId) {
                     <div class="flex items-center gap-2.5">
                         <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">🔑</span>
                         <div>
-                            <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">รหัสผ่าน 6 หลักสำหรับเข้าสู่ระบบ (ACCESS CODE)</div>
-                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${app.accessCode || '-'}</div>
+                            <div class="text-[10px] font-black text-emerald-800 uppercase tracking-wider">เลขไรเดอร์ (ใช้คู่กับรหัสผ่านเข้าระบบ)</div>
+                            <div class="text-xl font-black text-emerald-950 font-mono tracking-widest">${escapeHtml(app.accessCode) || '-'}</div>
+                            <div class="text-[10px] text-emerald-800 pt-0.5">${app.loginHash ? '🔒 ตั้งรหัสผ่านแล้ว (ระบบเก็บเฉพาะค่าเข้ารหัส ดูรหัสเดิมไม่ได้)' : '⚠️ ยังไม่มีรหัสผ่านเข้าระบบ — กดสร้างรหัสใหม่'}</div>
                         </div>
                     </div>
                     <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">พร้อมใช้งาน</span>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-emerald-200/60">
-                    <button type="button" onclick="sendRealSmsToApplicant(${jsArg(app.phone)}, ${jsArg(app.accessCode)}, ${jsArg(app.fullName)}, 'rider')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="เปิดแอปข้อความ SMS ในเครื่อง">
-                        <span class="material-symbols-outlined text-sm">sms</span>
-                        <span>ส่ง SMS จริง</span>
-                    </button>
-                    <button type="button" onclick="sendLineNotificationToApplicant(${jsArg(app.lineId || app.phone)}, ${jsArg(app.accessCode)}, ${jsArg(app.fullName)}, 'rider')" class="py-2 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="แชร์ข้อความแจ้งเตือนเข้า LINE">
-                        <span>💬</span>
-                        <span>ส่งแจ้ง LINE</span>
-                    </button>
-                    <button type="button" onclick="copyApprovalNotificationMessage(${jsArg(app.phone)}, ${jsArg(app.accessCode)}, ${jsArg(app.fullName)}, 'rider')" class="py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="คัดลอกข้อความแจ้งผลทางการ">
-                        <span class="material-symbols-outlined text-sm">content_copy</span>
-                        <span>คัดลอกข้อความ</span>
+                    <button type="button" onclick="resetRiderLoginSecret(${jsArg(app.id)})" class="col-span-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer" title="สร้างรหัสผ่านเข้าระบบใหม่ แล้วส่งต่อทาง SMS / LINE จากกล่องที่ขึ้นมา">
+                        <span class="material-symbols-outlined text-sm">key</span>
+                        <span>สร้างรหัสผ่านใหม่ & ส่งให้ไรเดอร์</span>
                     </button>
                     <a href="tel:${escapeHtml(app.phone)}" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer" title="โทรหาผู้สมัคร">
                         <span class="material-symbols-outlined text-sm">call</span>
@@ -22762,6 +23702,21 @@ function viewRiderAppDetail(appId) {
                 <span class="material-symbols-outlined text-2xl text-emerald-600">account_balance</span>
             </div>
 
+            ${app.status === 'pending' && getMissingRequiredRiderDocs(app).length ? `
+            <div class="bg-rose-50 border-2 border-rose-300 p-3 rounded-xl flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-rose-600 text-2xl">warning</span>
+                <div>
+                    <div class="font-black text-sm text-rose-800">⚠️ เอกสารยังไม่ครบ อนุมัติไม่ได้</div>
+                    <div class="text-[11px] text-rose-700">ขาด: ${escapeHtml(getMissingRequiredRiderDocs(app).join(", "))}</div>
+                </div>
+            </div>
+            ` : app.docsVerifiedAt ? `
+            <div class="bg-emerald-50/70 border border-emerald-200 p-2.5 rounded-xl text-[11px] text-emerald-800 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-base text-emerald-600">verified</span>
+                <span>ตรวจสอบเอกสารแล้วโดย ${escapeHtml(app.docsVerifiedBy || "เจ้าของ")} เมื่อ ${formatRiderAppDate(app.docsVerifiedAt)}</span>
+            </div>
+            ` : ''}
+
             ${renderRiderAppExtrasHtml(app)}
         `;
         hydrateRiderAppDocs(app);
@@ -22770,43 +23725,47 @@ function viewRiderAppDetail(appId) {
     if (footer) {
         footer.innerHTML = `
             <div class="flex items-center gap-1.5 flex-wrap">
-                <button type="button" onclick="openEditRiderAppModal('${app.id}'); closeRiderAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลใบสมัครนี้">
+                <button type="button" onclick="openEditRiderAppModal(${jsArg(app.id)}); closeRiderAppDetailModal();" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer" title="แก้ไขข้อมูลใบสมัครนี้">
                     <span class="material-symbols-outlined text-sm">edit</span>
                     <span>แก้ไขข้อมูล</span>
                 </button>
                 ${app.status === 'rejected' ? `
-                    <button type="button" onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button type="button" onclick="reconsiderRiderApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>พิจารณาใหม่</span>
                     </button>
                 ` : app.status === 'approved' ? `
-                    <button type="button" onclick="reconsiderRiderApplication('${app.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button type="button" onclick="reconsiderRiderApplication(${jsArg(app.id)})" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-sm">replay</span>
                         <span>ย้อนกลับไปรอพิจารณา</span>
                     </button>
                 ` : ''}
-                <button type="button" onclick="deleteRiderApplication('${app.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
+                <button type="button" onclick="deleteRiderApplication(${jsArg(app.id)})" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="ลบใบสมัครนี้">
                     <span class="material-symbols-outlined text-base">delete</span>
                 </button>
             </div>
 
             <div class="flex items-center gap-1.5 flex-wrap">
                 ${app.status === 'pending' ? `
-                    <button type="button" onclick="rejectRiderApplication('${app.id}')" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="rejectRiderApplication(${jsArg(app.id)})" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
                         ปฏิเสธ
                     </button>
-                    <button type="button" onclick="approveRiderApplication('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติเป็นไรเดอร์ในระบบและสร้างรหัสผ่าน 6 หลัก">
+                    <button type="button" onclick="approveRiderApplication(${jsArg(app.id)})" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติเป็นไรเดอร์ในระบบและสร้างรหัสผ่าน 6 หลัก">
                         <span class="material-symbols-outlined text-sm font-bold">check_circle</span>
                         <span>อนุมัติเป็นไรเดอร์</span>
                     </button>
-                    <button type="button" onclick="approveAndLoginRider('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
+                    <button type="button" onclick="approveAndLoginRider(${jsArg(app.id)})" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="อนุมัติและสลับเข้าสู่ระบบรับงานทันที">
                         <span class="material-symbols-outlined text-sm font-bold">sports_motorsports</span>
                         <span>อนุมัติ & รับงานทันที 🚀</span>
                     </button>
                 ` : `
-                    <button type="button" onclick="approveAndLoginRider('${app.id}')" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าระบบรับงานเป็นไรเดอร์คนนี้ทันที">
+                    <button type="button" onclick="approveAndLoginRider(${jsArg(app.id)})" class="px-3.5 py-2 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สลับเข้าระบบรับงานเป็นไรเดอร์คนนี้ทันที">
                         <span class="material-symbols-outlined text-sm font-bold">sports_motorsports</span>
                         <span>เข้าสู่ระบบรับงานทันที 🚀</span>
+                    </button>
+                    <button type="button" onclick="resetRiderLoginSecret(${jsArg(app.id)})" class="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold rounded-xl text-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์คนนี้">
+                        <span class="material-symbols-outlined text-sm">key</span>
+                        <span>สร้างรหัสเข้าระบบใหม่</span>
                     </button>
                     <button type="button" onclick="closeRiderAppDetailModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all cursor-pointer">
                         ปิดหน้าต่าง
@@ -22977,6 +23936,7 @@ function handleRiderAppEditSubmit(e) {
 }
 
 function deleteRiderApplication(appId) {
+    if (!requireOwnerAction()) return;
     if (confirm("⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบประวัติใบสมัครนี้ออกจากระบบ?")) {
         const apps = loadRiderApplications();
         const appToDelete = apps.find(x => x.id === appId);
@@ -23020,11 +23980,15 @@ function deleteRiderApplication(appId) {
 }
 
 function reconsiderRiderApplication(appId) {
+    if (!requireOwnerAction()) return;
     const apps = loadRiderApplications();
     const app = apps.find(x => x.id === appId);
     if (!app) return;
+    const wasApproved = app.status === "approved";
+    if (wasApproved && !confirm(`"${app.fullName}" เป็นไรเดอร์ที่อนุมัติแล้ว\nถ้าย้อนกลับไปรอพิจารณา จะถูกถอนสิทธิ์และรับงานไม่ได้จนกว่าจะอนุมัติใหม่\n\nยืนยันใช่หรือไม่?`)) return;
     app.status = "pending";
     saveRiderApplications(apps);
+    if (wasApproved) revokeRiderAccessForApplication(app);
     closeRiderAppDetailModal();
     showToast(`🔄 นำใบสมัครของ ${app.fullName} กลับมาพิจารณาใหม่แล้ว`);
     renderAdminRiders();
@@ -23191,7 +24155,7 @@ function openSingleRiderPayoutModal(riderId, amount, phone, name, plate, trips, 
     const qrImg = document.getElementById("rider-payout-qr-image");
     const ppNumEl = document.getElementById("rider-payout-promptpay-number");
 
-    if (nameEl) nameEl.innerHTML = `<span class="material-symbols-outlined text-purple-600 text-sm">two_wheeler</span><span>${_currentRiderPayout.name}</span>`;
+    if (nameEl) nameEl.innerHTML = `<span class="material-symbols-outlined text-purple-600 text-sm">two_wheeler</span><span>${escapeHtml(_currentRiderPayout.name)}</span>`;
     if (plateEl) plateEl.textContent = `ทะเบียน: ${_currentRiderPayout.plate}`;
     if (phoneEl) phoneEl.textContent = _currentRiderPayout.phone;
     if (tripsEl) tripsEl.textContent = `เที่ยววิ่งสำเร็จ: ${_currentRiderPayout.trips} เที่ยว`;
@@ -23640,11 +24604,11 @@ function renderFleetPayoutModal() {
                     ` : riderRows.map(row => `
                         <tr class="hover:bg-slate-50 transition-colors">
                             <td class="p-2.5">
-                                <div class="font-bold text-slate-900">${row.name}</div>
-                                <div class="text-[10px] text-slate-400 font-mono">${row.plate || '-'} ${row.motorcycleModel ? `• ${row.motorcycleModel}` : ''}</div>
+                                <div class="font-bold text-slate-900">${escapeHtml(row.name)}</div>
+                                <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(row.plate) || '-'} ${row.motorcycleModel ? `• ${row.motorcycleModel}` : ''}</div>
                             </td>
                             <td class="p-2.5 font-mono text-emerald-800 font-bold text-[11px]">
-                                ${row.promptPayNum}
+                                ${escapeHtml(row.promptPayNum)}
                                 <div class="text-[9px] text-slate-400 font-sans">${row.bank || 'พร้อมเพย์'}</div>
                             </td>
                             <td class="p-2.5 text-center font-bold">${row.trips}</td>
@@ -23653,17 +24617,17 @@ function renderFleetPayoutModal() {
                             <td class="p-2.5 text-right font-black text-emerald-700">฿${row.totalPayout.toLocaleString()}</td>
                             <td class="p-2.5 text-center">
                                 <div class="flex items-center justify-center gap-1 flex-wrap">
-                                    <button onclick="openSingleRiderPayoutModal('${row.id}', ${row.totalPayout}, '${row.promptPayNum}', '${row.name.replace(/'/g, "\\'")}', '${row.plate || '-'}', ${row.trips}, ${row.baseEarned}, ${row.bonus})" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[10.5px] shadow-xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer">
+                                    <button onclick="openSingleRiderPayoutModal(${jsArg(row.id)}, ${row.totalPayout}, ${jsArg(row.promptPayNum)}, ${jsArg(row.name)}, ${jsArg(row.plate || '-')}, ${row.trips}, ${row.baseEarned}, ${row.bonus})" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-lg text-[10.5px] shadow-xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer">
                                         <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                         <span>${row.isSettled ? 'ดู QR ซ้ำ' : 'สแกน QR โอน'}</span>
                                     </button>
                                     ${row.slipImage ? `
-                                        <button onclick="openRiderSlipViewerModal('${row.id || row.name}', '${targetDateKey}')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10.5px] shadow-xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer" title="ดูสลิปโอนเงิน">
+                                        <button onclick="openRiderSlipViewerModal(${jsArg(row.id || row.name)}, ${jsArg(targetDateKey)})" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10.5px] shadow-xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer" title="ดูสลิปโอนเงิน">
                                             <span class="material-symbols-outlined text-xs">image</span>
                                             <span>ดูสลิป</span>
                                         </button>
                                     ` : `
-                                        <button onclick="openRiderDirectSlipUploadModal('${row.id}', ${row.totalPayout}, '${row.promptPayNum}', '${row.name.replace(/'/g, "\\'")}', '${row.plate || '-'}', '${targetDateKey}')" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-lg text-[10.5px] shadow-2xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer" title="แนบสลิป">
+                                        <button onclick="openRiderDirectSlipUploadModal(${jsArg(row.id)}, ${row.totalPayout}, ${jsArg(row.promptPayNum)}, ${jsArg(row.name)}, ${jsArg(row.plate || '-')}, ${jsArg(targetDateKey)})" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 font-bold rounded-lg text-[10.5px] shadow-2xs active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer" title="แนบสลิป">
                                             <span class="material-symbols-outlined text-xs">attach_file</span>
                                             <span>แนบสลิป</span>
                                         </button>
@@ -23720,10 +24684,10 @@ function printFleetPayoutSlip() {
 
         riderRowsHtml += `
             <div class="slip-row" style="font-size: 11px;">
-                <span>${idx + 1}. ${r.name} (${trips} เที่ยว)</span>
+                <span>${idx + 1}. ${escapeHtml(r.name)} (${trips} เที่ยว)</span>
                 <span>฿${net.toLocaleString()}</span>
             </div>
-            <div style="font-size: 9px; color: #64748b; font-family: monospace; padding-left: 8px;">พร้อมเพย์: ${r.promptPay || r.phone || '-'}</div>
+            <div style="font-size: 9px; color: #64748b; font-family: monospace; padding-left: 8px;">พร้อมเพย์: ${escapeHtml(r.promptPay) || escapeHtml(r.phone) || '-'}</div>
         `;
     });
 
@@ -23824,17 +24788,24 @@ function simulateRiderGpsMovement() {
 }
 
 function clearFleetTestData() {
+    if (!requireOwnerAction()) return;
     if (!confirm("⚠️ คุณต้องการล้างข้อมูลระบบไรเดอร์ทั้งหมด (ล้างทั้งใบสมัครและไรเดอร์ทั้งหมด) หรือไม่?\n\n• ข้อมูลในเครื่องนี้และบนคลาวด์ Firebase จะถูกรีเซ็ตให้สะอาด 100% พร้อมใช้งานจริง")) return;
+
+    // เก็บรายชื่อ id ไว้ก่อนล้าง local เพื่อไปลบทีละรายการบนคลาวด์ (กฎ v2 อนุญาตให้ลบทีละ id เท่านั้น
+    //   ไม่มี .write ที่ตัวโหนดแม่ rider_applications/community_riders เอง - set([]) ทั้งก้อนจะโดนปฏิเสธเสมอ
+    //   แม้ว่าจะล็อกอินเป็นเจ้าของอยู่ก็ตาม เพราะ Firebase ไม่มองลึกลงไปที่กฎของลูก $id เวลาตัวเขียนคือโหนดแม่)
+    const appIds = loadRiderApplications().map(a => a && a.id).filter(Boolean);
+    const riderIds = loadCommunityRiders().map(r => r && r.id).filter(Boolean);
 
     // Reset local storage
     localStorage.removeItem("talathub_rider_applications");
     localStorage.removeItem("talathub_community_riders");
     localStorage.removeItem("talathub_logged_in_rider");
 
-    // Reset Firebase Realtime Database with empty arrays
+    // Reset Firebase Realtime Database: ลบทีละ id ตามกฎ v2 (ห้าม set() ทั้งโหนดแม่อีก - ดู CLAUDE.md 5c)
     if (isFirebaseReady() && db) {
-        db.ref("rider_applications").set([]).catch(console.warn);
-        db.ref("community_riders").set([]).catch(console.warn);
+        appIds.forEach(id => db.ref("rider_applications/" + id).remove().catch(console.warn));
+        riderIds.forEach(id => db.ref("community_riders/" + id).remove().catch(console.warn));
     }
 
     _lastSubmittedRiderApp = null;
@@ -23890,7 +24861,7 @@ function getDefaultSettingsNote(roleKey) {
     } else if (roleKey === "hub") {
         return "📋 คู่มือและระเบียบปฏิบัติงานฝ่ายจัดเตรียมสินค้า (ฮับ):\n1. เมื่อมีออเดอร์เข้า ให้ตรวจสอบใบจัดของ (Picking List) แล้วแยกตะกร้าตามแผงค้าทันที\n2. สินค้าสดต้องชั่งน้ำหนักให้ตรงตามบิล และติดสติกเกอร์รหัสออเดอร์ให้ชัดเจน\n3. เนื้อสัตว์และอาหารทะเลสดต้องใส่น้ำแข็งหลอดในถุงเพื่อคงความสดก่อนส่งมอบให้ไรเดอร์\n4. ตรวจสอบสลิปโอนเงินทุกรายการ หากเป็นออเดอร์ COD ให้แจ้งไรเดอร์เก็บเงินสดให้ครบถ้วน";
     } else if (roleKey === "merchant") {
-        return "🏪 ข้อตกลงและระเบียบสำหรับ 100 แผงค้าในตลาดสด:\n1. แผงค้าต้องจัดเตรียมของสดคุณภาพดี สะอาด และราคาต้องตรงกับราคาขายหน้าร้านจริง\n2. เมื่อได้รับแจ้งเตือนออเดอร์ กรุณาเตรียมสินค้าให้เสร็จภายใน 5-10 นาที\n3. ระบบตัดยอดและโอนเงินเข้าบัญชีพร้อมเพย์ของแผงค้าทุกวันเวลา 18:30 น. (ไม่มีหัก GP 0%)\n4. หากสินค้าตัวใดหมดชั่วคราว ให้แจ้งฝ่ายจัดของหรือปิดการขายในระบบทันที";
+        return "🏪 ข้อตกลงและระเบียบสำหรับ 100 แผงค้าในตลาดสด:\n1. แผงค้าต้องจัดเตรียมของสดคุณภาพดี สะอาด และราคาต้องตรงกับราคาขายหน้าร้านจริง\n2. เมื่อได้รับแจ้งเตือนออเดอร์ กรุณาเตรียมสินค้าให้เสร็จภายใน 5-10 นาที\n3. ระบบตัดยอดและโอนเงินเข้าบัญชีพร้อมเพย์ของแผงค้าทุกวันเวลา 18:30 น. (หลังหัก GP " + loadSavedHubSettings().merchantGP + "%)\n4. หากสินค้าตัวใดหมดชั่วคราว ให้แจ้งฝ่ายจัดของหรือปิดการขายในระบบทันที";
     } else if (roleKey === "rider") {
         return "🛵 ระเบียบวินัยและข้อปฏิบัติสำหรับไรเดอร์ประจำตลาด:\n1. ตรวจสอบจำนวนถุงและรหัสออเดอร์ให้ถูกต้องก่อนออกจากฮับทุกครั้ง\n2. สินค้าสดต้องบรรจุในกล่อง/กระเป๋าเก็บความเย็นที่มีถุงน้ำแข็งตลอดการเดินทาง\n3. โทรแจ้งลูกค้าล่วงหน้า 5 นาทีก่อนถึงบ้าน และพูดจาสุภาพเรียบร้อย\n4. ออเดอร์ COD ต้องเก็บเงินสดให้ครบ และนำส่งยอดเคลียร์เงินที่ฮับทุก 3 เที่ยวส่ง หรือก่อน 18:30 น.\n5. ขับขี่ปลอดภัย สวมหมวกกันน็อก ปฏิบัติตามกฎจราจรอย่างเคร่งครัด";
     }
@@ -24131,7 +25102,7 @@ function renderAdminSettings() {
                         <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
                             <span class="font-bold text-emerald-900">🎟️ โปรโมชั่นคูปองต้อนรับลูกค้าใหม่:</span>
                             <div class="flex items-center gap-2 mt-1">
-                                <input type="text" id="cfg-coupon-code" value="${s.couponCode}" class="w-1/2 p-2 rounded-lg border border-emerald-300 font-mono font-bold text-emerald-800 text-xs">
+                                <input type="text" id="cfg-coupon-code" value="${escapeHtml(s.couponCode)}" class="w-1/2 p-2 rounded-lg border border-emerald-300 font-mono font-bold text-emerald-800 text-xs">
                                 <span class="text-xs">ลด ฿</span>
                                 <input type="number" id="cfg-coupon-discount" value="${s.couponDiscount}" class="w-20 p-2 rounded-lg border border-emerald-300 font-bold text-emerald-800 text-xs">
                             </div>
@@ -24189,15 +25160,15 @@ function renderAdminSettings() {
                     <div class="space-y-3 text-xs">
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">ชื่อศูนย์กลางฮับกระจายสินค้า:</label>
-                            <input type="text" id="cfg-hub-name" value="${s.hubName}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            <input type="text" id="cfg-hub-name" value="${escapeHtml(s.hubName)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
                         </div>
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">ตำแหน่งจุดรวมของ / แท่นจัดของ:</label>
-                            <input type="text" id="cfg-hub-location" value="${s.hubLocation}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
+                            <input type="text" id="cfg-hub-location" value="${escapeHtml(s.hubLocation)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
                         </div>
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">เบอร์โทรศัพท์ผู้จัดการฮับ / เบอร์ PromptPay ฮับ:</label>
-                            <input type="text" id="cfg-hub-phone" value="${s.hubPhone}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold font-mono text-emerald-700 bg-slate-50">
+                            <input type="text" id="cfg-hub-phone" value="${escapeHtml(s.hubPhone)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold font-mono text-emerald-700 bg-slate-50">
                         </div>
                     </div>
                 </div>
@@ -24244,7 +25215,7 @@ function renderAdminSettings() {
                     <div class="space-y-3 text-xs">
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">ค่าธรรมเนียมส่วนแบ่งระบบ (GP %):</label>
-                            <input type="number" id="cfg-merchant-gp" value="${s.merchantGP}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-emerald-700 bg-slate-50">
+                            <input type="number" min="1" max="30" id="cfg-merchant-gp" value="${s.merchantGP}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-emerald-700 bg-slate-50">
                             <span class="text-[11px] text-slate-400">อัตราแนะนำ 10% เพื่อครอบคลุมค่าเช่าและเงินเดือนพนักงานตามแผนธุรกิจ (กำไรสุทธิ 5%)</span>
                         </div>
                         <div class="grid grid-cols-2 gap-3">
@@ -24353,7 +25324,7 @@ function renderAdminSettings() {
                     <span class="material-symbols-outlined text-purple-700 text-lg">edit_note</span>
                     <h4 class="font-extrabold text-sm text-slate-900">${curMeta.noteTitle}</h4>
                 </div>
-                <button onclick="resetSettingsCustomNote('${_activeSettingsSubTab}')" class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors cursor-pointer" title="รีเซ็ตกลับเป็นข้อความตัวอย่างเริ่มต้น">
+                <button onclick="resetSettingsCustomNote(${jsArg(_activeSettingsSubTab)})" class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors cursor-pointer" title="รีเซ็ตกลับเป็นข้อความตัวอย่างเริ่มต้น">
                     รีเซ็ตข้อความเริ่มต้น
                 </button>
             </div>
@@ -24364,7 +25335,7 @@ function renderAdminSettings() {
                     <span class="material-symbols-outlined text-xs text-emerald-600">check_circle</span>
                     <span>บันทึกในระบบเรียลไทม์ (Local Database Persistence)</span>
                 </span>
-                <button onclick="saveSettingsCustomNote('${_activeSettingsSubTab}')" class="px-5 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer">
+                <button onclick="saveSettingsCustomNote(${jsArg(_activeSettingsSubTab)})" class="px-5 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer">
                     <span class="material-symbols-outlined text-base">save</span>
                     <span>💾 บันทึกข้อความหน้านี้</span>
                 </button>
@@ -24382,9 +25353,9 @@ function renderAdminSettings() {
                 <div>
                     <h3 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
                         <span class="material-symbols-outlined text-purple-700">settings</span>
-                        <span>${curMeta.title}</span>
+                        <span>${escapeHtml(curMeta.title)}</span>
                     </h3>
-                    <p class="text-xs text-slate-500">${curMeta.desc}</p>
+                    <p class="text-xs text-slate-500">${escapeHtml(curMeta.desc)}</p>
                 </div>
                 <span class="text-xs font-extrabold px-3 py-1 rounded-full ${curMeta.badgeColor} self-start sm:self-auto shadow-2xs">
                     ${curMeta.badge}
@@ -24468,7 +25439,7 @@ function generateLineOrderMessage(order) {
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const cleanId = (order.orderId || "").replace(/#/g, '');
-    const trackUrl = `https://pisaen666.github.io/hsong/?track=${encodeURIComponent(cleanId)}`;
+    const trackUrl = buildOrderTrackingUrl(order, "https://pisaen666.github.io/hsong/");
 
     let itemsList = "";
     let itemIndex = 1;
@@ -24911,7 +25882,7 @@ function renderHubPickingList() {
                         <div>
                             <div class="flex items-center gap-1.5">
                                 <span class="text-[10px] bg-orange-100 text-orange-800 font-extrabold px-2 py-0.5 rounded-full">งานด่วนแผงค้าเรียกไรเดอร์</span>
-                                <span class="text-[10px] bg-slate-800 text-white font-mono px-2 py-0.5 rounded-full">${expOrder.orderId}</span>
+                                <span class="text-[10px] bg-slate-800 text-white font-mono px-2 py-0.5 rounded-full">${escapeHtml(expOrder.orderId)}</span>
                             </div>
                             <h3 class="font-extrabold text-slate-800 text-sm mt-0.5">รับของจากแผงค้าในตลาดไปส่งลูกค้า</h3>
                         </div>
@@ -24930,11 +25901,11 @@ function renderHubPickingList() {
                             <span>จุดรับของ (หน้าแผงค้าในตลาด):</span>
                         </div>
                         <div class="font-extrabold text-slate-900 text-xs">${stallTitle}</div>
-                        <div class="text-[11px] text-slate-600">ผู้ส่ง: ${origin.ownerName || 'เจ้าของแผง'} โซน ${origin.zone || 'A'}</div>
+                        <div class="text-[11px] text-slate-600">ผู้ส่ง: ${escapeHtml(origin.ownerName) || 'เจ้าของแผง'} โซน ${escapeHtml(origin.zone) || 'A'}</div>
                         <div class="pt-1 flex items-center gap-1.5">
-                            <button type="button" onclick="callContactDirect('${origin.ownerPhone || '0819998888'}', '${stallTitle}', 'แผงค้าต้นทาง')" class="px-2.5 py-1 bg-white hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-xl text-[10.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="callContactDirect(${jsArg(origin.ownerPhone || '0819998888')}, ${jsArg(stallTitle)}, 'แผงค้าต้นทาง')" class="px-2.5 py-1 bg-white hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-xl text-[10.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-xs">call</span>
-                                <span>โทรหาแผงค้า (${origin.ownerPhone || '-'})</span>
+                                <span>โทรหาแผงค้า (${escapeHtml(origin.ownerPhone) || '-'})</span>
                             </button>
                         </div>
                     </div>
@@ -24945,13 +25916,13 @@ function renderHubPickingList() {
                             <span class="material-symbols-outlined text-sm text-emerald-600">person_pin</span>
                             <span>จุดส่งของ (บ้านลูกค้าปลายทาง):</span>
                         </div>
-                        <div class="font-extrabold text-slate-900 text-xs">${expOrder.customerName || 'ลูกค้า'}</div>
+                        <div class="font-extrabold text-slate-900 text-xs">${escapeHtml(expOrder.customerName) || 'ลูกค้า'}</div>
                         <div class="text-[11px] text-slate-600 truncate">${cleanAddress}</div>
                         <div class="text-[10px] text-emerald-800 font-bold">ระยะทาง ~${distDisplay} กม. • ค่าส่ง ฿${expOrder.deliveryFee || 20} (ชำระแล้ว)</div>
                         <div class="pt-1 flex items-center gap-1.5">
-                            <button type="button" onclick="callContactDirect('${expOrder.customerPhone || '0812345678'}', 'คุณ${expOrder.customerName || 'ลูกค้า'}', 'ลูกค้าปลายทาง')" class="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-[10.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="callContactDirect(${jsArg(expOrder.customerPhone || '0812345678')}, 'คุณ${escapeHtml(expOrder.customerName) || 'ลูกค้า'}', 'ลูกค้าปลายทาง')" class="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-[10.5px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-xs">call</span>
-                                <span>โทรหาลูกค้า (${expOrder.customerPhone || '-'})</span>
+                                <span>โทรหาลูกค้า (${escapeHtml(expOrder.customerPhone) || '-'})</span>
                             </button>
                         </div>
                     </div>
@@ -24964,7 +25935,7 @@ function renderHubPickingList() {
                         <div class="font-extrabold text-slate-800">📦 ร้านค้าจัดเตรียมและแพ็คของเองเรียบร้อย</div>
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
-                        <button type="button" onclick="viewHubMerchantExpressSlip('${expOrder.orderId}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-[11px] font-extrabold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="กดเพื่อตรวจรูปสลิปพร้อมเพย์ฮับ">
+                        <button type="button" onclick="viewHubMerchantExpressSlip(${jsArg(expOrder.orderId)})" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-[11px] font-extrabold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="กดเพื่อตรวจรูปสลิปพร้อมเพย์ฮับ">
                             <span class="material-symbols-outlined text-xs text-amber-700">receipt_long</span>
                             <span>📷 ตรวจสลิปค่าส่ง (฿${expOrder.deliveryFee || 20})</span>
                         </button>
@@ -24987,15 +25958,15 @@ function renderHubPickingList() {
                     ${!isAssigned ? `
                         <!-- Unassigned State: 1-Click quick dispatch or Select Rider + Print Slip -->
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <button type="button" onclick="assignExpressOrderToRider('${expOrder.orderId}', 'R1')" class="py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
+                            <button type="button" onclick="assignExpressOrderToRider(${jsArg(expOrder.orderId)}, 'R1')" class="py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
                                 <span class="material-symbols-outlined text-sm">two_wheeler</span>
                                 <span>🚀 จ่ายงานให้ไรเดอร์สมศักดิ์ (พร้อมรับงาน)</span>
                             </button>
-                            <button type="button" onclick="openAssignRiderModal('${expOrder.orderId}')" class="py-2.5 px-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow-2xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
+                            <button type="button" onclick="openAssignRiderModal(${jsArg(expOrder.orderId)})" class="py-2.5 px-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow-2xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
                                 <span class="material-symbols-outlined text-sm">group</span>
                                 <span>👥 เลือกไรเดอร์คนอื่น</span>
                             </button>
-                            <button type="button" onclick="printMerchantExpressSlip('${expOrder.orderId}')" class="py-2.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer text-xs">
+                            <button type="button" onclick="printMerchantExpressSlip(${jsArg(expOrder.orderId)})" class="py-2.5 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer text-xs">
                                 <span class="material-symbols-outlined text-sm">print</span>
                                 <span>🖨️ พิมพ์สลิปส่งด่วน 80mm</span>
                             </button>
@@ -25003,29 +25974,29 @@ function renderHubPickingList() {
                     ` : `
                         <!-- Assigned State: Full Coordinator Operations Controls -->
                         <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                            <button type="button" onclick="callContactDirect('${rider.phone}', '${rider.name}', 'ไรเดอร์ผู้จัดส่ง')" class="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="callContactDirect(${jsArg(rider.phone)}, ${jsArg(rider.name)}, 'ไรเดอร์ผู้จัดส่ง')" class="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm">call</span>
                                 <span>โทรหาไรเดอร์</span>
                             </button>
-                            <button type="button" onclick="viewOrderOnRadar('${expOrder.orderId}')" class="py-2.5 px-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="viewOrderOnRadar(${jsArg(expOrder.orderId)})" class="py-2.5 px-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm">radar</span>
                                 <span>ดูเรดาร์สด GPS</span>
                             </button>
-                            <button type="button" onclick="openAssignRiderModal('${expOrder.orderId}')" class="py-2.5 px-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="openAssignRiderModal(${jsArg(expOrder.orderId)})" class="py-2.5 px-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm">swap_horiz</span>
                                 <span>เปลี่ยนไรเดอร์</span>
                             </button>
-                            <button type="button" onclick="printMerchantExpressSlip('${expOrder.orderId}')" class="py-2.5 px-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="printMerchantExpressSlip(${jsArg(expOrder.orderId)})" class="py-2.5 px-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm">print</span>
                                 <span>สลิป 80mm</span>
                             </button>
                             ${expOrder.status !== "delivered" ? `
-                                <button type="button" onclick="markExpressDeliveredByHub('${expOrder.orderId}')" class="py-2.5 px-2 bg-slate-900 hover:bg-black text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                <button type="button" onclick="markExpressDeliveredByHub(${jsArg(expOrder.orderId)})" class="py-2.5 px-2 bg-slate-900 hover:bg-black text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                     <span class="material-symbols-outlined text-sm">check_circle</span>
                                     <span>บันทึกส่งสำเร็จ</span>
                                 </button>
                             ` : `
-                                <button type="button" onclick="viewMerchantDeliveryProof('${expOrder.orderId}')" class="py-2.5 px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                                <button type="button" onclick="viewMerchantDeliveryProof(${jsArg(expOrder.orderId)})" class="py-2.5 px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                     <span class="material-symbols-outlined text-sm">photo_camera</span>
                                     <span>ดูรูปหลักฐาน</span>
                                 </button>
@@ -25080,7 +26051,7 @@ function renderHubPickingList() {
                             <label class="flex items-center gap-2.5 cursor-pointer select-none flex-1 min-w-0">
                                 <input type="checkbox" ${isPicked ? 'checked' : ''} ${isOutOfStock ? 'disabled' : ''} onchange="toggleHubPickedItem(${sIdx}, ${iIdx})" class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-40">
                                 <span class="font-bold ${isOutOfStock ? 'text-rose-700 line-through' : (isPicked ? 'text-emerald-900 line-through opacity-80' : 'text-slate-800')} text-xs truncate">
-                                    ${item.name} (฿${actualPrice})
+                                    ${escapeHtml(item.name)} (฿${actualPrice})
                                 </span>
                             </label>
                             <div class="flex items-center gap-1.5 shrink-0">
@@ -25112,14 +26083,14 @@ function renderHubPickingList() {
                 <div class="${stall.badgeColor || 'bg-slate-50'} border border-slate-200/80 rounded-2xl p-3.5 space-y-2.5">
                     <div class="flex items-center justify-between">
                         <span class="font-extrabold text-slate-900 text-xs flex items-center gap-1">
-                            <span>${stall.name}</span>
+                            <span>${escapeHtml(stall.name)}</span>
                         </span>
                         <div class="flex items-center gap-1.5">
-                            <button type="button" onclick="printStallPickingSlip('${order.orderId}', ${sIdx})" class="px-2 py-0.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์ใบจัดของสดเฉพาะแผงนี้">
+                            <button type="button" onclick="printStallPickingSlip(${jsArg(order.orderId)}, ${sIdx})" class="px-2 py-0.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer" title="พิมพ์ใบจัดของสดเฉพาะแผงนี้">
                                 <span class="material-symbols-outlined text-xs">print</span>
                                 <span>สลิปแผงนี้ 80mm</span>
                             </button>
-                            <span class="text-[10px] bg-white/90 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full font-bold shadow-2xs">${stall.tag || 'แผงค้าในตลาด'}</span>
+                            <span class="text-[10px] bg-white/90 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full font-bold shadow-2xs">${escapeHtml(stall.tag) || 'แผงค้าในตลาด'}</span>
                         </div>
                     </div>
                     <div class="space-y-1.5">
@@ -25180,7 +26151,7 @@ function renderHubPickingList() {
                                 <p class="text-[10px] text-orange-100 mt-0.5">ลูกค้าชำระค่าส่งด่วน +฿20 ไรเดอร์จะไปรับของที่หน้าร้านแผงค้าโดยตรง <strong>ไม่ต้องรวมของที่ฮับ</strong></p>
                             </div>
                         </div>
-                        <button type="button" onclick="contactExpressStall('${(order.stalls && order.stalls[0]) ? order.stalls[0].stallId : ''}', '${order.orderId}')" class="px-3 py-1.5 bg-white hover:bg-orange-50 text-orange-700 font-extrabold text-xs rounded-xl shadow-xs active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer">
+                        <button type="button" onclick="contactExpressStall(${jsArg((order.stalls && order.stalls[0]) ? order.stalls[0].stallId : '')}, ${jsArg(order.orderId)})" class="px-3 py-1.5 bg-white hover:bg-orange-50 text-orange-700 font-extrabold text-xs rounded-xl shadow-xs active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer">
                             <span class="material-symbols-outlined text-xs">call</span>
                             <span>โทรตามแผงค้า</span>
                         </button>
@@ -25190,11 +26161,11 @@ function renderHubPickingList() {
                 <div class="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div>
                         <div class="flex items-center gap-1.5">
-                            <span class="${isExpressGrocery ? 'bg-orange-100 text-orange-800 border border-orange-200' : 'bg-emerald-100 text-emerald-800'} font-extrabold text-[11px] px-2.5 py-0.5 rounded-full">${order.orderId}</span>
+                            <span class="${isExpressGrocery ? 'bg-orange-100 text-orange-800 border border-orange-200' : 'bg-emerald-100 text-emerald-800'} font-extrabold text-[11px] px-2.5 py-0.5 rounded-full">${escapeHtml(order.orderId)}</span>
                             <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">${order.status === 'delivering' ? '🛵 กำลังนำส่ง' : (isExpressGrocery ? '⚡ รอกำลังพลรับหน้าร้าน' : '📋 กำลังจัดของสด')}</span>
                         </div>
-                        <div class="text-xs font-bold text-slate-800 mt-1.5">ผู้รับ: ${customerName} (${address})</div>
-                        <div class="text-[11px] text-slate-500">โทร: ${customerPhone} • โน้ต: ${note}</div>
+                        <div class="text-xs font-bold text-slate-800 mt-1.5">ผู้รับ: ${escapeHtml(customerName)} (${escapeHtml(address)})</div>
+                        <div class="text-[11px] text-slate-500">โทร: ${customerPhone} • โน้ต: ${escapeHtml(note)}</div>
                     </div>
                     <div class="text-right">
                         <span class="text-sm font-black text-orange-600">฿${exactAmtDisplay}</span>
@@ -25228,11 +26199,11 @@ function renderHubPickingList() {
                             ลูกค้าแจ้งโอนผ่าน <strong>${paymentDesc}</strong> • กรุณาตรวจรูปสลิปหรือเทียบยอด <strong>฿${exactAmtDisplay}</strong> ในแอปธนาคารก่อนปล่อยงาน
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                            <button type="button" onclick="openOrderSlipVerificationModal('${order.orderId}')" class="py-2 px-3 bg-white text-orange-950 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="openOrderSlipVerificationModal(${jsArg(order.orderId)})" class="py-2 px-3 bg-white text-orange-950 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm text-orange-600">receipt_long</span>
                                 <span>📷 ตรวจรูปสลิป (${order.slipImage ? 'แนบแล้ว' : 'ยังไม่แนบ'})</span>
                             </button>
-                            <button type="button" onclick="approveOrderPayment('${order.orderId}')" class="py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer border border-emerald-400">
+                            <button type="button" onclick="approveOrderPayment(${jsArg(order.orderId)})" class="py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer border border-emerald-400">
                                 <span class="material-symbols-outlined text-sm">verified</span>
                                 <span>✅ ยืนยันเงินเข้าแล้ว (ปลดล็อค)</span>
                             </button>
@@ -25245,7 +26216,7 @@ function renderHubPickingList() {
                             <span>ยอดเงิน ฿${exactAmtDisplay} เข้าบัญชีแล้ว • ตรวจสอบสลิปเรียบร้อย</span>
                         </div>
                         ${order.slipImage ? `
-                            <button type="button" onclick="openOrderSlipVerificationModal('${order.orderId}')" class="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-[10.5px] font-bold shadow-2xs active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="openOrderSlipVerificationModal(${jsArg(order.orderId)})" class="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-[10.5px] font-bold shadow-2xs active:scale-95 transition-all cursor-pointer">
                                 📷 ดูสลิป
                             </button>
                         ` : ''}
@@ -25271,13 +26242,13 @@ function renderHubPickingList() {
                                 <span>ล็อคการปล่อยงาน: ต้องตรวจสลิปและกดยืนยันยอดโอน ฿${exactAmtDisplay} ก่อน</span>
                             </div>
                             <p class="text-[10.5px] text-rose-600">เพื่อความมั่นใจ 100% ว่าเงินเข้าบัญชีจริงก่อนปล่อยสินค้าและจ่ายงานให้ไรเดอร์</p>
-                            <button type="button" onclick="openOrderSlipVerificationModal('${order.orderId}')" class="mt-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-extrabold rounded-xl text-xs inline-flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer">
+                            <button type="button" onclick="openOrderSlipVerificationModal(${jsArg(order.orderId)})" class="mt-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-extrabold rounded-xl text-xs inline-flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer">
                                 <span class="material-symbols-outlined text-sm">receipt_long</span>
                                 <span>📷 เปิดตรวจสลิป & ปลดล็อคจ่ายงาน</span>
                             </button>
                         </div>
                     ` : `
-                        <button onclick="completePickingAndDispatchOrder('${order.orderId}')" class="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold py-3.5 rounded-2xl shadow-lg flex items-center justify-center gap-2 text-xs active:scale-95 transition-all cursor-pointer">
+                        <button onclick="completePickingAndDispatchOrder(${jsArg(order.orderId)})" class="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold py-3.5 rounded-2xl shadow-lg flex items-center justify-center gap-2 text-xs active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-base">moped</span>
                             <span>รวมถุงเสร็จแล้ว • ปล่อยไรเดอร์ออกเดินทาง 🚀</span>
                         </button>
@@ -25354,7 +26325,7 @@ function sendOutOfStockLineNotice() {
     }
     const refund = order.refundCashTotal || 0;
     const cleanOrderId = (order.orderId || "").replace(/#/g, '');
-    const trackUrl = `https://pisaen666.github.io/hsong/?track=${encodeURIComponent(cleanOrderId)}`;
+    const trackUrl = buildOrderTrackingUrl(order, "https://pisaen666.github.io/hsong/");
     const msg = `🔔【เฮียส่ง】แจ้งเตือนเรื่องสินค้าออเดอร์ ${order.orderId}:\nขออภัยครับ มีสินค้าที่แผงค้าหมด ได้แก่:\n${oosList.map(n => `• ${n}`).join('\n')}\n━━━━━━━━━━━━━━━━━━\n✉️ คืนเงินสดใส่ซอง: ฿${refund}\nทีมงานตัดรายการออก และไรเดอร์ได้นำเงินสดทอนจำนวน ฿${refund} ใส่ซองใสแนบไปกับถุงของสดเรียบร้อยแล้วครับ 🛵💨\n━━━━━━━━━━━━━━━━━━\n👉 แตะลิงก์นี้เพื่อดูสถานะจัดส่ง & ซองเงินทอนของคุณ:\n${trackUrl}`;
 
     if (isMobileDevice()) {
@@ -25614,7 +26585,7 @@ function renderHubSettlement() {
             vendorListHtml += `
                 <div class="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
                     <div>
-                        <div class="font-bold text-slate-800 text-xs">${stall.name}</div>
+                        <div class="font-bold text-slate-800 text-xs">${escapeHtml(stall.name)}</div>
                         <div class="text-[10px] text-slate-500">
                             ยอดขาย ฿${stallItemsTotal} <span class="text-amber-700 font-bold">(หัก GP ${gpRate}% -฿${stallGP})</span>
                             ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length})</span>` : ''}
@@ -25622,7 +26593,7 @@ function renderHubSettlement() {
                     </div>
                     <div class="text-right">
                         <div class="font-black text-emerald-700 text-xs">โอนสุทธิ ฿${stallPayout}</div>
-                        <button type="button" onclick="openVendorPayoutModal('${stallId}', '${stall.name.replace(/'/g, "\\'")}', ${stallPayout}, '${stallPhone}', '${stallOwner.replace(/'/g, "\\'")}', '${stallNum}', ${stallItemsTotal}, ${stallGP}, ${gpRate})" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
+                        <button type="button" onclick="openVendorPayoutModal(${jsArg(stallId)}, ${jsArg(stall.name)}, ${stallPayout}, ${jsArg(stallPhone)}, ${jsArg(stallOwner)}, ${jsArg(stallNum)}, ${stallItemsTotal}, ${stallGP}, ${gpRate})" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
                             โอนเคลียร์เงิน (PromptPay)
                         </button>
                     </div>
@@ -25637,7 +26608,7 @@ function renderHubSettlement() {
                 <div class="flex items-center justify-between pb-2 border-b border-slate-100">
                     <h3 class="font-bold text-sm text-slate-800 flex items-center gap-1">
                         <span class="material-symbols-outlined text-emerald-700 text-base">account_balance_wallet</span>
-                        <span>สรุปยอดจ่ายแผงค้า (${order.orderId})</span>
+                        <span>สรุปยอดจ่ายแผงค้า (${escapeHtml(order.orderId)})</span>
                     </h3>
                     <div class="text-right">
                         <div class="text-[10px] text-slate-500 font-medium">ยอดขายรวม ฿${vendorTotal}</div>
@@ -25672,16 +26643,16 @@ function renderHubSettlement() {
                 <div class="flex justify-between items-center p-3 bg-orange-50/60 rounded-2xl border border-orange-200">
                     <div class="space-y-0.5">
                         <div class="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
-                            <span>⚡ ${exp.orderId}</span>
-                            <span class="text-[10px] text-orange-800 font-bold bg-orange-100 px-2 py-0.2 rounded-full">${exp.originStall?.stallName || 'แผงค้า'}</span>
+                            <span>⚡ ${escapeHtml(exp.orderId)}</span>
+                            <span class="text-[10px] text-orange-800 font-bold bg-orange-100 px-2 py-0.2 rounded-full">${escapeHtml(exp.originStall?.stallName) || 'แผงค้า'}</span>
                         </div>
                         <div class="text-[10px] text-slate-600">
-                            🛵 ไรเดอร์: <strong>${rider.name}</strong> • ผู้รับ: คุณ${exp.customerName || 'ลูกค้า'}
+                            🛵 ไรเดอร์: <strong>${escapeHtml(rider.name)}</strong> • ผู้รับ: คุณ${escapeHtml(exp.customerName) || 'ลูกค้า'}
                         </div>
                     </div>
                     <div class="text-right shrink-0">
                         <div class="font-black text-emerald-700 text-xs">฿${fee}</div>
-                        <button type="button" onclick="clearHubSettlementVendor('ไรเดอร์: ${rider.name.replace(/'/g, "\\'")} (งาน ${exp.orderId})', this)" class="text-[10px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
+                        <button type="button" onclick="clearHubSettlementVendor('ไรเดอร์: ${rider.name.replace(/'/g, "\\'")} (งาน ${escapeHtml(exp.orderId)})', this)" class="text-[10px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
                             โอนให้ไรเดอร์
                         </button>
                     </div>
@@ -25721,7 +26692,7 @@ function renderHubSettlement() {
                 <div class="flex justify-between items-center p-3 ${isExceeded ? 'bg-rose-50 border-rose-300' : 'bg-slate-50 border-slate-200'} rounded-2xl border">
                     <div>
                         <div class="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
-                            <span>🛵 ${r.riderName}</span>
+                            <span>🛵 ${escapeHtml(r.riderName)}</span>
                             ${isExceeded ? `<span class="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-md animate-pulse">⚠️ เกินเพดาน ฿3,000</span>` : ''}
                         </div>
                         <div class="text-[10px] text-slate-500 font-mono">
@@ -25730,7 +26701,7 @@ function renderHubSettlement() {
                     </div>
                     <div class="text-right">
                         <div class="font-black ${isExceeded ? 'text-rose-700' : 'text-emerald-700'} text-xs">฿${r.netCashToHub.toLocaleString()}</div>
-                        <button type="button" onclick="settleRiderBalance('${r.riderName.replace(/'/g, "\\'")}', '${todayDateKey}'); renderHubSettlement();" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
+                        <button type="button" onclick="settleRiderBalance(${jsArg(r.riderName)}, ${jsArg(todayDateKey)}); renderHubSettlement();" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold mt-1 shadow-xs transition-all cursor-pointer">
                             💵 รับเงินสด
                         </button>
                     </div>
@@ -25820,10 +26791,66 @@ function renderRiderGuestPortal() {
 }
 window.renderRiderGuestPortal = renderRiderGuestPortal;
 
+// ── กล่องแจ้งสถานะใบสมัครที่ผู้สมัครเพิ่งส่ง (ค้างบนหน้าล็อกอินจนกว่าจะกดปิด ไม่หายเหมือนข้อความ toast)
+const _RIDER_APP_NOTICE_KEY = "talathub_rider_app_notice";
+
+function _escHtml(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function rememberRiderApplicationNotice(code, name) {
+    try { sessionStorage.setItem(_RIDER_APP_NOTICE_KEY, JSON.stringify({ code: String(code), name: name || "" })); } catch (e) { }
+}
+
+function dismissRiderApplicationNotice() {
+    try { sessionStorage.removeItem(_RIDER_APP_NOTICE_KEY); } catch (e) { }
+    renderRiderApplicationNotice();
+}
+window.dismissRiderApplicationNotice = dismissRiderApplicationNotice;
+
+function renderRiderApplicationNotice() {
+    const box = document.getElementById("rider-application-notice");
+    if (!box) return;
+    let n = null;
+    try { n = JSON.parse(sessionStorage.getItem(_RIDER_APP_NOTICE_KEY) || "null"); } catch (e) { }
+    if (!n || !n.code) { box.innerHTML = ""; return; }
+    const app = loadRiderApplications().find(a => a.id === n.code);
+    const status = app ? app.status : "pending";
+    const palette = status === "approved"
+        ? { bg: "bg-emerald-50", border: "border-emerald-400", text: "text-emerald-900", head: "✅ ใบสมัครได้รับอนุมัติแล้ว", hint: "เข้าสู่ระบบรับงานด้วยเลขนี้ และรหัสผ่านที่เจ้าของส่งให้ (พิมพ์ในช่องด้านล่าง) ถ้ายังไม่ได้รับรหัสผ่าน ให้ติดต่อเจ้าของ" }
+        : status === "rejected"
+            ? { bg: "bg-rose-50", border: "border-rose-400", text: "text-rose-900", head: "❌ ใบสมัครไม่ผ่านการอนุมัติ", hint: "กรุณาติดต่อเจ้าของตลาดเพื่อสอบถามเหตุผล" }
+            : { bg: "bg-amber-50", border: "border-amber-400", text: "text-amber-900", head: "⏳ ส่งใบสมัครแล้ว รอเจ้าของอนุมัติ", hint: "ยังเข้าสู่ระบบรับงานไม่ได้จนกว่าเจ้าของจะอนุมัติ ให้จดเลขนี้ไว้ เมื่ออนุมัติแล้วเจ้าของจะส่ง \"รหัสผ่านเข้าระบบ\" ให้คุณ ใช้คู่กับเลขนี้" };
+    box.innerHTML = `
+        <div class="p-4 ${palette.bg} border-2 ${palette.border} rounded-2xl space-y-2 text-left ${palette.text}">
+            <div class="font-black text-sm">${palette.head}</div>
+            ${n.name ? `<div class="text-xs">ผู้สมัคร: <strong>${_escHtml(n.name)}</strong></div>` : ""}
+            <div class="text-xs">เลขไรเดอร์ / เลขใบสมัครของคุณ:</div>
+            <div class="text-2xl font-black font-mono tracking-widest bg-white/80 rounded-xl px-3 py-2 text-center select-all">${_escHtml(n.code)}</div>
+            <p class="text-xs leading-relaxed">${palette.hint}</p>
+            <button type="button" onclick="dismissRiderApplicationNotice()" class="text-[11px] font-bold underline cursor-pointer">ปิดข้อความนี้</button>
+        </div>`;
+}
+window.renderRiderApplicationNotice = renderRiderApplicationNotice;
+
 function renderOnPageRidersList() {
+    renderRiderApplicationNotice();
     const container = document.getElementById("onpage-registered-riders-list");
     if (!container) return;
     const curRiders = loadCommunityRiders();
+    if (!isOwnerSignedIn()) {
+        // ผู้ใช้ทั่วไป: ไม่แสดงรายชื่อไรเดอร์และไม่มีปุ่มเข้าสู่ระบบข้างชื่อ (เข้าได้ด้วยเลขไรเดอร์ + รหัสผ่านเท่านั้น)
+        container.innerHTML = `
+            <div class="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-center space-y-2">
+                <div class="font-extrabold text-xs text-slate-800">เข้าสู่ระบบด้วยเลขไรเดอร์และรหัสผ่าน</div>
+                <p class="text-[11px] text-slate-500 max-w-xs mx-auto">เจ้าของจะส่งรหัสผ่านให้เมื่ออนุมัติใบสมัครของคุณ ถ้ายังไม่เคยสมัคร กดปุ่มด้านล่าง</p>
+                <button type="button" onclick="switchRiderGuestTab('register')" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
+                    📝 ไปหน้าลงทะเบียนสมัครไรเดอร์
+                </button>
+            </div>
+        `;
+        return;
+    }
     if (!curRiders || curRiders.length === 0) {
         container.innerHTML = `
             <div class="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-center space-y-2.5">
@@ -25853,11 +26880,11 @@ function renderOnPageRidersList() {
                         🛵
                     </div>
                     <div class="min-w-0 text-left">
-                        <div class="font-extrabold text-xs text-slate-900 truncate">${r.name}</div>
-                        <div class="text-[10px] text-slate-500 font-mono">รหัส: <strong class="text-emerald-700 font-bold">${code}</strong> • โทร: ${r.phone || '-'} • ทะเบียน: ${r.plate || '-'}</div>
+                        <div class="font-extrabold text-xs text-slate-900 truncate">${escapeHtml(r.name)}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">รหัส: <strong class="text-emerald-700 font-bold">${code}</strong> • โทร: ${escapeHtml(r.phone) || '-'} • ทะเบียน: ${escapeHtml(r.plate) || '-'}</div>
                     </div>
                 </div>
-                <button type="button" onclick="loginRiderById('${r.id}')"
+                <button type="button" onclick="loginRiderById(${jsArg(r.id)})"
                     class="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold text-xs rounded-xl shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer flex items-center gap-1">
                     <span class="material-symbols-outlined text-xs font-bold">login</span>
                     <span>เข้าสู่ระบบ</span>
@@ -25895,6 +26922,11 @@ function fillOnPageRiderSampleData() {
 window.fillOnPageRiderSampleData = fillOnPageRiderSampleData;
 
 function quickRegisterAndLoginRider() {
+    // ปุ่มทดสอบสร้างไรเดอร์ปลอมพร้อมอนุมัติเอง — ใช้ได้เฉพาะตอนเจ้าของล็อกอิน (กันข้อมูลทดสอบหลุดขึ้นระบบจริง)
+    if (!isOwnerSignedIn()) {
+        showToast("🔒 ปุ่มทดสอบนี้ใช้ได้เฉพาะเมื่อเจ้าของล็อกอินอยู่ ผู้สมัครจริงกรุณากรอกฟอร์มสมัครแล้วรอเจ้าของอนุมัติ");
+        return;
+    }
     const code = generate6DigitAccessCode("RD");
     const randomDigits = Math.floor(10000000 + Math.random() * 90000000);
     const phone = "08" + randomDigits;
@@ -26007,6 +27039,17 @@ async function handleOnPageRiderRegister(e) {
     const code = generate6DigitAccessCode("RD");
     const displayName = nickname ? `${fullName} (${nickname})` : fullName;
 
+    // ผู้สมัครทั่วไปส่งใบสมัครซ้ำด้วยเบอร์เดิมไม่ได้ (กันทับใบสมัครที่อนุมัติแล้ว และกันใบสมัครซ้ำ)
+    if (!isOwnerSignedIn()) {
+        const dup = loadRiderApplications().find(a => (a.phone || "").replace(/[-\s]/g, "") === phone);
+        if (dup) {
+            showToast(dup.status === "approved"
+                ? "⚠️ เบอร์นี้ได้รับอนุมัติเป็นไรเดอร์แล้ว กรุณาเข้าสู่ระบบด้วยรหัสเดิม หรือติดต่อแอดมิน"
+                : "⚠️ เบอร์นี้ส่งใบสมัครไว้แล้ว กรุณารอเจ้าของอนุมัติ หรือติดต่อแอดมิน");
+            return;
+        }
+    }
+
     // รูปเอกสารเก็บแยกจากใบสมัคร (ต้องบันทึกสำเร็จอย่างน้อยหนึ่งที่ก่อนสร้างไรเดอร์)
     const docResult = await saveRiderDocumentsGuarded("onpage", code, extras.docs, {
         idCard: extras.identity.idCard, address: extras.identity.address, drivingLicense: license, license,
@@ -26043,11 +27086,14 @@ async function handleOnPageRiderRegister(e) {
         codSettledToday: 0
     };
 
-    const curRiders = loadCommunityRiders();
-    const existingIdx = curRiders.findIndex(r => (r.phone || "").replace(/[-\s]/g, "") === phone);
-    if (existingIdx >= 0) curRiders[existingIdx] = newRider;
-    else curRiders.unshift(newRider);
-    saveCommunityRiders(curRiders);
+    // สร้างไรเดอร์เข้าระบบทันทีเฉพาะตอนเจ้าของล็อกอินอยู่ — ผู้สมัครทั่วไปรอเจ้าของอนุมัติ
+    if (isOwnerSignedIn()) {
+        const curRiders = loadCommunityRiders();
+        const existingIdx = curRiders.findIndex(r => (r.phone || "").replace(/[-\s]/g, "") === phone);
+        if (existingIdx >= 0) curRiders[existingIdx] = newRider;
+        else curRiders.unshift(newRider);
+        saveCommunityRiders(curRiders);
+    }
 
     const apps = loadRiderApplications();
     apps.unshift({
@@ -26072,10 +27118,8 @@ async function handleOnPageRiderRegister(e) {
         emergencyContact: extras.emergencyContact,
         docFlags: extras.docFlags,
         consentAt: extras.consentAt,
-        status: "approved",
         appliedAt: new Date().toISOString(),
-        approvedAt: new Date().toISOString(),
-        notes: "ลงทะเบียนผ่านหน้าเว็บ (อนุมัติอัตโนมัติ)"
+        ..._newRiderAppStatusFields()
     });
     saveRiderApplications(apps);
 
@@ -26083,30 +27127,19 @@ async function handleOnPageRiderRegister(e) {
     resetRiderRegExtras("onpage");
     closeRiderRegisterModal();
     closeRiderLoginModal();
+    if (!isOwnerSignedIn()) {
+        rememberRiderApplicationNotice(code, displayName);
+        showToast(`✅ ส่งใบสมัครแล้ว! เลขไรเดอร์ของคุณ: ${code} (จดไว้) — รอเจ้าของอนุมัติ แล้วเจ้าของจะส่งรหัสผ่านเข้าระบบให้`);
+        if (typeof switchRiderGuestTab === "function") switchRiderGuestTab("login");
+        return;
+    }
     loginRiderWithProfile(newRider);
     showToast(`🎉 ลงทะเบียนสำเร็จ! ยินดีต้อนรับ ${displayName} เข้าสู่ระบบรับงานทันที (รหัส PIN: ${code})`);
 }
 window.handleOnPageRiderRegister = handleOnPageRiderRegister;
 
 function handleOnPageRiderLoginSubmit() {
-    const inputVal = document.getElementById("onpage-rider-login-input")?.value.trim();
-    if (!inputVal) {
-        showToast("⚠️ กรุณากรอกรหัส PIN ไรเดอร์ หรือเบอร์โทรศัพท์");
-        return;
-    }
-    const clean = inputVal.toUpperCase().replace(/[-\s]/g, "");
-    const curRiders = loadCommunityRiders();
-    const r = curRiders.find(x => 
-        (x.id && x.id.toUpperCase() === clean) ||
-        (x.accessCode && x.accessCode.toUpperCase() === clean) ||
-        (x.phone && x.phone.replace(/[-\s]/g, "") === clean) ||
-        (x.name && x.name.toLowerCase().includes(inputVal.toLowerCase()))
-    );
-    if (!r) {
-        showToast("⚠️ ไม่พบข้อมูลไรเดอร์คนนี้ กรุณาตรวจสอบรหัส หรือกดสมัครใหม่");
-        return;
-    }
-    loginRiderWithProfile(r);
+    return submitRiderSecretLogin("onpage-rider-number-input", "onpage-rider-secret-input");
 }
 window.handleOnPageRiderLoginSubmit = handleOnPageRiderLoginSubmit;
 
@@ -26332,6 +27365,8 @@ window.assignSampleOrderToRider = assignSampleOrderToRider;
 function renderRiderLoginModalList() {
     const container = document.getElementById("rider-quick-login-list");
     if (!container) return;
+    // รายชื่อไรเดอร์แบบกดเข้าทันที (และใบสมัครที่รออนุมัติ) เป็นเครื่องมือเจ้าของเท่านั้น
+    if (!isOwnerSignedIn()) { container.innerHTML = ""; return; }
 
     const riders = loadCommunityRiders();
     const apps = loadRiderApplications();
@@ -26354,10 +27389,10 @@ function renderRiderLoginModalList() {
             html += `
                 <div class="flex items-center justify-between p-2 bg-white rounded-xl border border-amber-200 shadow-2xs">
                     <div>
-                        <div class="font-bold text-xs text-slate-900">${displayName}</div>
-                        <div class="text-[10px] text-slate-500 font-mono">โทร: ${a.phone} • รหัส: <strong class="text-amber-700 font-bold">${code}</strong></div>
+                        <div class="font-bold text-xs text-slate-900">${escapeHtml(displayName)}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">โทร: ${escapeHtml(a.phone)} • รหัส: <strong class="text-amber-700 font-bold">${code}</strong></div>
                     </div>
-                    <button type="button" onclick="approveAndLoginRider('${a.id}')" class="px-2.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button type="button" onclick="approveAndLoginRider(${jsArg(a.id)})" class="px-2.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span class="material-symbols-outlined text-xs">verified</span>
                         <span>⚡ อนุมัติ & รับงาน</span>
                     </button>
@@ -26391,11 +27426,11 @@ function renderRiderLoginModalList() {
                         🛵
                     </div>
                     <div class="text-left">
-                        <div class="font-extrabold text-xs text-slate-900">${r.name}</div>
-                        <div class="text-[10px] text-slate-500 font-mono">รหัส: <strong class="text-sky-700 font-bold">${code}</strong> • ทะเบียน: ${r.plate || '-'}</div>
+                        <div class="font-extrabold text-xs text-slate-900">${escapeHtml(r.name)}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">รหัส: <strong class="text-sky-700 font-bold">${code}</strong> • ทะเบียน: ${escapeHtml(r.plate) || '-'}</div>
                     </div>
                 </div>
-                <button type="button" onclick="loginRiderById('${r.id}')" class="px-3.5 py-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1">
+                <button type="button" onclick="loginRiderById(${jsArg(r.id)})" class="px-3.5 py-1.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white font-extrabold rounded-xl text-xs shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1">
                     <span class="material-symbols-outlined text-xs">login</span>
                     <span>เข้าสู่ระบบ</span>
                 </button>
@@ -26415,7 +27450,9 @@ function openRiderLoginModal() {
 
     renderRiderLoginModalList();
 
-    const phoneInput = document.getElementById("rider-login-phone-input");
+    const secretInput = document.getElementById("rider-login-secret-input");
+    if (secretInput) secretInput.value = "";
+    const phoneInput = document.getElementById("rider-login-number-input");
     if (phoneInput) {
         phoneInput.value = "";
         setTimeout(() => phoneInput.focus(), 100);
@@ -26433,6 +27470,7 @@ function closeRiderLoginModal() {
 window.closeRiderLoginModal = closeRiderLoginModal;
 
 function quickLoginRider(name) {
+    if (!requireOwnerAction()) return;   // ล็อกอินเป็นไรเดอร์คนแรกโดยไม่ใช้รหัส = เครื่องมือเจ้าของ
     const riders = loadCommunityRiders();
     if (riders && riders.length > 0) {
         loginRiderWithProfile(riders[0]);
@@ -26445,6 +27483,7 @@ function quickLoginRider(name) {
 window.quickLoginRider = quickLoginRider;
 
 function handleRiderLoginSubmit() {
+    if (!requireOwnerAction()) return;   // เลือกไรเดอร์จากรายการแล้วเข้าเลย = เครื่องมือเจ้าของ
     const riderSelect = document.getElementById("rider-select-input");
     const val = riderSelect ? riderSelect.value : "";
     if (!val) {
@@ -26464,66 +27503,8 @@ function handleRiderLoginSubmit() {
 window.handleRiderLoginSubmit = handleRiderLoginSubmit;
 
 function handleRiderPhoneLoginSubmit() {
-    const input = document.getElementById("rider-login-phone-input");
-    const raw = input ? input.value.trim() : "";
-    if (!raw) {
-        showToast("⚠️ กรุณากรอกรหัสประจำตัวไรเดอร์ (PIN 6 หลัก) หรือเบอร์โทรศัพท์");
-        if (input) input.focus();
-        return;
-    }
-
-    const cleanRaw = raw.replace(/[-\s]/g, "");
-    const upperRaw = cleanRaw.toUpperCase();
-    const riders = loadCommunityRiders();
-
-    // Admin Master PIN Bypass (เช่น 6305 หรือ ADMIN)
-    if (isOwnerSignedIn() && (upperRaw === "6305" || upperRaw === "HB6305" || upperRaw === "ADMIN6305" || upperRaw === "ADMIN")) {
-        if (riders && riders.length > 0) {
-            loginRiderWithProfile(riders[0]);
-            showToast("🔑 เข้าสู่ระบบด้วย Master PIN ในฐานะไรเดอร์คนแรก");
-            return;
-        } else {
-            showToast("⚠️ ระบบยังไม่มีข้อมูลไรเดอร์ กรุณาสมัครไรเดอร์ก่อน");
-            return;
-        }
-    }
-
-    const normRaw = typeof normalizeRiderCode === "function" ? normalizeRiderCode(upperRaw) : upperRaw;
-
-    // 1. ตรวจสอบในรายชื่อไรเดอร์ที่ได้รับการอนุมัติแล้ว (ตรวจทั้งรหัส PIN, เบอร์โทร, ID, หรือชื่อ)
-    let r = riders.find(x => 
-        (x.accessCode && (x.accessCode.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.accessCode) === normRaw)) ||
-        (x.pin && String(x.pin).trim().toUpperCase() === upperRaw) ||
-        (x.phone && x.phone.replace(/[-\s]/g, "") === cleanRaw) ||
-        (x.id && (x.id.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.id) === normRaw)) ||
-        (x.name && x.name.toLowerCase() === raw.toLowerCase())
-    );
-    if (r) {
-        loginRiderWithProfile(r);
-        return;
-    }
-
-    // 2. ตรวจสอบในข้อมูลใบสมัคร (Rider Applications)
-    const apps = loadRiderApplications();
-    const app = apps.find(x => 
-        (x.accessCode && (x.accessCode.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.accessCode) === normRaw)) ||
-        (x.phone && x.phone.replace(/[-\s]/g, "") === cleanRaw) ||
-        (x.id && (x.id.trim().toUpperCase() === upperRaw || normalizeRiderCode(x.id) === normRaw)) ||
-        (x.fullName && x.fullName.toLowerCase() === raw.toLowerCase())
-    );
-
-    if (app) {
-        if (app.status === "rejected") {
-            showToast(`❌ ใบสมัครของคุณ (${app.fullName || raw}) ไม่ผ่านการอนุมัติ กรุณาติดต่อแอดมิน`);
-            return;
-        }
-        // If pending, approve and log in
-        approveAndLoginRider(app.id);
-        return;
-    }
-
-    // 3. Not found
-    showToast("⚠️ ไม่พบข้อมูลไรเดอร์ที่ตรงกับรหัสหรือเบอร์โทรนี้ กรุณาตรวจสอบหรือสมัครใหม่");
+    // ชื่อฟังก์ชันคงเดิมเพราะหน้าเว็บเรียกอยู่ แต่ตอนนี้ล็อกอินด้วย "เลขไรเดอร์ + รหัสผ่านลับ" ไม่ใช่เบอร์โทร
+    return submitRiderSecretLogin("rider-login-number-input", "rider-login-secret-input");
 }
 window.handleRiderPhoneLoginSubmit = handleRiderPhoneLoginSubmit;
 
@@ -26958,9 +27939,9 @@ function renderAuthHeaderButtons() {
             <div class="flex items-center gap-1 sm:gap-1.5 bg-amber-950/90 border border-amber-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
                 <span class="text-[11px] sm:text-xs text-amber-300 font-bold flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm text-amber-400">store</span>
-                    <span class="truncate max-w-[80px]">${state.activeMerchant.stallNumber || 'ร้านค้า'}</span>
+                    <span class="truncate max-w-[80px]">${escapeHtml(state.activeMerchant.stallNumber) || 'ร้านค้า'}</span>
                 </span>
-                <button onclick="loginAsMerchantStall('${state.activeMerchant.stallId}')" class="text-[10px] text-amber-200 bg-amber-800/80 hover:bg-amber-700 px-1.5 py-0.5 rounded font-bold transition-all">
+                <button onclick="reopenMyMerchantStall(${jsArg(state.activeMerchant.stallId)})" class="text-[10px] text-amber-200 bg-amber-800/80 hover:bg-amber-700 px-1.5 py-0.5 rounded font-bold transition-all">
                     จัดการ
                 </button>
                 <button onclick="logoutMerchant()" class="text-[10px] text-rose-300 hover:text-white bg-rose-950/80 hover:bg-rose-700 px-1.5 py-0.5 rounded font-bold transition-all" title="ออกจากระบบร้านค้า">
@@ -26978,7 +27959,7 @@ function renderAuthHeaderButtons() {
             <div class="flex items-center gap-1 sm:gap-1.5 bg-sky-950/90 border border-sky-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
                 <span class="text-[11px] sm:text-xs text-sky-300 font-bold flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm text-sky-400">two_wheeler</span>
-                    <span class="truncate max-w-[80px]">${state.activeRider.name || 'ไรเดอร์'}</span>
+                    <span class="truncate max-w-[80px]">${escapeHtml(state.activeRider.name) || 'ไรเดอร์'}</span>
                 </span>
                 <button onclick="switchRole('rider')" class="text-[10px] text-sky-200 bg-sky-800/80 hover:bg-sky-700 px-1.5 py-0.5 rounded font-bold transition-all">
                     รับงาน
@@ -26992,7 +27973,7 @@ function renderAuthHeaderButtons() {
         html += `
             <button onclick="openRiderRegisterModal()" id="btn-rider-register" class="px-2 sm:px-3 md:px-3.5 py-1 sm:py-1.5 md:py-2 rounded-lg sm:rounded-xl font-bold bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white text-[11px] sm:text-xs md:text-sm flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0" title="สมัครเป็นไรเดอร์ส่งของสด">
                 <span class="material-symbols-outlined text-sm font-bold">how_to_reg</span>
-                <span class="hidden xs:inline sm:inline">สมัครไรเดอร์</span>
+                <span class="whitespace-nowrap">สมัครไรเดอร์</span>
             </button>
         `;
     }
@@ -27008,7 +27989,7 @@ function renderAuthHeaderButtons() {
                 <div class="flex items-center gap-1 sm:gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
                     <span class="text-[11px] sm:text-xs text-purple-300 font-bold flex items-center gap-1 cursor-pointer" onclick="switchRole('admin')">
                         <span class="material-symbols-outlined text-sm sm:text-base text-purple-400">admin_panel_settings</span>
-                        <span>${state.activeAdmin.name || 'เฮียส่ง'}</span>
+                        <span>${escapeHtml(state.activeAdmin.name) || 'เฮียส่ง'}</span>
                     </span>
                     <button onclick="switchRole('admin')" class="hidden sm:inline-block text-[10px] md:text-xs text-purple-200 bg-purple-800/80 hover:bg-purple-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all">
                         Admin
@@ -27102,9 +28083,13 @@ function openMerchantLoginModal() {
     const modal = document.getElementById("merchant-login-modal");
     if (modal) modal.classList.remove("hidden");
     const input = document.getElementById("merchant-code-login-input");
-    if (input) {
-        input.value = "";
-        setTimeout(() => input.focus(), 100);
+    const shopInput = document.getElementById("merchant-shop-login-input");
+    const errBox = document.getElementById("merchant-login-modal-error");
+    if (errBox) { errBox.textContent = ""; errBox.classList.add("hidden"); }
+    if (input) input.value = "";
+    if (shopInput) {
+        shopInput.value = "";
+        setTimeout(() => shopInput.focus(), 100);
     }
 }
 
@@ -27718,7 +28703,25 @@ function setMerchantOwnerImgPreset(type) {
     updateMerchantImagePreviews();
 }
 
+// เจ้าของเท่านั้น: สวมเข้าแผงค้าใดก็ได้ (ปุ่ม "เข้าระบบร้านนี้" ในหน้าแอดมิน)
+// แผงค้าตัวจริงต้องเข้าผ่านรหัสร้าน + รหัสผ่านที่ handleMerchantCodeLoginSubmit เท่านั้น
 function loginAsMerchantStall(stallId) {
+    if (!requireOwnerAction()) return;
+    _enterMerchantStall(stallId);
+}
+window.loginAsMerchantStall = loginAsMerchantStall;
+
+// ปุ่ม "จัดการ" บนแถบด้านบน: กลับเข้าแผงที่ล็อกอินอยู่แล้วเท่านั้น (คนอื่นต้องเป็นเจ้าของ)
+function reopenMyMerchantStall(stallId) {
+    if (state.activeMerchant && state.activeMerchant.isLoggedIn && state.activeMerchant.stallId === stallId) {
+        _enterMerchantStall(stallId);
+        return;
+    }
+    loginAsMerchantStall(stallId);
+}
+window.reopenMyMerchantStall = reopenMyMerchantStall;
+
+function _enterMerchantStall(stallId) {
     closeMerchantLoginModal();
     closeMerchantPortalModal();
     activeMerchantStallId = stallId;
@@ -27729,7 +28732,7 @@ function loginAsMerchantStall(stallId) {
         const _apps = loadMerchantApplications();
         const _matchApp = _apps.find(a => a.status === 'approved' && (a.id === stallId || (a.stallData && a.stallData.stallId === stallId)));
         if (_matchApp && _matchApp.stallData) {
-            stall = { ..._matchApp.stallData, accessCode: _matchApp.accessCode || _matchApp.stallData.accessCode };
+            stall = stallFromApp(_matchApp);
             if (!MARKET_DATA.find(s => s.stallId === stall.stallId)) {
                 MARKET_DATA.unshift(stall);
                 if (typeof ALL_100_STALLS !== "undefined" && !ALL_100_STALLS.find(s => s.stallId === stall.stallId)) {
@@ -27769,7 +28772,6 @@ function loginAsMerchantStall(stallId) {
     }
     showToast(`🎉 เข้าสู่ระบบร้านค้า "${stall.stallName}" เรียบร้อยแล้ว`);
 }
-window.loginAsMerchantStall = loginAsMerchantStall;
 
 function openMerchantEditModal(stallId) {
     let stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
@@ -27807,7 +28809,7 @@ function openMerchantEditModal(stallId) {
     if (document.getElementById("m-stall-name")) document.getElementById("m-stall-name").value = stall.stallName || "";
     if (document.getElementById("m-stall-number")) document.getElementById("m-stall-number").value = stall.stallNumber || "";
     if (document.getElementById("m-stall-zone")) document.getElementById("m-stall-zone").value = stall.zone ? `โซน ${stall.zone.charAt(0)}` : "โซน A (เนื้อสัตว์ & ไก่สด)";
-    if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = stall.category || "chicken";
+    if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = stall.category || DEFAULT_STALL_CATEGORY;
 
     // Fill Contact 1
     const c1 = (stall.contacts && stall.contacts[0]) || {};
@@ -27890,24 +28892,36 @@ window.backToMerchantRegisterForm = backToMerchantRegisterForm;
 
 function fillSampleMerchantRegistration() {
     backToMerchantRegisterForm();
-    
-    // 1. Info
-    document.getElementById("m-stall-name").value = "ร้านไก่สดเฮียวิศิษฐ์";
-    document.getElementById("m-stall-number").value = "แผง A-18";
-    document.getElementById("m-stall-zone").value = "โซน A (เนื้อสัตว์ & ไก่สด)";
-    document.getElementById("m-stall-category").value = "chicken";
-    document.getElementById("m-owner-name").value = "นายวิศิษฐ์ มั่นคง (เฮียวิศิษฐ์)";
-    document.getElementById("m-phone").value = "0815556789";
-    if (document.getElementById("m-phone2")) document.getElementById("m-phone2").value = "038245678";
-    if (document.getElementById("m-line")) document.getElementById("m-line").value = "@hsong_chicken";
-    document.getElementById("m-highlight").value = "ไก่สดส่งตรงจากฟาร์มทุกเช้า ชำแหละสด สะอาด ไร้สารเร่ง ปลอดภัย 100%";
-    document.getElementById("m-desc").value = "จำหน่ายเนื้อไก่สด อกไก่ น่องไก่ สันใน โครงไก่ และเครื่องในสดใหม่คัดเกรด A ประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง) อ.บ้านบึง จ.ชลบุรี พร้อมบริการตัดแต่งตามสั่ง";
 
-    // 2. Images (3 Stall Photos + Owner Photo)
-    document.getElementById("m-stall-image-url").value = MERCHANT_PRESET_IMAGES.stall.chicken;
-    if (document.getElementById("m-stall2-image-url")) document.getElementById("m-stall2-image-url").value = MERCHANT_PRESET_IMAGES.stall.pork;
-    if (document.getElementById("m-stall3-image-url")) document.getElementById("m-stall3-image-url").value = MERCHANT_PRESET_IMAGES.stall.beef;
-    document.getElementById("m-owner-image-url").value = MERCHANT_PRESET_IMAGES.owner.man1;
+    // เติมค่าแบบปลอดภัย (เช็คว่าช่องมีอยู่จริงก่อนเสมอ) กันพังถ้าฟอร์มถูกปรับปรุงอีกในอนาคต
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+
+    // 1. ชื่อร้าน & หมวดหมู่
+    setVal("m-stall-name", "ร้านไก่สดเฮียวิศิษฐ์");
+    setVal("m-stall-category", DEFAULT_STALL_CATEGORY);
+
+    // 2. เจ้าของร้าน (ชื่อเล่น 2 คน)
+    setVal("m-owner1-nickname", "เฮียวิศิษฐ์");
+    setVal("m-owner2-nickname", "");
+
+    // 3. ผู้ติดต่อ 2 ช่องทาง
+    setVal("m-contact1-name", "นายวิศิษฐ์ มั่นคง");
+    setVal("m-contact1-phone", "0815556789");
+    setVal("m-contact1-line", "@hsong_chicken");
+    setVal("m-contact2-name", "");
+    setVal("m-contact2-phone", "");
+    setVal("m-contact2-line", "");
+
+    // 4. บัญชีรับเงิน (บัญชีหลัก)
+    setVal("m-bank-name", "กสิกรไทย (KBank)");
+    setVal("m-bank-account-no", "1234567890");
+    setVal("m-bank-account-name", "นายวิศิษฐ์ มั่นคง");
+
+    // 5. รูปภาพ (3 รูปหน้าร้าน + รูปเจ้าของร้าน)
+    setVal("m-stall-image-url", MERCHANT_PRESET_IMAGES.stall.chicken);
+    setVal("m-stall2-image-url", MERCHANT_PRESET_IMAGES.stall.pork);
+    setVal("m-stall3-image-url", MERCHANT_PRESET_IMAGES.stall.curry);
+    setVal("m-owner-image-url", MERCHANT_PRESET_IMAGES.owner.man1);
     updateMerchantImagePreviews();
 
     // 3. Top 6 Highlight Products
@@ -27986,7 +29000,7 @@ function onCatalogMainCatChange(selectEl) {
 
     if (subSelect) {
         subSelect.innerHTML = '<option value="">-- เลือกหมวดหมู่รอง --</option>' +
-            subs.map(s => `<option value="${s}">${s}</option>`).join('');
+            subs.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
     }
     if (microSelect) {
         microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย --</option>';
@@ -28006,7 +29020,7 @@ function onCatalogSubCatChange(selectEl) {
     const micros = getMicroCategories(mainCat, subCat);
 
     microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย (ชิ้นส่วน/ชนิด) --</option>' +
-        micros.map(m => `<option value="${m}">${m}</option>`).join('');
+        micros.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
 }
 window.onCatalogSubCatChange = onCatalogSubCatChange;
 
@@ -28018,7 +29032,7 @@ function onHighlightMainCatChange(selectEl, index) {
 
     if (subSelect) {
         subSelect.innerHTML = '<option value="">-- เลือกหมวดหมู่รอง --</option>' +
-            subs.map(s => `<option value="${s}">${s}</option>`).join('');
+            subs.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
     }
     if (microSelect) {
         microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย --</option>';
@@ -28036,7 +29050,7 @@ function onHighlightSubCatChange(selectEl, index) {
     const micros = getMicroCategories(mainCat, subCat);
 
     microSelect.innerHTML = '<option value="">-- เลือกหมวดย่อย (ชิ้นส่วน/ชนิด) --</option>' +
-        micros.map(m => `<option value="${m}">${m}</option>`).join('');
+        micros.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
 }
 window.onHighlightSubCatChange = onHighlightSubCatChange;
 
@@ -28059,7 +29073,7 @@ function registerNewMerchantStall() {
     // Keep legacy fields functional for backward-compat
     if (document.getElementById("m-stall-number")) document.getElementById("m-stall-number").value = "";
     if (document.getElementById("m-stall-zone")) document.getElementById("m-stall-zone").value = "โซน A (เนื้อสัตว์ & ไก่สด)";
-    if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = "chicken";
+    if (document.getElementById("m-stall-category")) document.getElementById("m-stall-category").value = DEFAULT_STALL_CATEGORY;
     if (document.getElementById("m-owner-name")) document.getElementById("m-owner-name").value = "";
     if (document.getElementById("m-phone")) document.getElementById("m-phone").value = "";
     if (document.getElementById("m-phone2")) document.getElementById("m-phone2").value = "";
@@ -28199,7 +29213,7 @@ function renderMerchantTop6ProductsForm(products) {
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div class="sm:col-span-2">
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">ชื่อสินค้า <span class="text-rose-500">*</span></label>
-                        <input type="text" id="m-p-name-${i}" value="${p.name || ''}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs">
+                        <input type="text" id="m-p-name-${i}" value="${escapeHtml(p.name) || ''}" placeholder="" class="w-full p-2 rounded-xl bg-white border border-slate-300 font-bold text-xs">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-700 mb-0.5">หน่วยขาย</label>
@@ -28470,7 +29484,7 @@ async function saveMerchantStallData() {
         // Legacy fields - keep backward compat
         const stallNumber = (document.getElementById("m-stall-number")?.value || "").trim();
         const zoneVal = document.getElementById("m-stall-zone")?.value || "";
-        const category = document.getElementById("m-stall-category")?.value || "chicken";
+        const category = document.getElementById("m-stall-category")?.value || DEFAULT_STALL_CATEGORY;
         const ownerName = contact1Name || (document.getElementById("m-owner-name")?.value || "").trim();
         const phone = contact1Phone || (document.getElementById("m-phone")?.value || "").trim();
         const phone2 = contact2Phone || (document.getElementById("m-phone2")?.value || "").trim();
@@ -28776,7 +29790,7 @@ async function saveMerchantStallData() {
                 const res = await fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json");
                 if (res.ok) {
                     const remote = await res.json();
-                    apps = Array.isArray(remote) ? remote.filter(Boolean) : Object.values(remote || {}).filter(Boolean);
+                    apps = cloudValToList(remote, _keyOfMerchantApp);
                 }
             } catch (e) {}
         }
@@ -28869,7 +29883,7 @@ function previewMerchantLiveStore() {
     const stallName = document.getElementById("m-stall-name")?.value.trim() || "ตัวอย่างชื่อร้านค้า";
     const stallNumber = document.getElementById("m-stall-number")?.value.trim() || "แผง A-01";
     const zoneVal = document.getElementById("m-stall-zone")?.value || "โซน A";
-    const category = document.getElementById("m-stall-category")?.value || "chicken";
+    const category = document.getElementById("m-stall-category")?.value || DEFAULT_STALL_CATEGORY;
 
     const contact1Name = document.getElementById("m-contact1-name")?.value.trim() || "";
     const contact1Phone = document.getElementById("m-contact1-phone")?.value.trim() || "";
@@ -28982,18 +29996,10 @@ function previewMerchantLiveStore() {
         }
     });
 
-    const categoryNames = {
-        "pork": "หมูสด / เนื้อหมู",
-        "chicken": "ไก่สด / เป็ด / สัตว์ปีก",
-        "beef": "เนื้อวัว / เนื้อโคขุน",
-        "seafood": "อาหารทะเล / กุ้ง หอย ปู ปลา",
-        "vegetable": "ผักสด / พืชผลการเกษตร",
-        "egg": "ไข่ไก่ / ไข่เป็ด / ไข่นกกระทา",
-        "frozen": "อาหารแช่แข็ง / ลูกชิ้น",
-        "dryfood": "ของแห้ง / เครื่องปรุง / สมุนไพร",
-        "all": "รวมของสดทุกประเภท"
-    };
-    const catLabel = categoryNames[category] || "สินค้าของสด";
+    // category ตอนนี้เป็นชื่อหมวดหมู่เต็มที่อ่านง่ายอยู่แล้ว (เช่น "🥩 เนื้อสัตว์และสัตว์ปีก") ไม่ต้องแปลผ่านตารางอีกต่อไป
+    //   (เดิมเคยมีตาราง categoryNames แปลรหัสอังกฤษสั้น ๆ เป็นไทย แต่ตั้งแต่รวมหมวดหมู่ร้านค้าให้ใช้ชุดเดียวกับ
+    //   สินค้าแล้ว ค่าที่อ่านได้จากช่องนี้เป็นภาษาไทยพร้อมใช้อยู่แล้ว)
+    const catLabel = category || "สินค้าของสด";
 
     const contentContainer = document.getElementById("merchant-preview-content");
     const titleEl = document.getElementById("preview-modal-title");
@@ -29007,15 +30013,15 @@ function previewMerchantLiveStore() {
                     ${previewStallPhotosList.map((photoUrl, pIdx) => `
                         <!-- Slide ${pIdx + 1}: ภาพแผงค้า ${pIdx + 1} -->
                         <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextPreviewBannerSlide()">
-                            <img src="${photoUrl}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
-                            <img src="${photoUrl}" alt="${stallName} (รูปที่ ${pIdx + 1})" class="relative w-full h-full object-cover object-center">
+                            <img src="${escapeHtml(photoUrl)}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-30 select-none pointer-events-none">
+                            <img src="${escapeHtml(photoUrl)}" alt="${escapeHtml(stallName)} (รูปที่ ${pIdx + 1})" class="relative w-full h-full object-cover object-center">
                             <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none"></div>
                         </div>
                     `).join('')}
                     <!-- Slide ${previewOwnerSlideIdx + 1}: ภาพเจ้าของแผง (Composite Owner Template & Name Badge) -->
                     <div class="min-w-full h-full relative cursor-pointer bg-slate-950 overflow-hidden flex items-center justify-center" onclick="nextPreviewBannerSlide()">
-                        <img id="preview-owner-banner-blur" src="${ownerBannerPreviewSrc}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
-                        <img id="preview-owner-banner-img" src="${ownerBannerPreviewSrc}" alt="${ownerName}" class="relative w-full h-full object-contain sm:object-cover object-center">
+                        <img id="preview-owner-banner-blur" src="${escapeHtml(ownerBannerPreviewSrc)}" alt="" class="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40 select-none pointer-events-none">
+                        <img id="preview-owner-banner-img" src="${escapeHtml(ownerBannerPreviewSrc)}" alt="${escapeHtml(ownerName)}" class="relative w-full h-full object-contain sm:object-cover object-center">
                         <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none"></div>
                     </div>
                 </div>
@@ -29051,7 +30057,7 @@ function previewMerchantLiveStore() {
                 <!-- Bottom Row Info -->
                 <div class="absolute bottom-3 left-3 right-3 flex items-end justify-between pointer-events-none z-10">
                     <div class="pointer-events-auto">
-                        <h2 class="text-lg sm:text-xl font-black text-white drop-shadow-md leading-tight">${stallName}</h2>
+                        <h2 class="text-lg sm:text-xl font-black text-white drop-shadow-md leading-tight">${escapeHtml(stallName)}</h2>
                         <p class="text-emerald-300 font-bold text-xs mt-0.5 drop-shadow-sm flex items-center gap-1">
                             <span>✨</span>
                             <span>${highlight}</span>
@@ -29200,14 +30206,14 @@ function previewMerchantLiveStore() {
                                         </span>
                                     ` : ''}
                                 </div>
-                                <div class="font-bold text-xs text-slate-900 line-clamp-2 leading-tight" title="${p.name}">${p.name}</div>
+                                <div class="font-bold text-xs text-slate-900 line-clamp-2 leading-tight" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
                                 ${p.mainCat || p.subCat ? `
-                                    <div class="text-[9px] text-slate-500 line-clamp-1 mt-1">${p.mainCat} • ${p.subCat}</div>
+                                    <div class="text-[9px] text-slate-500 line-clamp-1 mt-1">${escapeHtml(p.mainCat)} • ${escapeHtml(p.subCat)}</div>
                                 ` : ''}
                             </div>
                             <div class="mt-2 pt-1.5 border-t border-slate-200/80 flex items-baseline justify-between">
                                 <span class="font-black text-xs text-orange-600">฿${p.price}</span>
-                                <span class="text-[9px] text-slate-400 font-medium">/${p.unit}</span>
+                                <span class="text-[9px] text-slate-400 font-medium">/${escapeHtml(p.unit)}</span>
                             </div>
                         </div>
                     `).join('')}
@@ -29248,11 +30254,11 @@ function previewMerchantLiveStore() {
                                     <div class="px-3 py-2 flex items-center justify-between text-xs hover:bg-slate-50">
                                         <div class="flex items-center gap-2">
                                             <span class="text-[10px] text-slate-400 w-4">${idx + 1}.</span>
-                                            <span class="font-bold text-slate-800">${item.name}</span>
-                                            ${item.subCat ? `<span class="text-[9px] text-slate-400 font-medium">(${item.subCat})</span>` : ''}
+                                            <span class="font-bold text-slate-800">${escapeHtml(item.name)}</span>
+                                            ${item.subCat ? `<span class="text-[9px] text-slate-400 font-medium">(${escapeHtml(item.subCat)})</span>` : ''}
                                         </div>
                                         <div class="font-black text-xs text-orange-600">
-                                            ฿${item.price} <span class="text-[9px] text-slate-400 font-normal">/${item.unit}</span>
+                                            ฿${item.price} <span class="text-[9px] text-slate-400 font-normal">/${escapeHtml(item.unit)}</span>
                                         </div>
                                     </div>
                                 `).join('')}
@@ -29880,11 +30886,8 @@ function autoSanitizeProductionData() {
             }
             keysToDel.forEach(k => localStorage.removeItem(k));
 
-            if (typeof isFirebaseReady === "function" && isFirebaseReady()) {
-                db.ref("orders").remove().catch(() => {});
-                db.ref("daily_reports").remove().catch(() => {});
-                db.ref("riders").remove().catch(() => {});
-            }
+            // ห้ามลบข้อมูลบนคลาวด์ตรงนี้: บล็อกนี้รันบนทุกเบราว์เซอร์เครื่องใหม่ (ลูกค้าคนแรกที่เข้าเว็บก็ลบออเดอร์ทั้งระบบได้)
+            // ล้างข้อมูลคลาวด์ทำได้เฉพาะเจ้าของผ่านปุ่มล้างข้อมูลในหน้าฮับ/แอดมิน
 
             if (typeof ALL_100_STALLS !== "undefined" && Array.isArray(ALL_100_STALLS)) {
                 ALL_100_STALLS.forEach(s => s.isClosed = false);
@@ -29899,15 +30902,8 @@ function autoSanitizeProductionData() {
         }
     } catch (e) {}
 
-    // 13. Complete Clean Purge of Rider Database (User requested clean wipe)
-    try {
-        if (localStorage.getItem("talathub_rider_db_purged_v2026_real_final") !== "true") {
-            if (typeof cleanRiderDatabase === "function") {
-                cleanRiderDatabase(true);
-            }
-            localStorage.setItem("talathub_rider_db_purged_v2026_real_final", "true");
-        }
-    } catch (e) {}
+    // 13. (ยกเลิก) เคยสั่ง cleanRiderDatabase(true) อัตโนมัติบนเบราว์เซอร์เครื่องใหม่ทุกเครื่อง ซึ่งลบไรเดอร์ทั้งระบบบนคลาวด์
+    //     ตอนนี้ล้างได้เฉพาะเจ้าของ ผ่านปุ่ม cleanRiderDatabase() เท่านั้น
 
 }
 
@@ -29920,13 +30916,8 @@ async function fetchOnlineStallsStartup() {
         const remoteApps = (resApps.status === 'fulfilled' && resApps.value) || null;
         const remoteCustom = (resCustom.status === 'fulfilled' && resCustom.value) || null;
 
-        let appList = [];
-        if (Array.isArray(remoteApps)) appList = remoteApps.filter(Boolean);
-        else if (remoteApps && typeof remoteApps === 'object') appList = Object.values(remoteApps).filter(Boolean);
-
-        let customList = [];
-        if (Array.isArray(remoteCustom)) customList = remoteCustom.filter(Boolean);
-        else if (remoteCustom && typeof remoteCustom === 'object') customList = Object.values(remoteCustom).filter(Boolean);
+        const appList = cloudValToList(remoteApps, _keyOfMerchantApp);
+        const customList = cloudValToList(remoteCustom, _keyOfStall);
 
         let hasChanges = false;
 
@@ -29936,7 +30927,7 @@ async function fetchOnlineStallsStartup() {
                     if (app.stallData.products && Array.isArray(app.stallData.products)) {
                         app.stallData.products.forEach(p => { if (p && p.image) delete p.image; });
                     }
-                    const sData = { ...app.stallData, accessCode: app.accessCode || app.stallData.accessCode };
+                    const sData = stallFromApp(app);
                     const mIdx = MARKET_DATA.findIndex(s => s.stallId === sData.stallId);
                     if (mIdx >= 0) {
                         MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...sData };
@@ -30016,7 +31007,7 @@ function initTalatHubApp() {
         const _mAppsOnInit = loadMerchantApplications();
         _mAppsOnInit.forEach(app => {
             if (app && app.status === 'approved' && app.stallData && app.stallData.stallId) {
-                const stall = { ...app.stallData, accessCode: app.accessCode || app.stallData.accessCode };
+                const stall = stallFromApp(app);
                 const mIdx = MARKET_DATA.findIndex(s => s.stallId === stall.stallId);
                 if (mIdx >= 0) {
                     MARKET_DATA[mIdx] = { ...MARKET_DATA[mIdx], ...stall };
@@ -30062,6 +31053,8 @@ function initTalatHubApp() {
     initMarketHeroCarousel();
     if (typeof setupDragScroll === 'function') {
         setupDragScroll('category-tabs');
+        setupDragScroll('main-role-selector-bar');   // แถบสลับบทบาท 5 ปุ่ม: บนคอมจอไม่กว้างพอ (โดยเฉพาะโหมดตัวอักษรใหญ่) ต้องลากเลื่อนดูปุ่มที่เกินได้
+        setupDragScroll('top-auth-buttons-container'); // แถวปุ่ม "เปิดร้าน/สมัครไรเดอร์": จอแคบ+ตัวอักษรใหญ่ อาจล้นแถวได้เช่นกัน
     }
     updateAdminRiderBadges();
     updateAdminStallsBadge();
@@ -30141,8 +31134,8 @@ window.generate6DigitAccessCode = generate6DigitAccessCode;
 
 let _lastGeneratedSmsInfo = null;
 
-function openSimulatedSmsModal(phone, codeVal, name, roleType, lineId) {
-    _lastGeneratedSmsInfo = { phone: phone, code: codeVal, name: name, roleType: roleType, lineId: lineId };
+function openSimulatedSmsModal(phone, codeVal, name, roleType, lineId, riderNumber) {
+    _lastGeneratedSmsInfo = { phone: phone, code: codeVal, name: name, roleType: roleType, lineId: lineId, riderNumber: riderNumber || "" };
     const modal = document.getElementById("simulated-sms-modal");
     if (!modal) return;
 
@@ -30159,9 +31152,14 @@ function openSimulatedSmsModal(phone, codeVal, name, roleType, lineId) {
     const roleNum = roleType === "merchant" ? "Role 3 (แผงค้า)" : "Role 4 (ไรเดอร์)";
 
     if (titleEl) titleEl.textContent = "ส่งรหัสเข้าสู่ระบบ" + roleName + "เรียบร้อย";
-    if (subtitleEl) subtitleEl.textContent = "ส่ง SMS & LINE แจ้งเตือนไปยัง " + name + " สำเร็จแล้ว";
-    if (msgEl) {
-        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + name + "</strong>! การลงทะเบียนเปิดร้าน/รับงานได้รับการอนุมัติแล้ว รหัสเข้าสู่ระบบ 6 หลักของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + codeVal + "</strong> นำรหัสนี้ไปใส่ใน " + roleNum + " เพื่อเริ่มปฏิบัติงานได้ทันทีครับ";
+    if (subtitleEl) subtitleEl.textContent = roleType === "merchant"
+        ? "กรุณาคัดลอกข้อความนี้ส่งให้ " + name + " ทาง LINE/SMS เอง (ระบบไม่ได้ส่งให้ และจะไม่แสดงรหัสผ่านนี้อีก)"
+        : "กรุณาคัดลอกข้อความนี้ส่งให้ " + name + " ทาง LINE/SMS เอง (ระบบไม่ได้ส่งให้ และจะไม่แสดงรหัสผ่านนี้อีก)";
+    if (msgEl && roleType !== "merchant") {
+        // ไรเดอร์: เข้าสู่ระบบด้วย "เลขไรเดอร์ + รหัสผ่านลับ" (รหัสผ่านนี้แสดงครั้งเดียว ระบบไม่เก็บรหัสจริง)
+        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! ใบสมัครไรเดอร์ได้รับอนุมัติแล้ว เลขไรเดอร์ของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
+    } else if (msgEl) {
+        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! ใบสมัครเปิดร้านค้าได้รับอนุมัติแล้ว รหัสร้านของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
     }
 
     modal.classList.remove("hidden");
@@ -30176,8 +31174,8 @@ window.closeSimulatedSmsModal = closeSimulatedSmsModal;
 
 function copyGeneratedCode() {
     if (_lastGeneratedSmsInfo && _lastGeneratedSmsInfo.code) {
-        const { phone, code, name, roleType } = _lastGeneratedSmsInfo;
-        const fullMsg = getApprovalNotificationText(phone, code, name, roleType);
+        const { phone, code, name, roleType, riderNumber } = _lastGeneratedSmsInfo;
+        const fullMsg = getApprovalNotificationText(phone, code, name, roleType, riderNumber);
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(fullMsg).then(() => {
                 showToast("📋 คัดลอกรหัส " + code + " และข้อความทั้งหมดเรียบร้อยแล้ว!");
@@ -30195,28 +31193,41 @@ window.copyGeneratedCode = copyGeneratedCode;
 
 function testLoginWithGeneratedCode() {
     if (!_lastGeneratedSmsInfo) return;
-    const { code, roleType } = _lastGeneratedSmsInfo;
+    const { code, roleType, riderNumber } = _lastGeneratedSmsInfo;
     closeSimulatedSmsModal();
 
     if (roleType === "merchant") {
         openMerchantLoginModal();
+        const shopInput = document.getElementById("merchant-shop-login-input");
         const input = document.getElementById("merchant-code-login-input");
-        if (input) {
+        if (input && shopInput) {
+            shopInput.value = riderNumber || "";
             input.value = code;
             handleMerchantCodeLoginSubmit();
         }
     } else {
         openRiderLoginModal();
-        const input = document.getElementById("rider-login-phone-input");
-        if (input) {
-            input.value = code;
+        const numInput = document.getElementById("rider-login-number-input");
+        const secInput = document.getElementById("rider-login-secret-input");
+        if (numInput && secInput) {
+            numInput.value = riderNumber || "";
+            secInput.value = code;
             handleRiderPhoneLoginSubmit();
         }
     }
 }
 window.testLoginWithGeneratedCode = testLoginWithGeneratedCode;
 
-function getApprovalNotificationText(phone, code, name, roleType) {
+function getApprovalNotificationText(phone, code, name, roleType, riderNumber) {
+    if (roleType !== "merchant") {
+        // ไรเดอร์: เลขไรเดอร์ + รหัสผ่านลับ (ไม่มีการล็อกอินด้วยเบอร์โทรอีกต่อไป)
+        return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัครร่วมทีมไรเดอร์ของคุณได้รับการอนุมัติเรียบร้อยแล้ว!\n🛵 เลขไรเดอร์: ${riderNumber || '-'}\n🔑 รหัสผ่านเข้าระบบ: ${code}\n(เก็บรหัสผ่านเป็นความลับ อย่าบอกใคร)` +
+            `\n\nเข้าสู่ระบบที่เมนู "4. ไรเดอร์" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nใส่เลขไรเดอร์และรหัสผ่านข้างต้น แล้วเริ่มรับงานได้เลยครับ!`;
+    }
+    if (roleType === "merchant") {
+        // แผงค้า: รหัสร้าน (สาธารณะ) + รหัสผ่านลับ
+        return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัครเปิดร้านค้าของคุณได้รับการอนุมัติแล้ว 🎉\n\nรหัสร้าน: ${riderNumber || '-'}\nรหัสผ่านเข้าระบบ: ${code}\n\nเข้าสู่ระบบที่เมนู "3. แผงค้า" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nใส่รหัสร้านและรหัสผ่านนี้ (เก็บรหัสผ่านเป็นความลับ อย่าบอกใคร)`;
+    }
     const roleTitle = roleType === "merchant" ? "เปิดร้านค้า" : "ร่วมทีมไรเดอร์";
     const roleTarget = roleType === "merchant" ? "3. แผงค้า" : "4. ไรเดอร์";
     return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัคร${roleTitle}ของคุณได้รับการอนุมัติเรียบร้อยแล้ว!\n🔑 รหัสผ่าน 6 หลักเข้าใช้งาน: ${code}\n(หรือล็อกอินด้วยเบอร์โทร: ${phone || '-'})` +
@@ -30224,13 +31235,13 @@ function getApprovalNotificationText(phone, code, name, roleType) {
 }
 window.getApprovalNotificationText = getApprovalNotificationText;
 
-function sendRealSmsToApplicant(phone, code, name, roleType) {
+function sendRealSmsToApplicant(phone, code, name, roleType, riderNumber) {
     const cleanPhone = String(phone || "").replace(/[^0-9]/g, "");
     if (!cleanPhone) {
         showToast("⚠️ ไม่พบเบอร์โทรศัพท์ของผู้สมัคร");
         return;
     }
-    const text = getApprovalNotificationText(cleanPhone, code, name, roleType);
+    const text = getApprovalNotificationText(cleanPhone, code, name, roleType, riderNumber);
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const separator = isIOS ? "&" : "?";
     const smsUrl = `sms:${cleanPhone}${separator}body=${encodeURIComponent(text)}`;
@@ -30239,8 +31250,8 @@ function sendRealSmsToApplicant(phone, code, name, roleType) {
 }
 window.sendRealSmsToApplicant = sendRealSmsToApplicant;
 
-function sendLineNotificationToApplicant(lineTarget, code, name, roleType) {
-    const text = getApprovalNotificationText("", code, name, roleType);
+function sendLineNotificationToApplicant(lineTarget, code, name, roleType, riderNumber) {
+    const text = getApprovalNotificationText("", code, name, roleType, riderNumber);
     if (isMobileDevice()) {
         const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
         try {
@@ -30255,8 +31266,8 @@ function sendLineNotificationToApplicant(lineTarget, code, name, roleType) {
 }
 window.sendLineNotificationToApplicant = sendLineNotificationToApplicant;
 
-function copyApprovalNotificationMessage(phone, code, name, roleType) {
-    const text = getApprovalNotificationText(phone, code, name, roleType);
+function copyApprovalNotificationMessage(phone, code, name, roleType, riderNumber) {
+    const text = getApprovalNotificationText(phone, code, name, roleType, riderNumber);
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(() => {
             showToast("📋 คัดลอกข้อความแจ้งผลและรหัสผ่านเรียบร้อยแล้ว!");
@@ -30271,15 +31282,15 @@ window.copyApprovalNotificationMessage = copyApprovalNotificationMessage;
 
 function sendRealSmsFromModal() {
     if (!_lastGeneratedSmsInfo) return;
-    const { phone, code, name, roleType } = _lastGeneratedSmsInfo;
-    sendRealSmsToApplicant(phone, code, name, roleType);
+    const { phone, code, name, roleType, riderNumber } = _lastGeneratedSmsInfo;
+    sendRealSmsToApplicant(phone, code, name, roleType, riderNumber);
 }
 window.sendRealSmsFromModal = sendRealSmsFromModal;
 
 function sendLineFromModal() {
     if (!_lastGeneratedSmsInfo) return;
-    const { phone, code, name, roleType, lineId } = _lastGeneratedSmsInfo;
-    sendLineNotificationToApplicant(lineId || phone, code, name, roleType);
+    const { phone, code, name, roleType, lineId, riderNumber } = _lastGeneratedSmsInfo;
+    sendLineNotificationToApplicant(lineId || phone, code, name, roleType, riderNumber);
 }
 window.sendLineFromModal = sendLineFromModal;
 
@@ -30309,18 +31320,8 @@ function saveMerchantApplications(apps) {
         } catch (storageErr) {
             console.warn("localStorage quota exceeded for merchant_applications:", storageErr);
         }
-        if (isFirebaseReady() && db) {
-            db.ref("merchant_applications").set(apps).catch(err => {
-                console.warn("Firebase save merchant_applications failed:", err);
-            });
-        }
-        try {
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(apps)
-            }).catch(() => {});
-        } catch (e) {}
+        // เขียนเฉพาะใบสมัครที่เปลี่ยน (ทีละ id) — ผู้ใช้ทั่วไปสร้างได้เฉพาะ pending, อนุมัติ/ลบเป็นสิทธิ์เจ้าของ
+        return syncListToCloud("merchant_applications", apps, _keyOfMerchantApp);
     } catch (e) {}
 }
 window.saveMerchantApplications = saveMerchantApplications;
@@ -30332,24 +31333,7 @@ async function saveMerchantApplicationsAsync(apps) {
         } catch (storageErr) {
             console.warn("localStorage quota exceeded for merchant_applications:", storageErr);
         }
-        const promises = [];
-        if (isFirebaseReady() && db) {
-            promises.push(
-                db.ref("merchant_applications").set(apps).catch(err => {
-                    console.warn("Firebase save merchant_applications failed:", err);
-                })
-            );
-        }
-        try {
-            promises.push(
-                fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(apps)
-                }).catch(e => console.warn("REST PUT merchant_applications failed:", e))
-            );
-        } catch(e) {}
-        await Promise.allSettled(promises);
+        return await syncListToCloud("merchant_applications", apps, _keyOfMerchantApp);
     } catch (e) {
         console.warn("saveMerchantApplicationsAsync error:", e);
     }
@@ -30439,19 +31423,19 @@ function handleCheckApplicationStatusSubmit() {
                     <div class="flex items-center justify-between">
                         <span class="font-black text-slate-800 flex items-center gap-1">
                             <span>🏪 แผงค้า:</span>
-                            <span class="text-emerald-800 font-extrabold">${mApp.stallData.stallName}</span>
+                            <span class="text-emerald-800 font-extrabold">${escapeHtml(mApp.stallData.stallName)}</span>
                         </span>
                         <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900">${statusText}</span>
                     </div>
-                    <div class="text-[11px] text-slate-500">หมายเลขแผง: ${mApp.stallData.stallNumber} • เจ้าของ: ${mApp.stallData.ownerName}</div>
-                    ${isApproved && mApp.accessCode ? `
+                    <div class="text-[11px] text-slate-500">หมายเลขแผง: ${escapeHtml(mApp.stallData.stallNumber)} • เจ้าของ: ${escapeHtml(mApp.stallData.ownerName)}</div>
+                    ${isApproved ? `
                         <div class="p-2.5 bg-slate-900 text-white rounded-xl flex items-center justify-between font-mono">
                             <div>
-                                <div class="text-[9px] text-slate-400 font-sans">รหัสเข้าสู่ระบบแผงค้า 6 หลัก:</div>
-                                <div class="text-base font-black text-amber-300 tracking-wider">${mApp.accessCode}</div>
+                                <div class="text-[9px] text-slate-400 font-sans">รหัสร้านของคุณ (ใช้คู่กับรหัสผ่านที่เจ้าของส่งให้):</div>
+                                <div class="text-base font-black text-amber-300 tracking-wider">${escapeHtml(mApp.stallData.stallId || mApp.id)}</div>
                             </div>
-                            <button onclick="closeStatusCheckModal(); openMerchantLoginModal(); document.getElementById('merchant-code-login-input').value='${mApp.accessCode}'; handleMerchantCodeLoginSubmit();" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-sans font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
-                                เข้าสู่ระบบทันที >
+                            <button onclick="closeStatusCheckModal(); openMerchantLoginModal(); document.getElementById('merchant-shop-login-input').value=${jsArg(mApp.stallData.stallId || mApp.id)}; document.getElementById('merchant-code-login-input').focus();" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-sans font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
+                                ไปหน้าเข้าสู่ระบบ >
                             </button>
                         </div>
                     ` : ""}
@@ -30470,18 +31454,18 @@ function handleCheckApplicationStatusSubmit() {
                     <div class="flex items-center justify-between">
                         <span class="font-black text-slate-800 flex items-center gap-1">
                             <span>🛵 ไรเดอร์:</span>
-                            <span class="text-sky-800 font-extrabold">${rApp.fullName}</span>
+                            <span class="text-sky-800 font-extrabold">${escapeHtml(rApp.fullName)}</span>
                         </span>
                         <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${statusColor}-100 text-${statusColor}-900">${statusText}</span>
                     </div>
-                    <div class="text-[11px] text-slate-500">ยานพาหนะ: ${rApp.vehiclePlate || '-'} • เบอร์โทร: ${rApp.phone}</div>
-                    ${isPending ? `
+                    <div class="text-[11px] text-slate-500">ยานพาหนะ: ${escapeHtml(rApp.vehiclePlate) || '-'} • เบอร์โทร: ${escapeHtml(rApp.phone)}</div>
+                    ${isPending && isOwnerSignedIn() ? `
                         <div class="p-2.5 bg-gradient-to-r from-emerald-900 to-teal-900 text-white rounded-xl flex items-center justify-between shadow-sm">
                             <div>
-                                <div class="text-[10px] text-emerald-300 font-bold">✨ ไม่ต้องรอแอดมิน! เริ่มงานได้ทันที</div>
+                                <div class="text-[10px] text-emerald-300 font-bold">✨ เจ้าของ: อนุมัติทันที</div>
                                 <div class="text-[9px] text-slate-300">แตะปุ่มเพื่ออนุมัติและเข้าสู่ระบบรับงาน</div>
                             </div>
-                            <button onclick="closeStatusCheckModal(); approveAndLoginRider('${rApp.id}');" class="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
+                            <button onclick="closeStatusCheckModal(); approveAndLoginRider(${jsArg(rApp.id)});" class="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
                                 ⚡ อนุมัติ & รับงานทันที >
                             </button>
                         </div>
@@ -30489,11 +31473,11 @@ function handleCheckApplicationStatusSubmit() {
                     ${isApproved ? `
                         <div class="p-2.5 bg-slate-900 text-white rounded-xl flex items-center justify-between font-mono">
                             <div>
-                                <div class="text-[9px] text-slate-400 font-sans">รหัสเข้าสู่ระบบไรเดอร์:</div>
-                                <div class="text-base font-black text-amber-300 tracking-wider">${rApp.accessCode || rApp.phone}</div>
+                                <div class="text-[9px] text-slate-400 font-sans">เลขไรเดอร์ (ใช้คู่กับรหัสผ่านที่เจ้าของส่งให้):</div>
+                                <div class="text-base font-black text-amber-300 tracking-wider">${escapeHtml(rApp.accessCode || rApp.id)}</div>
                             </div>
-                            <button onclick="closeStatusCheckModal(); openRiderLoginModal(); document.getElementById('rider-login-phone-input').value='${rApp.accessCode || rApp.phone}'; handleRiderPhoneLoginSubmit();" class="px-2.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-sans font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
-                                เข้าสู่ระบบทันที >
+                            <button onclick="closeStatusCheckModal(); openRiderLoginModal(); document.getElementById('rider-login-number-input').value=${jsArg(rApp.accessCode || rApp.id)}; document.getElementById('rider-login-secret-input').focus();" class="px-2.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-sans font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
+                                ไปหน้าเข้าสู่ระบบ >
                             </button>
                         </div>
                     ` : ""}
@@ -30509,23 +31493,29 @@ function handleCheckApplicationStatusSubmit() {
 }
 window.handleCheckApplicationStatusSubmit = handleCheckApplicationStatusSubmit;
 
-function approveMerchantApplication(appId) {
+async function approveMerchantApplication(appId) {
+    if (!requireOwnerAction()) return false;
     const apps = loadMerchantApplications();
     const app = apps.find(a => a.id === appId);
     if (!app) {
         showToast("⚠️ ไม่พบข้อมูลใบสมัคร");
-        return;
+        return false;
     }
 
-    // Keep the code already issued so a repeat approval never invalidates the merchant's login
-    const code = app.accessCode || generate6DigitAccessCode();
+    // รหัสผ่านลับ: แสดงครั้งเดียวในหน้าต่างส่งข้อความ เก็บเฉพาะ salt + hash
+    let cred;
+    try { cred = await makeRiderLoginCredential(); }
+    catch (e) { showToast("⚠️ สร้างรหัสผ่านไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return false; }
+
     app.status = "approved";
-    app.accessCode = code;
+    app.accessCode = app.accessCode || app.id;   // รหัสอ้างอิงร้าน (สาธารณะ) ไม่ใช่รหัสผ่าน
     app.approvedAt = new Date().toISOString();
+    app.loginSalt = cred.loginSalt;
+    app.loginHash = cred.loginHash;
     saveMerchantApplications(apps);
 
     // Create stall in market data & all stalls
-    const stallObj = { ...app.stallData, accessCode: code };
+    const stallObj = stallFromApp(app);
     const existingIndex = MARKET_DATA.findIndex(s => s.stallId === stallObj.stallId);
     if (existingIndex >= 0) MARKET_DATA[existingIndex] = stallObj;
     else MARKET_DATA.push(stallObj);
@@ -30559,17 +31549,56 @@ function approveMerchantApplication(appId) {
         updateStallRotationUI();
     }
 
-    showToast("🎉 อนุมัติเปิดร้าน \"" + stallObj.stallName + "\" สำเร็จ! รหัสผ่าน: " + code);
-    openSimulatedSmsModal(stallObj.phone, code, stallObj.stallName, "merchant", stallObj.lineId || (app && app.lineId));
+    showToast("🎉 อนุมัติเปิดร้าน \"" + stallObj.stallName + "\" สำเร็จ! กรุณาคัดลอกรหัสผ่านส่งให้ร้านค้า (แสดงครั้งเดียว)");
+    openSimulatedSmsModal(stallObj.phone, cred.secret, stallObj.stallName, "merchant", stallObj.lineId || (app && app.lineId), stallObj.stallId || app.id);
+    return true;
 }
+
+
 window.approveMerchantApplication = approveMerchantApplication;
+
+// เจ้าของ: สร้างรหัสผ่านเข้าระบบใหม่ให้ร้านที่อนุมัติแล้ว (รหัสเดิมใช้ไม่ได้ทันที) แสดงรหัสใหม่ครั้งเดียวในหน้าต่างส่งข้อความ
+async function resetMerchantLoginSecret(stallIdRaw) {
+    if (!requireOwnerAction()) return;
+    const stallId = String(stallIdRaw || "");
+    const apps = loadMerchantApplications();
+    const app = apps.find(a => a && (a.id === stallId || (a.stallData && a.stallData.stallId === stallId))) || null;
+    const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId) || (app ? stallFromApp(app) : null);
+    if (!app && !stall) { showToast("⚠️ ไม่พบข้อมูลร้านค้า"); return; }
+    if (app && app.status !== "approved") { showToast("⚠️ สร้างรหัสได้เฉพาะร้านที่อนุมัติแล้ว"); return; }
+    const name = (stall && stall.stallName) || (app && app.stallData && app.stallData.stallName) || stallId;
+    if (!confirm(`สร้างรหัสผ่านเข้าระบบใหม่ให้ร้าน "${name}" ?
+
+รหัสเดิมจะใช้ไม่ได้ทันที และรหัสใหม่จะแสดงให้เห็นครั้งเดียว (ต้องคัดลอกส่งให้ร้านค้า)`)) return;
+    let cred;
+    try { cred = await makeRiderLoginCredential(); }
+    catch (e) { showToast("⚠️ สร้างรหัสไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return; }
+
+    if (app) {
+        app.loginSalt = cred.loginSalt;
+        app.loginHash = cred.loginHash;
+        saveMerchantApplications(apps);
+    }
+    [MARKET_DATA, ALL_100_STALLS].forEach(list => {
+        const s = list.find(x => x && x.stallId === stallId);
+        if (s) { s.loginSalt = cred.loginSalt; s.loginHash = cred.loginHash; }
+    });
+    saveMarketDataToStorage();
+    if (typeof renderAdminStalls === "function") renderAdminStalls();
+    const detail = document.getElementById("merchant-app-detail-modal");
+    if (app && detail && !detail.classList.contains("hidden") && typeof viewMerchantAppDetail === "function") viewMerchantAppDetail(app.id);
+
+    showToast("🔑 สร้างรหัสผ่านใหม่แล้ว กรุณาคัดลอกส่งให้ร้านค้า (แสดงครั้งเดียว)");
+    openSimulatedSmsModal((stall && stall.phone) || "", cred.secret, name, "merchant", (stall && stall.lineId) || "", stallId);
+}
+window.resetMerchantLoginSecret = resetMerchantLoginSecret;
 
 function goToAdminToApproveMerchantFromSuccess() {
     closeMerchantPortalModal();
-    // 🔒 SECURITY: Require Admin PIN authentication (No auto-login)
+    // 🔒 SECURITY: Require owner sign-in (No auto-login)
     if (!state.activeAdmin || !state.activeAdmin.isLoggedIn) {
         openAdminLoginModal();
-        showToast("🔒 กรุณากรอกรหัส PIN ผู้ดูแลระบบ เพื่อตรวจสอบและอนุมัติแผงค้า");
+        showToast("🔒 กรุณาล็อกอินด้วยอีเมลและรหัสผ่านเจ้าของ เพื่อตรวจสอบและอนุมัติแผงค้า");
         return;
     }
     setActiveRoleView("admin");
@@ -30594,7 +31623,8 @@ function goToAdminToApproveMerchantFromSuccess() {
 }
 window.goToAdminToApproveMerchantFromSuccess = goToAdminToApproveMerchantFromSuccess;
 
-function approveAndLoginCurrentSubmittedMerchant() {
+async function approveAndLoginCurrentSubmittedMerchant() {
+    if (!requireOwnerAction()) return;
     const apps = loadMerchantApplications();
     const app = _lastSubmittedMerchantApp ? apps.find(a => a.id === _lastSubmittedMerchantApp.id) : apps.find(a => a.status === "pending");
     if (!app) {
@@ -30603,7 +31633,8 @@ function approveAndLoginCurrentSubmittedMerchant() {
     }
 
     if (app.status !== "approved") {
-        approveMerchantApplication(app.id);
+        const approved = await approveMerchantApplication(app.id);
+        if (!approved) return;
     }
 
     closeMerchantPortalModal();
@@ -30628,6 +31659,7 @@ function checkCurrentMerchantApprovalAndLogin() {
 window.checkCurrentMerchantApprovalAndLogin = checkCurrentMerchantApprovalAndLogin;
 
 function rejectMerchantApplication(appId) {
+    if (!requireOwnerAction()) return;
     if (!confirm("คุณต้องการปฏิเสธคำขอเปิดร้านค้านี้ใช่หรือไม่?")) return;
     const apps = loadMerchantApplications();
     const app = apps.find(a => a.id === appId);
@@ -30642,133 +31674,75 @@ function rejectMerchantApplication(appId) {
 window.rejectMerchantApplication = rejectMerchantApplication;
 
 async function handleMerchantCodeLoginSubmit() {
-    const inputEl = document.getElementById("merchant-code-login-input");
-    if (!inputEl) return;
-    const query = inputEl.value.trim().toUpperCase();
-    if (!query) {
-        showToast("⚠️ กรุณากรอกรหัสผ่าน หรือเบอร์โทรศัพท์");
-        inputEl.focus();
-        return;
-    }
-
-    // Role 3: เจ้าของที่ล็อกอินอยู่เข้าแผงค้าแรกในระบบเพื่อดูแล/ทดสอบได้ (คำว่า ADMIN6305 ใช้ได้เฉพาะตอนล็อกอินเจ้าของแล้ว)
-    if (isOwnerSignedIn() && (query === "ADMIN6305" || query === "ADMIN")) {
-        let defaultStall = (Array.isArray(MARKET_DATA) && MARKET_DATA[0]) || { stallId: "stall_chicken", name: "แผงป้าพร ไก่สดตลาดบ้านบึง" };
-        state.activeMerchant = {
-            isLoggedIn: true,
-            stallId: defaultStall.stallId || "stall_chicken",
-            name: defaultStall.name || "แผงค้าหลัก (Master Merchant)",
-            role: "merchant_admin",
-            loggedInAt: Date.now()
-        };
-        saveMerchantToStorage(state.activeMerchant);
-        closeMerchantLoginModal();
-        setActiveRoleView("merchant");
-        if (typeof renderMerchantView === "function") renderMerchantView();
-        showToast("🎉 เข้าสู่ระบบแผงค้า (Role 3) สำเร็จ!");
-        return;
-    }
+    const shopEl = document.getElementById("merchant-shop-login-input");
+    const secEl = document.getElementById("merchant-code-login-input");
+    if (!shopEl || !secEl) return;
+    // ข้อความผิดพลาดเป็นกล่องแดงใต้ปุ่ม (toast หายเร็วและอยู่ล่างจอ)
+    const errEl = document.getElementById("merchant-login-modal-error");
+    const showLoginError = msg => {
+        if (!errEl) return;
+        errEl.textContent = msg || "";
+        errEl.classList.toggle("hidden", !msg);
+    };
+    showLoginError("");
 
     const submitBtn = document.querySelector("#merchant-login-modal button[onclick*='handleMerchantCodeLoginSubmit']");
     const origBtnText = submitBtn ? submitBtn.innerHTML : "";
     if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.innerHTML = `<span class="inline-block animate-spin mr-1.5">⏳</span> กำลังตรวจสอบรหัสออนไลน์...`;
+        submitBtn.innerHTML = `<span class="inline-block animate-spin mr-1.5">⏳</span> กำลังตรวจสอบรหัส...`;
     }
 
-    const cleanQuery = query.replace(/[-\s]/g, "");
-
-    function findInApps(appsList) {
-        if (!Array.isArray(appsList)) return null;
-        return appsList.find(a => a && (
-            (a.accessCode && a.accessCode.trim().toUpperCase() === query) ||
-            (a.stallData && a.stallData.accessCode && a.stallData.accessCode.trim().toUpperCase() === query) ||
-            (a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === cleanQuery) ||
-            (a.id && a.id.trim().toUpperCase() === query)
-        ));
-    }
-
-    function findInStalls(stallsList) {
-        if (!Array.isArray(stallsList)) return null;
-        return stallsList.find(s => s && (
-            (s.accessCode && s.accessCode.trim().toUpperCase() === query) ||
-            (s.phone && s.phone.replace(/[-\s]/g, "") === cleanQuery) ||
-            (s.stallNumber && s.stallNumber.trim().toUpperCase() === query) ||
-            (s.stallId && s.stallId.trim().toUpperCase() === query)
-        ));
-    }
-
-    // 1. Search in local apps & stalls
-    let apps = loadMerchantApplications();
-    let matchedApp = findInApps(apps);
-    let matchedStall = findInStalls(MARKET_DATA) || findInStalls(ALL_100_STALLS);
-
-    // 2. If not found locally, fetch directly from Firebase Realtime Database
-    if (!matchedApp && !matchedStall) {
-        try {
-            let remoteData = null;
-            if (isFirebaseReady() && db) {
-                try {
-                    const snap = await db.ref("merchant_applications").once("value");
-                    remoteData = snap.val();
-                } catch (e) {
-                    console.warn("db.ref check failed:", e);
+    let res;
+    try {
+        res = await merchantSecretLogin(shopEl.value, secEl.value, {
+            fetchRemote: async () => {
+                let remoteData = null;
+                if (isFirebaseReady() && db) {
+                    try { remoteData = (await db.ref("merchant_applications").once("value")).val(); }
+                    catch (e) { console.warn("db.ref check failed:", e); }
                 }
+                if (!remoteData) {
+                    const r = await fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json");
+                    if (r.ok) remoteData = await r.json();
+                }
+                const list = cloudValToList(remoteData, _keyOfMerchantApp);
+                if (list.length > 0) {
+                    try { localStorage.setItem("talathub_merchant_applications", JSON.stringify(list)); } catch (e) { }
+                }
+                return list;
             }
-            if (!remoteData) {
-                const res = await fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json");
-                if (res.ok) remoteData = await res.json();
-            }
-
-            let remoteList = [];
-            if (Array.isArray(remoteData)) remoteList = remoteData.filter(Boolean);
-            else if (remoteData && typeof remoteData === "object") remoteList = Object.values(remoteData).filter(Boolean);
-
-            if (remoteList.length > 0) {
-                localStorage.setItem("talathub_merchant_applications", JSON.stringify(remoteList));
-                apps = remoteList;
-                matchedApp = findInApps(remoteList);
-            }
-        } catch (fetchErr) {
-            console.warn("Direct Firebase check failed:", fetchErr);
+        });
+    } catch (e) {
+        res = { ok: false, code: "error", message: "⚠️ เข้าสู่ระบบไม่สำเร็จ กรุณาลองอีกครั้ง (" + (e && e.message ? e.message : "ข้อผิดพลาดไม่ทราบสาเหตุ") + ")" };
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origBtnText;
         }
     }
 
-    if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = origBtnText;
-    }
-
-    if (!matchedStall && matchedApp && matchedApp.stallData) {
-        matchedStall = { ...matchedApp.stallData, accessCode: matchedApp.accessCode || matchedApp.stallData.accessCode };
-        if (!MARKET_DATA.find(s => s.stallId === matchedStall.stallId)) {
-            MARKET_DATA.unshift(matchedStall);
-            if (typeof ALL_100_STALLS !== "undefined" && !ALL_100_STALLS.find(s => s.stallId === matchedStall.stallId)) {
-                ALL_100_STALLS.unshift(matchedStall);
-            }
-            saveMarketDataToStorage();
-        }
-    }
-
-    if (!matchedStall) {
-        const pendingApp = apps.find(a => a.status === "pending" && (
-            (a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === cleanQuery) ||
-            (a.id && a.id.trim().toUpperCase() === query)
-        ));
-        if (pendingApp) {
-            alert("⏳ ใบสมัครร้าน \"" + (pendingApp.stallData?.stallName || pendingApp.id) + "\" ของคุณยังอยู่ระหว่างการพิจารณาโดยแอดมิน\n\nเมื่อแอดมินอนุมัติแล้ว จะได้รับรหัสผ่าน 6 หลักเพื่อเข้าใช้งานครับ");
-            return;
-        }
-
-        alert("⚠️ ไม่พบรหัสดังกล่าว..กรุณาตรวจสอบความถูกต้อง หรือถ้าได้รับการอนุมัติแล้วโปรดดูที่กล่องรับข้อความจากเบอร์โทรศัพท์หรือที่ไลน์ที่ให้ไว้กับทางเรา");
-        showToast("⚠️ ไม่พบรหัสดังกล่าว..กรุณาตรวจสอบความถูกต้อง");
+    if (!res.ok) {
+        showLoginError(res.message);
+        showToast(res.message);
+        if (res.code === "bad") { secEl.value = ""; secEl.focus(); }
         return;
     }
+    secEl.value = "";
 
+    const matchedStall = res.stall;
+    if (!MARKET_DATA.find(s => s.stallId === matchedStall.stallId)) {
+        MARKET_DATA.unshift(matchedStall);
+        if (typeof ALL_100_STALLS !== "undefined" && !ALL_100_STALLS.find(s => s.stallId === matchedStall.stallId)) {
+            ALL_100_STALLS.unshift(matchedStall);
+        }
+        saveMarketDataToStorage();
+    }
     closeMerchantLoginModal();
-    loginAsMerchantStall(matchedStall.stallId);
-    showToast("🎉 ยืนยันรหัสถูกต้อง! เข้าสู่ระบบแผงค้า " + matchedStall.stallName + " เรียบร้อยแล้ว");
+    _enterMerchantStall(matchedStall.stallId);
 }
+
+
 window.handleMerchantCodeLoginSubmit = handleMerchantCodeLoginSubmit;
 
 window.submitMerchantApplication = saveMerchantStallData;
@@ -30852,21 +31826,21 @@ function viewHubMerchantExpressSlip(orderId) {
                 <div class="flex items-center gap-2">
                     <span class="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-sm font-bold">📷</span>
                     <div>
-                        <div class="font-extrabold text-sm text-slate-900">ตรวจสอบสลิปค่าส่งด่วน (${order.orderId})</div>
-                        <div class="text-[10px] text-slate-400">จาก ${order.originStall?.stallName || 'แผงค้า'} • โอนล่วงหน้า ฿${order.deliveryFee || 20}</div>
+                        <div class="font-extrabold text-sm text-slate-900">ตรวจสอบสลิปค่าส่งด่วน (${escapeHtml(order.orderId)})</div>
+                        <div class="text-[10px] text-slate-400">จาก ${escapeHtml(order.originStall?.stallName) || 'แผงค้า'} • โอนล่วงหน้า ฿${order.deliveryFee || 20}</div>
                     </div>
                 </div>
                 <button onclick="document.getElementById('hub-express-slip-modal').classList.add('hidden')" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold">✕</button>
             </div>
             <div class="bg-slate-900 rounded-2xl p-2 flex items-center justify-center overflow-hidden max-h-72 border border-slate-800">
-                <img src="${slipImg}" alt="สลิปค่าส่งด่วน" class="max-h-64 object-contain rounded-xl">
+                <img src="${escapeHtml(slipImg)}" alt="สลิปค่าส่งด่วน" class="max-h-64 object-contain rounded-xl">
             </div>
             <div class="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-[11px] text-amber-900 font-medium">
                 <div>✓ ยอดโอนค่าบริการจัดส่ง: <strong>฿${order.deliveryFee || 20}</strong> เข้าพร้อมเพย์ฮับ</div>
-                <div>📍 จุดส่ง: ${order.customerName} (${order.address})</div>
+                <div>📍 จุดส่ง: ${escapeHtml(order.customerName)} (${escapeHtml(order.address)})</div>
             </div>
             <div class="flex items-center gap-2 pt-1">
-                <button onclick="approveHubMerchantExpressSlip('${order.orderId}')" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs shadow-md active:scale-95 transition-all cursor-pointer">
+                <button onclick="approveHubMerchantExpressSlip(${jsArg(order.orderId)})" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs shadow-md active:scale-95 transition-all cursor-pointer">
                     ✓ อนุมัติสลิป & เริ่มจ่ายงานไรเดอร์
                 </button>
             </div>
@@ -30920,7 +31894,7 @@ function openOrderSlipVerificationModal(orderId) {
                     <span class="w-8 h-8 rounded-xl bg-orange-100 text-orange-800 flex items-center justify-center text-base font-bold shadow-2xs">🔍</span>
                     <div>
                         <div class="font-extrabold text-sm text-slate-900">ตรวจสอบสลิปการโอนเงิน</div>
-                        <div class="text-[10px] text-slate-400">ออเดอร์ <span class="font-mono font-bold text-slate-700">${order.orderId}</span> • เวลาสั่ง ${orderTimeStr}</div>
+                        <div class="text-[10px] text-slate-400">ออเดอร์ <span class="font-mono font-bold text-slate-700">${escapeHtml(order.orderId)}</span> • เวลาสั่ง ${orderTimeStr}</div>
                     </div>
                 </div>
                 <button onclick="document.getElementById('order-slip-verify-modal').classList.add('hidden')" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold transition-all cursor-pointer">✕</button>
@@ -30933,7 +31907,7 @@ function openOrderSlipVerificationModal(orderId) {
                     <span class="text-lg font-black text-orange-600 tracking-tight">฿${exactAmtDisplay}</span>
                 </div>
                 <div class="text-[10.5px] text-slate-600 leading-snug">
-                    ช่องทาง: <strong>${order.paymentDesc || 'โอนเงิน'}</strong> • ลูกค้า: <strong>${order.customerName || 'ลูกค้า'}</strong> (${order.customerPhone || '-'})
+                    ช่องทาง: <strong>${order.paymentDesc || 'โอนเงิน'}</strong> • ลูกค้า: <strong>${escapeHtml(order.customerName) || 'ลูกค้า'}</strong> (${escapeHtml(order.customerPhone) || '-'})
                 </div>
                 <div class="bg-white/80 p-1.5 rounded-xl text-[10px] text-amber-900 font-medium flex items-center gap-1 border border-amber-200">
                     <span class="text-xs">💡</span>
@@ -30944,8 +31918,8 @@ function openOrderSlipVerificationModal(orderId) {
             <!-- Slip Image Preview Box -->
             <div class="bg-slate-900 rounded-2xl p-2 flex flex-col items-center justify-center overflow-hidden border border-slate-800 relative group min-h-[220px]">
                 ${slipImg ? `
-                    <img src="${slipImg}" alt="สลิปโอนเงินของลูกค้า" class="max-h-80 w-auto object-contain rounded-xl select-none">
-                    <a href="${slipImg}" target="_blank" download="slip_${order.orderId}.jpg" class="absolute bottom-3 right-3 bg-black/70 hover:bg-black text-white text-[10.5px] font-bold px-2.5 py-1 rounded-lg backdrop-blur-xs flex items-center gap-1 opacity-90 hover:opacity-100 transition-opacity">
+                    <img src="${escapeHtml(slipImg)}" alt="สลิปโอนเงินของลูกค้า" class="max-h-80 w-auto object-contain rounded-xl select-none">
+                    <a href="${escapeHtml(slipImg)}" target="_blank" download="slip_${escapeHtml(order.orderId)}.jpg" class="absolute bottom-3 right-3 bg-black/70 hover:bg-black text-white text-[10.5px] font-bold px-2.5 py-1 rounded-lg backdrop-blur-xs flex items-center gap-1 opacity-90 hover:opacity-100 transition-opacity">
                         <span class="material-symbols-outlined text-xs">open_in_new</span>
                         <span>ดูภาพเต็ม</span>
                     </a>
@@ -30969,16 +31943,16 @@ function openOrderSlipVerificationModal(orderId) {
             <!-- Action Buttons -->
             <div class="space-y-2 pt-1 border-t border-slate-100">
                 ${!isVerified ? `
-                    <button type="button" onclick="approveOrderPayment('${order.orderId}')" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
+                    <button type="button" onclick="approveOrderPayment(${jsArg(order.orderId)})" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-xs shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer">
                         <span class="material-symbols-outlined text-base">verified</span>
                         <span>✅ ยืนยันเงินเข้าบัญชีแล้ว (อนุมัติยอด ฿${exactAmtDisplay})</span>
                     </button>
                     <div class="grid grid-cols-2 gap-2">
-                        <button type="button" onclick="callContactDirect('${order.customerPhone || '0812345678'}', 'คุณ${order.customerName || 'ลูกค้า'}', 'ลูกค้า')" class="py-2 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                        <button type="button" onclick="callContactDirect(${jsArg(order.customerPhone || '0812345678')}, 'คุณ${escapeHtml(order.customerName) || 'ลูกค้า'}', 'ลูกค้า')" class="py-2 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-xs">call</span>
                             <span>โทรหาลูกค้า</span>
                         </button>
-                        <button type="button" onclick="rejectOrderPayment('${order.orderId}')" class="py-2 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
+                        <button type="button" onclick="rejectOrderPayment(${jsArg(order.orderId)})" class="py-2 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer">
                             <span class="material-symbols-outlined text-xs">cancel</span>
                             <span>สลิปไม่ถูกต้อง</span>
                         </button>
@@ -31168,7 +32142,7 @@ function renderRiderJobPool() {
                         <span class="px-2.5 py-1 rounded-lg ${badgeClass} text-[11px] font-extrabold flex items-center gap-1">
                             ${badgeText}
                         </span>
-                        <span class="font-extrabold text-slate-800 text-xs">${job.orderId}</span>
+                        <span class="font-extrabold text-slate-800 text-xs">${escapeHtml(job.orderId)}</span>
                     </div>
                     <span class="text-[10px] text-slate-400">${job.createdAt ? (typeof job.createdAt === 'number' ? new Date(job.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : job.createdAt) : 'เมื่อสักครู่'}</span>
                 </div>
@@ -31179,19 +32153,19 @@ function renderRiderJobPool() {
                     </div>
                     <div>
                         <div class="text-[10px] text-slate-400 font-medium">ปลายทางจัดส่ง</div>
-                        <div class="font-bold text-slate-800 truncate">📍 ${job.customerName || 'ลูกค้า'}</div>
+                        <div class="font-bold text-slate-800 truncate">📍 ${escapeHtml(job.customerName) || 'ลูกค้า'}</div>
                     </div>
                 </div>
                 <div class="bg-slate-50 p-2 rounded-xl text-[11px] text-slate-600">
-                    <div class="truncate">🏠 ที่อยู่: ${job.address || 'บ้านบึง ชลบุรี'}</div>
-                    ${job.deliveryNote || job.note ? `<div class="text-amber-800 font-medium mt-0.5 truncate">📝 ${job.deliveryNote || job.note}</div>` : ''}
+                    <div class="truncate">🏠 ที่อยู่: ${escapeHtml(job.address) || 'บ้านบึง ชลบุรี'}</div>
+                    ${job.deliveryNote || job.note ? `<div class="text-amber-800 font-medium mt-0.5 truncate">📝 ${escapeHtml(job.deliveryNote) || escapeHtml(job.note)}</div>` : ''}
                 </div>
                 <div class="flex items-center justify-between pt-1">
                     <div>
                         <span class="text-[10px] text-slate-400">รายได้ค่ารอบ:</span>
                         <span class="text-sm font-extrabold text-emerald-600 ml-1">${feeText}</span>
                     </div>
-                    <button onclick="claimOrderForRider('${job.orderId}')" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button onclick="claimOrderForRider(${jsArg(job.orderId)})" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
                         <span>🛵 กดรับงานนี้</span>
                     </button>
                 </div>
@@ -31377,7 +32351,7 @@ function renderRiderWallet() {
                     <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
                         <div class="text-[10px] text-emerald-200">ยอดเงินค่ารอบสุทธิที่ได้รับ:</div>
                         <div class="text-2xl font-black text-amber-300">฿${feeEarned.toLocaleString()}</div>
-                        <div class="text-[10px] text-emerald-300/80">โอนผ่าน PromptPay ไปยัง ${activeRiderObj.promptPay || activeRiderObj.phone || 'บัญชีคนขับ'}</div>
+                        <div class="text-[10px] text-emerald-300/80">โอนผ่าน PromptPay ไปยัง ${escapeHtml(activeRiderObj.promptPay) || escapeHtml(activeRiderObj.phone) || 'บัญชีคนขับ'}</div>
                     </div>
                     <div class="bg-white/10 rounded-2xl p-3 backdrop-blur-xs space-y-0.5">
                         <div class="text-[10px] text-emerald-200">วัน-เวลาที่ฮับยืนยันการโอนเงิน:</div>
@@ -31401,15 +32375,15 @@ function renderRiderWallet() {
                         </div>
 
                         <div class="flex flex-col sm:flex-row items-center gap-3 bg-white/5 p-2.5 rounded-xl border border-white/10">
-                            <div class="relative cursor-pointer group shrink-0" onclick="openRiderSlipViewerModal('${activeRiderObj.id || riderName}', '${dateKey}')">
-                                <img src="${settledInfo.slipImage}" alt="สลิปโอนเงินค่ารอบ" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border-2 border-emerald-400 shadow-md group-hover:scale-105 transition-all">
+                            <div class="relative cursor-pointer group shrink-0" onclick="openRiderSlipViewerModal(${jsArg(activeRiderObj.id || riderName)}, ${jsArg(dateKey)})">
+                                <img src="${escapeHtml(settledInfo.slipImage)}" alt="สลิปโอนเงินค่ารอบ" class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border-2 border-emerald-400 shadow-md group-hover:scale-105 transition-all">
                                 <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center transition-all">
                                     <span class="material-symbols-outlined text-white text-xl">zoom_in</span>
                                 </div>
                             </div>
                             <div class="space-y-1 text-xs text-left flex-1 min-w-0">
                                 <div class="text-[11px] text-emerald-200">
-                                    ผู้รับ: <strong>${riderName}</strong> (${activeRiderObj.plate || 'รถจักรยานยนต์ส่งของ'})
+                                    ผู้รับ: <strong>${escapeHtml(riderName)}</strong> (${escapeHtml(activeRiderObj.plate) || 'รถจักรยานยนต์ส่งของ'})
                                 </div>
                                 <div class="text-[11px] text-white font-mono">
                                     ยอดเงินโอนสุทธิ: <strong class="text-amber-300 text-sm">฿${feeEarned.toLocaleString()}</strong>
@@ -31417,13 +32391,13 @@ function renderRiderWallet() {
                                 <div class="text-[10px] text-slate-300">
                                     เวลาที่โอน: ${settledInfo.settledAt ? new Date(settledInfo.settledAt).toLocaleString('th-TH') : dateKey} ${settledInfo.settledBy ? `• ผู้โอน: ${settledInfo.settledBy}` : ''}
                                 </div>
-                                ${settledInfo.slipNote ? `<div class="text-[10px] text-amber-200 italic truncate">บันทึก: ${settledInfo.slipNote}</div>` : ''}
+                                ${settledInfo.slipNote ? `<div class="text-[10px] text-amber-200 italic truncate">บันทึก: ${escapeHtml(settledInfo.slipNote)}</div>` : ''}
                                 <div class="pt-1 flex items-center gap-2 flex-wrap">
-                                    <button onclick="openRiderSlipViewerModal('${activeRiderObj.id || riderName}', '${dateKey}')" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer">
+                                    <button onclick="openRiderSlipViewerModal(${jsArg(activeRiderObj.id || riderName)}, ${jsArg(dateKey)})" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-[11px] flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer">
                                         <span class="material-symbols-outlined text-xs">zoom_in</span>
                                         <span>🔍 ดูรูปสลิปเต็มจอ</span>
                                     </button>
-                                    <a href="${settledInfo.slipImage}" download="rider_slip_${dateKey}_${activeRiderObj.id || 'rider'}.jpg" class="px-3 py-1 bg-white/20 hover:bg-white/30 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
+                                    <a href="${escapeHtml(settledInfo.slipImage)}" download="rider_slip_${dateKey}_${escapeHtml(activeRiderObj.id) || 'rider'}.jpg" class="px-3 py-1 bg-white/20 hover:bg-white/30 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer">
                                         <span class="material-symbols-outlined text-xs">download</span>
                                         <span>บันทึกรูปสลิป</span>
                                     </a>
@@ -31525,7 +32499,7 @@ function renderRiderWallet() {
                 <div class="space-y-2 text-xs">
                     <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
                         <div>
-                            <div class="font-bold text-slate-800">${state.activeOrder?.orderId || '#TH-8801'} • ${state.activeOrder?.customerName || 'ลูกค้า'}</div>
+                            <div class="font-bold text-slate-800">${escapeHtml(state.activeOrder?.orderId) || '#TH-8801'} • ${escapeHtml(state.activeOrder?.customerName) || 'ลูกค้า'}</div>
                             <div class="text-[10px] text-slate-500">เสร็จเมื่อ: ${state.activeOrder?.deliveredAt || 'วันนี้'}</div>
                         </div>
                         <div class="text-right">
