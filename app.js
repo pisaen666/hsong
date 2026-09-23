@@ -3012,6 +3012,33 @@ function extractPlaceQueryFromGoogleUrl(urlStr) {
 }
 window.extractPlaceQueryFromGoogleUrl = extractPlaceQueryFromGoogleUrl;
 
+// 🔎 ระบบค้นหาสถานที่/ปักหมุด (Nominatim + Plus Code + ลิงก์ Google Maps) ใช้ร่วมกันได้ทั้งของลูกค้า
+//   (แผนที่หน้าแรก) และของแผงค้า (แผนที่ตอนเรียกไรเดอร์ไปส่งปลายทางอื่น) - ตัวแปรนี้บอกว่า "ตอนนี้กำลังใช้กับใคร"
+//   เพื่อให้ฟังก์ชันชุดเดียวกันรู้ว่าจะอ่าน/เขียนช่องไหน และปักหมุดลงแผนที่ไหนเมื่อเลือกผลลัพธ์
+let _activeLocationSearchTarget = "customer";
+const LOCATION_SEARCH_IDS = {
+    customer: {
+        input: "location-search-input",
+        dropdown: "location-search-dropdown",
+        list: "location-search-results-list",
+        spinner: "location-search-spinner",
+        clearBtn: "btn-clear-location-search"
+    },
+    merchant: {
+        input: "merchant-location-search-input",
+        dropdown: "merchant-location-search-dropdown",
+        list: "merchant-location-search-results-list",
+        spinner: "merchant-location-search-spinner",
+        clearBtn: "btn-clear-merchant-location-search"
+    }
+};
+function _lsId(key) {
+    return (LOCATION_SEARCH_IDS[_activeLocationSearchTarget] || LOCATION_SEARCH_IDS.customer)[key];
+}
+function _lsEl(key) {
+    return document.getElementById(_lsId(key));
+}
+
 function pinCoordinatesResult(lat, lng, label = "พิกัดระบุเอง") {
     if (typeof lat !== "number" || typeof lng !== "number" || isNaN(lat) || isNaN(lng)) return;
     const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
@@ -3048,7 +3075,7 @@ document.addEventListener("visibilitychange", async function () {
                     const pc = decodePlusCode(text);
                     if (coords || pc) {
                         _clipboardWatcherActive = false;
-                        const input = document.getElementById("location-search-input");
+                        const input = _lsEl("input");
                         if (input) input.value = text;
                         handleLocationSearchInput(text);
                         showToast("🎉 ตรวจพบพิกัดจากคลิปบอร์ดและปักหมุดให้อัตโนมัติแล้วครับ!");
@@ -3062,8 +3089,8 @@ document.addEventListener("visibilitychange", async function () {
 });
 
 async function renderGoogleMapsShortlinkHelper(rawInput) {
-    const dropdown = document.getElementById("location-search-dropdown");
-    const list = document.getElementById("location-search-results-list");
+    const dropdown = _lsEl("dropdown");
+    const list = _lsEl("list");
     if (!dropdown || !list) return;
 
     // 1. Direct coordinates
@@ -3312,11 +3339,11 @@ function handleLocationSearchInput(queryOrEvent) {
     } else if (queryOrEvent && queryOrEvent.target && typeof queryOrEvent.target.value === "string") {
         q = queryOrEvent.target.value.trim();
     } else {
-        const input = document.getElementById("location-search-input");
+        const input = _lsEl("input");
         q = (input?.value || "").trim();
     }
 
-    const clearBtn = document.getElementById("btn-clear-location-search");
+    const clearBtn = _lsEl("clearBtn");
     if (clearBtn) {
         if (q.length > 0) clearBtn.classList.remove("hidden");
         else clearBtn.classList.add("hidden");
@@ -3370,7 +3397,7 @@ function handleLocationSearchInput(queryOrEvent) {
 }
 
 async function fetchOnlineLocationSearch(query, existingMatches = []) {
-    const spinner = document.getElementById("location-search-spinner");
+    const spinner = _lsEl("spinner");
     if (spinner) spinner.classList.remove("hidden");
 
     if (_locSearchController) {
@@ -3445,7 +3472,7 @@ async function fetchOnlineLocationSearch(query, existingMatches = []) {
 }
 
 function executeLocationSearchNow() {
-    const input = document.getElementById("location-search-input");
+    const input = _lsEl("input");
     if (!input) return;
     const q = input.value.trim();
     if (q.length >= 1) {
@@ -3454,11 +3481,11 @@ function executeLocationSearchNow() {
 }
 
 function renderLocationSearchResults(results) {
-    const dropdown = document.getElementById("location-search-dropdown");
-    const list = document.getElementById("location-search-results-list");
+    const dropdown = _lsEl("dropdown");
+    const list = _lsEl("list");
     if (!dropdown || !list) return;
 
-    const currentQuery = (document.getElementById("location-search-input")?.value || "").trim();
+    const currentQuery = (_lsEl("input")?.value || "").trim();
 
     if (!Array.isArray(results) || results.length === 0) {
         list.innerHTML = `
@@ -3517,7 +3544,7 @@ function renderLocationSearchResults(results) {
 }
 
 function openGoogleMapsSearchHelper() {
-    const searchInput = document.getElementById("location-search-input");
+    const searchInput = _lsEl("input");
     const q = (searchInput?.value || "").trim();
     const queryParam = q ? encodeURIComponent(q + " บ้านบึง ชลบุรี") : encodeURIComponent("ตลาดวิศิษฐ์ชัย บ้านบึง ชลบุรี");
     window.open(`https://www.google.com/maps/search/?api=1&query=${queryParam}`, "_blank");
@@ -3526,6 +3553,10 @@ window.openGoogleMapsSearchHelper = openGoogleMapsSearchHelper;
 
 function selectLocationSearchResult(item) {
     if (!item || typeof item.lat !== "number" || typeof item.lng !== "number") return;
+    if (_activeLocationSearchTarget === "merchant") {
+        _applyLocationResultToMerchantMap(item);
+        return;
+    }
     const lat = item.lat;
     const lng = item.lng;
 
@@ -3564,9 +3595,43 @@ function selectLocationSearchResult(item) {
     updateModalAddressPreview();
 
     // 4. Update search input and hide dropdown
-    const searchInput = document.getElementById("location-search-input");
+    const searchInput = _lsEl("input");
     if (searchInput) searchInput.value = item.shortTitle || item.title;
-    const clearBtn = document.getElementById("btn-clear-location-search");
+    const clearBtn = _lsEl("clearBtn");
+    if (clearBtn) clearBtn.classList.remove("hidden");
+    hideLocationSearchDropdown();
+
+    const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+    const fee = calculateDeliveryFee(distKm);
+    showToast(`📍 ปักหมุดที่ "${item.shortTitle || item.title}" (~${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee})`);
+}
+
+// 🏪 นำผลลัพธ์ที่ค้นหาไปปักหมุดบนแผนที่ของแผงค้า (ตอนเรียกไรเดอร์ไปส่งปลายทางอื่นที่ไม่ใช่หน้าร้าน)
+//   ใช้ตัวแปร/ฟังก์ชันแผนที่ของร้านค้าที่มีอยู่แล้ว (merchantPickerMap/_onMerchantMapPinMoved) ไม่ได้สร้างแผนที่ใหม่
+function _applyLocationResultToMerchantMap(item) {
+    const lat = item.lat, lng = item.lng;
+    if (!merchantPickerMap) {
+        _initMerchantPickerMap();
+    }
+    if (merchantPickerMap && merchantPickerMarker) {
+        merchantPickerMap.setView([lat, lng], 17);
+        merchantPickerMarker.setLatLng([lat, lng]);
+        setTimeout(() => { if (merchantPickerMap) merchantPickerMap.invalidateSize(); }, 150);
+    }
+    _onMerchantMapPinMoved(lat, lng);
+
+    // เติมช่องบ้านเลขที่/จุดสังเกตให้อัตโนมัติถ้ายังว่างอยู่ (ไม่บังคับ ผู้ใช้แก้ต่อได้)
+    const addrInput = document.getElementById("merchant-map-addr-input");
+    if (addrInput && !addrInput.value.trim()) {
+        const placeName = item.shortTitle || item.title || "";
+        const road = item.soiRoad || "";
+        const parts = [placeName, road].filter(Boolean);
+        if (parts.length > 0) addrInput.value = parts.join(" ");
+    }
+
+    const searchInput = _lsEl("input");
+    if (searchInput) searchInput.value = item.shortTitle || item.title;
+    const clearBtn = _lsEl("clearBtn");
     if (clearBtn) clearBtn.classList.remove("hidden");
     hideLocationSearchDropdown();
 
@@ -3583,20 +3648,20 @@ function selectQuickLandmark(id) {
 }
 
 function clearLocationSearch() {
-    const input = document.getElementById("location-search-input");
+    const input = _lsEl("input");
     if (input) input.value = "";
-    const clearBtn = document.getElementById("btn-clear-location-search");
+    const clearBtn = _lsEl("clearBtn");
     if (clearBtn) clearBtn.classList.add("hidden");
     hideLocationSearchDropdown();
 }
 
 function hideLocationSearchDropdown() {
-    const dropdown = document.getElementById("location-search-dropdown");
+    const dropdown = _lsEl("dropdown");
     if (dropdown) dropdown.classList.add("hidden");
 }
 
 async function pasteFromClipboardToSearch() {
-    const input = document.getElementById("location-search-input");
+    const input = _lsEl("input");
     if (!input) return;
     try {
         if (navigator.clipboard && navigator.clipboard.readText) {
@@ -3629,10 +3694,41 @@ window.parseDMSCoordinates = parseDMSCoordinates;
 window.extractCoordinatesFromUrlOrText = extractCoordinatesFromUrlOrText;
 window.renderGoogleMapsShortlinkHelper = renderGoogleMapsShortlinkHelper;
 
-// Close search dropdown on click/pointerdown outside
+// 🏪 ตัวเรียกเข้าฟังก์ชันค้นหาชุดเดียวกันด้านบน แต่ตั้งเป้าหมายเป็น "แผนที่ของแผงค้า" ก่อนทำงาน
+//   (ตอนแผงค้าเรียกไรเดอร์ไปส่งปลายทางอื่นที่ไม่ใช่หน้าร้าน - ใช้ระบบค้นหาเดียวกับลูกค้าทุกอย่าง)
+function handleMerchantLocationSearchInput(queryOrEvent) {
+    _activeLocationSearchTarget = "merchant";
+    handleLocationSearchInput(queryOrEvent);
+}
+function executeMerchantLocationSearchNow() {
+    _activeLocationSearchTarget = "merchant";
+    executeLocationSearchNow();
+}
+function pasteFromClipboardToMerchantSearch() {
+    _activeLocationSearchTarget = "merchant";
+    return pasteFromClipboardToSearch();
+}
+function clearMerchantLocationSearch() {
+    _activeLocationSearchTarget = "merchant";
+    clearLocationSearch();
+}
+function openGoogleMapsSearchHelperMerchant() {
+    _activeLocationSearchTarget = "merchant";
+    openGoogleMapsSearchHelper();
+}
+window.handleMerchantLocationSearchInput = handleMerchantLocationSearchInput;
+window.executeMerchantLocationSearchNow = executeMerchantLocationSearchNow;
+window.pasteFromClipboardToMerchantSearch = pasteFromClipboardToMerchantSearch;
+window.clearMerchantLocationSearch = clearMerchantLocationSearch;
+window.openGoogleMapsSearchHelperMerchant = openGoogleMapsSearchHelperMerchant;
+
+// Close search dropdown on click/pointerdown outside (ทั้งของลูกค้าและของแผงค้า)
 document.addEventListener("pointerdown", function (e) {
     const wrapper = document.getElementById("location-search-wrapper");
-    if (wrapper && !wrapper.contains(e.target)) {
+    const merchantWrapper = document.getElementById("merchant-location-search-wrapper");
+    const insideCustomer = wrapper && wrapper.contains(e.target);
+    const insideMerchant = merchantWrapper && merchantWrapper.contains(e.target);
+    if (!insideCustomer && !insideMerchant) {
         hideLocationSearchDropdown();
     }
 });
@@ -3706,6 +3802,7 @@ function collapseInPageLocationPicker() {
 window.collapseInPageLocationPicker = collapseInPageLocationPicker;
 
 function openLocationModal() {
+    _activeLocationSearchTarget = "customer";
     showInPageLocationPicker(true);
     const container = document.getElementById("inpage-location-container");
     if (container) {
@@ -15323,6 +15420,9 @@ function openMerchantDestinationMap() {
     const modal = document.getElementById("merchant-map-modal");
     if (!modal) { console.error("merchant-map-modal not found in DOM"); return; }
 
+    // ระบบค้นหาสถานที่ (ช่องพิมพ์/วาง/Google Maps) ให้ทำงานกับแผนที่ของแผงค้าตั้งแต่เปิดหน้าต่างนี้
+    _activeLocationSearchTarget = "merchant";
+
     // Show modal
     modal.classList.remove("hidden");
     document.body.style.overflow = "hidden";
@@ -15338,6 +15438,9 @@ function closeMerchantMapModal() {
     const modal = document.getElementById("merchant-map-modal");
     if (modal) modal.classList.add("hidden");
     document.body.style.overflow = "";
+    hideLocationSearchDropdown();
+    // สลับระบบค้นหากลับไปเป็นของลูกค้า (ค่าเริ่มต้น) กันปนกันถ้าลูกค้าเปิดแผนที่หน้าแรกต่อ
+    _activeLocationSearchTarget = "customer";
 }
 
 function _initMerchantPickerMap() {
