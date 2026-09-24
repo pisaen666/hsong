@@ -1,0 +1,261 @@
+/* คู่มือสำหรับผู้สมัคร (ไรเดอร์ / ร้านค้า) - ตัวหนังสือใหญ่ อ่านง่ายบนมือถือ
+   ใช้ร่วมกันโดย guide-rider.html (และคู่มือร้านค้าในอนาคต) */
+:root {
+    --bg: #f4f6f5;
+    --card: #ffffff;
+    --ink: #13201b;
+    --muted: #4a5a54;
+    --line: #cfd8d4;
+    --brand: #0b6b4f;
+    --brand-ink: #ffffff;
+    --brand-soft: #e3f3ec;
+    --warn-bg: #fff4d6;
+    --warn-line: #e0a800;
+    --warn-ink: #5c4200;
+    --bad-bg: #fde8ea;
+    --bad-line: #d63447;
+    --bad-ink: #7a1522;
+    --ok-bg: #e2f5e9;
+    --ok-line: #2f9e5b;
+    --ok-ink: #14532d;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .08);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #0f1614;
+        --card: #18221f;
+        --ink: #eef4f1;
+        --muted: #b5c4be;
+        --line: #33433d;
+        --brand: #3fbf8f;
+        --brand-ink: #06231a;
+        --brand-soft: #1d3b30;
+        --warn-bg: #3a2f10;
+        --warn-line: #d9a400;
+        --warn-ink: #ffe7a3;
+        --bad-bg: #3d1a1f;
+        --bad-line: #ff6b7d;
+        --bad-ink: #ffd0d6;
+        --ok-bg: #163524;
+        --ok-line: #4cc27f;
+        --ok-ink: #c9f2d8;
+        --shadow: none;
+    }
+}
+
+* { box-sizing: border-box; }
+html { font-size: 19px; scroll-behavior: smooth; }
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Prompt", system-ui, sans-serif;
+    line-height: 1.75;
+    -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 16px 64px; }
+
+/* หัวเรื่อง */
+.top {
+    background: var(--brand);
+    color: var(--brand-ink);
+    padding: 22px 16px 26px;
+}
+.top .wrap { padding-bottom: 0; }
+.top h1 { font-size: 1.55rem; line-height: 1.35; margin: 6px 0 6px; }
+.top p { margin: 0; font-size: 1rem; opacity: .95; }
+.back {
+    display: inline-block;
+    color: inherit;
+    font-weight: 600;
+    text-decoration: none;
+    border: 2px solid currentColor;
+    border-radius: 12px;
+    padding: 4px 14px;
+    font-size: .9rem;
+}
+
+/* สารบัญ */
+.toc {
+    background: var(--card);
+    border: 2px solid var(--line);
+    border-radius: 18px;
+    padding: 14px 16px;
+    margin: 20px 0;
+    box-shadow: var(--shadow);
+}
+.toc h2 { font-size: 1.1rem; margin: 0 0 6px; }
+.toc ol { margin: 0; padding-left: 1.3em; }
+.toc a { color: var(--brand); font-weight: 600; }
+
+/* หัวข้อส่วน */
+h2.part {
+    font-size: 1.4rem;
+    line-height: 1.4;
+    margin: 40px 0 10px;
+    padding: 10px 14px;
+    background: var(--brand-soft);
+    border-left: 8px solid var(--brand);
+    border-radius: 10px;
+}
+h3 { font-size: 1.15rem; margin: 26px 0 8px; line-height: 1.45; }
+p { margin: 8px 0; }
+.muted { color: var(--muted); }
+strong { font-weight: 700; }
+.btn-name {
+    display: inline-block;
+    font-weight: 700;
+    background: var(--card);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 0 8px;
+    line-height: 1.5;
+    white-space: normal;
+}
+
+/* ขั้นตอนเป็นข้อ ๆ */
+.step {
+    background: var(--card);
+    border: 2px solid var(--line);
+    border-radius: 18px;
+    padding: 14px 16px 16px;
+    margin: 16px 0;
+    box-shadow: var(--shadow);
+}
+.step-head { display: flex; gap: 12px; align-items: flex-start; }
+.num {
+    flex: 0 0 auto;
+    width: 2.1rem; height: 2.1rem;
+    border-radius: 50%;
+    background: var(--brand);
+    color: var(--brand-ink);
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.05rem;
+}
+.step-head h3 { margin: 2px 0 0; }
+.step ul, .step ol { padding-left: 1.3em; margin: 8px 0; }
+.step li { margin: 4px 0; }
+
+/* รูปหน้าจอ */
+figure { margin: 12px 0 4px; text-align: center; }
+figure img {
+    width: 100%;
+    max-width: 380px;
+    height: auto;
+    border: 2px solid var(--line);
+    border-radius: 14px;
+    background: #fff;
+}
+figure.narrow img { max-width: 300px; }
+figure.small img { max-width: 260px; }
+figcaption { font-size: .85rem; color: var(--muted); margin-top: 4px; }
+
+/* กล่องเตือน */
+.note, .warn, .bad, .ok {
+    border-radius: 14px;
+    padding: 10px 14px;
+    margin: 12px 0;
+    border: 2px solid;
+}
+.note { background: var(--brand-soft); border-color: var(--brand); }
+.warn { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+.bad { background: var(--bad-bg); border-color: var(--bad-line); color: var(--bad-ink); }
+.ok { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
+.note p, .warn p, .bad p, .ok p { margin: 4px 0; }
+
+/* เช็กลิสต์ */
+.check { list-style: none; padding: 0; margin: 8px 0; }
+.check li {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--line);
+}
+.check li:last-child { border-bottom: 0; }
+.check .box {
+    flex: 0 0 auto;
+    width: 1.3rem; height: 1.3rem;
+    margin-top: .3rem;
+    border: 3px solid var(--brand);
+    border-radius: 5px;
+}
+.tag {
+    display: inline-block;
+    font-size: .78rem;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 0 9px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+.tag.req { background: var(--bad-bg); color: var(--bad-ink); border: 1px solid var(--bad-line); }
+.tag.opt { background: var(--card); color: var(--muted); border: 1px solid var(--line); }
+
+/* เส้นทางภาพรวม */
+.flow { list-style: none; padding: 0; margin: 12px 0; counter-reset: f; }
+.flow li {
+    counter-increment: f;
+    position: relative;
+    padding: 8px 12px 8px 3.1rem;
+    margin: 0 0 8px;
+    background: var(--card);
+    border: 2px solid var(--line);
+    border-radius: 14px;
+}
+.flow li::before {
+    content: counter(f);
+    position: absolute; left: 10px; top: 8px;
+    width: 1.8rem; height: 1.8rem;
+    border-radius: 50%;
+    background: var(--brand); color: var(--brand-ink);
+    font-weight: 700; text-align: center; line-height: 1.8rem;
+}
+
+/* ตารางข้อความเตือน -> วิธีแก้ */
+.fix { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: .95rem; }
+.fix th, .fix td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+.fix th { background: var(--brand-soft); }
+.fix td:first-child { font-weight: 600; }
+
+/* คำถามพบบ่อย */
+details {
+    background: var(--card);
+    border: 2px solid var(--line);
+    border-radius: 14px;
+    padding: 10px 14px;
+    margin: 10px 0;
+}
+summary { font-weight: 700; cursor: pointer; }
+details[open] summary { margin-bottom: 6px; }
+
+/* ติดต่อ */
+.contact {
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+    background: var(--card);
+    border: 2px solid var(--ok-line);
+    border-radius: 18px;
+    padding: 14px 16px;
+}
+.contact img { width: 130px; height: 130px; background: #fff; border-radius: 12px; padding: 4px; }
+.line-btn {
+    display: inline-block;
+    background: #06c755;
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+    border-radius: 12px;
+    padding: 8px 18px;
+    margin-top: 6px;
+}
+.to-top { text-align: right; margin: 6px 0 0; font-size: .9rem; }
+.to-top a { color: var(--brand); }
+
+a:focus-visible, summary:focus-visible { outline: 3px solid var(--warn-line); outline-offset: 2px; }
+
+@media print {
+    html { font-size: 14px; }
+    .top { background: none; color: #000; border-bottom: 2px solid #000; }
+    .back, .to-top, .toc { display: none; }
+    .step, figure, details, .contact { break-inside: avoid; }
+    figure img { max-width: 260px; }
+}

@@ -26827,6 +26827,7 @@ function renderRiderApplicationNotice() {
             <div class="text-xs">เลขไรเดอร์ / เลขใบสมัครของคุณ:</div>
             <div class="text-2xl font-black font-mono tracking-widest bg-white/80 rounded-xl px-3 py-2 text-center select-all">${_escHtml(n.code)}</div>
             <p class="text-xs leading-relaxed">${palette.hint}</p>
+            <a href="guide-rider.html#${status === "approved" ? "part2" : "after"}" target="_blank" rel="noopener" class="flex items-center justify-center gap-1.5 w-full py-2 bg-white/90 border-2 border-current rounded-xl text-xs font-black no-underline">📖 อ่านขั้นตอนต่อไปในคู่มือไรเดอร์</a>
             <button type="button" onclick="dismissRiderApplicationNotice()" class="text-[11px] font-bold underline cursor-pointer">ปิดข้อความนี้</button>
         </div>`;
 }

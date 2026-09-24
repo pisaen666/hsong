@@ -2141,6 +2141,17 @@
                             <span class="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full shrink-0">รอเจ้าของอนุมัติ</span>
                         </div>
 
+                        <!-- 📖 คู่มือสมัครไรเดอร์ (guide-rider.html) เปิดแท็บใหม่ ข้อมูลที่กรอกไว้ไม่หาย -->
+                        <a href="guide-rider.html#prepare" target="_blank" rel="noopener" id="rider-guide-link-onpage"
+                            class="flex items-center gap-3 p-3.5 bg-sky-50 hover:bg-sky-100 border-2 border-sky-400 rounded-2xl text-sky-950 no-underline active:scale-95 transition-all">
+                            <span class="text-2xl shrink-0">📖</span>
+                            <span class="flex-1 min-w-0">
+                                <span class="block font-black text-sm">อ่านคู่มือสมัครไรเดอร์ก่อนเริ่มกรอก</span>
+                                <span class="block text-[11px] text-sky-800">มีรูปทุกขั้นตอน + รายการเอกสารที่ต้องเตรียม (เปิดหน้าใหม่ ข้อมูลที่กรอกไว้ไม่หาย)</span>
+                            </span>
+                            <span class="material-symbols-outlined text-lg shrink-0">open_in_new</span>
+                        </a>
+
                         <!-- 1. ข้อมูลส่วนตัว -->
                         <div class="p-3.5 bg-white border-2 border-slate-300 rounded-2xl space-y-3">
                             <div class="font-extrabold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
@@ -2244,6 +2255,12 @@
                             </div>
                         </div>
 
+                        <a href="guide-rider.html#part2" target="_blank" rel="noopener" id="rider-guide-link-login"
+                            class="flex items-center justify-center gap-1.5 w-full py-2 bg-sky-50 hover:bg-sky-100 border-2 border-sky-300 rounded-xl text-sky-900 font-bold no-underline">
+                            <span>📖 คู่มือเข้าสู่ระบบและวิธีรับงาน</span>
+                            <span class="material-symbols-outlined text-sm">open_in_new</span>
+                        </a>
+
                         <div class="space-y-2">
                             <label class="block font-bold text-slate-700">เลขไรเดอร์ (เช่น RD1234):</label>
                             <input type="text" id="onpage-rider-number-input" autocomplete="username"
@@ -2330,6 +2347,12 @@
                     </button>
                 </div>
             </div>
+            <!-- 📖 คู่มือวิธีรับงาน (แถวแยก ไม่ให้เบียดปุ่ม 3 แท็บบนมือถือ) -->
+            <a href="guide-rider.html#part2" target="_blank" rel="noopener" id="rider-guide-link-workspace"
+                class="shrink-0 flex items-center justify-center gap-1.5 bg-sky-50 hover:bg-sky-100 border-b border-sky-200 text-sky-900 font-bold text-xs py-1.5 no-underline"
+                title="เปิดคู่มือไรเดอร์ (หน้าใหม่)">
+                <span>📖 คู่มือวิธีรับงาน (เปิดหน้าใหม่)</span>
+            </a>
 
             <!-- Rider Content -->
             <div class="p-3.5 sm:p-4 flex-1 overflow-y-auto space-y-3.5 pb-20 text-xs max-w-3xl mx-auto w-full">
@@ -6479,6 +6502,15 @@
             <div id="rider-reg-step-form" class="flex-1 flex flex-col min-h-0 overflow-hidden">
                 <!-- Form Content (Scrollable with extra bottom space) -->
                 <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs text-slate-700">
+                    <a href="guide-rider.html#prepare" target="_blank" rel="noopener" id="rider-guide-link-modal"
+                        class="flex items-center gap-3 p-3 bg-sky-50 hover:bg-sky-100 border-2 border-sky-400 rounded-2xl text-sky-950 no-underline">
+                        <span class="text-2xl shrink-0">📖</span>
+                        <span class="flex-1 min-w-0">
+                            <span class="block font-black text-sm">อ่านคู่มือสมัครไรเดอร์ก่อนเริ่มกรอก</span>
+                            <span class="block text-[11px] text-sky-800">มีรูปทุกขั้นตอน (เปิดหน้าใหม่ ข้อมูลที่กรอกไว้ไม่หาย)</span>
+                        </span>
+                        <span class="material-symbols-outlined text-lg shrink-0">open_in_new</span>
+                    </a>
                     <!-- Highlight Benefits Card -->
                     <div
                         class="bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50 border border-sky-200 rounded-2xl p-3.5 text-sky-950 space-y-1.5 shadow-2xs">
@@ -7321,7 +7353,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.53_reg_forms_uiux_consistency"></script>
+    <script src="app.js?v=10.54_rider_guide"></script>
 </body>
 
 </html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>คู่มือไรเดอร์เฮียส่ง</title>
+    <meta name="description" content="คู่มือสมัครเป็นไรเดอร์และวิธีใช้งานหน้ารับงาน ตลาดวิศิษฐ์ชัย บ้านบึง (เฮียส่ง)">
+    <meta name="theme-color" content="#0b6b4f">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide.css?v=1">
+</head>
+<body>
+    <!-- คู่มือนี้เป็นหน้าเอกสารล้วน ไม่มี JavaScript และไม่เชื่อมฐานข้อมูล
+         รูปทั้งหมดถ่ายจากสำเนาทดสอบด้วยข้อมูลตัวอย่าง (ชื่อ/เบอร์/ที่อยู่ปลอม)
+         แก้ฟอร์มสมัครหรือหน้ารับงานเมื่อไร ต้องแก้คู่มือนี้ด้วย (ตัวทดสอบ firebase-rules/tests/guide-rider.test.js ตรวจชื่อปุ่ม) -->
+    <header class="top">
+        <div class="wrap">
+            <a class="back" href="./">← กลับหน้าเว็บเฮียส่ง</a>
+            <h1>🛵 คู่มือไรเดอร์เฮียส่ง</h1>
+            <p>ตลาดวิศิษฐ์ชัย อ.บ้านบึง • อ่านจบใน 10 นาที มีรูปประกอบทุกขั้นตอน</p>
+        </div>
+    </header>
+
+    <main class="wrap">
+        <nav class="toc" aria-label="สารบัญ">
+            <h2>อ่านเรื่องไหน กดที่ชื่อได้เลย</h2>
+            <ol>
+                <li><a href="#overview">ภาพรวม: จากสมัครจนได้รับงาน</a></li>
+                <li><a href="#prepare">ของที่ต้องเตรียมก่อนสมัคร</a></li>
+                <li><a href="#part1">ส่วนที่ 1: กรอกใบสมัครทีละข้อ</a></li>
+                <li><a href="#after">ส่งใบสมัครแล้ว ต้องทำอะไรต่อ</a></li>
+                <li><a href="#part2">ส่วนที่ 2: เข้าสู่ระบบและรับงาน</a></li>
+                <li><a href="#faq">คำถามที่พบบ่อย</a></li>
+                <li><a href="#contact">ติดต่อแอดมิน</a></li>
+            </ol>
+        </nav>
+
+        <!-- ================= ภาพรวม ================= -->
+        <h2 class="part" id="overview">ภาพรวม: จากสมัครจนได้รับงาน</h2>
+        <ol class="flow">
+            <li><strong>เตรียมเอกสาร</strong> ถ่ายรูปใบขับขี่ เล่มทะเบียนรถ และรูปหน้าตรงของคุณไว้ในมือถือ</li>
+            <li><strong>กรอกใบสมัคร</strong> บนเว็บ แล้วกดส่ง จะได้ <strong>เลขไรเดอร์</strong> เช่น RD4821</li>
+            <li><strong>รอเจ้าของตลาดตรวจ</strong> เจ้าของจะเปิดดูรูปเอกสารทุกใบก่อนอนุมัติ</li>
+            <li><strong>รับรหัสผ่าน</strong> เมื่ออนุมัติแล้ว เจ้าของจะส่งรหัสผ่าน 8 ตัวให้ทาง SMS หรือ LINE</li>
+            <li><strong>เข้าสู่ระบบ</strong> ด้วยเลขไรเดอร์ + รหัสผ่าน แล้วเริ่มรับงานได้</li>
+        </ol>
+        <div class="warn">
+            <p><strong>สำคัญ:</strong> หลังกดส่งใบสมัคร คุณจะ <strong>ยังรับงานไม่ได้ทันที</strong> ต้องรอเจ้าของอนุมัติและส่งรหัสผ่านให้ก่อน ไม่ใช่ระบบเสีย</p>
+        </div>
+
+        <!-- ================= เตรียมของ ================= -->
+        <h2 class="part" id="prepare">ของที่ต้องเตรียมก่อนสมัคร</h2>
+        <p>เตรียมให้ครบก่อนเริ่มกรอก จะกรอกเสร็จในรอบเดียว ไม่ต้องกลับมาทำใหม่</p>
+        <div class="step">
+            <h3 style="margin-top:0">📷 รูปถ่าย (ถ่ายด้วยมือถือได้เลย)</h3>
+            <ul class="check">
+                <li><span class="box"></span><span><strong>รูปหน้าตรงของคุณ</strong> <span class="tag req">ต้องมี</span><br><span class="muted">เห็นหน้าชัด ไม่ใส่แว่นดำ ไม่ใส่หมวก</span></span></li>
+                <li><span class="box"></span><span><strong>ใบขับขี่ ด้านหน้า</strong> <span class="tag req">ต้องมี</span><br><span class="muted">เห็นชื่อ เลขที่ และวันหมดอายุชัด</span></span></li>
+                <li><span class="box"></span><span><strong>เล่มทะเบียนรถ</strong> หน้าที่มีชื่อเจ้าของและเลขทะเบียน <span class="tag req">ต้องมี</span></span></li>
+                <li><span class="box"></span><span><strong>รูปรถที่เห็นป้ายทะเบียน</strong> <span class="tag opt">ไม่บังคับ</span><br><span class="muted">ใส่ไว้จะช่วยให้อนุมัติเร็วขึ้น</span></span></li>
+            </ul>
+            <p class="muted">เคล็ดลับ: ถ่ายในที่สว่าง วางเอกสารบนโต๊ะเรียบ ๆ ให้ตัวหนังสืออ่านออก รูปต้องไม่ใหญ่เกิน 15 MB (รูปจากมือถือทั่วไปใช้ได้)</p>
+        </div>
+        <div class="step">
+            <h3 style="margin-top:0">📝 ข้อมูลที่ต้องกรอก</h3>
+            <ul class="check">
+                <li><span class="box"></span><span>ชื่อ-นามสกุลจริง ชื่อเล่น เบอร์มือถือ 10 หลัก และ LINE ID</span></li>
+                <li><span class="box"></span><span>ยี่ห้อ/รุ่นรถ และเลขทะเบียนรถพร้อมจังหวัด (เช่น 1กข-4567 ชลบุรี)</span></li>
+                <li><span class="box"></span><span>เลขบัตรประชาชน 13 หลัก และที่อยู่ปัจจุบัน</span></li>
+                <li><span class="box"></span><span>ชื่อและเบอร์ของ <strong>ผู้ติดต่อฉุกเฉิน</strong> 1 คน (เช่น พ่อแม่ คู่สมรส)</span></li>
+                <li><span class="box"></span><span><strong>บัญชีรับเงินค่ารอบ</strong> อย่างน้อย 1 บัญชี: พร้อมเพย์ หรือเลขบัญชีธนาคาร</span></li>
+            </ul>
+        </div>
+
+        <!-- ================= ส่วนที่ 1 ================= -->
+        <h2 class="part" id="part1">ส่วนที่ 1: กรอกใบสมัครทีละข้อ</h2>
+        <p>ช่องที่มีดอกจันสีแดง <strong style="color:#d63447">*</strong> ต้องกรอก ถ้าเว้นว่าง ระบบจะไม่ยอมส่ง</p>
+
+        <div class="step">
+            <div class="step-head"><span class="num">1</span><h3>เปิดหน้าสมัคร</h3></div>
+            <ol>
+                <li>เปิดเว็บเฮียส่ง</li>
+                <li>กดปุ่ม <span class="btn-name">สมัครไรเดอร์</span> สีฟ้า ที่มุมขวาบน (ในกรอบสีแดงในรูป)</li>
+            </ol>
+            <figure><img src="images/guide/rider/r01-header-button.jpg" width="780" height="240" loading="lazy" alt="แถบบนสุดของเว็บ ปุ่มสมัครไรเดอร์อยู่ขวาสุด"></figure>
+            <p>จะเห็นหน้า <strong>ศูนย์บริการไรเดอร์ส่งของสด</strong> และปุ่ม <span class="btn-name">1. 📝 ลงทะเบียนสมัครไรเดอร์ใหม่</span> เป็นสีเขียว แปลว่าอยู่ถูกหน้าแล้ว</p>
+            <figure class="small"><img src="images/guide/rider/r02-tabs.jpg" width="356" height="120" loading="lazy" alt="ปุ่มลงทะเบียนสมัครไรเดอร์ใหม่ เป็นสีเขียว"></figure>
+            <p class="muted">ถ้าเห็นแบบฟอร์มเป็นหน้าต่างเด้งขึ้นมาแทน ก็ใช้ได้เหมือนกัน ข้อมูลที่ต้องกรอกคล้ายกัน</p>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">2</span><h3>ข้อ 1. ข้อมูลส่วนตัวผู้สมัคร</h3></div>
+            <ul>
+                <li>ชื่อ-นามสกุล ให้ตรงกับบัตรประชาชน</li>
+                <li>เบอร์มือถือพิมพ์ติดกัน 10 ตัว ไม่ต้องใส่ขีด</li>
+                <li>LINE ID ใช้ให้เจ้าของติดต่อคุณ และส่งรหัสผ่านให้</li>
+            </ul>
+            <figure><img src="images/guide/rider/r03-sec1-personal.jpg" width="728" height="748" loading="lazy" alt="ตัวอย่างข้อ 1 ที่กรอกครบ"></figure>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">3</span><h3>ข้อ 2. ข้อมูลรถจักรยานยนต์</h3></div>
+            <ul>
+                <li>ยี่ห้อ/รุ่นรถ และเลขทะเบียนพร้อมจังหวัด <span class="tag req">ต้องกรอก</span></li>
+                <li>เลขที่ใบขับขี่ <span class="tag opt">ไม่บังคับ</span> แต่ควรใส่</li>
+            </ul>
+            <figure><img src="images/guide/rider/r04-sec2-vehicle.jpg" width="728" height="594" loading="lazy" alt="ตัวอย่างข้อ 2 ข้อมูลรถ"></figure>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">4</span><h3>ข้อ 3. พื้นที่วิ่งส่งประจำ</h3></div>
+            <p>กดที่ช่อง แล้วเลือกพื้นที่ที่คุณสะดวกวิ่งส่งมากที่สุด</p>
+            <figure><img src="images/guide/rider/r05-sec3-zone.jpg" width="728" height="284" loading="lazy" alt="ช่องเลือกพื้นที่วิ่งส่ง"></figure>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">5</span><h3>ข้อ 4. ข้อมูลยืนยันตัวตนและที่อยู่</h3></div>
+            <ul>
+                <li>เลขบัตรประชาชน 13 หลัก <span class="tag req">ต้องกรอก</span></li>
+                <li>ที่อยู่ปัจจุบัน: บ้านเลขที่ ซอย ตำบล อำเภอ จังหวัด <span class="tag req">ต้องกรอก</span></li>
+                <li>ติ๊กช่วงเวลาที่สะดวกรับงาน เลือกได้หลายช่วง</li>
+            </ul>
+            <figure><img src="images/guide/rider/r06-sec4-identity.jpg" width="728" height="1042" loading="lazy" alt="ตัวอย่างข้อ 4 เลขบัตร ที่อยู่ และช่วงเวลา"></figure>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">6</span><h3>ข้อ 5. ผู้ติดต่อฉุกเฉิน</h3></div>
+            <p>ใส่ชื่อและเบอร์ของคนในครอบครัวหรือคนใกล้ชิด 1 คน ใช้ติดต่อเมื่อคุณเกิดอุบัติเหตุระหว่างส่งของ</p>
+            <figure><img src="images/guide/rider/r07-sec5-emergency.jpg" width="728" height="468" loading="lazy" alt="ตัวอย่างข้อ 5 ผู้ติดต่อฉุกเฉิน"></figure>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">7</span><h3>ข้อ 6. รูปถ่ายและเอกสาร (ข้อที่คนลืมบ่อยที่สุด)</h3></div>
+            <ol>
+                <li>ที่ช่องแต่ละใบ กดปุ่มสีฟ้า <span class="btn-name">📷 เลือกรูป / ถ่ายรูป</span></li>
+                <li>เลือกรูปจากมือถือ หรือถ่ายใหม่ตอนนั้นเลย</li>
+                <li>รอจนเห็นรูปในกรอบ และมีข้อความสีเขียว <strong>✅ อัปโหลดแล้ว</strong></li>
+                <li>ทำแบบเดียวกันให้ครบ <strong>3 ใบที่ต้องมี</strong>: รูปหน้าตรง ใบขับขี่ เล่มทะเบียนรถ</li>
+            </ol>
+            <p>ถ้าเลือกรูปผิด กด <span class="btn-name">ลบรูป</span> แล้วเลือกใหม่</p>
+            <figure class="narrow"><img src="images/guide/rider/r08-sec6-documents.jpg" width="728" height="3216" loading="lazy" alt="ช่องอัปโหลดรูป 4 ช่อง ทุกช่องขึ้นว่าอัปโหลดแล้ว"><figcaption>รูปในตัวอย่างเป็นภาพทดสอบ ของจริงต้องเป็นรูปเอกสารของคุณ</figcaption></figure>
+            <div class="bad"><p><strong>ขาดรูปใบไหนใบหนึ่งใน 3 ใบนี้ เจ้าของจะกดอนุมัติให้ไม่ได้เลย</strong> รูปมืดหรืออ่านไม่ออก ก็อาจถูกขอให้ส่งใหม่</p></div>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">8</span><h3>ข้อ 7. บัญชีรับเงินค่ารอบ</h3></div>
+            <ol>
+                <li>ช่อง <strong>ธนาคาร / ช่องทาง</strong>: เลือก "พร้อมเพย์ (PromptPay)" หรือธนาคารของคุณ</li>
+                <li>ช่อง <strong>เลขบัญชี / เลขพร้อมเพย์</strong>: ถ้าพร้อมเพย์ผูกกับเบอร์มือถือ กดปุ่ม <span class="btn-name">⚡ ใช้เบอร์มือถือ</span> ระบบจะใส่เบอร์ให้เอง</li>
+                <li>ช่อง <strong>ชื่อบัญชี</strong>: เว้นว่างได้ ถ้าเป็นชื่อเดียวกับผู้สมัคร</li>
+            </ol>
+            <p>มีหลายบัญชี กด <span class="btn-name">+ เพิ่มบัญชีรับเงิน</span> ได้สูงสุด 3 บัญชี แล้วกดวงกลมหน้าบัญชีที่อยากใช้เป็น <strong>บัญชีหลัก</strong></p>
+            <figure><img src="images/guide/rider/r09-sec7-bank.jpg" width="728" height="1438" loading="lazy" alt="ตัวอย่างบัญชีรับเงิน 2 บัญชี"></figure>
+            <div class="note">
+                <p>• พร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขบัตร 13 หลัก • บัญชีธนาคารต้องเป็นตัวเลข 10-15 หลัก</p>
+                <p>• <strong>แนะนำให้ใช้พร้อมเพย์ที่ผูกกับเบอร์มือถือ</strong> แทนเลขบัตรประชาชน จะได้ไม่ต้องบอกเลขบัตรกับใคร</p>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">9</span><h3>ข้อ 8. ยืนยันและยินยอม</h3></div>
+            <p>อ่านข้อความ แล้ว <strong>ติ๊กในช่องสี่เหลี่ยม</strong> ถ้าไม่ติ๊ก จะส่งใบสมัครไม่ได้</p>
+            <figure><img src="images/guide/rider/r10-sec8-consent.jpg" width="728" height="418" loading="lazy" alt="ช่องติ๊กยืนยันและยินยอม"></figure>
+            <p class="muted">คุณยืนยันว่าข้อมูลเป็นความจริง และรับผิดชอบเงินสดที่เก็บจากลูกค้า (เก็บเงินปลายทาง) จนส่งคืนฮับ</p>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">10</span><h3>กดส่งใบสมัคร</h3></div>
+            <ol>
+                <li>กดปุ่มสีเขียวล่างสุด <span class="btn-name">ยืนยันการลงทะเบียน</span></li>
+                <li>จะมีข้อความ "กำลังส่งข้อมูลและรูปเอกสาร" <strong>รอจนเสร็จ ห้ามกดซ้ำ และห้ามปิดหน้าเว็บ</strong></li>
+            </ol>
+            <figure><img src="images/guide/rider/r11-submit.jpg" width="728" height="110" loading="lazy" alt="ปุ่มยืนยันการลงทะเบียน สีเขียว"></figure>
+            <p>ถ้ากรอกบางช่องไม่ครบ หน้าเว็บจะเลื่อนไปที่ช่องนั้นเอง และขึ้นข้อความเตือน ดูวิธีแก้ในตารางนี้:</p>
+            <table class="fix">
+                <thead><tr><th>ข้อความที่เห็น</th><th>ต้องทำอะไร</th></tr></thead>
+                <tbody>
+                    <tr><td>กรุณาอัปโหลดรูปถ่ายผู้สมัคร / ใบขับขี่ / เล่มทะเบียนรถจริง</td><td>กลับไปข้อ 6 ใส่รูปใบที่บอกให้ครบ</td></tr>
+                    <tr><td>กรุณากรอกเลขบัตรประชาชน 13 หลักให้ถูกต้อง</td><td>นับให้ครบ 13 ตัว (มีขีดหรือไม่มีก็ได้)</td></tr>
+                    <tr><td>กรุณากรอกที่อยู่ปัจจุบันให้ครบถ้วน</td><td>ใส่บ้านเลขที่ ตำบล อำเภอ จังหวัด ให้ครบ</td></tr>
+                    <tr><td>เลขพร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก...</td><td>เช็กเลขพร้อมเพย์ ใส่แต่ตัวเลข</td></tr>
+                    <tr><td>กรุณาติ๊กยืนยันและยินยอมเงื่อนไข</td><td>ติ๊กช่องในข้อ 8</td></tr>
+                    <tr><td>เบอร์นี้ส่งใบสมัครไว้แล้ว</td><td>ไม่ต้องสมัครใหม่ รอเจ้าของอนุมัติ หรือติดต่อแอดมิน</td></tr>
+                    <tr><td>ส่งข้อมูลส่วนตัวไม่สำเร็จ / บันทึกรูปเอกสารไม่สำเร็จ</td><td>เช็กอินเทอร์เน็ต แล้วกดส่งอีกครั้ง ถ้ายังไม่ได้ ติดต่อแอดมิน</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="to-top"><a href="#overview">↑ กลับไปด้านบน</a></p>
+
+        <!-- ================= หลังส่ง ================= -->
+        <h2 class="part" id="after">ส่งใบสมัครแล้ว ต้องทำอะไรต่อ</h2>
+        <div class="step">
+            <div class="step-head"><span class="num">1</span><h3>จดเลขไรเดอร์ของคุณไว้</h3></div>
+            <p>ส่งสำเร็จแล้วจะเห็นกล่องสีเหลือง <strong>"⏳ ส่งใบสมัครแล้ว รอเจ้าของอนุมัติ"</strong> และเลขไรเดอร์ตัวใหญ่ (ในรูปคือ RD4821)</p>
+            <figure><img src="images/guide/rider/r12-pending-notice.jpg" width="728" height="564" loading="lazy" alt="กล่องแจ้งว่าส่งใบสมัครแล้ว พร้อมเลขไรเดอร์ RD4821"></figure>
+            <div class="warn"><p><strong>จดเลขนี้ในกระดาษ หรือถ่ายรูปหน้าจอเก็บไว้</strong> ต้องใช้ตอนเข้าสู่ระบบ และตอนติดต่อแอดมิน</p></div>
+        </div>
+        <div class="step">
+            <div class="step-head"><span class="num">2</span><h3>รอเจ้าของตรวจและอนุมัติ</h3></div>
+            <p>เจ้าของตลาดจะเปิดดูรูปเอกสารทุกใบ และเช็กว่าหน้าตรงกับชื่อ ถ้าข้อมูลครบ จะอนุมัติให้</p>
+            <p>ถ้ารอนานหรืออยากถามความคืบหน้า ส่งเลขไรเดอร์ให้แอดมินทาง LINE (ดู <a href="#contact">ติดต่อแอดมิน</a>)</p>
+        </div>
+        <div class="step">
+            <div class="step-head"><span class="num">3</span><h3>รับรหัสผ่านเข้าระบบ</h3></div>
+            <p>เมื่ออนุมัติแล้ว เจ้าของจะส่ง <strong>รหัสผ่าน 8 ตัว</strong> ให้ทาง SMS หรือ LINE หน้าตาเหมือนตัวอย่างนี้: <strong>K7MQ-2XTA</strong></p>
+            <div class="bad">
+                <p><strong>ห้ามบอกรหัสผ่านกับใคร</strong> ใครได้รหัสนี้ไปจะเข้าระบบเป็นคุณได้</p>
+                <p>เจ้าของตลาดจะไม่ขอรหัสผ่านคืนจากคุณเด็ดขาด</p>
+            </div>
+        </div>
+        <p class="to-top"><a href="#overview">↑ กลับไปด้านบน</a></p>
+
+        <!-- ================= ส่วนที่ 2 ================= -->
+        <h2 class="part" id="part2">ส่วนที่ 2: เข้าสู่ระบบและรับงาน</h2>
+
+        <div class="step">
+            <div class="step-head"><span class="num">1</span><h3>เข้าสู่ระบบ</h3></div>
+            <ol>
+                <li>เปิดเว็บเฮียส่ง กดปุ่ม <span class="btn-name">ไรเดอร์</span> ในแถบบน</li>
+                <li>กดปุ่ม <span class="btn-name">2. 🔑 เข้าสู่ระบบรับงาน</span></li>
+                <li>ช่องบน พิมพ์ <strong>เลขไรเดอร์</strong> เช่น RD4821</li>
+                <li>ช่องล่าง พิมพ์ <strong>รหัสผ่าน 8 ตัว</strong> ที่เจ้าของส่งให้ (มีขีดหรือไม่มีก็ได้ ตัวเล็กหรือตัวใหญ่ก็ได้)</li>
+                <li>กดปุ่ม <span class="btn-name">เข้าสู่ระบบรับงาน</span></li>
+            </ol>
+            <figure><img src="images/guide/rider/r13-login-box.jpg" width="728" height="656" loading="lazy" alt="กล่องเข้าสู่ระบบไรเดอร์ มีช่องเลขไรเดอร์และรหัสผ่าน"></figure>
+            <p>ถ้าเข้าไม่ได้ จะมีกล่องสีแดงใต้ปุ่มบอกเหตุผล:</p>
+            <figure><img src="images/guide/rider/r14-login-error.jpg" width="644" height="94" loading="lazy" alt="กล่องแดง เลขไรเดอร์หรือรหัสผ่านไม่ถูกต้อง"></figure>
+            <table class="fix">
+                <thead><tr><th>ข้อความในกล่องแดง</th><th>ต้องทำอะไร</th></tr></thead>
+                <tbody>
+                    <tr><td>เลขไรเดอร์หรือรหัสผ่านไม่ถูกต้อง</td><td>พิมพ์ใหม่ช้า ๆ พิมพ์ตัวเล็กหรือตัวใหญ่ก็ได้ รหัสผ่านไม่มีตัว O I L และไม่มีเลข 0 1 ถ้าเห็นคล้ายตัวพวกนี้ ให้ดูรหัสผ่านอีกครั้ง</td></tr>
+                    <tr><td>ใส่รหัสผิดหลายครั้ง กรุณารออีก ... นาที</td><td>ผิดครบ 5 ครั้ง ระบบจะล็อกไว้ 5 นาที รอแล้วค่อยลองใหม่</td></tr>
+                    <tr><td>ใบสมัครของคุณยังรอเจ้าของอนุมัติ</td><td>ยังไม่อนุมัติ รอก่อน หรือถามแอดมิน</td></tr>
+                    <tr><td>บัญชีนี้ยังไม่มีรหัสผ่านเข้าระบบ</td><td>ติดต่อแอดมินเพื่อขอรหัสผ่าน</td></tr>
+                    <tr><td>ใบสมัครนี้ไม่ผ่านการอนุมัติ</td><td>ติดต่อแอดมินเพื่อถามเหตุผล</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">2</span><h3>รู้จักหน้ารับงาน</h3></div>
+            <p>เข้าสู่ระบบแล้ว จะเห็นชื่อคุณด้านบน และปุ่ม 3 ปุ่ม:</p>
+            <figure><img src="images/guide/rider/r20-workspace-top.jpg" width="780" height="520" loading="lazy" alt="หัวหน้ารับงาน ชื่อไรเดอร์ และปุ่ม 3 ปุ่ม"></figure>
+            <ul>
+                <li><span class="btn-name">1. งานปัจจุบัน</span> งานที่คุณกำลังส่งอยู่</li>
+                <li><span class="btn-name">2. บอร์ดรับงานด่วน</span> งานใหม่ที่รอคนรับ</li>
+                <li><span class="btn-name">3. กระเป๋าเงินไรเดอร์</span> ค่ารอบ และเงินสดที่ต้องส่งคืนฮับ</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">3</span><h3>รับงานใหม่</h3></div>
+            <ol>
+                <li>กดปุ่ม <span class="btn-name">2. บอร์ดรับงานด่วน</span></li>
+                <li>ดูว่าต้องไปรับของที่ไหน (<strong>จุดรับสินค้า</strong>) และส่งให้ใคร (<strong>ปลายทางจัดส่ง</strong>)</li>
+                <li>ถ้ารับได้ กดปุ่ม <span class="btn-name">🛵 กดรับงานนี้</span></li>
+            </ol>
+            <figure><img src="images/guide/rider/r25-job-board.jpg" width="720" height="548" loading="lazy" alt="การ์ดงานด่วน 1 งาน มีจุดรับสินค้า ปลายทาง และปุ่มกดรับงานนี้"></figure>
+            <p class="muted">ถ้าเขียนว่า "รับตรงหน้าร้าน" ให้ไปรับของที่แผงค้านั้นเลย ถ้าเป็นงานรวมรอบ ให้ไปรับของที่ฮับ ถ้ายังไม่มีงาน จะขึ้นว่า "ยังไม่มีงานรอรับในขณะนี้" งานใหม่จะโผล่เองเมื่อมีคนสั่ง</p>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">4</span><h3>ไปส่งของ</h3></div>
+            <p>กดปุ่ม <span class="btn-name">1. งานปัจจุบัน</span> จะเห็นข้อมูลลูกค้า:</p>
+            <figure><img src="images/guide/rider/r22-active-order.jpg" width="720" height="1262" loading="lazy" alt="หน้างานปัจจุบัน ชื่อลูกค้า ที่อยู่ จุดสังเกต และปุ่มต่าง ๆ"></figure>
+            <ul>
+                <li><strong>บรรทัดบนสุด</strong>: เลขออเดอร์ และยอดเงิน ถ้าเขียน <strong>"เก็บเงินสดปลายทาง"</strong> ต้องเก็บเงินสดตามยอดนี้จากลูกค้า</li>
+                <li><strong>จุดสังเกตหน้าบ้าน</strong>: ช่วยให้หาบ้านเจอง่าย</li>
+                <li><span class="btn-name">🚀 นำทาง GPS</span> เปิดแผนที่นำทางไปบ้านลูกค้า</li>
+                <li><span class="btn-name">โทรหาลูกค้า</span> โทรหาลูกค้าได้ทันที</li>
+                <li><span class="btn-name">📍 ถึงหน้าแผงค้าแล้ว</span> กดเมื่อไปถึงร้าน ระบบจะแจ้งร้านให้</li>
+                <li><span class="btn-name">🏠 ถึงหน้าบ้านลูกค้าแล้ว</span> กดเมื่อไปถึงบ้าน ระบบจะแจ้งลูกค้าให้ออกมารับ</li>
+            </ul>
+            <div class="warn"><p>ถ้าเห็นกล่อง <strong>"⚠️ มีซองเงินทอนคืนลูกค้า"</strong> อย่าลืมให้ซองเงินทอนกับลูกค้าด้วย</p></div>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">5</span><h3>กดปุ่มบอกสถานะ 2 ครั้ง</h3></div>
+            <p><strong>ครั้งที่ 1:</strong> ได้ของครบแล้ว กำลังออกไปส่ง กดปุ่มส้ม <span class="btn-name">1. รับของแล้ว ออกส่ง</span></p>
+            <figure><img src="images/guide/rider/r23-btn-start.jpg" width="652" height="136" loading="lazy" alt="ปุ่มรับของแล้ว ออกส่ง"></figure>
+            <p><strong>ครั้งที่ 2:</strong> ส่งของถึงมือลูกค้าแล้ว (และเก็บเงินแล้ว ถ้าเป็นเงินสด) กดปุ่มเขียว <span class="btn-name">2. ส่งมอบสำเร็จ</span></p>
+            <figure><img src="images/guide/rider/r24-btn-complete.jpg" width="652" height="140" loading="lazy" alt="ปุ่มส่งมอบสำเร็จ"></figure>
+            <div class="bad"><p><strong>อย่ากด "ส่งมอบสำเร็จ" ก่อนของถึงมือลูกค้า</strong> ลูกค้าจะเห็นทันทีว่าส่งแล้ว</p></div>
+            <p>จากนั้นกลับไปที่ <span class="btn-name">2. บอร์ดรับงานด่วน</span> เพื่อรับงานถัดไป</p>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">6</span><h3>ดูเงิน และส่งเงินสดคืนฮับ</h3></div>
+            <p>กดปุ่ม <span class="btn-name">3. กระเป๋าเงินไรเดอร์</span></p>
+            <figure class="narrow"><img src="images/guide/rider/r26-wallet.jpg" width="720" height="1758" loading="lazy" alt="หน้ากระเป๋าเงินไรเดอร์ ค่ารอบ เงินสด และสรุปยอด"></figure>
+            <ul>
+                <li><strong>รายได้ค่ารอบสะสมวันนี้</strong>: ได้ 40 บาทต่อรอบที่ส่งสำเร็จ</li>
+                <li><strong>เงินสด COD ถือติดตัว</strong>: เงินสดที่เก็บจากลูกค้า <strong>ต้องนำส่งฮับเย็นวันเดียวกัน</strong></li>
+                <li><strong>สรุปยอดเงินต้องเคลียร์กับฮับตลาด</strong>: บอกว่าเย็นนี้ต้องส่งเงินให้ฮับเท่าไร (เงินสดที่เก็บได้ หักค่ารอบของคุณ และเงินทอนที่สำรองจ่าย)</li>
+                <li>สถานะ <strong>"รอโอน"</strong> แปลว่าฮับยังไม่โอนค่ารอบ พอฮับโอนแล้ว จะเปลี่ยนเป็น <strong>"โอนแล้ว"</strong> และมีรูปสลิปให้ดู</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">7</span><h3>ออกจากระบบ</h3></div>
+            <p>ถ้ายืมมือถือคนอื่นเข้าระบบ หรือใช้เครื่องร่วมกัน เลิกงานแล้วกดปุ่ม <span class="btn-name">ออกจากระบบ</span> มุมขวาบนทุกครั้ง</p>
+        </div>
+        <p class="to-top"><a href="#overview">↑ กลับไปด้านบน</a></p>
+
+        <!-- ================= FAQ ================= -->
+        <h2 class="part" id="faq">คำถามที่พบบ่อย</h2>
+        <details>
+            <summary>ลืมรหัสผ่าน ทำอย่างไร?</summary>
+            <p>ติดต่อแอดมินทาง LINE พร้อมบอกเลขไรเดอร์ เจ้าของจะสร้างรหัสผ่านใหม่ให้ รหัสเก่าจะใช้ไม่ได้อีก ระบบไม่เก็บรหัสผ่านเดิมไว้ จึงบอกรหัสเดิมให้ไม่ได้</p>
+        </details>
+        <details>
+            <summary>ใช้เบอร์โทรเข้าระบบได้ไหม?</summary>
+            <p>ไม่ได้ ต้องใช้ <strong>เลขไรเดอร์ (RDxxxx) คู่กับรหัสผ่าน</strong> เท่านั้น เพื่อไม่ให้คนอื่นแอบเข้าระบบด้วยเบอร์ของคุณ</p>
+        </details>
+        <details>
+            <summary>กดส่งใบสมัครแล้ว ทำไมยังรับงานไม่ได้?</summary>
+            <p>ต้องรอเจ้าของตรวจเอกสารและอนุมัติก่อน แล้วเจ้าของจะส่งรหัสผ่านให้ ดูหัวข้อ <a href="#after">ส่งใบสมัครแล้ว ต้องทำอะไรต่อ</a></p>
+        </details>
+        <details>
+            <summary>อยากเปลี่ยนเบอร์โทร หรือบัญชีรับเงิน?</summary>
+            <p>ติดต่อแอดมินทาง LINE ไม่ต้องสมัครใหม่ (ถ้าสมัครใหม่ด้วยเบอร์เดิม ระบบจะไม่รับ)</p>
+        </details>
+        <details>
+            <summary>ข้อมูลส่วนตัวของฉันใครเห็นบ้าง?</summary>
+            <p><strong>เลขบัตรประชาชน ที่อยู่ ผู้ติดต่อฉุกเฉิน บัญชีธนาคาร และรูปเอกสาร</strong> เจ้าของตลาดเปิดดูได้คนเดียว ใช้ตรวจตัวตนและโอนค่ารอบเท่านั้น</p>
+            <p><strong>ชื่อ เบอร์โทร LINE ID และทะเบียนรถ</strong> ใช้ในการทำงาน ร้านค้าและลูกค้าจึงอาจเห็น เพื่อโทรหาคุณระหว่างส่งของ</p>
+        </details>
+        <details>
+            <summary>หน้าเว็บค้าง หรือข้อมูลไม่อัปเดต?</summary>
+            <p>ดึงหน้าเว็บลงแล้วปล่อยเพื่อโหลดใหม่ หรือปิดแล้วเปิดเว็บใหม่ ถ้ายังไม่หาย ถ่ายรูปหน้าจอส่งให้แอดมิน</p>
+        </details>
+        <details>
+            <summary>ตัวหนังสือเล็กไป อ่านไม่ถนัด?</summary>
+            <p>ในหน้าเว็บเฮียส่ง กดปุ่มสีขาว <span class="btn-name">ใหญ่</span> ที่มีตัว TT อยู่แถบบนสุด (ข้างคำว่า เฮียส่ง) กดอีกครั้งจะเปลี่ยนเป็น "ใหญ่มาก"</p>
+        </details>
+
+        <!-- ================= ติดต่อ ================= -->
+        <h2 class="part" id="contact">ติดต่อแอดมิน</h2>
+        <div class="contact">
+            <img src="images/line_oa_qr.png" width="130" height="130" alt="QR Code LINE ทางการเฮียส่ง">
+            <div>
+                <p><strong>LINE ทางการเฮียส่ง</strong></p>
+                <p class="muted">สแกน QR หรือกดปุ่มด้านล่าง แล้วส่งเลขไรเดอร์ของคุณมาด้วยทุกครั้ง</p>
+                <a class="line-btn" href="https://lin.ee/61O4EyH" target="_blank" rel="noopener noreferrer">➕ แอด LINE แอดมิน</a>
+            </div>
+        </div>
+        <p class="to-top"><a href="#overview">↑ กลับไปด้านบน</a></p>
+    </main>
+</body>
+</html>
