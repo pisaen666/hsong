@@ -22,7 +22,8 @@ function fn(name) {
 }
 const ctx = {};
 vm.createContext(ctx);
-["orderItemLineTotal", "merchantStallItemsTotal", "merchantBankAccountProblem"].forEach(n => vm.runInContext(fn(n), ctx));
+vm.runInContext(appSrc.match(/const WEIGHT_UNITS = \[[^\]]*\];/)[0].replace("const ", "var "), ctx);   // ตัวคิดเงินใช้กติกาของชั่งด้วย
+["orderItemUnitPrice", "orderItemOrderedQty", "orderItemUnit", "isWeighedOrderItem", "orderItemWeighedQty", "orderItemBilledQty", "orderItemLineTotal", "merchantStallItemsTotal", "merchantBankAccountProblem"].forEach(n => vm.runInContext(fn(n), ctx));
 
 console.log("== (ก) ราคา x จำนวน ==");
 const line = ctx.orderItemLineTotal;
@@ -44,11 +45,11 @@ const bodies = {
     "openReceiptModal (ใบเสร็จ)": fn("openReceiptModal")
 };
 Object.entries(bodies).forEach(([label, body]) => {
-    ok(/orderItemLineTotal\(|merchantStallItemsTotal\(/.test(body), `${label} ใช้ตัวคิดเงิน ราคา x จำนวน`);
+    ok(/orderItemLineTotal\(|merchantStallItemsTotal\(|orderItemRefund\(|orderRefundTotal\(/.test(body), `${label} ใช้ตัวคิดเงิน ราคา x จำนวน`);
     // รูปแบบเก่าที่คิดเงินจากราคาต่อหน่วยตรง ๆ แล้วบวกเข้ายอด/เงินคืน
     // "+= price" ใช้ได้เฉพาะเมื่อ price มาจาก orderItemLineTotal (ราคา x จำนวน) แล้ว
     const addsVar = /(refundCashTotal|refundTotal|subtotal)\s*\+=\s*(price|pr)\s*;/.test(body);
-    const varIsLineTotal = /const (price|pr) = orderItemLineTotal\(/.test(body);
+    const varIsLineTotal = /const (price|pr) = (orderItemLineTotal|orderItemRefund)\(/.test(body);
     ok(!addsVar || varIsLineTotal, `${label} ไม่บวกราคาต่อหน่วยเข้ายอดเงินแบบเดิม`);
     ok(!/refund\w*\s*\+=\s*\((it|item|i)\.actualPrice !== undefined/.test(body), `${label} ไม่คิดเงินคืนจากราคาต่อหน่วย`);
 });

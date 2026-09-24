@@ -82,11 +82,14 @@ ok(fnStart >= 0, "มีฟังก์ชัน merchantStallItemsTotal");
 let i = appSrc.indexOf("{", fnStart), d = 0;
 for (; i < appSrc.length; i++) { if (appSrc[i] === "{") d++; else if (appSrc[i] === "}" && --d === 0) break; }
 const ctx = {}; vm.createContext(ctx);
-{   // merchantStallItemsTotal ใช้ orderItemLineTotal (ราคา x จำนวน) ต้องโหลดคู่กัน
-    const s2 = appSrc.indexOf("function orderItemLineTotal(");
-    let j = appSrc.indexOf("{", s2), d2 = 0;
-    for (; j < appSrc.length; j++) { if (appSrc[j] === "{") d2++; else if (appSrc[j] === "}" && --d2 === 0) break; }
-    vm.runInContext(appSrc.slice(s2, j + 1), ctx);
+{   // merchantStallItemsTotal ใช้ orderItemLineTotal (ราคา x จำนวน / น้ำหนักที่ชั่ง) ต้องโหลดคู่กัน
+    vm.runInContext(appSrc.match(/const WEIGHT_UNITS = \[[^\]]*\];/)[0].replace("const ", "var "), ctx);
+    ["orderItemUnitPrice", "orderItemOrderedQty", "orderItemUnit", "isWeighedOrderItem", "orderItemWeighedQty", "orderItemBilledQty", "orderItemLineTotal"].forEach(name => {
+        const s2 = appSrc.indexOf("function " + name + "(");
+        let j = appSrc.indexOf("{", s2), d2 = 0;
+        for (; j < appSrc.length; j++) { if (appSrc[j] === "{") d2++; else if (appSrc[j] === "}" && --d2 === 0) break; }
+        vm.runInContext(appSrc.slice(s2, j + 1), ctx);
+    });
 }
 vm.runInContext(appSrc.slice(fnStart, i + 1), ctx);
 const total = ctx.merchantStallItemsTotal;

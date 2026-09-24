@@ -12632,6 +12632,7 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         stallsMap[item.stallId].items.push({
             productId: item.productId,
             name: `${item.name} (${item.unit || 'ชิ้น'})`,
+            unit: item.unit || 'ชิ้น',   // ใช้รู้ว่าเป็นของชั่งน้ำหนักไหม (orderItemUnit)
             unitPrice: uPrice,
             price: uPrice,
             subtotal: uPrice * uQty,
@@ -12923,7 +12924,7 @@ function renderTrackingScreen() {
                         (s.items || []).forEach(it => {
                             if (!it.outOfStock) {
                                 validCount++;
-                                validTotal += ((it.actualPrice !== undefined ? it.actualPrice : it.price) * (it.qty || 1));
+                                validTotal += orderItemLineTotal(it);
                             }
                         });
                     });
@@ -12945,10 +12946,8 @@ function renderTrackingScreen() {
     if (order.stalls) {
         order.stalls.forEach(s => {
             (s.items || []).forEach(item => {
-                if (item.outOfStock) {
-                    refundCashTotal += orderItemLineTotal(item);
-                    outOfStockCount++;
-                }
+                refundCashTotal += orderItemRefund(item);   // ของหมด + ชั่งได้น้อยกว่าที่สั่ง
+                if (item.outOfStock) outOfStockCount++;
             });
         });
     }
@@ -13034,7 +13033,7 @@ function renderTrackingScreen() {
                         <div class="flex items-center gap-1.5">
                             <span class="text-xs ${isOOS ? 'text-rose-500 font-bold' : 'text-emerald-600'}">${isOOS ? '✕' : '✓'}</span>
                             <span class="${isOOS ? 'line-through text-slate-400 font-medium' : 'font-semibold'}">${escapeHtml(item.name)}</span>
-                            <span class="text-slate-400">x${Number(item.qty || item.quantity || 1)}</span>
+                            <span class="text-slate-400">x${Number(item.qty || item.quantity || 1)}${orderItemWeighedQty(item) !== null && !isOOS ? ` • ชั่งได้ ${orderItemWeighedQty(item)} ${escapeHtml(orderItemUnit(item))}${orderItemRefund(item) > 0 ? ` (คืน ฿${orderItemRefund(item)})` : ""}` : ""}</span>
                             ${isOOS ? '<span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.2 rounded font-black">ของหมด • คืนเงินสดใส่ซอง</span>' : ''}
                         </div>
                         <span class="font-bold ${isOOS ? 'text-rose-600' : 'text-slate-800'} text-xs">
@@ -14427,9 +14426,60 @@ function merchantStallItemsTotal(items) {
 // ใช้ทั้งตอนคิดยอดขาย และตอนคิดเงินคืนลูกค้าเมื่อของหมด (เดิมหลายจุดลืมคูณจำนวน: หมด 2 กำ คืนเงินแค่ 1 กำ)
 function orderItemLineTotal(it) {
     if (!it) return 0;
-    const p = Number(it.actualPrice !== undefined ? it.actualPrice : (it.price || 0)) || 0;
-    const q = Number(it.qty || it.quantity || 1) || 1;
-    return p * q;
+    const p = orderItemUnitPrice(it);
+    const billed = orderItemBilledQty(it);
+    // ของชั่งน้ำหนักปัดเป็นบาทเต็ม (ไม่มีเศษสตางค์ในซองเงินทอน)
+    return orderItemWeighedQty(it) !== null ? Math.round(p * billed) : p * billed;
+}
+
+// ── ของที่ขายตามน้ำหนัก (เจ้าของตัดสินใจ 2026-09-24) ─────────────────────────────
+// แม่ค้าชั่งแล้วพิมพ์น้ำหนักจริงที่การ์ดออเดอร์ (merchantSetItemWeight) เก็บใน item.weighedQty (หน่วยเดียวกับที่ลูกค้าสั่ง)
+// - ชั่งได้น้อยกว่าที่สั่ง: คิดเงินตามน้ำหนักจริง ส่วนต่างคืนเงินสดใส่ซอง (เหมือนของหมด)
+// - ชั่งได้มากกว่าที่สั่ง: ไม่เก็บเงินเพิ่ม ลูกค้าจ่ายตามที่สั่ง
+const WEIGHT_UNITS = ["กก.", "ขีด", "กรัม"];
+function orderItemUnitPrice(it) {
+    return Number(it && it.actualPrice !== undefined ? it.actualPrice : ((it && it.price) || 0)) || 0;
+}
+function orderItemOrderedQty(it) {
+    return Number((it && (it.qty || it.quantity)) || 1) || 1;
+}
+// หน่วยขายของสินค้าในออเดอร์: ใช้ it.unit (ออเดอร์ใหม่) หรือแกะจากท้ายชื่อ "ผักบุ้ง (กำ)" (ออเดอร์เก่า)
+function orderItemUnit(it) {
+    if (!it) return "";
+    if (it.unit) return String(it.unit);
+    const m = String(it.name || "").match(/\(([^()]+)\)\s*$/);
+    return m ? m[1].trim() : "";
+}
+function isWeighedOrderItem(it) {
+    return WEIGHT_UNITS.includes(orderItemUnit(it));
+}
+// น้ำหนักที่ชั่งได้ (ตัวเลข) หรือ null ถ้ายังไม่ได้ชั่ง/ไม่ใช่ของชั่ง
+function orderItemWeighedQty(it) {
+    if (!it || !isWeighedOrderItem(it) || it.weighedQty === undefined || it.weighedQty === null || it.weighedQty === "") return null;
+    const w = Number(it.weighedQty);
+    return Number.isFinite(w) && w >= 0 ? w : null;
+}
+// จำนวนที่คิดเงินจริง = ที่สั่ง หรือ น้ำหนักที่ชั่งได้ (ไม่เกินที่สั่ง)
+function orderItemBilledQty(it) {
+    const q = orderItemOrderedQty(it);
+    const w = orderItemWeighedQty(it);
+    return w === null ? q : Math.min(w, q);
+}
+// เงินที่ต้องคืนลูกค้าของสินค้า 1 บรรทัด: ของหมด = คืนทั้งหมด, ชั่งได้น้อยกว่าที่สั่ง = คืนส่วนต่าง
+function orderItemRefund(it) {
+    if (!it) return 0;
+    const ordered = orderItemUnitPrice(it) * orderItemOrderedQty(it);
+    if (it.outOfStock) return ordered;
+    if (orderItemWeighedQty(it) === null) return 0;
+    return Math.max(0, Math.round(ordered) - orderItemLineTotal(it));
+}
+function orderRefundTotal(order) {
+    let sum = 0;
+    ((order && order.stalls) || []).forEach(s => {
+        const items = Array.isArray(s && s.items) ? s.items : Object.values((s && s.items) || {});
+        items.forEach(it => { sum += orderItemRefund(it); });
+    });
+    return sum;
 }
 
 function renderMerchantSettlement() {
@@ -15209,21 +15259,38 @@ function renderMerchantIncomingOrders() {
                         <div class="bg-slate-50 rounded-xl p-2.5 space-y-1 divide-y divide-slate-100">
                             ${o.items.map((it, itIdx) => {
                                 const isOos = it.outOfStock || false;
+                                const weighUnit = isWeighedOrderItem(it) ? orderItemUnit(it) : "";
+                                const weighed = orderItemWeighedQty(it);
+                                const weighRefund = isOos ? 0 : orderItemRefund(it);
+                                const weighBoxId = merchantWeighInputId(o.orderId, itIdx);
                                 return `
-                                    <div class="flex items-center justify-between pt-1.5 text-xs ${isOos ? 'opacity-60 line-through' : ''}">
+                                    <div class="pt-1.5">
+                                    <div class="flex items-center justify-between text-xs ${isOos ? 'opacity-60 line-through' : ''}">
                                         <div class="font-bold text-slate-800 flex items-center gap-1.5">
                                             <span class="${isOos ? 'text-rose-500' : 'text-emerald-600'} font-black">${isOos ? '✕' : '✓'}</span>
                                             <span>${escapeHtml(it.name) || 'สินค้า'}</span>
-                                            <span class="text-slate-400 font-normal">x${it.qty || 1}</span>
+                                            <span class="text-slate-400 font-normal">x${Number(it.qty || 1)}</span>
                                         </div>
                                         <div class="flex items-center gap-2">
-                                            <div class="font-mono font-bold text-slate-700">฿${(it.price || 0).toLocaleString()}</div>
+                                            <div class="font-mono font-bold text-slate-700">฿${orderItemLineTotal(it).toLocaleString()}</div>
                                             ${o.status !== 'delivered' ? `
                                                 <button type="button" onclick="merchantToggleItemOutOfStock(${jsArg(o.orderId)}, ${jsArg(currentStallId)}, ${itIdx})" class="px-1.5 py-0.5 ${isOos ? 'bg-slate-200 text-slate-700' : 'bg-rose-50 text-rose-700 border border-rose-200'} rounded text-[10px] font-bold hover:opacity-80 active:scale-95 transition-all" title="${isOos ? 'กู้คืนสินค้า' : 'แจ้งสินค้าหมด คืนเงินสดใส่ซอง'}">
                                                     ${isOos ? 'กู้คืน' : 'แจ้งหมด'}
                                                 </button>
                                             ` : ''}
                                         </div>
+                                    </div>
+                                    ${weighUnit && !isOos ? `
+                                        <div class="mt-1 pl-5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+                                            <span class="font-bold">⚖️ ชั่งได้จริง:</span>
+                                            ${o.status !== 'delivered' ? `
+                                                <input type="number" inputmode="decimal" step="0.01" min="0" id="${weighBoxId}" value="${weighed !== null ? weighed : ''}" placeholder="${Number(it.qty || 1)}" class="w-20 p-1 border border-slate-300 rounded-lg text-center text-xs font-bold text-slate-800 bg-white focus:ring-1 focus:ring-emerald-500">
+                                                <span>${escapeHtml(weighUnit)}</span>
+                                                <button type="button" onclick="merchantSetItemWeight(${jsArg(o.orderId)}, ${jsArg(currentStallId)}, ${itIdx})" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold active:scale-95 transition-all">บันทึกน้ำหนัก</button>
+                                            ` : `<span class="font-bold">${weighed !== null ? weighed : Number(it.qty || 1)} ${escapeHtml(weighUnit)}</span>`}
+                                            ${weighed !== null ? `<span class="w-full ${weighRefund > 0 ? 'text-rose-700' : 'text-emerald-700'} font-bold">${weighRefund > 0 ? `น้อยกว่าที่สั่ง คืนลูกค้า ฿${weighRefund} ใส่ซอง` : 'ครบตามที่สั่ง (เกินไม่เก็บเงินเพิ่ม)'}</span>` : ''}
+                                        </div>
+                                    ` : ''}
                                     </div>
                                 `;
                             }).join('')}
@@ -15272,37 +15339,157 @@ function renderMerchantIncomingOrders() {
 window.renderMerchantIncomingOrders = renderMerchantIncomingOrders;
 
 // Helper: Merchant mark stall ready
-function merchantMarkStallReady(orderId, stallId) {
-    if (state.activeOrder && state.activeOrder.orderId === orderId && state.activeOrder.stalls) {
-        const stall = state.activeOrder.stalls.find(s => s.stallId === stallId);
-        if (stall) {
-            stall.ready = true;
-            stall.pickedCount = stall.itemsCount;
-            if (stall.items) stall.items.forEach(i => { if (!i.outOfStock) i.picked = true; });
-            saveActiveOrderToStorage(state.activeOrder);
-        }
+// ── ปุ่มของแม่ค้าบนการ์ดออเดอร์ (เตรียมเสร็จ / แจ้งหมด / บันทึกน้ำหนัก) ─────────────────────
+// เดิม 2 ปุ่มแรกทำงานเฉพาะเมื่อออเดอร์นั้นบังเอิญเป็น state.activeOrder ของเครื่องแม่ค้าเอง
+// บนมือถือแม่ค้าจริงจึงขึ้นข้อความว่าสำเร็จ แต่ไม่ได้บันทึกอะไรเลย (พบ 2026-09-24)
+// ตอนนี้: แก้ทุกสำเนาของออเดอร์ในเครื่อง แล้วส่งขึ้นคลาวด์เฉพาะช่องที่เปลี่ยน (ไม่เขียนทับทั้งออเดอร์
+// เพื่อไม่ลบสถานะที่ไรเดอร์/ฮับเพิ่งอัปเดต)
+function merchantWeighInputId(orderId, itemIndex) {
+    return `merchant-weigh-${String(orderId || "").replace(/[^A-Za-z0-9_-]/g, "")}-${itemIndex}`;
+}
+
+// ใช้ fn กับทุกสำเนาของออเดอร์นี้ในเครื่อง (ออเดอร์ที่เปิดอยู่, ประวัติใน localStorage, แคชจากคลาวด์)
+// คืนสำเนาแรกที่เจอ (หลังแก้แล้ว) หรือ null
+function mutateOrderEverywhere(orderId, fn) {
+    let first = null;
+    const apply = o => { if (o && o.orderId === orderId && Array.isArray(o.stalls)) { fn(o); if (!first) first = o; } };
+    apply(state.activeOrder);
+    if (state.activeOrder && state.activeOrder.orderId === orderId) {
+        try { localStorage.setItem("talathub_active_order", JSON.stringify(state.activeOrder)); } catch (e) { }
     }
-    showToast("🎉 แผงค้าบันทึกจัดเตรียมของสดเรียบร้อย! ส่งสัญญาณแจ้งฮับมารับของแล้ว 🔔");
+    try {
+        const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
+        let changed = false;
+        hist.forEach(o => { if (o && o.orderId === orderId) { apply(o); changed = true; } });
+        if (changed) localStorage.setItem("talathub_order_history", JSON.stringify(hist));
+    } catch (e) { }
+    (window._cachedFirebaseOrders || []).forEach(apply);
+    return first;
+}
+
+// อัปเดตเฉพาะบางช่องของออเดอร์บนคลาวด์ updates = { "stalls/0/items/1/outOfStock": true, ... }
+function patchOrderInCloud(orderId, updates) {
+    if (!orderId || !updates || isMockOrder(orderId)) return;
+    const orderKey = toFirebaseKey(orderId);
+    const payload = Object.assign({}, updates, { updatedAt: Date.now() });
+    const viaRest = () => fetch(`${RIDER_DB_BASE_URL}/orders/${orderKey}.json`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    }).catch(() => {});
+    if (isFirebaseReady() && typeof db !== "undefined" && db) {
+        db.ref(`orders/${orderKey}`).update(payload).catch(e => { console.warn("patchOrderInCloud SDK error, trying REST:", e); viaRest(); });
+    } else {
+        viaRest();
+    }
+}
+
+function _merchantOrderStallIndex(order, stallId) {
+    return (order && Array.isArray(order.stalls)) ? order.stalls.findIndex(s => s && s.stallId === stallId) : -1;
+}
+
+function _refreshAfterMerchantOrderChange() {
     renderMerchantIncomingOrders();
+    if (typeof renderMerchantSettlement === "function") renderMerchantSettlement();
     if (typeof renderHubPickingList === "function") renderHubPickingList();
     if (typeof renderTrackingScreen === "function") renderTrackingScreen();
 }
+
+function merchantMarkStallReady(orderId, stallId) {
+    let sIdx = -1;
+    const order = mutateOrderEverywhere(orderId, o => {
+        const i = _merchantOrderStallIndex(o, stallId);
+        if (i < 0) return;
+        sIdx = i;
+        const stall = o.stalls[i];
+        stall.ready = true;
+        if (stall.items) stall.items.forEach(it => { if (it && !it.outOfStock) it.picked = true; });
+        stall.pickedCount = (stall.items || []).filter(it => it && it.picked && !it.outOfStock).length;
+    });
+    if (!order || sIdx < 0) {
+        showToast("⚠️ ไม่พบออเดอร์นี้ในเครื่อง กรุณากดปุ่มรีเฟรช 🔄 แล้วลองใหม่");
+        return;
+    }
+    const stall = order.stalls[sIdx];
+    const updates = { [`stalls/${sIdx}/ready`]: true, [`stalls/${sIdx}/pickedCount`]: stall.pickedCount };
+    (stall.items || []).forEach((it, i) => { if (it && !it.outOfStock) updates[`stalls/${sIdx}/items/${i}/picked`] = true; });
+    patchOrderInCloud(orderId, updates);
+    showToast("🎉 แผงค้าบันทึกจัดเตรียมของสดเรียบร้อย! ส่งสัญญาณแจ้งฮับมารับของแล้ว 🔔");
+    _refreshAfterMerchantOrderChange();
+}
 window.merchantMarkStallReady = merchantMarkStallReady;
 
-// Helper: Merchant toggle out of stock on item
+// แม่ค้าแจ้งของหมด / กู้คืน: คืนเงินสดใส่ซองให้ลูกค้าเต็มจำนวนของบรรทัดนั้น
 function merchantToggleItemOutOfStock(orderId, stallId, itemIndex) {
-    if (state.activeOrder && state.activeOrder.orderId === orderId && state.activeOrder.stalls) {
-        const stallIndex = state.activeOrder.stalls.findIndex(s => s.stallId === stallId);
-        if (stallIndex !== -1) {
-            toggleHubItemOutOfStock(stallIndex, itemIndex);
-            renderMerchantIncomingOrders();
-            return;
-        }
+    let sIdx = -1, nowOos = false;
+    const order = mutateOrderEverywhere(orderId, o => {
+        const i = _merchantOrderStallIndex(o, stallId);
+        const it = i >= 0 && o.stalls[i].items ? o.stalls[i].items[itemIndex] : null;
+        if (!it) return;
+        sIdx = i;
+        it.outOfStock = !it.outOfStock;
+        if (it.outOfStock) it.picked = false;
+        nowOos = it.outOfStock;
+        o.refundCashTotal = orderRefundTotal(o);
+        o.finalPaidTotal = Math.max(0, (o.grandTotal || o.total || 0) - o.refundCashTotal);
+    });
+    if (!order || sIdx < 0) {
+        showToast("⚠️ ไม่พบออเดอร์นี้ในเครื่อง กรุณากดปุ่มรีเฟรช 🔄 แล้วลองใหม่");
+        return;
     }
-    showToast("ปรับปรุงสถานะสินค้าเรียบร้อย");
-    renderMerchantIncomingOrders();
+    const it = order.stalls[sIdx].items[itemIndex];
+    patchOrderInCloud(orderId, {
+        [`stalls/${sIdx}/items/${itemIndex}/outOfStock`]: nowOos,
+        [`stalls/${sIdx}/items/${itemIndex}/picked`]: !!it.picked,
+        refundCashTotal: order.refundCashTotal,
+        finalPaidTotal: order.finalPaidTotal
+    });
+    showToast(nowOos
+        ? `⚠️ แจ้ง "${it.name}" หมดแล้ว คืนเงินลูกค้า ฿${orderItemRefund(it)} ใส่ซอง`
+        : `✓ กู้คืน "${it.name}" กลับเข้ารายการแล้ว`);
+    _refreshAfterMerchantOrderChange();
 }
 window.merchantToggleItemOutOfStock = merchantToggleItemOutOfStock;
+
+// แม่ค้าบันทึกน้ำหนักที่ชั่งได้จริง (ของที่ขายเป็น กก./ขีด/กรัม) หน่วยเดียวกับที่ลูกค้าสั่ง
+// น้อยกว่าที่สั่ง = คืนส่วนต่างใส่ซอง, มากกว่าที่สั่ง = ไม่เก็บเงินเพิ่ม (เจ้าของตัดสินใจ 2026-09-24)
+function merchantSetItemWeight(orderId, stallId, itemIndex) {
+    const input = document.getElementById(merchantWeighInputId(orderId, itemIndex));
+    const raw = input ? String(input.value || "").trim().replace(",", ".") : "";
+    const w = Number(raw);
+    if (raw === "" || !Number.isFinite(w) || w <= 0) {
+        showToast("⚠️ กรุณาพิมพ์น้ำหนักที่ชั่งได้เป็นตัวเลข เช่น 0.9");
+        if (input) input.focus();
+        return;
+    }
+    let sIdx = -1;
+    const weight = Math.round(w * 1000) / 1000;
+    const order = mutateOrderEverywhere(orderId, o => {
+        const i = _merchantOrderStallIndex(o, stallId);
+        const it = i >= 0 && o.stalls[i].items ? o.stalls[i].items[itemIndex] : null;
+        if (!it || !isWeighedOrderItem(it)) return;
+        sIdx = i;
+        it.weighedQty = weight;
+        o.refundCashTotal = orderRefundTotal(o);
+        o.finalPaidTotal = Math.max(0, (o.grandTotal || o.total || 0) - o.refundCashTotal);
+    });
+    if (!order || sIdx < 0) {
+        showToast("⚠️ ไม่พบสินค้านี้ในออเดอร์ กรุณากดปุ่มรีเฟรช 🔄 แล้วลองใหม่");
+        return;
+    }
+    const it = order.stalls[sIdx].items[itemIndex];
+    patchOrderInCloud(orderId, {
+        [`stalls/${sIdx}/items/${itemIndex}/weighedQty`]: weight,
+        refundCashTotal: order.refundCashTotal,
+        finalPaidTotal: order.finalPaidTotal
+    });
+    const refund = orderItemRefund(it);
+    showToast(refund > 0
+        ? `⚖️ บันทึกน้ำหนัก ${weight} ${orderItemUnit(it)} แล้ว น้อยกว่าที่สั่ง คืนลูกค้า ฿${refund} ใส่ซอง`
+        : `⚖️ บันทึกน้ำหนัก ${weight} ${orderItemUnit(it)} แล้ว ครบตามที่สั่ง`);
+    _refreshAfterMerchantOrderChange();
+}
+window.merchantSetItemWeight = merchantSetItemWeight;
 
 // Helper: Merchant print stall slip
 function merchantPrintStallSlip(orderId, stallId) {
@@ -26041,10 +26228,10 @@ function renderHubPickingList() {
         // Calculate out-of-stock items & total refund amount (วิธีที่ 1: คืนเงินสดใส่ซอง)
         order.stalls.forEach(stall => {
             (stall.items || []).forEach(item => {
-                if (item.outOfStock) {
-                    const price = orderItemLineTotal(item);
+                const price = orderItemRefund(item);   // ของหมด = คืนทั้งหมด, ชั่งได้น้อยกว่าที่สั่ง = คืนส่วนต่าง
+                if (price > 0) {
                     refundCashTotal += price;
-                    outOfStockItems.push({ stallName: stall.name, itemName: item.name, price: price });
+                    outOfStockItems.push({ stallName: stall.name, itemName: item.outOfStock ? item.name : `${item.name} (ชั่งได้น้อยกว่าที่สั่ง)`, price: price });
                 }
             });
         });
@@ -26072,7 +26259,7 @@ function renderHubPickingList() {
                             </label>
                             <div class="flex items-center gap-1.5 shrink-0">
                                 ${isOutOfStock ? `
-                                    <span class="text-[9px] text-rose-700 bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-full font-bold">⚠️ หมด คืน ฿${orderItemLineTotal(item)}</span>
+                                    <span class="text-[9px] text-rose-700 bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-full font-bold">⚠️ หมด คืน ฿${orderItemRefund(item)}</span>
                                     <button type="button" onclick="toggleHubItemOutOfStock(${sIdx}, ${iIdx})" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold active:scale-95 transition-all">กู้คืน</button>
                                 ` : `
                                     ${isPicked ? '<span class="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full font-bold">✓ พร้อม</span>' : '<span class="text-[10px] text-slate-400">รอหยิบ</span>'}
@@ -26129,7 +26316,7 @@ function renderHubPickingList() {
                         <span class="bg-white/25 text-white font-bold text-[10px] px-2 py-0.5 rounded-full">วิธีที่ 1: เงินสดใส่ซอง</span>
                     </div>
                     <div class="text-[11px] text-amber-100 leading-snug">
-                        พบสินค้าหมด ${outOfStockItems.length} รายการ ทีมงานฮับ/ไรเดอร์ต้องนำเงินสดจำนวน <strong>฿${refundCashTotal}</strong> ใส่ซองใสเย็บแนบไปกับถุงของสดส่งให้ลูกค้า
+                        พบสินค้าหมดหรือชั่งได้น้อยกว่าที่สั่ง ${outOfStockItems.length} รายการ ทีมงานฮับ/ไรเดอร์ต้องนำเงินสดจำนวน <strong>฿${refundCashTotal}</strong> ใส่ซองใสเย็บแนบไปกับถุงของสดส่งให้ลูกค้า
                     </div>
                     <div class="grid grid-cols-2 gap-2 pt-1">
                         <button onclick="callCustomerPhone()" class="py-1.5 px-2 bg-white text-slate-800 font-bold rounded-xl text-[11px] flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all">
@@ -26298,14 +26485,7 @@ function toggleHubItemOutOfStock(stallIndex, itemIndex) {
     stall.pickedCount = stall.items.filter(i => i.picked && !i.outOfStock).length;
 
     // Recalculate order refund totals
-    let refundCashTotal = 0;
-    state.activeOrder.stalls.forEach(s => {
-        (s.items || []).forEach(it => {
-            if (it.outOfStock) {
-                refundCashTotal += orderItemLineTotal(it);
-            }
-        });
-    });
+    const refundCashTotal = orderRefundTotal(state.activeOrder);   // ของหมด + ชั่งได้น้อยกว่าที่สั่ง
     state.activeOrder.refundCashTotal = refundCashTotal;
     state.activeOrder.finalPaidTotal = Math.max(0, (state.activeOrder.grandTotal || state.activeOrder.total || 0) - refundCashTotal);
 
@@ -26334,14 +26514,15 @@ function sendOutOfStockLineNotice() {
     if (order.stalls) {
         order.stalls.forEach(s => {
             (s.items || []).forEach(i => {
-                if (i.outOfStock) oosList.push(`${i.name} x${i.qty || 1} (฿${orderItemLineTotal(i)})`);
+                if (i.outOfStock) oosList.push(`${i.name} x${i.qty || 1} (฿${orderItemRefund(i)})`);
+                else if (orderItemRefund(i) > 0) oosList.push(`${i.name} ชั่งได้ ${orderItemWeighedQty(i)} จากที่สั่ง ${orderItemOrderedQty(i)} (คืน ฿${orderItemRefund(i)})`);
             });
         });
     }
-    const refund = order.refundCashTotal || 0;
+    const refund = orderRefundTotal(order);
     const cleanOrderId = (order.orderId || "").replace(/#/g, '');
     const trackUrl = buildOrderTrackingUrl(order, "https://pisaen666.github.io/hsong/");
-    const msg = `🔔【เฮียส่ง】แจ้งเตือนเรื่องสินค้าออเดอร์ ${order.orderId}:\nขออภัยครับ มีสินค้าที่แผงค้าหมด ได้แก่:\n${oosList.map(n => `• ${n}`).join('\n')}\n━━━━━━━━━━━━━━━━━━\n✉️ คืนเงินสดใส่ซอง: ฿${refund}\nทีมงานตัดรายการออก และไรเดอร์ได้นำเงินสดทอนจำนวน ฿${refund} ใส่ซองใสแนบไปกับถุงของสดเรียบร้อยแล้วครับ 🛵💨\n━━━━━━━━━━━━━━━━━━\n👉 แตะลิงก์นี้เพื่อดูสถานะจัดส่ง & ซองเงินทอนของคุณ:\n${trackUrl}`;
+    const msg = `🔔【เฮียส่ง】แจ้งเตือนเรื่องสินค้าออเดอร์ ${order.orderId}:\nขออภัยครับ มีสินค้าที่หมด หรือชั่งได้น้อยกว่าที่สั่ง ได้แก่:\n${oosList.map(n => `• ${n}`).join('\n')}\n━━━━━━━━━━━━━━━━━━\n✉️ คืนเงินสดใส่ซอง: ฿${refund}\nทีมงานตัดรายการออก และไรเดอร์ได้นำเงินสดทอนจำนวน ฿${refund} ใส่ซองใสแนบไปกับถุงของสดเรียบร้อยแล้วครับ 🛵💨\n━━━━━━━━━━━━━━━━━━\n👉 แตะลิงก์นี้เพื่อดูสถานะจัดส่ง & ซองเงินทอนของคุณ:\n${trackUrl}`;
 
     if (isMobileDevice()) {
         window.location.href = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
@@ -26469,16 +26650,7 @@ function goToRiderTrackingScreen() {
         }
 
         // คำนวณเงินทอนที่ไรเดอร์ต้องคืนลูกค้า (กรณีสินค้าขาด)
-        let refundTotal = 0;
-        if (state.activeOrder.stalls) {
-            state.activeOrder.stalls.forEach(s => {
-                (s.items || []).forEach(it => {
-                    if (it.outOfStock) {
-                        refundTotal += orderItemLineTotal(it);
-                    }
-                });
-            });
-        }
+        const refundTotal = orderRefundTotal(state.activeOrder);   // ของหมด + ชั่งได้น้อยกว่าที่สั่ง
         state.activeOrder.refundCashTotal = refundTotal;
 
         if (!state.activeOrder.paymentDesc) {
@@ -27281,20 +27453,9 @@ function renderRiderScreen() {
     }
 
     // Check Refund Amount (กรณีมีสินค้าขาด)
-    let refundCashTotal = order.refundCashTotal || 0;
-    if (refundCashTotal === 0 && order.stalls) {
-        const stallList = Array.isArray(order.stalls) ? order.stalls : Object.values(order.stalls || {});
-        stallList.forEach(s => {
-            if (!s) return;
-            const items = Array.isArray(s.items) ? s.items : Object.values(s.items || {});
-            items.forEach(it => {
-                if (it && it.outOfStock) {
-                    refundCashTotal += orderItemLineTotal(it);
-                }
-            });
-        });
-        order.refundCashTotal = refundCashTotal;
-    }
+    // คิดใหม่ทุกครั้งจากรายการสินค้า (ของหมด + ชั่งได้น้อยกว่าที่สั่ง) ไม่ใช้ค่าเก่าที่อาจค้างมา
+    let refundCashTotal = order.stalls ? orderRefundTotal(order) : (order.refundCashTotal || 0);
+    order.refundCashTotal = refundCashTotal;
 
     if (refundAlert) {
         if (refundCashTotal > 0 && order.status !== "delivered") {
