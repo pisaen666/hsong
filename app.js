@@ -8039,7 +8039,7 @@ function printStallPickingSlip(orderId, stallIndex) {
         `;
     }).join('');
 
-    const stallTotal = items.reduce((sum, it) => sum + (it.outOfStock ? 0 : (it.actualPrice !== undefined ? it.actualPrice : it.price)), 0);
+    const stallTotal = merchantStallItemsTotal(items);
 
     const content = `
         <div class="slip-brand">
@@ -14413,6 +14413,18 @@ function updateMerchantSettlementBadge() {
 }
 window.updateMerchantSettlementBadge = updateMerchantSettlementBadge;
 
+// ยอดเงินสินค้าของร้านหนึ่งในออเดอร์ = ราคา x จำนวน (ไม่นับของที่แจ้งหมด)
+// ใช้ร่วมกัน 3 ที่: หน้าสรุปยอดเงินโอน, การ์ดออเดอร์ของร้าน, สลิปหน้าเขียง — ให้ตัวเลขตรงกันเสมอ
+// (เดิมการ์ดออเดอร์และสลิปรวมแค่ราคาต่อหน่วย ไม่คูณจำนวน สั่ง 2 กำ นับเงินแค่ 1 กำ)
+function merchantStallItemsTotal(items) {
+    return (Array.isArray(items) ? items : []).reduce((sum, it) => {
+        if (!it || it.outOfStock) return sum;
+        const p = Number(it.actualPrice !== undefined ? it.actualPrice : (it.price || 0));
+        const q = Number(it.qty || it.quantity || 1);
+        return sum + (p * q);
+    }, 0);
+}
+
 function renderMerchantSettlement() {
     const container = document.getElementById("merchant-settlement-container");
     if (!container) return;
@@ -14446,12 +14458,7 @@ function renderMerchantSettlement() {
             const matchingStall = order.stalls.find(s => s && ((currentStallId && s.stallId === currentStallId) || (currentStallName && s.name && (s.name.includes(currentStallName) || currentStallName.includes(s.name)))));
             if (matchingStall && Array.isArray(matchingStall.items)) {
                 orderCount++;
-                const subtotal = matchingStall.items.reduce((sum, it) => {
-                    if (!it || it.outOfStock) return sum;
-                    const p = Number(it.actualPrice !== undefined ? it.actualPrice : (it.price || 0));
-                    const q = Number(it.qty || it.quantity || 1);
-                    return sum + (p * q);
-                }, 0);
+                const subtotal = merchantStallItemsTotal(matchingStall.items);
                 grossSales += subtotal;
                 itemBreakdown.push({
                     orderId: order.orderId || "ORD-000",
@@ -14998,7 +15005,7 @@ function renderMerchantIncomingOrders() {
                 customerPhone: order.customerPhone || "-",
                 deliveryAddress: order.address || order.houseNumber || "จัดส่งตามพิกัด",
                 items: matchingStallGroup.items,
-                stallTotal: matchingStallGroup.items.reduce((sum, it) => sum + (it.price || 0), 0)
+                stallTotal: merchantStallItemsTotal(matchingStallGroup.items)
             });
         }
     });
@@ -15041,7 +15048,7 @@ function renderMerchantIncomingOrders() {
                         🏪
                     </div>
                     <div>
-                        <div class="text-[11px] text-amber-100 font-bold">แผงค้าของฉัน • ${stall ? (escapeHtml(stall.stallNumber) || 'แผงค้า') : 'แผงค้า'} (${stall ? (escapeHtml(normalizeMainCategoryName(stall.category)) || escapeHtml(stall.category) || 'ของสด') : 'ของสด'})</div>
+                        <div class="text-[11px] text-amber-100 font-bold">แผงค้าของฉัน${stall && stall.stallNumber && stall.stallNumber !== "-" ? " • " + escapeHtml(stall.stallNumber) : ""} (${stall ? (escapeHtml(normalizeMainCategoryName(stall.category)) || escapeHtml(stall.category) || 'ของสด') : 'ของสด'})</div>
                         <h3 class="text-base sm:text-lg font-black leading-tight">${stall ? escapeHtml(stall.stallName) : 'แผงค้า'}</h3>
                     </div>
                 </div>
@@ -15075,7 +15082,7 @@ function renderMerchantIncomingOrders() {
                             <span>เปิดรับออเดอร์ปกติ</span>
                         </div>
                     </div>
-                    <span class="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-mono font-bold">${stall ? (escapeHtml(stall.stallNumber) || '-') : '-'}</span>
+                    ${stall && stall.stallNumber && stall.stallNumber !== "-" ? `<span class="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-mono font-bold">${escapeHtml(stall.stallNumber)}</span>` : ""}
                 </div>
             </div>
         </div>
@@ -15353,10 +15360,13 @@ function renderMerchantView() {
     const emoji = stall.stallTag ? stall.stallTag.split(" ")[0] : "🏪";
     if (headerIcon) headerIcon.textContent = emoji;
     if (headerCategory) headerCategory.textContent = normalizeMainCategoryName(stall.category) || stall.category || "ของสด";
-    if (headerStallNo) headerStallNo.textContent = stall.stallNumber || "แผง A01";
+    // เลขแผงเลิกใช้แล้ว (หัวข้อ 5r) ร้านใหม่เก็บเป็น "-" — ไม่แสดงขีดลอย ๆ
+    const realStallNo = (stall.stallNumber && stall.stallNumber !== "-") ? stall.stallNumber : "";
+    const catLabel = normalizeMainCategoryName(stall.category) || stall.category || "ของสด";
+    if (headerStallNo) { headerStallNo.textContent = realStallNo; headerStallNo.classList.toggle("hidden", !realStallNo); }
     if (headerStallName) headerStallName.textContent = stall.stallName || "แผงค้าในตลาด";
-    if (senderBadge) senderBadge.textContent = `${stall.stallNumber || 'แผงค้า'} • ${normalizeMainCategoryName(stall.category) || stall.category || 'ของสด'}`;
-    if (senderName) senderName.textContent = `${stall.stallName} (${stall.stallNumber || 'แผงค้า'})`;
+    if (senderBadge) senderBadge.textContent = realStallNo ? `${realStallNo} • ${catLabel}` : catLabel;
+    if (senderName) senderName.textContent = realStallNo ? `${stall.stallName} (${realStallNo})` : stall.stallName;
     if (senderPhone) senderPhone.textContent = `${stall.ownerName || 'เจ้าของร้าน'} (${stall.phone || '081-999-8888'})`;
 
     updateMerchantStatusUI(stall);
@@ -27939,7 +27949,7 @@ function renderAuthHeaderButtons() {
             <div class="flex items-center gap-1 sm:gap-1.5 bg-amber-950/90 border border-amber-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
                 <span class="text-[11px] sm:text-xs text-amber-300 font-bold flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm text-amber-400">store</span>
-                    <span class="truncate max-w-[80px]">${escapeHtml(state.activeMerchant.stallNumber) || 'ร้านค้า'}</span>
+                    <span class="truncate max-w-[80px]">${escapeHtml(state.activeMerchant.stallNumber && state.activeMerchant.stallNumber !== "-" ? state.activeMerchant.stallNumber : (state.activeMerchant.stallName || 'ร้านค้า'))}</span>
                 </span>
                 <button onclick="reopenMyMerchantStall(${jsArg(state.activeMerchant.stallId)})" class="text-[10px] text-amber-200 bg-amber-800/80 hover:bg-amber-700 px-1.5 py-0.5 rounded font-bold transition-all">
                     จัดการ
@@ -29763,7 +29773,7 @@ async function saveMerchantStallData() {
             const elStatus = document.getElementById("nextstep-merchant-status");
             if (elId) elId.textContent = appId;
             if (elName) elName.textContent = stallName;
-            if (elStall) elStall.textContent = `${stallNumber} • ${category}`;
+            if (elStall) elStall.textContent = category;   // เลขแผงเลิกใช้แล้ว (หัวข้อ 5r)
             if (elPhone) elPhone.textContent = `${ownerName} (${phone})`;
             if (elStatus) elStatus.innerHTML = '<span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full">⏳ รอแอดมินอนุมัติ</span>';
 

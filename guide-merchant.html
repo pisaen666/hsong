@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>คู่มือร้านค้าเฮียส่ง</title>
+    <meta name="description" content="คู่มือลงทะเบียนเปิดร้านและวิธีใช้หน้าจัดการร้าน ตลาดวิศิษฐ์ชัย บ้านบึง (เฮียส่ง)">
+    <meta name="theme-color" content="#0b6b4f">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide.css?v=1">
+</head>
+<body>
+    <!-- คู่มือนี้เป็นหน้าเอกสารล้วน ไม่มี JavaScript และไม่เชื่อมฐานข้อมูล
+         รูปทั้งหมดถ่ายจากสำเนาทดสอบด้วยข้อมูลตัวอย่าง (ร้าน/ชื่อ/เบอร์ปลอม)
+         แก้ฟอร์มเปิดร้านหรือหน้าจัดการร้านเมื่อไร ต้องแก้คู่มือนี้ด้วย (ตัวทดสอบ firebase-rules/tests/guide-merchant.test.js ตรวจชื่อปุ่ม) -->
+    <header class="top">
+        <div class="wrap">
+            <a class="back" href="./">← กลับหน้าเว็บเฮียส่ง</a>
+            <h1>🏪 คู่มือร้านค้าเฮียส่ง</h1>
+            <p>ตลาดวิศิษฐ์ชัย อ.บ้านบึง • เปิดร้านขายของสดออนไลน์ มีรูปประกอบทุกขั้นตอน</p>
+        </div>
+    </header>
+
+    <main class="wrap">
+        <nav class="toc" aria-label="สารบัญ">
+            <h2>อ่านเรื่องไหน กดที่ชื่อได้เลย</h2>
+            <ol>
+                <li><a href="#overview">ภาพรวม: จากสมัครจนเริ่มขาย</a></li>
+                <li><a href="#prepare">ของที่ต้องเตรียมก่อนสมัคร</a></li>
+                <li><a href="#part1">ส่วนที่ 1: กรอกใบสมัครเปิดร้านทีละข้อ</a></li>
+                <li><a href="#after">ส่งใบสมัครแล้ว ต้องทำอะไรต่อ</a></li>
+                <li><a href="#part2">ส่วนที่ 2: เข้าสู่ระบบและจัดการร้าน</a></li>
+                <li><a href="#faq">คำถามที่พบบ่อย</a></li>
+                <li><a href="#contact">ติดต่อแอดมิน</a></li>
+            </ol>
+        </nav>
+
+        <!-- ================= ภาพรวม ================= -->
+        <h2 class="part" id="overview">ภาพรวม: จากสมัครจนเริ่มขาย</h2>
+        <ol class="flow">
+            <li><strong>เตรียมรูปและรายการสินค้า</strong> รูปหน้าร้าน รูปเจ้าของร้าน สินค้าเด่นพร้อมราคา และเลขบัญชีรับเงิน</li>
+            <li><strong>กรอกใบสมัคร 2 หน้า</strong> หน้า 1 ข้อมูลร้าน หน้า 2 สินค้าและราคา แล้วกดส่ง จะได้ <strong>รหัสร้าน</strong> เช่น APP-SHOP-0001</li>
+            <li><strong>รอเจ้าของตลาดตรวจ</strong> เจ้าของจะดูข้อมูลร้านก่อนอนุมัติ</li>
+            <li><strong>รับรหัสผ่าน</strong> เมื่ออนุมัติแล้ว เจ้าของจะส่งรหัสผ่าน 8 ตัวให้ทาง SMS หรือ LINE</li>
+            <li><strong>เข้าสู่ระบบ</strong> ด้วยรหัสร้าน + รหัสผ่าน แล้วเริ่มรับออเดอร์ได้</li>
+        </ol>
+        <div class="warn">
+            <p><strong>สำคัญ:</strong> หลังส่งใบสมัคร ร้านของคุณ <strong>ยังไม่ขึ้นในตลาดทันที</strong> ต้องรอเจ้าของอนุมัติก่อน</p>
+        </div>
+
+        <!-- ================= เตรียมของ ================= -->
+        <h2 class="part" id="prepare">ของที่ต้องเตรียมก่อนสมัคร</h2>
+        <p>เตรียมให้ครบก่อนเริ่มกรอก จะกรอกเสร็จในรอบเดียว</p>
+        <div class="step">
+            <h3 style="margin-top:0">📷 รูปถ่าย (ถ่ายด้วยมือถือได้เลย)</h3>
+            <ul class="check">
+                <li><span class="box"></span><span><strong>รูปหน้าร้าน 1 รูป</strong> ถ่ายแนวนอน เห็นแผงและสินค้าชัด <span class="tag req">ควรมี</span><br><span class="muted">ถ่ายเพิ่มได้อีก 2 รูป เช่น มุมสินค้า บรรยากาศร้าน</span></span></li>
+                <li><span class="box"></span><span><strong>รูปหน้าเจ้าของร้าน</strong> 1 หรือ 2 คน <span class="tag req">ควรมี</span><br><span class="muted">ระบบจะตัดเป็นวงกลมใส่ป้ายชื่อให้เอง</span></span></li>
+            </ul>
+            <p class="muted">ถ้าไม่ใส่รูป ระบบจะใส่รูปตัวอย่างแทน ลูกค้าจะไม่เห็นร้านจริงของคุณ</p>
+        </div>
+        <div class="step">
+            <h3 style="margin-top:0">📝 ข้อมูลที่ต้องกรอก</h3>
+            <ul class="check">
+                <li><span class="box"></span><span>ชื่อร้าน และร้านขายอะไรเป็นหลัก</span></li>
+                <li><span class="box"></span><span>ชื่อ เบอร์โทร และ LINE ของผู้ติดต่อหลัก 1 คน (มีคนที่ 2 ก็ใส่ได้)</span></li>
+                <li><span class="box"></span><span><strong>บัญชีธนาคารรับเงินค่าขาย</strong> ชื่อธนาคาร เลขบัญชี และชื่อบัญชี</span></li>
+                <li><span class="box"></span><span><strong>สินค้าเด่น</strong> สูงสุด 10 อย่าง: ชื่อ หน่วยขาย (กก. กำ แพ็ก ฯลฯ) และราคา</span></li>
+                <li><span class="box"></span><span>สินค้าอื่น ๆ เพิ่มได้อีก 50 อย่าง <span class="tag opt">ไม่บังคับ</span></span></li>
+            </ul>
+        </div>
+
+        <!-- ================= ส่วนที่ 1 ================= -->
+        <h2 class="part" id="part1">ส่วนที่ 1: กรอกใบสมัครเปิดร้านทีละข้อ</h2>
+        <p>ช่องที่มีดอกจันสีแดง <strong style="color:#d63447">*</strong> ต้องกรอกให้ครบ แม้บางช่องระบบจะยอมให้ส่งได้ แต่ถ้าข้อมูลไม่ครบ เจ้าของอาจอนุมัติให้ไม่ได้</p>
+
+        <div class="step">
+            <div class="step-head"><span class="num">1</span><h3>เปิดหน้าสมัคร</h3></div>
+            <ol>
+                <li>เปิดเว็บเฮียส่ง</li>
+                <li>กดปุ่ม <span class="btn-name">เปิดร้าน</span> สีเข้ม ที่แถบบนสุด (ในกรอบสีแดงในรูป)</li>
+            </ol>
+            <figure><img src="images/guide/merchant/m01-header-button.jpg" width="780" height="240" loading="lazy" alt="แถบบนสุดของเว็บ ปุ่มเปิดร้าน"></figure>
+            <p class="muted">บนคอมพิวเตอร์ ปุ่มนี้เขียนว่า "ลงทะเบียนเปิดร้าน"</p>
+            <p>จะมีหน้าต่างใบสมัครเด้งขึ้นมา ข้างบนมีปุ่มแบ่งเป็น 2 หน้า ปุ่มสีเขียวคือหน้าที่กำลังกรอกอยู่</p>
+            <figure><img src="images/guide/merchant/m02-tabs.jpg" width="600" height="82" loading="lazy" alt="ปุ่มหน้า 1 ชื่อร้านค้าและผู้ติดต่อ และหน้า 2 สินค้าและราคา"></figure>
+        </div>
+
+        <h3>หน้า 1: ชื่อร้านค้าและผู้ติดต่อ</h3>
+
+        <div class="step">
+            <div class="step-head"><span class="num">2</span><h3>ข้อมูลร้านค้าเบื้องต้น</h3></div>
+            <ul>
+                <li><strong>ชื่อร้านค้า / แผงค้า</strong>: ชื่อที่ลูกค้าจะเห็น เช่น ร้านผักสดป้าแดง</li>
+                <li><strong>ร้านค้าขายอะไรเป็นหลัก</strong>: กดแล้วเลือกหมวดที่ตรงกับสินค้าหลัก</li>
+            </ul>
+            <figure><img src="images/guide/merchant/m03-basic.jpg" width="680" height="556" loading="lazy" alt="ช่องชื่อร้านและหมวดหมู่"></figure>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">3</span><h3>รูปหน้าร้านและรูปเจ้าของร้าน</h3></div>
+            <ol>
+                <li>ที่ <strong>รูปหน้าร้าน รูปที่ 1</strong> กดปุ่ม <span class="btn-name">เลือกรูปที่ 1</span> แล้วเลือกรูปจากมือถือ</li>
+                <li>รอจนเห็นรูปเล็ก ๆ และข้อความสีเขียว <strong>"อัปโหลดรูปที่ 1 แล้ว"</strong></li>
+                <li>มีรูปเพิ่ม ทำแบบเดียวกันที่รูปที่ 2 และ 3 <span class="tag opt">ไม่บังคับ</span></li>
+                <li>ที่ <strong>รูปเจ้าของร้าน คนที่ 1</strong> กดปุ่ม <span class="btn-name">เลือกรูปคนที่ 1</span> แล้วพิมพ์ชื่อที่อยากให้ขึ้นบนป้าย เช่น ป้าแดง</li>
+                <li>มีเจ้าของ 2 คน ใส่รูปคนที่ 2 ได้ <span class="tag opt">ไม่บังคับ</span></li>
+            </ol>
+            <p>ด้านล่างจะเห็น <strong>ตัวอย่างแบนเนอร์เจ้าของร้าน</strong> หน้าตาแบบนี้จะขึ้นในหน้าร้านของคุณ</p>
+            <figure class="narrow"><img src="images/guide/merchant/m04-photos.jpg" width="680" height="3116" loading="lazy" alt="ช่องอัปโหลดรูปหน้าร้าน 3 รูป และรูปเจ้าของร้าน พร้อมตัวอย่างแบนเนอร์"><figcaption>รูปในตัวอย่างเป็นรูปตัวอย่างของระบบ ของจริงต้องเป็นรูปร้านและรูปของคุณ</figcaption></figure>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">4</span><h3>ผู้ติดต่อคนที่ 1 และคนที่ 2</h3></div>
+            <ul>
+                <li><strong>ผู้ติดต่อคนที่ 1</strong> <span class="tag req">ต้องกรอก</span>: ชื่อ เบอร์โทร และ LINE เบอร์นี้ใช้ตรวจสถานะใบสมัคร และให้ไรเดอร์โทรหาเวลามารับของ</li>
+                <li><strong>ผู้ติดต่อคนที่ 2</strong> <span class="tag opt">ไม่บังคับ</span>: เช่น ลูกหรือคู่สมรสที่ช่วยขาย</li>
+            </ul>
+            <figure><img src="images/guide/merchant/m05-contact1.jpg" width="680" height="552" loading="lazy" alt="ช่องผู้ติดต่อคนที่ 1"></figure>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">5</span><h3>ช่องทางการรับชำระเงิน</h3></div>
+            <p>ฮับจะโอนเงินค่าขายของคุณเข้าบัญชีนี้ <strong>กรอกให้ถูกทุกตัว</strong> ถ้าผิด จะรับเงินไม่ได้</p>
+            <ol>
+                <li><strong>ธนาคาร</strong>: กดแล้วเลือกธนาคารของคุณ หรือพร้อมเพย์</li>
+                <li><strong>เลขที่บัญชี</strong>: พิมพ์ตามสมุดบัญชี</li>
+                <li><strong>ชื่อบัญชี</strong>: ชื่อ-นามสกุลเจ้าของบัญชี ตามสมุดบัญชี</li>
+            </ol>
+            <p><strong>บัญชีสำรองที่ 2</strong> ใส่หรือไม่ใส่ก็ได้</p>
+            <figure><img src="images/guide/merchant/m07-bank.jpg" width="680" height="1206" loading="lazy" alt="ช่องบัญชีหลักที่ 1 และบัญชีสำรองที่ 2"></figure>
+            <p>กรอกหน้า 1 ครบแล้ว กดปุ่มล่างสุด <span class="btn-name">ถัดไป: ใส่สินค้าและราคาที่ต้องการจำหน่าย</span></p>
+        </div>
+
+        <h3>หน้า 2: สินค้าและราคาที่ต้องการจำหน่าย</h3>
+
+        <div class="step">
+            <div class="step-head"><span class="num">6</span><h3>สินค้าเด่น (Highlight) สูงสุด 10 อย่าง</h3></div>
+            <p>สินค้าชุดนี้ลูกค้าจะเห็นก่อนเมื่อเข้าร้าน เลือกของขายดีที่สุด ในแต่ละกล่อง:</p>
+            <ol>
+                <li><strong>หมวดหมู่หลัก</strong>: เลือกหมวดของสินค้า (หมวดรองและหมวดย่อย เลือกเพิ่มได้ถ้ามี)</li>
+                <li><strong>ชื่อสินค้า</strong> <span class="tag req">ต้องกรอก</span>: เช่น ผักบุ้ง</li>
+                <li><strong>หน่วยขาย</strong>: เช่น กก. กำ แพ็ก ฟอง</li>
+                <li><strong>ราคา (บาท)</strong>: ราคาต่อ 1 หน่วย ใส่แต่ตัวเลข</li>
+                <li><strong>ป้ายสินค้า</strong>: คำสั้น ๆ เช่น สดใหม่ทุกเช้า <span class="tag opt">ไม่บังคับ</span></li>
+            </ol>
+            <figure><img src="images/guide/merchant/m08-highlight-card.jpg" width="680" height="1148" loading="lazy" alt="กล่องสินค้า Highlight รายการที่ 1 ที่กรอกแล้ว"></figure>
+            <p class="muted">ไม่ต้องกรอกครบ 10 อย่าง กล่องที่ไม่มีชื่อสินค้า ระบบจะข้ามไปเอง</p>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">7</span><h3>สินค้าอื่น ๆ (ไม่บังคับ)</h3></div>
+            <p>ขายของมากกว่า 10 อย่าง กดปุ่ม <span class="btn-name">เพิ่มรายการสินค้าเพิ่มเติม</span> แล้วกรอกทีละแถว ได้สูงสุด 50 อย่าง</p>
+            <figure class="small"><img src="images/guide/merchant/m09-add-more.jpg" width="428" height="78" loading="lazy" alt="ปุ่มเพิ่มรายการสินค้าเพิ่มเติม"></figure>
+            <div class="warn"><p>ห้ามใส่ชื่อสินค้าซ้ำกับสินค้าเด่น ระบบจะไม่ยอมบันทึก</p></div>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">8</span><h3>ดูตัวอย่าง แล้วส่งใบสมัคร</h3></div>
+            <ol>
+                <li>กด <span class="btn-name">ดูตัวอย่าง</span> เพื่อดูว่าหน้าร้านจะออกมาหน้าตาแบบไหน</li>
+                <li>ถ้าพอใจ กดปุ่มสีเขียว <span class="btn-name">ส่งใบสมัครเปิดร้านให้แอดมินอนุมัติ</span></li>
+                <li>ปุ่มจะเปลี่ยนเป็น "กำลังบันทึกข้อมูลออนไลน์" <strong>รอจนเสร็จ ห้ามกดซ้ำ และห้ามปิดหน้าเว็บ</strong></li>
+            </ol>
+            <figure class="small"><img src="images/guide/merchant/m10b-footer.jpg" width="516" height="170" loading="lazy" alt="ปุ่มดูตัวอย่าง และปุ่มส่งใบสมัครเปิดร้าน"></figure>
+            <table class="fix">
+                <thead><tr><th>ข้อความที่เห็น</th><th>ต้องทำอะไร</th></tr></thead>
+                <tbody>
+                    <tr><td>กรุณากรอกข้อมูลสำคัญให้ครบถ้วน: ชื่อร้านค้า และเบอร์โทรศัพท์ผู้ติดต่อ</td><td>กลับไปหน้า 1 ใส่ชื่อร้าน และเบอร์โทรของผู้ติดต่อคนที่ 1</td></tr>
+                    <tr><td>รายการสินค้า "..." ซ้ำกับสินค้า Highlight</td><td>ช่องที่ซ้ำจะขึ้นกรอบแดง ลบแถวนั้น หรือเปลี่ยนชื่อสินค้า</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="to-top"><a href="#overview">↑ กลับไปด้านบน</a></p>
+
+        <!-- ================= หลังส่ง ================= -->
+        <h2 class="part" id="after">ส่งใบสมัครแล้ว ต้องทำอะไรต่อ</h2>
+        <div class="step">
+            <div class="step-head"><span class="num">1</span><h3>จดรหัสร้านของคุณไว้</h3></div>
+            <p>ส่งสำเร็จแล้วจะเห็นหน้า <strong>"ส่งใบสมัครลงทะเบียนเปิดร้านสำเร็จ!"</strong> และ <strong>รหัสติดตามใบสมัคร</strong> (ในรูปคือ APP-SHOP-0001)</p>
+            <figure class="narrow"><img src="images/guide/merchant/m11-success.jpg" width="744" height="2746" loading="lazy" alt="หน้าส่งใบสมัครสำเร็จ พร้อมรหัส APP-SHOP-0001 และช่องทาง LINE"></figure>
+            <div class="warn"><p><strong>จดรหัสนี้ในกระดาษ หรือถ่ายรูปหน้าจอเก็บไว้</strong> รหัสนี้คือ <strong>รหัสร้าน</strong> ที่ใช้เข้าสู่ระบบ</p></div>
+        </div>
+        <div class="step">
+            <div class="step-head"><span class="num">2</span><h3>รอเจ้าของอนุมัติ และตรวจสถานะ</h3></div>
+            <p>อยากรู้ว่าอนุมัติหรือยัง กด <span class="btn-name">ตรวจสอบสถานะการอนุมัติ / ล็อกอินร้านค้า</span> หรือ <span class="btn-name">🔍 ตรวจสถานะด้วยเบอร์</span> แล้วพิมพ์เบอร์ผู้ติดต่อคนที่ 1</p>
+            <p>หรือแอด LINE แอดมินในหน้านี้ แล้วส่งรหัสร้านให้แอดมิน</p>
+        </div>
+        <div class="step">
+            <div class="step-head"><span class="num">3</span><h3>รับรหัสผ่านเข้าระบบ</h3></div>
+            <p>เมื่ออนุมัติแล้ว เจ้าของจะส่ง <strong>รหัสผ่าน 8 ตัว</strong> ให้ทาง SMS หรือ LINE หน้าตาเหมือนตัวอย่างนี้: <strong>K7MQ-2XTA</strong></p>
+            <div class="bad">
+                <p><strong>ห้ามบอกรหัสผ่านกับใคร</strong> ใครได้รหัสนี้ไปจะเข้ามาแก้ร้านและบัญชีรับเงินของคุณได้</p>
+                <p>เจ้าของตลาดจะไม่ขอรหัสผ่านคืนจากคุณเด็ดขาด</p>
+            </div>
+        </div>
+        <p class="to-top"><a href="#overview">↑ กลับไปด้านบน</a></p>
+
+        <!-- ================= ส่วนที่ 2 ================= -->
+        <h2 class="part" id="part2">ส่วนที่ 2: เข้าสู่ระบบและจัดการร้าน</h2>
+
+        <div class="step">
+            <div class="step-head"><span class="num">1</span><h3>เข้าสู่ระบบ</h3></div>
+            <ol>
+                <li>เปิดเว็บเฮียส่ง กดปุ่ม <span class="btn-name">แผงค้า</span> ในแถบบน</li>
+                <li>จะมีหน้าต่าง <strong>"ร้านค้าเข้าสู่ระบบ"</strong> เด้งขึ้นมา</li>
+                <li>ช่องบน พิมพ์ <strong>รหัสร้าน</strong> เช่น APP-SHOP-0001</li>
+                <li>ช่องล่าง พิมพ์ <strong>รหัสผ่าน 8 ตัว</strong> (มีขีดหรือไม่มีก็ได้ ตัวเล็กหรือตัวใหญ่ก็ได้)</li>
+                <li>กดปุ่ม <span class="btn-name">เข้าสู่ระบบแผงค้า</span></li>
+            </ol>
+            <figure><img src="images/guide/merchant/m12-login.jpg" width="716" height="688" loading="lazy" alt="หน้าต่างร้านค้าเข้าสู่ระบบ มีช่องรหัสร้านและรหัสผ่าน"></figure>
+            <p>ถ้าเข้าไม่ได้ จะมีกล่องสีแดงบอกเหตุผล:</p>
+            <figure><img src="images/guide/merchant/m13-login-error.jpg" width="572" height="94" loading="lazy" alt="กล่องแดง รหัสร้านหรือรหัสผ่านไม่ถูกต้อง"></figure>
+            <table class="fix">
+                <thead><tr><th>ข้อความในกล่องแดง</th><th>ต้องทำอะไร</th></tr></thead>
+                <tbody>
+                    <tr><td>รหัสร้านหรือรหัสผ่านไม่ถูกต้อง</td><td>พิมพ์ใหม่ช้า ๆ รหัสผ่านไม่มีตัว O I L และไม่มีเลข 0 1 ถ้าเห็นคล้ายตัวพวกนี้ ให้ดูรหัสผ่านอีกครั้ง</td></tr>
+                    <tr><td>ใส่รหัสผิดหลายครั้ง กรุณารออีก ... นาที</td><td>ผิดครบ 5 ครั้ง ระบบจะล็อกไว้ 5 นาที รอแล้วค่อยลองใหม่</td></tr>
+                    <tr><td>ใบสมัครเปิดร้านของคุณยังรอเจ้าของอนุมัติ</td><td>ยังไม่อนุมัติ รอก่อน หรือถามแอดมิน</td></tr>
+                    <tr><td>ร้านนี้ยังไม่มีรหัสผ่านเข้าระบบ</td><td>ติดต่อแอดมินเพื่อขอรหัสผ่าน</td></tr>
+                    <tr><td>ใบสมัครนี้ไม่ผ่านการอนุมัติ</td><td>ติดต่อแอดมินเพื่อถามเหตุผล</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">2</span><h3>รู้จักหน้าจัดการร้าน</h3></div>
+            <figure><img src="images/guide/merchant/m20-workspace-top.jpg" width="780" height="660" loading="lazy" alt="หัวหน้าจัดการร้าน ชื่อร้าน ปุ่มสถานะร้าน และปุ่ม 3 ปุ่ม"></figure>
+            <ul>
+                <li>ด้านบน: ชื่อร้าน หมวดหมู่ ปุ่มสถานะร้าน และปุ่ม <span class="btn-name">ออกจากระบบ</span></li>
+                <li><span class="btn-name">ดูหน้าลูกค้า</span> ไปดูตลาดแบบที่ลูกค้าเห็น</li>
+                <li><span class="btn-name">1. ออเดอร์ของสดจากลูกค้า</span> ของที่ลูกค้าสั่ง ต้องจัดเตรียม</li>
+                <li><span class="btn-name">2. เรียกไรเดอร์ด่วน</span> เรียกไรเดอร์มารับของที่คุณแพ็กเองไปส่ง</li>
+                <li><span class="btn-name">3. สรุปยอดเงินโอนค่างวด</span> ยอดขาย และเงินที่ฮับจะโอนให้</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">3</span><h3>เปิด / ปิดรับออเดอร์</h3></div>
+            <p>ปุ่มสถานะร้านอยู่ด้านบน (ในกรอบสีแดงในรูป) ตอนนี้เขียนว่า <strong>"เปิดรับออเดอร์ปกติ"</strong></p>
+            <figure class="small"><img src="images/guide/merchant/m21-open-toggle.jpg" width="258" height="112" loading="lazy" alt="ปุ่มสถานะร้าน เปิดรับออเดอร์ปกติ"></figure>
+            <ul>
+                <li>ของหมด ปิดแผง หรือไม่สะดวก <strong>กดปุ่มนี้ 1 ครั้ง</strong> ร้านจะเปลี่ยนเป็น <strong>"พักรับออเดอร์ชั่วคราว"</strong> ลูกค้าจะสั่งของจากร้านคุณไม่ได้</li>
+                <li>พร้อมขายอีกครั้ง กดปุ่มเดิมอีกครั้ง ร้านจะกลับมาเปิดรับออเดอร์</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">4</span><h3>จัดของตามออเดอร์</h3></div>
+            <p>กดปุ่ม <span class="btn-name">1. ออเดอร์ของสดจากลูกค้า</span> ออเดอร์ใหม่จะขึ้นเป็นการ์ดแบบนี้:</p>
+            <figure><img src="images/guide/merchant/m23-order-card.jpg" width="720" height="962" loading="lazy" alt="การ์ดออเดอร์ รายการสินค้าที่ต้องจัดเตรียม ปุ่มแจ้งหมด และปุ่มเตรียมของเสร็จแล้ว"></figure>
+            <ol>
+                <li>ดู <strong>รายการสินค้าที่ต้องจัดเตรียม</strong> x2 หมายถึงลูกค้าสั่ง 2 หน่วย</li>
+                <li>สินค้าไหนหมด กดปุ่ม <span class="btn-name">แจ้งหมด</span> ข้างสินค้านั้น ระบบจะไม่คิดเงินรายการนั้น และคืนเงินให้ลูกค้าใส่ซองไปกับของ</li>
+                <li>จัดของครบแล้ว กดปุ่มเขียว <span class="btn-name">✓ รับออเดอร์ &amp; เตรียมของเสร็จแล้ว</span> ฮับหรือไรเดอร์จะรู้ว่ามารับของได้</li>
+                <li>อยากพิมพ์ใบแปะถุง กด <span class="btn-name">🖨️ สลิปหน้าเขียง 80mm</span> (ต้องมีเครื่องพิมพ์ใบเสร็จ)</li>
+            </ol>
+            <p class="muted">ปุ่ม 📅 วันนี้ / เมื่อวาน / รายสัปดาห์ / รายเดือน ใช้ดูออเดอร์ย้อนหลัง ยังไม่มีออเดอร์ จะขึ้นว่า "ยังไม่มีออเดอร์ของสดสั่งซื้อเข้ามาในขณะนี้"</p>
+            <p>ในหน้านี้ยังมีปุ่ม <span class="btn-name">แก้ไขข้อมูลร้าน</span> (เปลี่ยนรูป สินค้า ราคา) และ <span class="btn-name">ดูหน้าร้านในตลาด</span></p>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">5</span><h3>เรียกไรเดอร์ด่วน (ร้านแพ็กของเอง)</h3></div>
+            <p>ใช้เมื่อลูกค้าสั่งกับคุณโดยตรง (เช่น ทางโทรศัพท์) แล้วอยากให้ไรเดอร์ของฮับไปส่ง</p>
+            <ol>
+                <li>กดปุ่ม <span class="btn-name">2. เรียกไรเดอร์ด่วน</span></li>
+                <li>ใส่ <strong>ชื่อลูกค้า</strong> และ <strong>เบอร์โทรลูกค้า</strong></li>
+                <li>กดปุ่ม <strong>"กดเปิดแผนที่เพื่อปักหมุดจุดส่งของ"</strong> แล้วพิมพ์ชื่อสถานที่ในช่องค้นหา หรือแตะจุดบ้านลูกค้าบนแผนที่</li>
+                <li>ใส่บ้านเลขที่ ซอย หรือจุดสังเกต</li>
+                <li>ระบบจะคิด <strong>ค่าส่งตามระยะทาง</strong> ให้ แล้วทำตามขั้นตอนบนจอเพื่อโอนค่าส่งเข้าฮับ</li>
+            </ol>
+            <figure class="narrow"><img src="images/guide/merchant/m24-express.jpg" width="720" height="2484" loading="lazy" alt="ฟอร์มเรียกไรเดอร์ส่งของ"></figure>
+            <div class="warn">
+                <p>• ต้อง <strong>โอนค่าส่งล่วงหน้า</strong> ระบบจึงส่งงานให้ไรเดอร์</p>
+                <p>• บริการนี้ <strong>ไม่เก็บเงินปลายทางแทนร้าน</strong> ค่าของให้ร้านเก็บจากลูกค้าเอง</p>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">6</span><h3>ดูยอดขายและเงินที่จะได้รับ</h3></div>
+            <p>กดปุ่ม <span class="btn-name">3. สรุปยอดเงินโอนค่างวด</span></p>
+            <figure class="narrow"><img src="images/guide/merchant/m25-settlement.jpg" width="720" height="2782" loading="lazy" alt="หน้าสรุปยอดเงินโอน ยอดขาย หัก GP 10% และยอดโอนสุทธิ"></figure>
+            <ul>
+                <li><strong>1. ยอดจำหน่ายของสดรวม</strong>: ยอดขายของวันนั้น (ไม่นับของที่แจ้งหมด)</li>
+                <li><strong>2. หักค่าบริการฮับ (GP 10%)</strong>: ค่าระบบ จัดหาไรเดอร์ และการตลาด เช่น ขายได้ 90 บาท หัก 9 บาท</li>
+                <li><strong>3. ยอดเงินโอนสุทธิเข้าบัญชี</strong>: เงินที่ฮับจะโอนให้คุณ</li>
+                <li>สถานะ <strong>"รอโอนเงิน"</strong> แปลว่าฮับยังไม่โอน พอโอนแล้ว จะเปลี่ยนเป็น <strong>"โอนแล้ว"</strong></li>
+                <li>ปุ่ม <strong>วันนี้ / เมื่อวาน</strong> และช่องวันที่ ใช้ดูยอดวันอื่น</li>
+                <li>ต้องการเปลี่ยนบัญชีรับเงิน กดปุ่ม <span class="btn-name">✏️ แก้ไขบัญชี</span></li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <div class="step-head"><span class="num">7</span><h3>ออกจากระบบ</h3></div>
+            <p>ถ้าใช้มือถือหรือคอมพิวเตอร์ร่วมกับคนอื่น เลิกขายแล้วกดปุ่ม <span class="btn-name">ออกจากระบบ</span> ด้านบนทุกครั้ง</p>
+        </div>
+        <p class="to-top"><a href="#overview">↑ กลับไปด้านบน</a></p>
+
+        <!-- ================= FAQ ================= -->
+        <h2 class="part" id="faq">คำถามที่พบบ่อย</h2>
+        <details>
+            <summary>ลืมรหัสผ่าน ทำอย่างไร?</summary>
+            <p>ติดต่อแอดมินทาง LINE พร้อมบอกรหัสร้าน เจ้าของจะสร้างรหัสผ่านใหม่ให้ รหัสเก่าจะใช้ไม่ได้อีก ระบบไม่เก็บรหัสผ่านเดิมไว้ จึงบอกรหัสเดิมให้ไม่ได้</p>
+        </details>
+        <details>
+            <summary>ใช้เบอร์โทรเข้าระบบได้ไหม?</summary>
+            <p>ไม่ได้ ต้องใช้ <strong>รหัสร้าน (APP-SHOP-xxxx) คู่กับรหัสผ่าน</strong> เท่านั้น เพื่อไม่ให้คนอื่นแอบเข้าร้านคุณ</p>
+        </details>
+        <details>
+            <summary>อยากเปลี่ยนราคา เพิ่มสินค้า หรือเปลี่ยนรูป?</summary>
+            <p>เข้าสู่ระบบ แล้วกดปุ่ม <span class="btn-name">แก้ไขข้อมูลร้าน</span> ในหน้า <span class="btn-name">1. ออเดอร์ของสดจากลูกค้า</span> แก้แล้วกดบันทึก</p>
+        </details>
+        <details>
+            <summary>ค่าบริการ GP 10% คืออะไร?</summary>
+            <p>ฮับหัก 10% จากยอดขายผ่านเว็บ เป็นค่าระบบ ค่าจัดหาไรเดอร์ และการตลาด ส่วนที่เหลือโอนเข้าบัญชีของคุณ</p>
+        </details>
+        <details>
+            <summary>ของหมดกลางวัน ทำอย่างไร?</summary>
+            <p>ถ้าหมดทั้งร้าน กดปุ่มสถานะร้านให้เป็น "พักรับออเดอร์ชั่วคราว" ถ้าหมดบางอย่างในออเดอร์ กดปุ่ม <span class="btn-name">แจ้งหมด</span> ข้างสินค้านั้น</p>
+        </details>
+        <details>
+            <summary>ตัวหนังสือเล็กไป อ่านไม่ถนัด?</summary>
+            <p>ในหน้าเว็บเฮียส่ง กดปุ่มสีขาว <span class="btn-name">ใหญ่</span> ที่มีตัว TT อยู่แถบบนสุด (ข้างคำว่า เฮียส่ง) กดอีกครั้งจะเปลี่ยนเป็น "ใหญ่มาก"</p>
+        </details>
+
+        <!-- ================= ติดต่อ ================= -->
+        <h2 class="part" id="contact">ติดต่อแอดมิน</h2>
+        <div class="contact">
+            <img src="images/line_oa_qr.png" width="130" height="130" alt="QR Code LINE ทางการเฮียส่ง">
+            <div>
+                <p><strong>LINE ทางการเฮียส่ง</strong></p>
+                <p class="muted">สแกน QR หรือกดปุ่มด้านล่าง แล้วส่งรหัสร้านของคุณมาด้วยทุกครั้ง</p>
+                <a class="line-btn" href="https://lin.ee/61O4EyH" target="_blank" rel="noopener noreferrer">➕ แอด LINE แอดมิน</a>
+            </div>
+        </div>
+        <p class="to-top"><a href="#overview">↑ กลับไปด้านบน</a></p>
+    </main>
+</body>
+</html>

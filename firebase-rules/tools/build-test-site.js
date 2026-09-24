@@ -38,7 +38,7 @@ let cfg = read("firebase-config.js")
 write("firebase-config.js", cfg);
 
 // ไฟล์อื่นที่เว็บใช้
-["styles.css", "guide.css", "guide-rider.html", "line_oa_qr.png", "promptpay_qr.png", "qrcode_hsong.png"].forEach(f => { if (fs.existsSync(path.join(root, f))) fs.copyFileSync(path.join(root, f), path.join(pub, f)); });
+["styles.css", "guide.css", "guide-rider.html", "guide-merchant.html", "line_oa_qr.png", "promptpay_qr.png", "qrcode_hsong.png"].forEach(f => { if (fs.existsSync(path.join(root, f))) fs.copyFileSync(path.join(root, f), path.join(pub, f)); });
 fs.cpSync(path.join(root, "images"), path.join(pub, "images"), { recursive: true });
 
 // ตั้งค่า Firebase CLI ให้ชี้ hsong-test เท่านั้น

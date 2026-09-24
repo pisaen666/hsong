@@ -1842,6 +1842,12 @@
                     </button>
                 </div>
             </div>
+            <!-- 📖 คู่มือจัดการร้าน (แถวแยก ไม่ให้เบียดปุ่ม 3 แท็บบนมือถือ) -->
+            <a href="guide-merchant.html#part2" target="_blank" rel="noopener" id="merchant-guide-link-workspace"
+                class="shrink-0 flex items-center justify-center gap-1.5 bg-sky-50 hover:bg-sky-100 border-b border-sky-200 text-sky-900 font-bold text-xs py-1.5 no-underline"
+                title="เปิดคู่มือร้านค้า (หน้าใหม่)">
+                <span>📖 คู่มือวิธีจัดการร้าน (เปิดหน้าใหม่)</span>
+            </a>
 
             <div class="p-3.5 sm:p-4 flex-1 overflow-y-auto space-y-4 text-xs pb-16 max-w-4xl mx-auto w-full">
                 <!-- PANEL 1: INCOMING CUSTOMER ORDERS (ออเดอร์ของสดจากลูกค้า) -->
@@ -4045,6 +4051,12 @@
                 </button>
             </div>
 
+            <a href="guide-merchant.html#part2" target="_blank" rel="noopener" id="merchant-guide-link-login"
+                class="flex items-center justify-center gap-1.5 w-full py-2 bg-sky-50 hover:bg-sky-100 border-2 border-sky-300 rounded-xl text-sky-900 font-bold text-xs no-underline">
+                <span>📖 คู่มือเข้าสู่ระบบและวิธีจัดการร้าน</span>
+                <span class="material-symbols-outlined text-sm">open_in_new</span>
+            </a>
+
             <!-- Login via shop code + secret password -->
             <div class="space-y-2 p-3.5 bg-emerald-50/70 border border-emerald-200/90 rounded-2xl">
                 <label class="block text-xs font-bold text-slate-800">
@@ -4146,6 +4158,16 @@
 
                     <!-- TAB 1: General Info -->
                     <div id="tab-info" class="merchant-tab-pane space-y-3.5">
+                        <!-- 📖 คู่มือร้านค้า (guide-merchant.html) เปิดแท็บใหม่ ข้อมูลที่กรอกไว้ไม่หาย -->
+                        <a href="guide-merchant.html#prepare" target="_blank" rel="noopener" id="merchant-guide-link-register"
+                            class="flex items-center gap-3 p-3 bg-sky-50 hover:bg-sky-100 border-2 border-sky-400 rounded-2xl text-sky-950 no-underline">
+                            <span class="text-2xl shrink-0">📖</span>
+                            <span class="flex-1 min-w-0">
+                                <span class="block font-black text-sm">อ่านคู่มือเปิดร้านก่อนเริ่มกรอก</span>
+                                <span class="block text-[11px] text-sky-800">มีรูปทุกขั้นตอน + รายการที่ต้องเตรียม (เปิดหน้าใหม่ ข้อมูลที่กรอกไว้ไม่หาย)</span>
+                            </span>
+                            <span class="material-symbols-outlined text-lg shrink-0">open_in_new</span>
+                        </a>
                         <div class="flex items-center gap-1.5 text-[11px] text-emerald-800">
                             <span class="material-symbols-outlined text-emerald-600 text-sm shrink-0">info</span>
                             <span>ข้อมูลนี้จะแสดงบนหน้าร้านให้ลูกค้าเห็น กรุณากรอกให้ถูกต้องและชัดเจน</span>
@@ -4647,11 +4669,11 @@
                             <div
                                 class="bg-amber-100 text-amber-900 border border-amber-300 p-2 rounded-xl font-bold animate-pulse">
                                 <div class="text-xs mb-0.5">⏳ 2. แอดมินอนุมัติ</div>
-                                <span>รับรหัส 6 หลัก</span>
+                                <span>รับรหัสผ่าน 8 ตัว</span>
                             </div>
                             <div class="bg-orange-50 text-orange-800 border border-orange-200 p-2 rounded-xl font-bold">
                                 <div class="text-xs mb-0.5">🏪 3. เริ่มขายของสด</div>
-                                <span>ปุ่ม 3. แผงค้า</span>
+                                <span>กดปุ่ม แผงค้า</span>
                             </div>
                         </div>
                     </div>
@@ -4669,7 +4691,7 @@
                             <span id="nextstep-merchant-name" class="font-bold text-slate-800">-</span>
                         </div>
                         <div class="flex items-center justify-between">
-                            <span class="text-slate-500">หมายเลขแผง & หมวดหมู่:</span>
+                            <span class="text-slate-500">หมวดหมู่ร้าน:</span>
                             <span id="nextstep-merchant-stall" class="font-bold text-slate-800">-</span>
                         </div>
                         <div class="flex items-center justify-between">
@@ -4727,6 +4749,12 @@
                             </div>
                         </div>
                     </div>
+
+                    <a href="guide-merchant.html#after" target="_blank" rel="noopener" id="merchant-guide-link-success"
+                        class="flex items-center justify-center gap-1.5 w-full py-2.5 bg-sky-50 hover:bg-sky-100 border-2 border-sky-400 rounded-2xl text-sky-950 font-black text-xs no-underline">
+                        <span>📖 อ่านขั้นตอนต่อไปในคู่มือร้านค้า</span>
+                        <span class="material-symbols-outlined text-sm">open_in_new</span>
+                    </a>
 
                     <!-- Next Step Action Buttons -->
                     <div class="space-y-2.5 pt-2">
@@ -7353,7 +7381,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.54_rider_guide"></script>
+    <script src="app.js?v=10.55_merchant_guide"></script>
 </body>
 
 </html>
