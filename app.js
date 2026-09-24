@@ -12946,8 +12946,7 @@ function renderTrackingScreen() {
         order.stalls.forEach(s => {
             (s.items || []).forEach(item => {
                 if (item.outOfStock) {
-                    const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
-                    refundCashTotal += price;
+                    refundCashTotal += orderItemLineTotal(item);
                     outOfStockCount++;
                 }
             });
@@ -13028,13 +13027,14 @@ function renderTrackingScreen() {
         if (stall.items && stall.items.length > 0) {
             itemsListHtml = `<div class="mt-2 pt-2 border-t border-slate-100 space-y-1.5">`;
             stall.items.forEach(item => {
-                const itemPrice = item.actualPrice !== undefined ? item.actualPrice : item.price;
+                const itemPrice = orderItemLineTotal(item);   // ราคา x จำนวน
                 const isOOS = item.outOfStock || false;
                 itemsListHtml += `
                     <div class="flex items-center justify-between text-xs py-0.5 ${isOOS ? 'text-rose-700 bg-rose-50/50 px-2 py-1 rounded-lg' : 'text-slate-700'}">
                         <div class="flex items-center gap-1.5">
                             <span class="text-xs ${isOOS ? 'text-rose-500 font-bold' : 'text-emerald-600'}">${isOOS ? '✕' : '✓'}</span>
                             <span class="${isOOS ? 'line-through text-slate-400 font-medium' : 'font-semibold'}">${escapeHtml(item.name)}</span>
+                            <span class="text-slate-400">x${Number(item.qty || item.quantity || 1)}</span>
                             ${isOOS ? '<span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.2 rounded font-black">ของหมด • คืนเงินสดใส่ซอง</span>' : ''}
                         </div>
                         <span class="font-bold ${isOOS ? 'text-rose-600' : 'text-slate-800'} text-xs">
@@ -13055,7 +13055,7 @@ function renderTrackingScreen() {
                         </div>
                         <div>
                             <div class="font-extrabold text-slate-800 text-xs leading-tight">${escapeHtml(stall.name)}</div>
-                            <div class="text-[10px] text-slate-400 mt-0.5 font-medium">จำนวน ${stall.itemsCount} รายการ ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length} คืน ฿${oosItems.reduce((s,i)=>s+(i.actualPrice||i.price),0)})</span>` : ''}</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5 font-medium">จำนวน ${stall.itemsCount} รายการ ${oosItems.length > 0 ? `<span class="text-rose-600 font-bold">(หมด ${oosItems.length} คืน ฿${oosItems.reduce((s,i)=>s+orderItemLineTotal(i),0)})</span>` : ''}</div>
                         </div>
                     </div>
                     ${statusBadge}
@@ -14112,7 +14112,7 @@ function openReceiptModal() {
         let subtotal = 0;
         order.stalls.forEach(stall => {
             (stall.items || []).forEach(item => {
-                const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
+                const price = orderItemLineTotal(item);   // ราคา x จำนวน (เดิมรวมแค่ราคาต่อหน่วย)
                 subtotal += price;
                 const isOOS = item.outOfStock || false;
                 itemsHtml += `
@@ -14419,10 +14419,17 @@ window.updateMerchantSettlementBadge = updateMerchantSettlementBadge;
 function merchantStallItemsTotal(items) {
     return (Array.isArray(items) ? items : []).reduce((sum, it) => {
         if (!it || it.outOfStock) return sum;
-        const p = Number(it.actualPrice !== undefined ? it.actualPrice : (it.price || 0));
-        const q = Number(it.qty || it.quantity || 1);
-        return sum + (p * q);
+        return sum + orderItemLineTotal(it);
     }, 0);
+}
+
+// เงินของสินค้า 1 บรรทัดในออเดอร์ = ราคาต่อหน่วย (หรือราคาชั่งจริง) x จำนวน
+// ใช้ทั้งตอนคิดยอดขาย และตอนคิดเงินคืนลูกค้าเมื่อของหมด (เดิมหลายจุดลืมคูณจำนวน: หมด 2 กำ คืนเงินแค่ 1 กำ)
+function orderItemLineTotal(it) {
+    if (!it) return 0;
+    const p = Number(it.actualPrice !== undefined ? it.actualPrice : (it.price || 0)) || 0;
+    const q = Number(it.qty || it.quantity || 1) || 1;
+    return p * q;
 }
 
 function renderMerchantSettlement() {
@@ -26035,7 +26042,7 @@ function renderHubPickingList() {
         order.stalls.forEach(stall => {
             (stall.items || []).forEach(item => {
                 if (item.outOfStock) {
-                    const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
+                    const price = orderItemLineTotal(item);
                     refundCashTotal += price;
                     outOfStockItems.push({ stallName: stall.name, itemName: item.name, price: price });
                 }
@@ -26065,7 +26072,7 @@ function renderHubPickingList() {
                             </label>
                             <div class="flex items-center gap-1.5 shrink-0">
                                 ${isOutOfStock ? `
-                                    <span class="text-[9px] text-rose-700 bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-full font-bold">⚠️ หมด คืน ฿${actualPrice}</span>
+                                    <span class="text-[9px] text-rose-700 bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-full font-bold">⚠️ หมด คืน ฿${orderItemLineTotal(item)}</span>
                                     <button type="button" onclick="toggleHubItemOutOfStock(${sIdx}, ${iIdx})" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold active:scale-95 transition-all">กู้คืน</button>
                                 ` : `
                                     ${isPicked ? '<span class="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full font-bold">✓ พร้อม</span>' : '<span class="text-[10px] text-slate-400">รอหยิบ</span>'}
@@ -26278,7 +26285,7 @@ function toggleHubItemOutOfStock(stallIndex, itemIndex) {
     if (!item) return;
 
     item.outOfStock = !item.outOfStock;
-    const price = item.actualPrice !== undefined ? item.actualPrice : item.price;
+    const price = orderItemLineTotal(item);   // เงินทอนใส่ซอง = ราคา x จำนวน
 
     if (item.outOfStock) {
         item.picked = false;
@@ -26295,8 +26302,7 @@ function toggleHubItemOutOfStock(stallIndex, itemIndex) {
     state.activeOrder.stalls.forEach(s => {
         (s.items || []).forEach(it => {
             if (it.outOfStock) {
-                const pr = it.actualPrice !== undefined ? it.actualPrice : it.price;
-                refundCashTotal += pr;
+                refundCashTotal += orderItemLineTotal(it);
             }
         });
     });
@@ -26328,7 +26334,7 @@ function sendOutOfStockLineNotice() {
     if (order.stalls) {
         order.stalls.forEach(s => {
             (s.items || []).forEach(i => {
-                if (i.outOfStock) oosList.push(`${i.name} (฿${i.actualPrice !== undefined ? i.actualPrice : i.price})`);
+                if (i.outOfStock) oosList.push(`${i.name} x${i.qty || 1} (฿${orderItemLineTotal(i)})`);
             });
         });
     }
@@ -26468,7 +26474,7 @@ function goToRiderTrackingScreen() {
             state.activeOrder.stalls.forEach(s => {
                 (s.items || []).forEach(it => {
                     if (it.outOfStock) {
-                        refundTotal += (it.actualPrice !== undefined ? it.actualPrice : it.price);
+                        refundTotal += orderItemLineTotal(it);
                     }
                 });
             });
@@ -26579,7 +26585,7 @@ function renderHubSettlement() {
             const meta = (typeof findStallInfo === "function") ? findStallInfo(stall.stallId, stall.name) : {};
             const activeItems = (stall.items || []).filter(item => !item.outOfStock);
             const oosItems = (stall.items || []).filter(item => item.outOfStock);
-            const stallItemsTotal = activeItems.reduce((sum, item) => sum + (item.actualPrice !== undefined ? item.actualPrice : item.price), 0);
+            const stallItemsTotal = merchantStallItemsTotal(stall.items);
             const stallGP = Math.round(stallItemsTotal * (gpRate / 100));
             const stallPayout = Math.max(0, stallItemsTotal - stallGP);
             const stallPhone = meta.phone || "089-123-4567";
@@ -27283,7 +27289,7 @@ function renderRiderScreen() {
             const items = Array.isArray(s.items) ? s.items : Object.values(s.items || {});
             items.forEach(it => {
                 if (it && it.outOfStock) {
-                    refundCashTotal += (it.actualPrice !== undefined ? it.actualPrice : it.price) || 0;
+                    refundCashTotal += orderItemLineTotal(it);
                 }
             });
         });
@@ -29473,6 +29479,24 @@ function deleteMerchantCatalogRow(btn) {
     }
 }
 
+// ตรวจบัญชีหลักที่ 1 ของร้าน คืน null ถ้าใช้ได้ หรือ { focusId, message } ถ้าไม่ครบ/ผิดรูปแบบ
+// กติกาเดียวกับบัญชีไรเดอร์: พร้อมเพย์ = เบอร์ 10 หลัก / เลขบัตร 13 หลัก / e-Wallet 15 หลัก, ธนาคาร = ตัวเลข 10-15 หลัก
+function merchantBankAccountProblem(bankName, accountNoRaw, accountNameRaw) {
+    const accountNo = String(accountNoRaw || "").replace(/[-\s]/g, "");
+    const accountName = String(accountNameRaw || "").trim();
+    if (!accountNo) return { focusId: "m-bank-account-no", message: "⚠️ กรุณากรอกเลขที่บัญชีรับเงิน (บัญชีหลักที่ 1)\n\nฮับจะโอนเงินค่าขายเข้าบัญชีนี้" };
+    const isPP = String(bankName || "").startsWith("พร้อมเพย์");
+    const okNo = /^\d+$/.test(accountNo) && (isPP ? [10, 13, 15].includes(accountNo.length) : (accountNo.length >= 10 && accountNo.length <= 15));
+    if (!okNo) {
+        return { focusId: "m-bank-account-no", message: isPP
+            ? "⚠️ เลขพร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขบัตรประชาชน 13 หลัก"
+            : "⚠️ เลขที่บัญชีธนาคารต้องเป็นตัวเลข 10-15 หลัก" };
+    }
+    if (!accountName) return { focusId: "m-bank-account-name", message: "⚠️ กรุณากรอกชื่อบัญชี (ชื่อ-นามสกุลเจ้าของบัญชี ตามสมุดบัญชี)" };
+    return null;
+}
+window.merchantBankAccountProblem = merchantBankAccountProblem;
+
 async function saveMerchantStallData() {
     const submitBtn = document.getElementById("merchant-submit-footer-btn");
     const origSubmitHtml = submitBtn ? submitBtn.innerHTML : '<span class="material-symbols-outlined text-sm font-bold">save</span><span>บันทึกการแก้ไขข้อมูลร้านค้า 💾</span>';
@@ -29529,6 +29553,24 @@ async function saveMerchantStallData() {
         if (!stallName || !phone) {
             alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน: ชื่อร้านค้า และเบอร์โทรศัพท์ผู้ติดต่อ");
             switchMerchantPortalTab("tab-info");
+            return;
+        }
+
+        // บัญชีรับเงินค่าขาย (บัญชีหลักที่ 1) ต้องครบและถูกรูปแบบ ไม่งั้นฮับโอนเงินให้ร้านไม่ได้ (เจ้าของตัดสินใจ 2026-09-24)
+        const bankProblem = merchantBankAccountProblem(
+            document.getElementById("m-bank-name")?.value || "",
+            document.getElementById("m-bank-account-no")?.value || "",
+            document.getElementById("m-bank-account-name")?.value || ""
+        );
+        if (bankProblem) {
+            alert(bankProblem.message);
+            switchMerchantPortalTab("tab-info");
+            const bad = document.getElementById(bankProblem.focusId);
+            if (bad) {
+                bad.scrollIntoView({ behavior: "smooth", block: "center" });
+                bad.focus();
+                bad.classList.add("border-rose-500", "ring-2", "ring-rose-400", "bg-rose-50");
+            }
             return;
         }
 

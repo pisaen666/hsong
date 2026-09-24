@@ -28,6 +28,10 @@ console.log("== ข้อความที่คู่มือยกมา ต
 [
     "กรุณากรอกข้อมูลสำคัญให้ครบถ้วน: ชื่อร้านค้า และเบอร์โทรศัพท์ผู้ติดต่อ",
     "ซ้ำกับสินค้า Highlight",
+    "กรุณากรอกเลขที่บัญชีรับเงิน (บัญชีหลักที่ 1)",
+    "เลขที่บัญชีธนาคารต้องเป็นตัวเลข 10-15 หลัก",
+    "เลขพร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขบัตรประชาชน 13 หลัก",
+    "กรุณากรอกชื่อบัญชี",
     "รหัสร้านหรือรหัสผ่านไม่ถูกต้อง",
     "ใส่รหัสผิดหลายครั้ง กรุณารออีก",
     "ใบสมัครเปิดร้านของคุณยังรอเจ้าของอนุมัติ",
@@ -77,7 +81,14 @@ const fnStart = appSrc.indexOf("function merchantStallItemsTotal(");
 ok(fnStart >= 0, "มีฟังก์ชัน merchantStallItemsTotal");
 let i = appSrc.indexOf("{", fnStart), d = 0;
 for (; i < appSrc.length; i++) { if (appSrc[i] === "{") d++; else if (appSrc[i] === "}" && --d === 0) break; }
-const ctx = {}; vm.createContext(ctx); vm.runInContext(appSrc.slice(fnStart, i + 1), ctx);
+const ctx = {}; vm.createContext(ctx);
+{   // merchantStallItemsTotal ใช้ orderItemLineTotal (ราคา x จำนวน) ต้องโหลดคู่กัน
+    const s2 = appSrc.indexOf("function orderItemLineTotal(");
+    let j = appSrc.indexOf("{", s2), d2 = 0;
+    for (; j < appSrc.length; j++) { if (appSrc[j] === "{") d2++; else if (appSrc[j] === "}" && --d2 === 0) break; }
+    vm.runInContext(appSrc.slice(s2, j + 1), ctx);
+}
+vm.runInContext(appSrc.slice(fnStart, i + 1), ctx);
 const total = ctx.merchantStallItemsTotal;
 ok(total([{ price: 20, qty: 2 }, { price: 25, qty: 1 }, { price: 25, qty: 1 }]) === 90, "ผักบุ้ง 20x2 + 25 + 25 = 90");
 ok(total([{ price: 20, qty: 2 }, { price: 25, qty: 1, outOfStock: true }]) === 40, "ของที่แจ้งหมดไม่นับเงิน");
