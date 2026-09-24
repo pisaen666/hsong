@@ -44,6 +44,14 @@ const els = {
     "onpage-rider-number-input": mkEl(), "onpage-rider-secret-input": mkEl(), "onpage-rider-login-error": mkEl(),
     "rider-login-number-input": mkEl(), "rider-login-secret-input": mkEl(), "rider-login-modal-error": mkEl()
 };
+// ตัวช่วยสิทธิ์อ่านออเดอร์ (staff_keys / staff_sessions) — ทดสอบจริงอยู่ใน order-access.test.js
+Object.assign(ctx, {
+    staffProofFromSecret: async () => "f".repeat(64),
+    saveStaffKey: () => Promise.resolve(true),
+    removeStaffKey: () => { },
+    openStaffSession: async () => false,
+    closeStaffSession: () => { }
+});
 vm.createContext(ctx);
 vm.runInContext([
     fn("normalizeRiderCode"),

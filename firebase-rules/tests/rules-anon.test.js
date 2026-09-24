@@ -1,4 +1,4 @@
-// ทดสอบกฎ v2 บน hsong-test ด้วยคำขอ "ไม่ล็อกอิน" (มุมมองคนแปลกหน้า/ผู้ไม่หวังดี) ผ่าน REST
+// ทดสอบกฎ v2/v3 บน hsong-test ด้วยคำขอ "ไม่ล็อกอิน" (มุมมองคนแปลกหน้า/ผู้ไม่หวังดี) ผ่าน REST
 // ห้ามชี้ไปโปรเจกต์จริง: host ถูกล็อกเป็น hsong-test เท่านั้น
 //
 // วิธีรัน (จากโฟลเดอร์โปรเจกต์; ต้องใส่ --project hsong-test ทุกครั้ง ห้ามพลาดไปโดนโปรเจกต์จริง):
@@ -99,7 +99,13 @@ async function expect(name, wantAllowed, method, path, body) {
     console.log("== daily_reports / open nodes / unknown ==");
     await expect("เขียน daily_reports ไม่ได้", false, "PUT", `daily_reports/${T}`, { x: 1 });
     await expect("อ่าน daily_reports ได้", true, "GET", `daily_reports/${T}`);
-    await expect("ลูกค้าสร้างออเดอร์ได้ (ยังเปิด)", true, "PUT", `orders/${T}O1`, { orderId: `${T}O1`, status: "new" });
+    // v3 (2026-09-25): คนที่ไม่มีบัตรผ่านทำอะไรกับออเดอร์/ตะกร้าไม่ได้เลย (กรณีมีบัตรผ่านอยู่ใน rules-v3-live.test.js)
+    await expect("ไม่มีบัตรผ่าน: สร้างออเดอร์ไม่ได้", false, "PUT", `orders/${T}O1`, { orderId: `${T}O1`, status: "new" });
+    await expect("ไม่มีบัตรผ่าน: ดึงรายการออเดอร์ทั้งหมดไม่ได้", false, "GET", `orders`);
+    await expect("ไม่มีบัตรผ่าน: ดูรายชื่อตะกร้าไม่ได้", false, "GET", `carts`);
+    await expect("ไม่มีบัตรผ่าน: เขียนตะกร้าไม่ได้", false, "PUT", `carts/${T}C1`, { items: [] });
+    await expect("อ่าน staff_keys ไม่ได้ (เฉพาะเจ้าของ)", false, "GET", `staff_keys`);
+    await expect("อ่าน order_codes ไม่ได้ (เฉพาะเจ้าของ)", false, "GET", `order_codes`);
     await expect("ไรเดอร์อัปเดตพิกัดได้ (ยังเปิด)", true, "PUT", `rider_locations/${SEED}R0`, { lat: 13.3, lng: 101.1 });
     await expect("โหนดที่ไม่รู้จักเขียนไม่ได้", false, "PUT", `unknown_node/${T}`, { x: 1 });
     await expect("อ่านรากทั้งฐานข้อมูลไม่ได้", false, "GET", ``);

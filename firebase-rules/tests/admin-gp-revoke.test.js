@@ -27,6 +27,14 @@ const ctx = {
 };
 ctx.saveCommunityRiders = list => { ctx.savedRiders = list; };
 ctx.loadCommunityRiders = () => JSON.parse(JSON.stringify(ctx.ridersDb));
+// ตัวช่วยสิทธิ์อ่านออเดอร์ (staff_keys / staff_sessions) — ทดสอบจริงอยู่ใน order-access.test.js
+Object.assign(ctx, {
+    staffProofFromSecret: async () => "f".repeat(64),
+    saveStaffKey: () => Promise.resolve(true),
+    removeStaffKey: () => { },
+    openStaffSession: async () => false,
+    closeStaffSession: () => { }
+});
 vm.createContext(ctx);
 ["loadSavedHubSettings", "loadMarketStallSettings", "revokeRiderAccessForApplication"].forEach(n => vm.runInContext(extract(n), ctx));
 

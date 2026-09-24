@@ -44,6 +44,14 @@ const ctx = {
     document: { getElementById: () => null },
     loadCommunityRiders: () => [], loadRiderApplications: () => []
 };
+// ตัวช่วยสิทธิ์อ่านออเดอร์ (staff_keys / staff_sessions) — ทดสอบจริงอยู่ใน order-access.test.js
+Object.assign(ctx, {
+    staffProofFromSecret: async () => "f".repeat(64),
+    saveStaffKey: () => Promise.resolve(true),
+    removeStaffKey: () => { },
+    openStaffSession: async () => false,
+    closeStaffSession: () => { }
+});
 vm.createContext(ctx);
 vm.runInContext([
     between("const RIDER_SECRET_ALPHABET", "window.riderSecretLogin = riderSecretLogin;"),

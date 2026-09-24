@@ -409,13 +409,13 @@ function saveCartToStorage(cart) {
         localStorage.setItem("talathub_cart", JSON.stringify(cart || []));
     } catch (e) { }
 
-    // 2. Firebase — sync ข้ามอุปกรณ์
-    if (isFirebaseReady() && state.customer && state.customer.isLoggedIn) {
-        const customerId = toFirebaseKey(state.customer.identifier);
-        db.ref(`carts/${customerId}`).set({
+    // 2. Firebase — สำรองตะกร้าไว้ที่ carts/<uid ของเครื่องนี้> (กฎ: เครื่องนี้อ่าน/เขียนได้คนเดียว)
+    //    เดิมใช้เบอร์โทร/ชื่อเป็นชื่อหัวข้อ ทำให้ใครก็เห็นเบอร์ลูกค้าได้จากรายชื่อตะกร้า
+    const cartUid = getAuthUid();
+    if (isFirebaseReady() && cartUid && state.customer && state.customer.isLoggedIn) {
+        db.ref(`carts/${cartUid}`).set({
             items: cart || [],
-            updatedAt: Date.now(),
-            customerName: state.customer.identifier
+            updatedAt: Date.now()
         }).catch(e => console.warn("Firebase cart save failed:", e));
     }
 }
@@ -572,14 +572,261 @@ function initOwnerAuth() {
         console.warn("OWNER_UIDS ว่างเปล่า (firebase-config.js): จะไม่มีใครล็อกอินเป็นเจ้าของได้");
     }
     auth.onAuthStateChanged(user => {
-        if (user && !isOwnerUid(user.uid)) {
-            // บัญชีที่ไม่อยู่ในรายชื่อเจ้าของ (เช่น มีคนสร้างบัญชีเองผ่านอินเทอร์เน็ต) ไม่ให้ค้างสถานะล็อกอินไว้
+        if (user && !user.isAnonymous && !isOwnerUid(user.uid)) {
+            // บัญชีอีเมลที่ไม่อยู่ในรายชื่อเจ้าของ (เช่น มีคนสร้างบัญชีเองผ่านอินเทอร์เน็ต) ไม่ให้ค้างสถานะล็อกอินไว้
             auth.signOut().catch(() => { });
             return;
         }
         applyOwnerSession(user);
+        if (!user && !_anonAuthFailed) { _signInAnonymouslyOnce(); return; }
+        _resolveAuthWaiters();
+        refreshOrderAccess();
     });
 }
+
+// =================================================================
+// "บัตรผ่าน" ของทุกเครื่อง (Firebase Anonymous Auth)
+// - ทุกเบราว์เซอร์ได้ uid ของตัวเองโดยอัตโนมัติ (ไม่ต้องสมัคร/กรอกอะไร) ใช้ให้กฎฐานข้อมูลรู้ว่า "ออเดอร์นี้ของเครื่องไหน"
+// - เจ้าของล็อกอินอีเมลแล้ว uid เจ้าของจะแทนที่บัตรนิรนาม; ออกจากระบบแล้วได้บัตรนิรนามใบใหม่
+// - ถ้าโปรเจกต์ยังไม่ได้เปิด Anonymous (_anonAuthFailed) แอปทำงานแบบเดิม (กฎเปิด) เพื่อให้ขึ้นโค้ดก่อนเปลี่ยนกฎได้
+// =================================================================
+let _authReady = false;
+let _anonAuthFailed = false;
+let _anonSignInInFlight = null;
+let _authReadyWaiters = [];
+
+function getAuthUid() {
+    return (typeof auth !== "undefined" && auth && auth.currentUser) ? auth.currentUser.uid : null;
+}
+
+function _resolveAuthWaiters() {
+    _authReady = true;
+    const waiters = _authReadyWaiters;
+    _authReadyWaiters = [];
+    waiters.forEach(fn => { try { fn(getAuthUid()); } catch (e) { } });
+}
+
+function _signInAnonymouslyOnce() {
+    if (_anonSignInInFlight) return _anonSignInInFlight;
+    _anonSignInInFlight = auth.signInAnonymously()
+        .catch(e => {
+            // ยังไม่ได้เปิด Anonymous ในโปรเจกต์ / เน็ตหลุด: ทำงานต่อแบบไม่มีบัตรผ่าน
+            _anonAuthFailed = true;
+            console.warn("Anonymous sign-in ไม่สำเร็จ (ทำงานแบบไม่มีบัตรผ่าน):", e && (e.code || e.message));
+            _resolveAuthWaiters();
+            refreshOrderAccess();
+        })
+        .finally(() => { _anonSignInInFlight = null; });
+    return _anonSignInInFlight;
+}
+
+// รอให้เครื่องนี้มีบัตรผ่าน (หรือรู้แน่แล้วว่าไม่มี) คืน uid หรือ null
+function ensureAuthUser(timeoutMs) {
+    if (typeof auth === "undefined" || !auth) return Promise.resolve(null);
+    if (auth.currentUser) return Promise.resolve(auth.currentUser.uid);
+    if (_authReady && _anonAuthFailed) return Promise.resolve(null);
+    return new Promise(resolve => {
+        let done = false;
+        const timer = setTimeout(() => { if (!done) { done = true; resolve(getAuthUid()); } }, timeoutMs || 8000);
+        _authReadyWaiters.push(uid => { if (!done) { done = true; clearTimeout(timer); resolve(uid); } });
+    });
+}
+window.getAuthUid = getAuthUid;
+window.ensureAuthUser = ensureAuthUser;
+
+// ใส่ uid ของเครื่องนี้ในคำขอ REST (กฎฐานข้อมูลต้องรู้ว่าใครขอ) คืน "" ถ้าไม่มีบัตรผ่าน
+async function authQueryParam() {
+    try {
+        if (typeof auth !== "undefined" && auth && auth.currentUser) {
+            const token = await auth.currentUser.getIdToken();
+            if (token) return "?auth=" + encodeURIComponent(token);
+        }
+    } catch (e) { }
+    return "";
+}
+
+// =================================================================
+// สิทธิ์อ่านออเดอร์ของไรเดอร์/แม่ค้า (ตรวจที่ฐานข้อมูล ไม่ใช่แค่ในเบราว์เซอร์)
+// - ตอนเจ้าของสร้างรหัสผ่าน จะเก็บ "ค่าพิสูจน์" (staffProof) ไว้ที่ staff_keys/<role>/<id> ซึ่งเจ้าของอ่านได้คนเดียว
+// - ตอนไรเดอร์/แม่ค้าล็อกอินถูก เบราว์เซอร์คำนวณค่าพิสูจน์จากรหัสผ่านแล้วเขียน staff_sessions/<uid>
+//   กฎฐานข้อมูลยอมให้เขียนเฉพาะเมื่อค่าตรงกับ staff_keys (รหัสผิด = เขียนไม่ได้ = อ่านออเดอร์ไม่ได้)
+// - สร้างรหัสผ่านใหม่ = ค่าพิสูจน์เปลี่ยน = เครื่องที่ล็อกอินด้วยรหัสเก่าหมดสิทธิ์ทันที
+// =================================================================
+const STAFF_PROOF_SALT_SUFFIX = "70726f6f66";   // "proof" (hex) ต่อท้าย salt ให้ได้ค่าคนละตัวกับ loginHash ที่เปิดอ่านได้
+
+async function staffProofFromSecret(secret, saltHex) {
+    return hashRiderSecret(secret, String(saltHex || "") + STAFF_PROOF_SALT_SUFFIX);
+}
+
+function staffKeyId(id) {
+    return _cloudSafeKey(String(id == null ? "" : id).trim());
+}
+
+// เจ้าของเท่านั้น (กฎบังคับ): เก็บค่าพิสูจน์ของรหัสผ่านใหม่
+function saveStaffKey(role, id, proof) {
+    if (!isFirebaseReady() || !id || !proof) return Promise.resolve(false);
+    return db.ref(`staff_keys/${role}/${staffKeyId(id)}`).set(proof)
+        .then(() => true)
+        .catch(e => { console.warn("saveStaffKey failed:", role, id, e && e.message); return false; });
+}
+
+function removeStaffKey(role, id) {
+    if (!isFirebaseReady() || !id) return;
+    db.ref(`staff_keys/${role}/${staffKeyId(id)}`).remove().catch(() => { });
+}
+
+// ไรเดอร์/แม่ค้าล็อกอินด้วยรหัสผ่านถูกแล้ว: ขอสิทธิ์อ่านออเดอร์จากฐานข้อมูล
+async function openStaffSession(role, id, secret, saltHex) {
+    const ok = await _openStaffSession(role, id, secret, saltHex);
+    // ดึงออเดอร์ต่อทั้งสองกรณี: ถ้ากฎยังเป็นแบบเก่า (เปิด) ไรเดอร์/แม่ค้าก็ยังเห็นออเดอร์ตามเดิม
+    refreshOrderAccess();
+    return ok;
+}
+
+async function _openStaffSession(role, id, secret, saltHex) {
+    if (!isFirebaseReady() || !id || !secret || !saltHex) return false;
+    const uid = await ensureAuthUser(8000);
+    if (!uid) return false;
+    let proof;
+    try { proof = await staffProofFromSecret(secret, saltHex); } catch (e) { return false; }
+    try {
+        await _withTimeout(db.ref(`staff_sessions/${uid}`).set({ role, id: staffKeyId(id), proof, at: Date.now() }), 8000);
+    } catch (e) {
+        console.warn("openStaffSession rejected:", e && e.message);
+        return false;
+    }
+    return true;
+}
+
+function closeStaffSession() {
+    const uid = getAuthUid();
+    if (uid && isFirebaseReady() && !isOwnerUid(uid)) db.ref(`staff_sessions/${uid}`).remove().catch(() => { });
+    window._cachedFirebaseOrders = [];
+}
+window.openStaffSession = openStaffSession;
+window.closeStaffSession = closeStaffSession;
+
+// =================================================================
+// ใครดึง "รายการออเดอร์ทั้งหมด" ได้: เจ้าของ (ฮับ/แอดมิน), ไรเดอร์, แม่ค้า
+// ลูกค้าทั่วไปดึงได้เฉพาะออเดอร์ของตัวเองทีละใบ (watchActiveOrderInCloud)
+// (ฝั่งนี้แค่ไม่ขอสิ่งที่ไม่มีสิทธิ์ สิทธิ์จริงบังคับที่กฎฐานข้อมูล)
+// =================================================================
+function canListAllOrders() {
+    return isOwnerSignedIn() ||
+        !!(state.activeRider && state.activeRider.isLoggedIn) ||
+        !!(state.activeMerchant && state.activeMerchant.isLoggedIn);
+}
+window.canListAllOrders = canListAllOrders;
+
+let _lastOrderPermissionToast = 0;
+function _onOrderListDenied(err) {
+    console.warn("orders listener stopped:", err && (err.code || err.message));
+    const staff = (state.activeRider && state.activeRider.isLoggedIn) || (state.activeMerchant && state.activeMerchant.isLoggedIn);
+    if (staff && !isOwnerSignedIn() && Date.now() - _lastOrderPermissionToast > 60000) {
+        _lastOrderPermissionToast = Date.now();
+        showToast("🔒 เครื่องนี้ยังไม่มีสิทธิ์ดูออเดอร์ กรุณากด ออกจากระบบ แล้วเข้าสู่ระบบใหม่ด้วยรหัสผ่าน");
+    }
+}
+
+// เรียกทุกครั้งที่สิทธิ์เปลี่ยน (บัตรผ่านพร้อม / เจ้าของล็อกอิน / ไรเดอร์-แม่ค้าล็อกอิน)
+function refreshOrderAccess() {
+    if (!isFirebaseReady()) return;
+    ensureAuthUser(8000).then(() => {
+        if (canListAllOrders()) {
+            syncAdminOrdersFromCloud();
+            listenToFirebaseOrdersForAdmin();
+            attachOrderChildListeners();
+        }
+        watchActiveOrderInCloud();
+    });
+}
+window.refreshOrderAccess = refreshOrderAccess;
+
+// ติดตามออเดอร์ที่เครื่องนี้กำลังดูอยู่ (state.activeOrder) ทีละใบ — ใช้ได้กับลูกค้าที่ไม่มีสิทธิ์ดึงรายการทั้งหมด
+let _watchedOrderKey = null;
+let _watchedOrderRef = null;
+function watchActiveOrderInCloud() {
+    if (!isFirebaseReady()) return;
+    const o = state.activeOrder;
+    const key = (o && o.orderId && !isMockOrder(o)) ? toFirebaseKey(o.orderId) : null;
+    if (key === _watchedOrderKey && _watchedOrderRef) return;
+    if (_watchedOrderRef) { try { _watchedOrderRef.off(); } catch (e) { } _watchedOrderRef = null; }
+    _watchedOrderKey = key;
+    if (!key) return;
+    const ref = db.ref(`orders/${key}`);
+    _watchedOrderRef = ref;
+    ref.on("value", snap => {
+        const v = snap.val();
+        if (v && v.orderId) applyActiveOrderCloudUpdate(v);
+    }, err => {
+        console.warn("watchActiveOrderInCloud stopped:", key, err && (err.code || err.message));
+        if (_watchedOrderRef === ref) { _watchedOrderRef = null; _watchedOrderKey = null; }
+    });
+}
+window.watchActiveOrderInCloud = watchActiveOrderInCloud;
+
+// รวมข้อมูลออเดอร์ที่มาจากคลาวด์เข้ากับออเดอร์ที่เครื่องนี้กำลังติดตามอยู่ (ถ้าเป็นใบเดียวกัน)
+function applyActiveOrderCloudUpdate(updatedOrder) {
+    if (!updatedOrder || !updatedOrder.orderId) return;
+    if (!(state.activeOrder && state.activeOrder.orderId === updatedOrder.orderId)) return;
+    const oldStatus = state.activeOrder.status;
+    const oldRefund = state.activeOrder.refundCashTotal || 0;
+    state.activeOrder = { ...state.activeOrder, ...updatedOrder };
+    try { localStorage.setItem("talathub_active_order", JSON.stringify(state.activeOrder)); } catch (e) { }
+
+    if (state.currentScreen === "tracking") renderTrackingScreen();
+    updateHomeActiveOrderBanner();
+
+    if ((updatedOrder.refundCashTotal || 0) > oldRefund) {
+        showToast(`✉️ แจ้งเตือน: มีการคืนเงินสดใส่ซอง ฿${updatedOrder.refundCashTotal}! แตะดูสถานะจัดส่งได้เลย`);
+    } else if (updatedOrder.status === "delivering" && oldStatus !== "delivering") {
+        showToast("🛵 ไรเดอร์ออกเดินทางแล้ว! กำลังมาส่งของที่บ้านคุณ");
+    } else if (updatedOrder.status === "delivered" && oldStatus !== "delivered") {
+        showToast("✅ จัดส่งสำเร็จแล้ว! ขอบคุณที่ใช้บริการเฮียส่ง 🙏");
+    }
+}
+
+// ฟังออเดอร์ใหม่/ออเดอร์ที่เปลี่ยน ทั้งโหนด (เฉพาะเจ้าของ/ไรเดอร์/แม่ค้า)
+let _orderChildListenersOn = false;
+function attachOrderChildListeners() {
+    if (!isFirebaseReady() || _orderChildListenersOn || !canListAllOrders()) return;
+    _orderChildListenersOn = true;
+    const ordersRef = db.ref("orders");
+    const stop = err => { _orderChildListenersOn = false; try { ordersRef.off("child_added"); ordersRef.off("child_changed"); } catch (e) { } _onOrderListDenied(err); };
+
+    ordersRef.on("child_added", (snapshot) => {
+        const newOrder = snapshot.val();
+        if (!newOrder || !newOrder.orderId) return;
+
+        // รับเฉพาะออเดอร์ใหม่ (ภายใน 30 วินาที) เพื่อไม่ให้ trigger ตอน page load
+        const isRecent = newOrder.savedAt && (Date.now() - newOrder.savedAt) < 30000;
+        if (!isRecent) return;
+
+        // 🔒 อัปเดต state.activeOrder เฉพาะออเดอร์ของ "ผู้ใช้คนนี้เอง" (ดู pickMyOwnActiveOrder)
+        const myUid = getAuthUid();
+        const isMyOwnOrder = (state.activeOrder && state.activeOrder.orderId === newOrder.orderId) || (!!myUid && newOrder.customerUid === myUid);
+        if (isMyOwnOrder) {
+            state.activeOrder = newOrder;
+            try { localStorage.setItem("talathub_active_order", JSON.stringify(newOrder)); } catch (e) { }
+            renderTrackingScreen();
+            updateHomeActiveOrderBanner();
+        }
+
+        // แจ้งเตือนฝั่งฮับ/แอดมิน
+        if (isOwnerSignedIn()) {
+            const hubBadge = document.getElementById("hub-badge-count");
+            if (hubBadge) { hubBadge.classList.remove("hidden"); hubBadge.textContent = "NEW"; }
+            if (typeof renderHubPickingList === "function") renderHubPickingList();
+            if (typeof renderHubDeliveryView === "function") renderHubDeliveryView();
+            playOrderAlertSound();
+            showToast(`🔔 ออเดอร์ใหม่ ${newOrder.orderId} เข้ามา! ฿${newOrder.grandTotal || newOrder.total}`);
+        }
+    }, stop);
+
+    // มือถือที่ติดตามออเดอร์ใบนี้อยู่จะเห็นสถานะ picking→delivering→delivered ทันที
+    ordersRef.on("child_changed", (snapshot) => applyActiveOrderCloudUpdate(snapshot.val()), stop);
+}
+window.attachOrderChildListeners = attachOrderChildListeners;
 
 function signOutOwner() {
     if (typeof auth !== "undefined" && auth) auth.signOut().catch(() => { });
@@ -654,7 +901,8 @@ async function makeRiderLoginCredential() {
     crypto.getRandomValues(saltBytes);
     const loginSalt = _bytesToHex(saltBytes);
     const loginHash = await hashRiderSecret(secret, loginSalt);
-    return { secret, loginSalt, loginHash };
+    const staffProof = await staffProofFromSecret(secret, loginSalt);   // เก็บที่ staff_keys (เจ้าของอ่านได้คนเดียว) ใช้ตรวจสิทธิ์อ่านออเดอร์
+    return { secret, loginSalt, loginHash, staffProof };
 }
 
 async function verifyRiderSecret(rider, secret) {
@@ -775,7 +1023,7 @@ async function merchantSecretLogin(shopRaw, secretRaw, opts) {
     catch (e) { return { ok: false, code: "no-crypto", message: "⚠️ เบราว์เซอร์นี้ตรวจรหัสผ่านไม่ได้ กรุณาเปิดผ่านเว็บ https" }; }
     if (!good) { _noteRiderLoginFail(_MERCHANT_LOGIN_FAIL_KEY); return bad; }
     _clearRiderLoginFail(_MERCHANT_LOGIN_FAIL_KEY);
-    return { ok: true, code: "ok", app, stall: stall || stallFromApp(app) };
+    return { ok: true, code: "ok", app, stall: stall || stallFromApp(app), loginSalt: holder.loginSalt };
 }
 window.merchantSecretLogin = merchantSecretLogin;
 
@@ -805,9 +1053,12 @@ async function submitRiderSecretLogin(numberInputId, secretInputId) {
         return;
     }
     showLoginError("");
+    const typedSecret = secEl ? secEl.value : "";
     if (secEl) secEl.value = "";
     loginRiderWithProfile(res.rider);
     showToast("🎉 เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ " + (res.rider.name || "ไรเดอร์"));
+    // ขอสิทธิ์อ่านออเดอร์จากฐานข้อมูล (รหัสผ่านถูกตรวจซ้ำที่กฎฐานข้อมูล)
+    openStaffSession("rider", res.rider.accessCode || res.rider.id, typedSecret, res.rider.loginSalt);
 }
 
 // เจ้าของ: สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์ที่อนุมัติแล้ว (รหัสเดิมใช้ไม่ได้ทันที) และแสดงให้เจ้าของส่งต่อ
@@ -824,6 +1075,7 @@ async function resetRiderLoginSecret(appId) {
     app.loginSalt = cred.loginSalt;
     app.loginHash = cred.loginHash;
     saveRiderApplications(apps);
+    saveStaffKey("rider", app.accessCode || app.id, cred.staffProof);
     const riders = loadCommunityRiders();
     const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
     const r = riders.find(x => (x.id && x.id === app.id) || (x.accessCode && x.accessCode === app.accessCode) || (cleanPhone && (x.phone || "").replace(/[-\s]/g, "") === cleanPhone));
@@ -1130,10 +1382,8 @@ function executeClearAllTestData() {
     // ล้าง Firebase orders ทั้งหมด
     if (isFirebaseReady()) {
         db.ref("orders").remove().catch(e => console.warn("Firebase clear failed:", e));
-        if (state.customer && state.customer.isLoggedIn) {
-            const cid = toFirebaseKey(state.customer.identifier);
-            db.ref(`carts/${cid}`).remove().catch(() => {});
-        }
+        const cartUid = getAuthUid();
+        if (cartUid) db.ref(`carts/${cartUid}`).remove().catch(() => {});
     }
 
     // ล้าง state
@@ -1196,6 +1446,7 @@ function saveActiveOrderToStorage(order) {
     try {
         if (order) {
             if (!order.savedAt) order.savedAt = Date.now();
+            if (!isMockOrder(order)) stampOrderOwner(order);   // จำว่าเครื่องนี้เป็นเจ้าของออเดอร์ (ใช้ดึงกลับมาดูภายหลัง)
             localStorage.setItem("talathub_active_order", JSON.stringify(order));
             if (order.orderType === "MERCHANT_EXPRESS" || (order.orderId && order.orderId.startsWith("EXP-"))) {
                 localStorage.setItem("hsong_active_order", JSON.stringify(order));
@@ -1219,8 +1470,44 @@ function saveActiveOrderToStorage(order) {
 }
 
 // ── CLOUD ORDER SYNC: ซิงค์ออเดอร์เข้า Firebase Realtime Database (ทั้ง WebSocket & REST Fallback)
+// ใครเป็นเจ้าของออเดอร์ (uid ของเครื่องที่สั่ง) — กฎฐานข้อมูลใช้ค่านี้ตัดสินว่าใครอ่านออเดอร์ได้ และห้ามเปลี่ยนหลังสร้าง
+// ออเดอร์ที่ยังไม่มี customerUid และเครื่องนี้ไม่เคยเห็นบนคลาวด์ = ออเดอร์ใหม่ที่เครื่องนี้สร้าง -> ใส่ uid ของเครื่องนี้
+// ออเดอร์ที่อยู่บนคลาวด์แล้ว -> คัด customerUid เดิมกลับมา (ไม่งั้นการบันทึกทั้งใบจะถูกกฎปฏิเสธ)
+function stampOrderOwner(order) {
+    if (!order || !order.orderId) return order;
+    if (order.customerUid) return order;
+    const known = (window._cachedFirebaseOrders || []).find(o => o && o.orderId === order.orderId);
+    if (known) {
+        if (known.customerUid) order.customerUid = known.customerUid;
+        return order;
+    }
+    const uid = getAuthUid();
+    if (uid) order.customerUid = uid;
+    return order;
+}
+window.stampOrderOwner = stampOrderOwner;
+
+// เก็บรหัสติดตาม (6 ตัว) ไว้ที่ order_codes/<key> (เจ้าของตลาดอ่านได้คนเดียว) ใช้ตรวจลิงก์ติดตามจากเครื่องอื่นที่กฎฐานข้อมูล
+const _orderCodesSaved = {};
+function saveOrderTrackCodeToCloud(orderKey, order) {
+    if (!isFirebaseReady() || !order || !order.trackCode || !order.customerUid) return;
+    if (order.customerUid !== getAuthUid() || _orderCodesSaved[orderKey]) return;
+    _orderCodesSaved[orderKey] = true;
+    db.ref(`order_codes/${orderKey}`).set(normalizeOrderTrackCode(order.trackCode)).catch(() => { });
+}
+
 function syncOrderToCloud(order) {
     if (!order || !order.orderId || isMockOrder(order)) return;
+    // ต้องมีบัตรผ่านก่อนเขียนออเดอร์ใหม่ (ไม่งั้นกฎปฏิเสธออเดอร์ที่ไม่มีเจ้าของ) — ปกติพร้อมตั้งแต่เปิดหน้าเว็บ
+    if (typeof auth !== "undefined" && auth && !auth.currentUser && !(_authReady && _anonAuthFailed)) {
+        ensureAuthUser(8000).then(() => _syncOrderToCloudNow(order));
+        return;
+    }
+    _syncOrderToCloudNow(order);
+}
+
+function _syncOrderToCloudNow(order) {
+    stampOrderOwner(order);
     const orderKey = toFirebaseKey(order.orderId);
 
     // ทำสำเนาข้อมูลที่ปลอดภัยสำหรับ JSON
@@ -1249,6 +1536,9 @@ function syncOrderToCloud(order) {
         db.ref(`orders/${orderKey}`).set(cleanOrder)
             .then(() => {
                 console.log(`☁️ Firebase RTDB sync success for order: ${order.orderId}`);
+                saveOrderTrackCodeToCloud(orderKey, cleanOrder);
+                // ติดตามสถานะออเดอร์ใบนี้ต่อ (ต้องรอให้เขียนเสร็จก่อน ไม่งั้นกฎยังไม่รู้ว่าเป็นออเดอร์ของเรา)
+                if (state.activeOrder && state.activeOrder.orderId === order.orderId) watchActiveOrderInCloud();
             })
             .catch(e => {
                 console.warn("Firebase SDK save failed, using REST fallback:", e);
@@ -1260,8 +1550,9 @@ function syncOrderToCloud(order) {
 }
 window.syncOrderToCloud = syncOrderToCloud;
 
-function _syncOrderViaREST(orderKey, orderData) {
-    fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/orders/${orderKey}.json`, {
+async function _syncOrderViaREST(orderKey, orderData) {
+    const authQ = await authQueryParam();
+    fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/orders/${orderKey}.json${authQ}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(orderData)
@@ -1276,22 +1567,22 @@ function updateOrderStatusInFirebase(orderId, newStatus) {
     const orderKey = toFirebaseKey(orderId);
     const updatePayload = { status: newStatus, updatedAt: Date.now() };
 
-    if (isFirebaseReady() && typeof db !== "undefined" && db) {
-        db.ref(`orders/${orderKey}`).update(updatePayload)
-            .catch(e => {
-                console.warn("Firebase status update SDK error, trying REST:", e);
-                fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/orders/${orderKey}/status.json`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(newStatus)
-                }).catch(() => {});
-            });
-    } else {
-        fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/orders/${orderKey}/status.json`, {
+    const viaRest = async () => {
+        const authQ = await authQueryParam();
+        fetch(`https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/orders/${orderKey}/status.json${authQ}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(newStatus)
         }).catch(() => {});
+    };
+    if (isFirebaseReady() && typeof db !== "undefined" && db) {
+        db.ref(`orders/${orderKey}`).update(updatePayload)
+            .catch(e => {
+                console.warn("Firebase status update SDK error, trying REST:", e);
+                viaRest();
+            });
+    } else {
+        viaRest();
     }
 }
 window.updateOrderStatusInFirebase = updateOrderStatusInFirebase;
@@ -1310,6 +1601,11 @@ function pickMyOwnActiveOrder(list) {
         const mine = activeOrders.find(o => o.orderId === state.activeOrder.orderId);
         if (mine) return mine;   // ออเดอร์ที่ติดตามอยู่แล้ว (ผ่านการตรวจรหัสลิงก์/เป็นของเบราว์เซอร์นี้มาก่อน) แค่รีเฟรชสถานะ
     }
+    const myUid = (typeof getAuthUid === "function") ? getAuthUid() : null;
+    if (myUid) {
+        const mine = activeOrders.find(o => o.customerUid === myUid);   // ออเดอร์ที่เครื่องนี้เป็นคนสั่ง
+        if (mine) return mine;
+    }
     const myPhoneDigits = (state.customer && state.customer.identifier) ? String(state.customer.identifier).replace(/\D/g, "") : "";
     if (myPhoneDigits.length >= 9) {
         const mine = activeOrders.find(o => String(o.customerPhone || "").replace(/\D/g, "") === myPhoneDigits);
@@ -1323,8 +1619,8 @@ async function syncLatestOrderFromCloud() {
     try {
         let syncedOrder = null;
 
-        // 1. ตรวจสอบและดึงข้อมูลจาก Firebase Realtime Database (Cloud)
-        if (isFirebaseReady()) {
+        // 1. ตรวจสอบและดึงข้อมูลจาก Firebase Realtime Database (Cloud) — เฉพาะเจ้าของ/ไรเดอร์/แม่ค้า
+        if (isFirebaseReady() && canListAllOrders()) {
             const snapshot = await db.ref("orders").limitToLast(50).once("value");
             const data = snapshot.val();
             if (data) {
@@ -1416,6 +1712,8 @@ async function syncLatestOrderFromCloud() {
 
 // ✅ ซิงค์ประวัติออเดอร์ทั้งหมดจาก Firebase Cloud เพื่อนำมาคำนวณรายงานแอดมิน Tab 1 และ Tab 2 และคิวฮับ
 async function syncAdminOrdersFromCloud() {
+    // ลูกค้าทั่วไปไม่มีสิทธิ์ดึงออเดอร์ทุกใบ (กฎฐานข้อมูล) — ติดตามเฉพาะใบของตัวเองผ่าน watchActiveOrderInCloud
+    if (!canListAllOrders()) return;
     try {
         let list = [];
         if (isFirebaseReady() && typeof db !== "undefined" && db) {
@@ -1426,7 +1724,7 @@ async function syncAdminOrdersFromCloud() {
             }
         } else {
             // Direct REST fetch fallback
-            const res = await fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/orders.json");
+            const res = await fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/orders.json" + (await authQueryParam()));
             if (res.ok) {
                 const val = await res.json();
                 if (val && typeof val === "object") {
@@ -1502,10 +1800,17 @@ window.syncAdminOrdersFromCloud = syncAdminOrdersFromCloud;
 function listenToFirebaseOrdersForAdmin() {
     if (!isFirebaseReady()) return;
     if (window._hasFirebaseOrderListener) return;
+    if (!canListAllOrders()) return;   // เจ้าของ/ไรเดอร์/แม่ค้าเท่านั้น
     window._hasFirebaseOrderListener = true;
 
     try {
-        db.ref("orders").on("value", (snap) => {
+        const ordersRef = db.ref("orders");
+        const onDenied = err => {
+            // ไม่มีสิทธิ์ (เช่น ออกจากระบบ / ยังไม่ได้ล็อกอินด้วยรหัสผ่าน): ปล่อยให้เรียกใหม่ได้เมื่อสิทธิ์เปลี่ยน
+            window._hasFirebaseOrderListener = false;
+            _onOrderListDenied(err);
+        };
+        ordersRef.on("value", (snap) => {
             const val = snap.val();
             if (val && typeof val === "object") {
                 const list = Object.values(val).filter(o => o && o.orderId && !isMockOrder(o));
@@ -1557,8 +1862,9 @@ function listenToFirebaseOrdersForAdmin() {
                     if (typeof renderRiderScreen === "function") renderRiderScreen();
                 }
             }
-        });
+        }, onDenied);
     } catch(e) {
+        window._hasFirebaseOrderListener = false;
         console.warn("listenToFirebaseOrdersForAdmin error:", e);
     }
 }
@@ -4769,11 +5075,17 @@ async function handleTrackingDeepLink() {
             if ((!state.activeOrder || state.activeOrder.orderId !== trackId) && isFirebaseReady()) {
                 // 2. ดึงจาก Firebase Cloud
                 try {
-                    const snap = await db.ref(`orders/${toFirebaseKey(trackId)}`).once("value");
-                    let orderData = snap.val();
+                    // กฎฐานข้อมูลให้อ่านออเดอร์คนอื่นได้เฉพาะเครื่องที่ "ลงชื่อผู้ชม" ด้วยรหัสติดตามที่ถูกต้อง (order_viewers)
+                    const uid = await ensureAuthUser(8000);
+                    const readWithCode = async (key) => {
+                        if (uid && providedTrackCode) {
+                            try { await _withTimeout(db.ref(`order_viewers/${key}/${uid}`).set(normalizeOrderTrackCode(providedTrackCode)), 8000); } catch (e) { }
+                        }
+                        try { return (await db.ref(`orders/${key}`).once("value")).val(); } catch (e) { return null; }
+                    };
+                    let orderData = await readWithCode(toFirebaseKey(trackId));
                     if (!orderData) {
-                        const snap2 = await db.ref(`orders/${toFirebaseKey("#" + cleanKey)}`).once("value");
-                        orderData = snap2.val();
+                        orderData = await readWithCode(toFirebaseKey("#" + cleanKey));
                     }
                     if (orderData && orderData.orderId) {
                         state.activeOrder = orderData;
@@ -4801,7 +5113,8 @@ async function handleTrackingDeepLink() {
             }
             switchRole("customer");
             goToTrackingScreen();
-            
+            watchActiveOrderInCloud();
+
             // เลื่อนหน้าจอไปที่แบนเนอร์เงินทอนหรือสถานะ
             setTimeout(() => {
                 const refundBanner = document.getElementById("tracking-refund-banner");
@@ -4856,66 +5169,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // ✅ Firebase Real-time Listeners — sync ข้ามเครือข่ายและอุปกรณ์
     if (isFirebaseReady()) {
-
-        // 1. ฟังออเดอร์ใหม่ทั้งหมด (Hub/PC จะเห็นทันทีที่มือถือสั่งซื้อ)
-        db.ref("orders").on("child_added", (snapshot) => {
-            const newOrder = snapshot.val();
-            if (!newOrder || !newOrder.orderId) return;
-
-            // รับเฉพาะออเดอร์ใหม่ (ภายใน 30 วินาที) เพื่อไม่ให้ trigger ตอน page load
-            const isRecent = newOrder.savedAt && (Date.now() - newOrder.savedAt) < 30000;
-            if (!isRecent) return;
-
-            // 🔒 แก้บั๊กความปลอดภัยที่พบ 2026-09-22: โค้ดเดิมเขียนทับ state.activeOrder ของ "ทุกคน" ที่เปิดเว็บอยู่
-            // ด้วยออเดอร์ใหม่ล่าสุดของใครก็ได้ ทำให้คนแปลกหน้าเห็นชื่อ/เบอร์/ที่อยู่ของลูกค้าคนอื่นบนหน้าติดตามออเดอร์ของตัวเอง
-            // ตอนนี้จะอัปเดต state.activeOrder เฉพาะกรณีเป็นออเดอร์ของ "ลูกค้าคนนี้เอง" ในเบราว์เซอร์นี้เท่านั้น
-            const myPhoneDigits = (state.customer && state.customer.identifier) ? String(state.customer.identifier).replace(/\D/g, "") : "";
-            const orderPhoneDigits = String(newOrder.customerPhone || "").replace(/\D/g, "");
-            const isMyOwnOrder = (state.activeOrder && state.activeOrder.orderId === newOrder.orderId) || (myPhoneDigits.length >= 9 && myPhoneDigits === orderPhoneDigits);
-            if (isMyOwnOrder) {
-                state.activeOrder = newOrder;
-                try { localStorage.setItem("talathub_active_order", JSON.stringify(newOrder)); } catch(e) {}
-                renderTrackingScreen();
-                updateHomeActiveOrderBanner();
-            }
-
-            // แจ้งเตือนฝั่งฮับ/แอดมิน (มีสิทธิ์เห็นออเดอร์ทุกใบอยู่แล้วผ่านการล็อกอินเจ้าของ) — ไม่เกี่ยวกับ state.activeOrder ของลูกค้า
-            if (isOwnerSignedIn()) {
-                const hubBadge = document.getElementById("hub-badge-count");
-                if (hubBadge) { hubBadge.classList.remove("hidden"); hubBadge.textContent = "NEW"; }
-                if (typeof renderHubPickingList === "function") renderHubPickingList();
-                if (typeof renderHubDeliveryView === "function") renderHubDeliveryView();
-                playOrderAlertSound();
-                showToast(`🔔 ออเดอร์ใหม่ ${newOrder.orderId} เข้ามา! ฿${newOrder.grandTotal || newOrder.total}`);
-            }
-        });
-
-        // 2. ฟัง order status update (มือถือลูกค้าจะเห็นสถานะ picking→delivering→delivered ทันที)
-        db.ref("orders").on("child_changed", (snapshot) => {
-            const updatedOrder = snapshot.val();
-            if (!updatedOrder || !updatedOrder.orderId) return;
-
-            // ถ้า order นี้คือ order ที่กำลัง active อยู่
-            if (state.activeOrder && state.activeOrder.orderId === updatedOrder.orderId) {
-                const oldStatus = state.activeOrder.status;
-                const oldRefund = state.activeOrder.refundCashTotal || 0;
-                state.activeOrder = { ...state.activeOrder, ...updatedOrder };
-                try { localStorage.setItem("talathub_active_order", JSON.stringify(state.activeOrder)); } catch(e) {}
-
-                // แสดงสถานะใหม่บน tracking screen และหน้าหลัก
-                if (state.currentScreen === "tracking") renderTrackingScreen();
-                updateHomeActiveOrderBanner();
-
-                if ((updatedOrder.refundCashTotal || 0) > oldRefund) {
-                    showToast(`✉️ แจ้งเตือน: มีการคืนเงินสดใส่ซอง ฿${updatedOrder.refundCashTotal}! แตะดูสถานะจัดส่งได้เลย`);
-                } else if (updatedOrder.status === "delivering" && oldStatus !== "delivering") {
-                    showToast("🛵 ไรเดอร์ออกเดินทางแล้ว! กำลังมาส่งของที่บ้านคุณ");
-                } else if (updatedOrder.status === "delivered" && oldStatus !== "delivered") {
-                    showToast("✅ จัดส่งสำเร็จแล้ว! ขอบคุณที่ใช้บริการเฮียส่ง 🙏");
-                }
-            }
-        });
-
+        // ฟังออเดอร์ทั้งโหนดเฉพาะเจ้าของ/ไรเดอร์/แม่ค้า (attachOrderChildListeners)
+        // ลูกค้าฟังเฉพาะออเดอร์ของตัวเอง (watchActiveOrderInCloud) — เรียกผ่าน refreshOrderAccess หลังบัตรผ่านพร้อม
+        refreshOrderAccess();
         console.log("🔥 Firebase real-time listeners active");
     } else {
         console.warn("⚠️ Firebase not ready, using localStorage only");
@@ -7234,8 +7490,8 @@ function _executeClearDailyOrdersAndReport(targetDateKey) {
             }
         });
 
-        // ตรวจสอบและลบออเดอร์ใน Firebase ทั้งหมดที่มีวันที่ตรงกับ targetDateKey
-        try {
+        // ตรวจสอบและลบออเดอร์ใน Firebase ทั้งหมดที่มีวันที่ตรงกับ targetDateKey (ดึงทุกใบได้เฉพาะเจ้าของ)
+        if (canListAllOrders()) try {
             db.ref("orders").once("value", (snap) => {
                 const val = snap.val();
                 if (val && typeof val === "object") {
@@ -11905,8 +12161,8 @@ function clearCart() {
 
     if (isFirebaseReady() && state.customer && state.customer.isLoggedIn) {
         try {
-            const customerId = toFirebaseKey(state.customer.identifier);
-            db.ref(`carts/${customerId}`).remove().catch(() => {});
+            const cartUid = getAuthUid();
+            if (cartUid) db.ref(`carts/${cartUid}`).remove().catch(() => {});
         } catch (e) {}
     }
 
@@ -15372,7 +15628,7 @@ function patchOrderInCloud(orderId, updates) {
     if (!orderId || !updates || isMockOrder(orderId)) return;
     const orderKey = toFirebaseKey(orderId);
     const payload = Object.assign({}, updates, { updatedAt: Date.now() });
-    const viaRest = () => fetch(`${RIDER_DB_BASE_URL}/orders/${orderKey}.json`, {
+    const viaRest = async () => fetch(`${RIDER_DB_BASE_URL}/orders/${orderKey}.json${typeof authQueryParam === "function" ? await authQueryParam() : ""}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -17713,29 +17969,9 @@ function handleCustomerLoginSubmit() {
     updateCustomerLoyaltyBanner();
     renderCatalog();
 
-    // ✅ ตรวจสอบและดึงออเดอร์ที่กำลังจัดส่งของลูกค้ารายนี้กลับมาแสดง (ถ้ามี)
-    if (isFirebaseReady()) {
-        db.ref("orders").limitToLast(15).once("value").then(snap => {
-            const data = snap.val();
-            if (data) {
-                const myOrders = Object.values(data).filter(o => 
-                    o && o.orderId && o.status !== "delivered" && 
-                    (o.customerName === displayVal || o.customerPhone === displayVal || toFirebaseKey(o.customerName) === toFirebaseKey(displayVal))
-                );
-                if (myOrders.length > 0) {
-                    myOrders.sort((a,b) => (b.savedAt||0) - (a.savedAt||0));
-                    state.activeOrder = myOrders[0];
-                    try { localStorage.setItem("talathub_active_order", JSON.stringify(state.activeOrder)); } catch(e) {}
-                    updateHomeActiveOrderBanner();
-                    renderTrackingScreen();
-                } else {
-                    updateHomeActiveOrderBanner();
-                }
-            }
-        }).catch(() => updateHomeActiveOrderBanner());
-    } else {
-        updateHomeActiveOrderBanner();
-    }
+    // ✅ ดึงออเดอร์ที่กำลังจัดส่ง "ที่เครื่องนี้เคยสั่ง" กลับมาแสดง (ถ้ามี)
+    // เดิมดึงออเดอร์ 15 ใบล่าสุดของทุกคนมาเทียบชื่อ/เบอร์ ซึ่งทำให้เห็นออเดอร์คนอื่นได้ และกฎใหม่ไม่อนุญาตแล้ว
+    restoreMyActiveOrderFromCloud().finally(() => updateHomeActiveOrderBanner());
 
     // Auto-fulfill pending add to cart if customer clicked before logging in
     if (pendingAddToCart) {
@@ -17751,6 +17987,35 @@ function handleCustomerLoginSubmit() {
         showToast(`👋 ยินดีต้อนรับคุณลูกค้า (${displayVal}) เข้าสู่ระบบสำเร็จ!`);
     }
 }
+
+// หาออเดอร์ล่าสุดที่ยังไม่ส่งเสร็จ ซึ่งเครื่องนี้เป็นคนสั่ง (customerUid ตรงกับบัตรผ่านของเครื่องนี้) แล้วอ่านสถานะล่าสุดจากคลาวด์
+async function restoreMyActiveOrderFromCloud() {
+    if (state.activeOrder && state.activeOrder.orderId && state.activeOrder.status !== "delivered") {
+        watchActiveOrderInCloud();
+        return state.activeOrder;
+    }
+    const uid = await ensureAuthUser(8000);
+    if (!uid || !isFirebaseReady()) return null;
+    let hist = [];
+    try { hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]"); } catch (e) { }
+    const mine = (Array.isArray(hist) ? hist : [])
+        .filter(o => o && o.orderId && o.customerUid === uid && o.status !== "delivered" && !isMockOrder(o))
+        .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0))[0];
+    if (!mine) return null;
+    try {
+        const snap = await db.ref(`orders/${toFirebaseKey(mine.orderId)}`).once("value");
+        const fresh = snap.val();
+        if (fresh && fresh.orderId && fresh.status !== "delivered") {
+            state.activeOrder = fresh;
+            try { localStorage.setItem("talathub_active_order", JSON.stringify(fresh)); } catch (e) { }
+            renderTrackingScreen();
+            watchActiveOrderInCloud();
+            return fresh;
+        }
+    } catch (e) { }
+    return null;
+}
+window.restoreMyActiveOrderFromCloud = restoreMyActiveOrderFromCloud;
 
 function logoutCustomer() {
     state.customer = { isLoggedIn: false, identifier: "", type: "phone" };
@@ -17788,6 +18053,7 @@ function logoutCustomer() {
 }
 
 function logoutMerchant() {
+    closeStaffSession();
     state.activeMerchant = null;
     activeMerchantStallId = null;
     _isEditingMerchantStall = false;
@@ -20208,6 +20474,7 @@ function reconsiderMerchantApplication(appId) {
 
     // Immediately remove from active market when reverted to pending
     const stallId = app.stallData?.stallId || app.id;
+    removeStaffKey("merchant", stallId);
     const phone = app.stallData?.phone || app.phone;
     const sName = app.stallData?.stallName;
     for (let i = MARKET_DATA.length - 1; i >= 0; i--) {
@@ -20242,6 +20509,7 @@ function deleteMerchantApplication(appId) {
     apps = apps.filter(a => a.id !== appId);
     saveMerchantApplications(apps);
 
+    if (appToDelete) removeStaffKey("merchant", (appToDelete.stallData && appToDelete.stallData.stallId) || appToDelete.id);
     if (appToDelete && appToDelete.stallData) {
         const stallId = appToDelete.stallData.stallId;
         const phone = appToDelete.stallData.phone;
@@ -20273,6 +20541,7 @@ window.deleteMerchantApplication = deleteMerchantApplication;
 function deleteStallByAdmin(stallId) {
     if (!requireOwnerAction()) return;
     if (!confirm("คุณแน่ใจหรือไม่ว่าต้องการลบแผงค้านี้ออกจากทำเนียบแผงค้า?")) return;
+    removeStaffKey("merchant", stallId);
 
     for (let i = MARKET_DATA.length - 1; i >= 0; i--) {
         if (MARKET_DATA[i].stallId === stallId) {
@@ -20501,6 +20770,7 @@ window.reconcileApprovedRiders = reconcileApprovedRiders;
 // ต้องเรียกหลังเปลี่ยนสถานะใบสมัครเป็นไม่ใช่ "approved" แล้ว ไม่งั้น reconcileApprovedRiders จะกู้ไรเดอร์กลับมา
 function revokeRiderAccessForApplication(app) {
     if (!app) return false;
+    removeStaffKey("rider", app.accessCode || app.id);   // เครื่องที่ล็อกอินอยู่หมดสิทธิ์อ่านออเดอร์ทันที
     const cleanPhone = (app.phone || "").replace(/[-\s]/g, "");
     const matches = (r) => {
         if (!r) return false;
@@ -22219,6 +22489,7 @@ async function approveRiderApplication(appId) {
     app.loginSalt = cred.loginSalt;
     app.loginHash = cred.loginHash;
     saveRiderApplications(apps);
+    saveStaffKey("rider", app.accessCode, cred.staffProof);   // สิทธิ์อ่านออเดอร์ของไรเดอร์คนนี้ (ตรวจที่กฎฐานข้อมูล)
 
     // Update _lastSubmittedRiderApp if matching
     if (_lastSubmittedRiderApp && (_lastSubmittedRiderApp.id === app.id || _lastSubmittedRiderApp.phone === app.phone)) {
@@ -27737,6 +28008,7 @@ function loginRiderWithProfile(r) {
 window.loginRiderWithProfile = loginRiderWithProfile;
 
 function logoutRider() {
+    closeStaffSession();
     state.activeRider = null;
     saveRiderToStorage(null);
     setActiveRoleView("customer");
@@ -31270,8 +31542,7 @@ function initTalatHubApp() {
     initMerchantRealtimeSync();
     initCustomStallsRealtimeSync();
     initCatalogDbRealtimeSync();
-    syncAdminOrdersFromCloud();
-    listenToFirebaseOrdersForAdmin();
+    refreshOrderAccess();   // ดึง/ฟังออเดอร์หลังบัตรผ่านพร้อม (สิทธิ์ตามบทบาท)
     listenToFirebaseVendorSettlementForMerchant();
 
     // Auto-prompt location picker modal for first-time customers who have no saved location
@@ -31286,8 +31557,7 @@ function initTalatHubApp() {
             initMerchantRealtimeSync();
             initCustomStallsRealtimeSync();
             initCatalogDbRealtimeSync();
-            syncAdminOrdersFromCloud();
-            listenToFirebaseOrdersForAdmin();
+            refreshOrderAccess();
             listenToFirebaseVendorSettlementForMerchant();
             fetchOnlineStallsStartup();
             updateAdminRiderBadges();
@@ -31724,6 +31994,7 @@ async function approveMerchantApplication(appId) {
 
     // Create stall in market data & all stalls
     const stallObj = stallFromApp(app);
+    saveStaffKey("merchant", stallObj.stallId || app.id, cred.staffProof);   // สิทธิ์อ่านออเดอร์ของร้านนี้ (ตรวจที่กฎฐานข้อมูล)
     const existingIndex = MARKET_DATA.findIndex(s => s.stallId === stallObj.stallId);
     if (existingIndex >= 0) MARKET_DATA[existingIndex] = stallObj;
     else MARKET_DATA.push(stallObj);
@@ -31792,6 +32063,7 @@ async function resetMerchantLoginSecret(stallIdRaw) {
         if (s) { s.loginSalt = cred.loginSalt; s.loginHash = cred.loginHash; }
     });
     saveMarketDataToStorage();
+    saveStaffKey("merchant", stallId, cred.staffProof);
     if (typeof renderAdminStalls === "function") renderAdminStalls();
     const detail = document.getElementById("merchant-app-detail-modal");
     if (app && detail && !detail.classList.contains("hidden") && typeof viewMerchantAppDetail === "function") viewMerchantAppDetail(app.id);
@@ -31875,6 +32147,7 @@ function rejectMerchantApplication(appId) {
     app.status = "rejected";
     app.rejectedAt = new Date().toISOString();
     saveMerchantApplications(apps);
+    removeStaffKey("merchant", (app.stallData && app.stallData.stallId) || app.id);
     updateAdminStallsBadge();
     renderAdminStalls();
     showToast("ปฏิเสธคำขอเปิดร้านค้าเรียบร้อยแล้ว");
@@ -31936,6 +32209,7 @@ async function handleMerchantCodeLoginSubmit() {
         if (res.code === "bad") { secEl.value = ""; secEl.focus(); }
         return;
     }
+    const typedSecret = secEl.value;
     secEl.value = "";
 
     const matchedStall = res.stall;
@@ -31948,6 +32222,8 @@ async function handleMerchantCodeLoginSubmit() {
     }
     closeMerchantLoginModal();
     _enterMerchantStall(matchedStall.stallId);
+    // ขอสิทธิ์อ่านออเดอร์จากฐานข้อมูล (รหัสผ่านถูกตรวจซ้ำที่กฎฐานข้อมูล)
+    openStaffSession("merchant", matchedStall.stallId, typedSecret, res.loginSalt);
 }
 
 

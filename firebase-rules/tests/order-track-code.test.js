@@ -73,7 +73,7 @@ ok(r.ok === true && r.reason === "legacy-no-code", "ออเดอร์เก�
 
 console.log("== ทุกครั้งที่สร้างออเดอร์ต้องได้รหัสติดตามด้วยเสมอ");
 ok(/trackCode:\s*generateOrderTrackCode\(\)/.test(src), "simulatePaymentSuccess ใส่ trackCode ให้ทุกออเดอร์ใหม่");
-ok(/handleTrackingDeepLink[\s\S]{0,3000}resolveOrderTrackingAccess/.test(src), "handleTrackingDeepLink (ทางเข้าเดียวที่เปิดออเดอร์จากลิงก์) เรียกใช้ตัวตรวจรหัสจริง");
+ok(/handleTrackingDeepLink[\s\S]{0,5000}resolveOrderTrackingAccess/.test(src), "handleTrackingDeepLink (ทางเข้าเดียวที่เปิดออเดอร์จากลิงก์) เรียกใช้ตัวตรวจรหัสจริง");
 
 console.log(fail ? "\n" + fail + " FAILED" : "\nALL PASSED");
 process.exit(fail ? 1 : 0);

@@ -48,6 +48,14 @@ const ctx = {
     state: { activeAdmin: { name: "เจ้าของ" } },
     document: { getElementById: () => null }
 };
+// ตัวช่วยสิทธิ์อ่านออเดอร์ (staff_keys / staff_sessions) — ทดสอบจริงอยู่ใน order-access.test.js
+Object.assign(ctx, {
+    staffProofFromSecret: async () => "f".repeat(64),
+    saveStaffKey: () => Promise.resolve(true),
+    removeStaffKey: () => { },
+    openStaffSession: async () => false,
+    closeStaffSession: () => { }
+});
 vm.createContext(ctx);
 vm.runInContext([
     between("const RIDER_DOC_SLOTS = [", "window.getMissingRequiredRiderDocs = getMissingRequiredRiderDocs;"),

@@ -11,7 +11,8 @@ const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) fail++;
 
 // ดึง callback ของ child_added ออกมาตรง ๆ จากซอร์ส แล้วรันในบริบทจำลอง (ไม่ใช้ Firebase จริง)
 function extractChildAddedCallback() {
-    const anchor = 'db.ref("orders").on("child_added", (snapshot) => {';
+    // ตั้งแต่ 2026-09-25 ตัวฟังนี้อยู่ใน attachOrderChildListeners (เปิดเฉพาะเจ้าของ/ไรเดอร์/แม่ค้า)
+    const anchor = 'ordersRef.on("child_added", (snapshot) => {';
     const start = src.indexOf(anchor);
     if (start < 0) throw new Error("marker missing: " + anchor);
     let i = src.indexOf("{", start), depth = 0, bodyStart = -1;
@@ -30,6 +31,7 @@ const ctx = {
     state: { activeOrder: null, customer: null },
     localStorage: { setItem() { }, getItem: () => null, removeItem() { } },
     isOwnerSignedIn: () => ctx._owner === true,
+    getAuthUid: () => ctx._uid || null,
     document: { getElementById: () => null },
     renderTrackingScreen: () => calls.push("renderTrackingScreen"),
     updateHomeActiveOrderBanner: () => calls.push("updateHomeActiveOrderBanner"),
@@ -55,10 +57,16 @@ ctx.state = { activeOrder: null, customer: { isLoggedIn: true, identifier: "081-
 run(fakeSnap(strangersOrder));
 ok(ctx.state.activeOrder === null, "ออเดอร์ของคนอื่น (เบอร์ไม่ตรง) ไม่ถูกเอามาใส่ใน state.activeOrder ของลูกค้า A");
 
-console.log("== ออเดอร์ของ \"ตัวเอง\" (เบอร์ตรงกับที่ล็อกอินไว้) ต้องอัปเดตให้เห็นสถานะสด");
-ctx.state = { activeOrder: null, customer: { isLoggedIn: true, identifier: "089-999-9999", type: "phone" } }; ctx._owner = false; calls.length = 0;
-run(fakeSnap(strangersOrder)); // เบอร์เดียวกับออเดอร์นี้ (0899999999)
-ok(ctx.state.activeOrder && ctx.state.activeOrder.orderId === "#TH-9999", "ออเดอร์ของตัวเอง (เบอร์ตรง) ถูกอัปเดตเข้า state.activeOrder");
+console.log("== แค่เบอร์ตรงกัน ไม่ถือว่าเป็นเจ้าของออเดอร์ (ใครก็พิมพ์เบอร์คนอื่นได้)");
+ctx.state = { activeOrder: null, customer: { isLoggedIn: true, identifier: "089-999-9999", type: "phone" } }; ctx._owner = false; ctx._uid = "uid-other"; calls.length = 0;
+run(fakeSnap(strangersOrder));
+ok(ctx.state.activeOrder === null, "เบอร์ตรงแต่ไม่ใช่เครื่องที่สั่ง: ไม่เอาออเดอร์มาใส่ state.activeOrder");
+
+console.log("== ออเดอร์ของ \"ตัวเอง\" (customerUid = บัตรผ่านของเครื่องนี้) ต้องอัปเดตให้เห็นสถานะสด");
+ctx.state = { activeOrder: null, customer: { isLoggedIn: true, identifier: "089-999-9999", type: "phone" } }; ctx._owner = false; ctx._uid = "uid-me"; calls.length = 0;
+run(fakeSnap({ ...strangersOrder, customerUid: "uid-me" }));
+ok(ctx.state.activeOrder && ctx.state.activeOrder.orderId === "#TH-9999", "ออเดอร์ของตัวเอง (uid ตรง) ถูกอัปเดตเข้า state.activeOrder");
+ctx._uid = null;
 ok(calls.includes("renderTrackingScreen") && calls.includes("updateHomeActiveOrderBanner"), "รีเฟรชหน้าติดตามให้เจ้าของออเดอร์จริง");
 
 console.log("== ออเดอร์ที่กำลังติดตามอยู่แล้ว (orderId ตรงกัน) ยังอัปเดตสถานะสดได้ตามปกติ");
