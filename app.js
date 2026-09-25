@@ -18621,6 +18621,24 @@ const MERCHANT_PRESET_IMAGES = {
     }
 };
 
+// 🔍 รูป "จริง" ที่ร้านอัปโหลดเองเป็น data: URL (บีบอัดผ่าน compressDataUrl) ส่วนรูปตัวอย่างที่ระบบใส่ให้เองตอนไม่กรอก
+//   (MERCHANT_PRESET_IMAGES) เป็นลิงก์ Unsplash คงที่ — ใช้แยกว่ามีรูปจริงของร้านนั้นหรือยังเป็นแค่รูปตัวอย่าง
+function isRealMerchantPhoto(url) {
+    return typeof url === "string" && url.trim().startsWith("data:image");
+}
+window.isRealMerchantPhoto = isRealMerchantPhoto;
+
+// 🔍 รายการที่ยังขาดก่อนอนุมัติร้านค้า (เดิม approveMerchantApplication ไม่เคยตรวจเรื่องนี้เลย เจ้าของกดอนุมัติได้ทันที
+//   แม้ร้านยังไม่เคยอัปโหลดรูปเจ้าของร้าน/รูปหน้าร้านจริงสักรูป เป็นแค่รูปสต็อกที่ระบบใส่ให้เองเวลาไม่กรอก)
+function getMissingMerchantVerificationItems(app) {
+    const s = (app && app.stallData) || {};
+    const missing = [];
+    if (!isRealMerchantPhoto(s.ownerImage)) missing.push("รูปเจ้าของร้าน (หน้าตรง)");
+    if (!isRealMerchantPhoto(s.stallImage)) missing.push("รูปหน้าร้าน/แผงค้า");
+    return missing;
+}
+window.getMissingMerchantVerificationItems = getMissingMerchantVerificationItems;
+
 // ==========================================
 // AUTHENTICATION & LOGIN/LOGOUT (CUSTOMER & MERCHANT)
 // ==========================================
@@ -20310,6 +20328,9 @@ function renderAdminStalls() {
                                                 ` : `
                                                     <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">✕ ปฏิเสธ</span>
                                                 `}
+                                                ${app.status === 'pending' && getMissingMerchantVerificationItems(app).length ? `
+                                                    <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full">⚠️ รูปไม่ครบ</span>
+                                                ` : ''}
                                                 ${app.status === 'approved' ? `
                                                     <span class="bg-emerald-50 text-emerald-900 border border-emerald-300 text-[10px] font-mono font-black px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
                                                         <span>🏪 รหัสร้าน:</span>
@@ -32784,6 +32805,27 @@ async function approveMerchantApplication(appId) {
     if (!app) {
         showToast("⚠️ ไม่พบข้อมูลใบสมัคร");
         return false;
+    }
+
+    // 🔒 ต้องมีรูปเจ้าของร้าน/รูปหน้าร้านจริงก่อนถึงจะอนุมัติได้ (เดิมอนุมัติได้เลยแม้ยังเป็นแค่รูปตัวอย่างที่ระบบใส่ให้เอง)
+    const missingItems = getMissingMerchantVerificationItems(app);
+    if (missingItems.length > 0) {
+        showToast("⚠️ อนุมัติไม่ได้ ยังขาด: " + missingItems.join(", "));
+        if (typeof viewMerchantAppDetail === "function") viewMerchantAppDetail(app.id);
+        return false;
+    }
+    // 🔒 บังคับให้เจ้าของยืนยันว่า "เปิดดู" รูปแล้วจริง ก่อนอนุมัติทุกครั้งที่ยังไม่เคยยืนยัน (กันกดอนุมัติมั่ว ๆ จากรายการโดยไม่เปิดดูรูป)
+    if (!app.photosVerifiedAt) {
+        const displayName = (app.stallData && app.stallData.stallName)
+            ? `${app.stallData.stallName} (${app.stallData.ownerName || "-"})`
+            : app.id;
+        const confirmed = confirm(`ก่อนอนุมัติร้าน "${displayName}" กรุณายืนยัน:\n\n✓ เปิดดูรูปเจ้าของร้านและรูปหน้าร้าน/แผงค้าแล้ว\n✓ เป็นรูปจริงของร้านนี้ ไม่ใช่รูปตัวอย่าง\n✓ ข้อมูลร้าน/บัญชีธนาคารดูสมเหตุสมผล\n\nยืนยันว่าตรวจสอบแล้วและจะอนุมัติใช่หรือไม่?`);
+        if (!confirmed) {
+            showToast("ยกเลิกการอนุมัติ (ยังไม่ได้ยืนยันว่าตรวจสอบรูปแล้ว)");
+            return false;
+        }
+        app.photosVerifiedAt = new Date().toISOString();
+        app.photosVerifiedBy = (state.activeAdmin && state.activeAdmin.name) || "เจ้าของ";
     }
 
     // รหัสผ่านลับ: แสดงครั้งเดียวในหน้าต่างส่งข้อความ เก็บเฉพาะ salt + hash
