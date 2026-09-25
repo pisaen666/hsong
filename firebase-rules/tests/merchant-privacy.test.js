@@ -67,5 +67,15 @@ ok(/fetchStallContactPhone\(origin\.stallId\)/.test(fn("callMerchantFromRiderUI"
 ok(!/081-444-5555/.test(src), "ไม่มีเบอร์ร้านสมมติ 081-444-5555 แล้ว");
 ok(/saveMyStallContact\(stallObj\)/.test(fn("saveMerchantStallData")), "ร้านแก้ข้อมูล -> เบอร์หลักที่ไรเดอร์เห็นอัปเดตตาม");
 
+console.log("== ป้ายร้านในผังแผง / หัวตาราง (เจ้าของขอแก้ 2026-09-25)");
+vm.runInContext(fn("stallShortLabel"), ctx);
+ok(ctx.stallShortLabel({ stallNumber: "-", stallName: "ร้าน ส.ไก่สด" }) === "ร้าน ส.ไก่สด", "เลขแผงเป็น \"-\" -> แสดงชื่อร้านแทน");
+ok(ctx.stallShortLabel({ stallNumber: "A-04", stallName: "x" }) === "A-04", "ร้านที่ยังมีเลขแผงจริง -> แสดงเลขแผง");
+ok(ctx.stallShortLabel({ stallName: "ร้านผักสดป้าแดงตลาดเช้า" }).length <= 14, "ชื่อยาวถูกย่อ");
+const adminStalls = fn("renderAdminStalls");
+ok(!adminStalls.includes("รหัสผ่าน 6 หลัก") && adminStalls.includes("รหัสร้าน / รหัสผ่าน"), "หัวคอลัมน์เปลี่ยนเป็น รหัสร้าน / รหัสผ่าน");
+ok(!/<th class="p-3">เลขแผง<\/th>/.test(adminStalls), "ตารางร้านไม่มีคอลัมน์เลขแผงแล้ว");
+ok(/stallShortLabel\(s\)/.test(src), "ผังแผงของฮับใช้ป้ายชื่อร้าน");
+
 console.log(fail ? "\n" + fail + " FAILED" : "\nALL PASSED");
 process.exit(fail ? 1 : 0);

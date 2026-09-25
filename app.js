@@ -1640,6 +1640,15 @@ function sanitizeStallForPublic(stall) {
 }
 window.sanitizeStallForPublic = sanitizeStallForPublic;
 
+// ป้ายสั้น ๆ ของร้านในผังแผง (ฮับ/แอดมิน): เลขแผงถูกเลิกใช้แล้ว (มีแต่ "-") จึงใช้ชื่อร้านแทน
+function stallShortLabel(stall) {
+    const num = String((stall && stall.stallNumber) || "").trim();
+    if (num && num !== "-") return num;
+    const name = String((stall && (stall.stallName || stall.stallId)) || "แผงค้า").trim();
+    return name.length > 14 ? name.slice(0, 13) + "…" : name;
+}
+window.stallShortLabel = stallShortLabel;
+
 // ชื่อเจ้าของร้านที่แสดงให้ลูกค้าเห็น = ชื่อเล่นเท่านั้น (ชื่อ-นามสกุลจริงเห็นเฉพาะเจ้าของตลาด)
 function stallOwnerDisplayName(stall) {
     return (stall && (stall.owner1Nickname || stall.ownerNickname)) || "เจ้าของแผงค้า";
@@ -20166,12 +20175,12 @@ function renderAdminStalls() {
                                             ${catStalls.slice(0, 20).map(s => {
                                                 const hasOrder = stallsWithOrdersIds.has(s.stallId);
                                                 return `
-                                                    <button onclick="handleAdminStallSearch(${jsArg(s.stallNumber)})" title="${escapeHtml(s.stallNumber)}: ${escapeHtml(s.stallName)} (${hasOrder ? 'มีออเดอร์ค้างทำ!' : (s.isClosed ? 'พักร้าน' : 'เปิดปกติ')})" class="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold transition-all active:scale-95 cursor-pointer ${
+                                                    <button onclick="handleAdminStallSearch(${jsArg(s.stallName || s.stallId)})" title="${escapeHtml(s.stallName)} (${hasOrder ? 'มีออเดอร์ค้างทำ!' : (s.isClosed ? 'พักร้าน' : 'เปิดปกติ')})" class="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold transition-all active:scale-95 cursor-pointer ${
                                                         hasOrder
                                                         ? 'bg-amber-400 text-slate-950 font-black animate-pulse border border-amber-500 shadow-2xs'
                                                         : (s.isClosed ? 'bg-slate-200 text-slate-400 opacity-60' : 'bg-white hover:bg-emerald-50 text-slate-700 border border-slate-200')
                                                     }">
-                                                        ${escapeHtml(s.stallNumber)}
+                                                        ${escapeHtml(stallShortLabel(s))}
                                                     </button>
                                                 `;
                                             }).join('')}
@@ -20361,11 +20370,10 @@ function renderAdminStalls() {
                             <table class="w-full text-left text-xs">
                                 <thead>
                                     <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                                        <th class="p-3">เลขแผง</th>
                                         <th class="p-3">ชื่อร้านค้า</th>
                                         <th class="p-3">เจ้าของแผง</th>
                                         <th class="p-3">เบอร์โทรศัพท์</th>
-                                        <th class="p-3">รหัสผ่าน 6 หลัก</th>
+                                        <th class="p-3">รหัสร้าน / รหัสผ่าน</th>
                                         <th class="p-3 text-center">สถานะ</th>
                                         <th class="p-3 text-center">การจัดการ</th>
                                     </tr>
@@ -20373,9 +20381,6 @@ function renderAdminStalls() {
                                 <tbody class="divide-y divide-slate-100">
                                     ${filteredStalls.slice(0, 80).map(s => `
                                         <tr class="hover:bg-slate-50 transition-colors">
-                                            <td class="p-3 font-mono font-bold text-slate-700">
-                                                <span class="bg-slate-100 px-2 py-0.5 rounded">${escapeHtml(s.stallNumber) || 'แผงตลาด'}</span>
-                                            </td>
                                             <td class="p-3">
                                                 <div class="font-extrabold text-slate-900">${escapeHtml(s.stallName)}</div>
                                                 ${s.stallTag ? `<div class="text-[10px] text-slate-400">${escapeHtml(s.stallTag)}</div>` : ''}
@@ -20494,7 +20499,6 @@ function renderAdminStalls() {
                     <table class="w-full text-left text-xs">
                         <thead>
                             <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                                <th class="p-3">เลขแผง</th>
                                 <th class="p-3">ชื่อแผงค้า / เจ้าของ</th>
                                 <th class="p-3 text-center">ออเดอร์</th>
                                 <th class="p-3 text-right">ยอดขายรวม</th>
@@ -20508,7 +20512,7 @@ function renderAdminStalls() {
                         <tbody class="divide-y divide-slate-100">
                             ${vendorList.length === 0 ? `
                                 <tr>
-                                    <td colspan="9" class="p-8 text-center text-slate-400">
+                                    <td colspan="8" class="p-8 text-center text-slate-400">
                                         <div class="space-y-2">
                                             <span class="material-symbols-outlined text-3xl text-slate-300">payments</span>
                                             <div>ยังไม่มียอดขายของแผงค้าในวันที่เลือก (${targetDateKey})</div>
@@ -20524,9 +20528,6 @@ function renderAdminStalls() {
                                 const stallGP = Number(v.gpAmount || 0);
                                 return `
                                 <tr class="hover:bg-slate-50 transition-colors">
-                                    <td class="p-3 font-mono font-bold text-slate-700">
-                                        <span class="bg-slate-100 px-2 py-0.5 rounded">${escapeHtml(v.stallNumber) || 'แผง'}</span>
-                                    </td>
                                     <td class="p-3">
                                         <div class="font-extrabold text-slate-900">${escapeHtml(v.stallName)}</div>
                                         <div class="text-[10px] text-slate-400">เจ้าของ: ${escapeHtml(v.ownerName) || '-'}</div>
