@@ -67,7 +67,7 @@
             if (m !== "normal") document.documentElement.classList.add("text-" + m);
         })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=10.04_rider_banner_fix">
+    <link rel="stylesheet" href="styles.css?v=10.05_toast_fix">
 </head>
 
 <body
@@ -7376,6 +7376,12 @@
         </div>
     </div>
     <!-- END MERCHANT MAP PICKER MODAL -->
+
+    <!-- Toast Notification: แจ้งเตือนสั้น ๆ มุมล่างกลางจอ ใช้โดย showToast() ทั่วทั้งแอป
+         (element นี้เพิ่งเพิ่มเข้ามา — เดิมไม่มีเลยตั้งแต่คอมมิตแรก ทำให้ showToast() หาไม่เจอและไม่แสดงอะไรมาตลอด) -->
+    <div id="toast-message" class="max-w-[92vw] sm:max-w-sm px-5 py-3 rounded-2xl bg-slate-900 text-white text-sm font-bold shadow-2xl text-center">
+        <span id="toast-text"></span>
+    </div>
 
     <!-- Firebase SDK (compat version - ใช้ได้กับ HTML/JS ธรรมดา) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>

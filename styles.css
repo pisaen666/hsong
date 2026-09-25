@@ -128,7 +128,19 @@ body {
     display: flex !important;
 }
 
-/* Toast Notification Animation */
+/* Toast Notification (สถานะเริ่มต้น — เดิมมีแค่ .show ด้านล่าง ไม่มีสถานะเริ่มต้นเลย เพราะ
+   #toast-message ไม่เคยถูกสร้างใน index.html ตั้งแต่คอมมิตแรกของโปรเจกต์ ทำให้ showToast()
+   ไม่เคยแสดงอะไรบนหน้าจอเลยทั้งแอป) */
+#toast-message {
+    position: fixed;
+    left: 50%;
+    bottom: 28px;
+    z-index: 999999;
+    opacity: 0;
+    transform: translate(-50%, 24px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    pointer-events: none;
+}
 #toast-message.show {
     opacity: 1;
     transform: translate(-50%, 10px);
