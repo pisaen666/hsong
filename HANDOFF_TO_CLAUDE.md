@@ -24,7 +24,8 @@
    ```
    - `rules-anon.test.js` ต่อเน็ตไป hsong-test (ต้อง seed ก่อน ดูหัวไฟล์) และ `rules-v3/v4/v5/v6-live.test.js` ข้ามเอง ถ้าไม่ใส่ `LIVE=1` (กฎที่ใช้บน hsong-test ตอนนี้ = v6 ดังนั้น v3-live จะล้มถ้ารัน — ใช้กับ v3 เท่านั้น)
    - เครื่อง Windows ที่ `core.autocrlf=true`: `checkout-gate`, `merchant-login`, `untrusted-guard` เคยล้มเพราะ CRLF — แก้แล้ว 26 ก.ย. (ตัวทดสอบแปลง CRLF เป็น LF เองก่อนอ่าน `app.js`) ตัวทดสอบใหม่ที่ค้นหาข้อความมี `\n` ควรทำแบบเดียวกัน
-   - 26 ก.ย.: `rules-anon.test.js` ผ่าน 75 ล้ม 1 ข้อ ("ใบสมัครที่มีรหัสผ่านแล้ว: แก้ฟิลด์อื่นโดย loginHash เดิม ได้" ได้ 401) — น่าจะเพราะข้อมูล seed บน hsong-test ไม่ครบ/ถูกล้างไป ยังไม่ได้ตรวจยืนยัน ลอง seed ใหม่ตามหัวไฟล์ก่อนสรุปว่ากฎผิด
+   - `rules-anon.test.js` ต้อง seed ก่อนรันทุกครั้ง: `clean-zz-test-data.js` ลบข้อมูลตั้งต้น `ZZSEED*` ไปด้วย ถ้าไม่ seed ข้อ "แก้ฟิลด์อื่นโดย loginHash เดิม ได้" จะล้ม (HTTP 401) ซึ่งไม่ใช่กฎผิด (ตรวจแล้ว 26 ก.ย.: seed ใหม่ → ผ่าน 76/76 แล้วล้างข้อมูล ZZ ทิ้ง)
+     ลำดับ: `MSYS_NO_PATHCONV=1 firebase database:update / firebase-rules/tests/rules-anon.seed.json --project hsong-test --force` → รันทดสอบ → `node firebase-rules/tools/clean-zz-test-data.js`
    - ล้างข้อมูลทดสอบ "ZZ*" บน hsong-test: `node firebase-rules/tools/clean-zz-test-data.js`
 4. **ไม่มีงานโค้ดค้าง** — ทุกอย่างขึ้นเว็บจริงและตรวจแล้ว (ค่ารอบไรเดอร์ / ตรวจรูปก่อนอนุมัติร้าน / กล่องแจ้งเตือน toast = CLAUDE.md 5z5-5z7 ขึ้นเว็บจริง 25 ก.ย. เย็น ตรวจไฟล์ตรงกันแล้ว 26 ก.ย.)
 5. **เรื่องที่พักไว้ / รอเจ้าของตอบ** (ถามเจ้าของก่อน ไม่ต้องทำเอง):
