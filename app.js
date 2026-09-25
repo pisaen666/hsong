@@ -1697,6 +1697,11 @@ async function syncKeyedToCloud(node, map, opts) {
     try {
         if (!(isFirebaseReady() && db)) return { written: 0, skipped: true };
         const ready = await _ensureCloudBaseline(node, opts.keyFn, opts.mapper);
+        if (!ready && !isOwnerSignedIn() && _BLIND_WRITE_NODES.has(node)) {
+            // กฎ v5+: ผู้สมัคร/ร้านอ่านรายการทั้งโหนดไม่ได้ (baseline ไม่มา) แต่ยังต้องส่งใบสมัครของตัวเองได้
+            // เครื่องนี้มีเฉพาะรายการของตัวเอง (รายการของคนอื่นถูกลบออกจากเครื่องแล้ว) -> เขียนทีละรายการตรง ๆ
+            return await _blindWriteItems(node, map, opts.mapper || _CLOUD_COMPARE_MAPPERS[node]);
+        }
         if (!ready) return { written: 0, skipped: true };   // ยังคุยกับคลาวด์ไม่ได้ — ข้อมูลยังอยู่ในเครื่อง
         const base = _cloudBaselines[node];
         const owner = isOwnerSignedIn();
@@ -1726,6 +1731,29 @@ async function syncKeyedToCloud(node, map, opts) {
         console.warn("syncKeyedToCloud " + node + " error:", e);
         return { written: 0, failed: 1 };
     }
+}
+
+// โหนดที่คนทั่วไปอ่านทั้งโหนดไม่ได้ (กฎ v5+) แต่ต้องส่งข้อมูลของตัวเองได้ (สมัครใหม่ / ร้านแก้ใบสมัครของตัวเอง)
+const _BLIND_WRITE_NODES = new Set(["rider_applications", "merchant_applications"]);
+const _blindWritten = {};   // node -> { key: json } ที่เขียนสำเร็จแล้วในรอบนี้ (ไม่เขียนซ้ำถ้าไม่เปลี่ยน)
+async function _blindWriteItems(node, map, mapper) {
+    const done = _blindWritten[node] || (_blindWritten[node] = {});
+    const jobs = [];
+    Object.keys(map).forEach(k => {
+        const raw = map[k];
+        // ส่งได้เฉพาะใบสมัครที่ยังรออนุมัติ หรือใบสมัครของร้านที่ล็อกอินอยู่ (กันข้อมูลเก่าที่ค้างในเครื่องไปทับของคนอื่น)
+        const mine = node === "merchant_applications" && typeof myMerchantStaffId === "function" && myMerchantStaffId() &&
+            (k === myMerchantStaffId() || (raw && raw.stallData && staffKeyId(raw.stallData.stallId) === myMerchantStaffId()));
+        if (!raw || (raw.status !== "pending" && !mine)) return;
+        const item = mapper ? mapper(raw) : raw;
+        const json = _canonJson(item);
+        if (json === undefined || done[k] === json) return;
+        jobs.push(_withTimeout(db.ref(node + "/" + k).set(JSON.parse(JSON.stringify(item))), 10000).then(() => { done[k] = json; }));
+    });
+    const results = await Promise.allSettled(jobs);
+    const failed = results.filter(r => r.status === "rejected");
+    if (failed.length) console.warn("Firebase save " + node + " (blind): " + failed.length + " รายการถูกปฏิเสธ", failed[0].reason);
+    return { written: results.length - failed.length, failed: failed.length, blind: true };
 }
 
 function syncListToCloud(node, list, keyFn, opts) {

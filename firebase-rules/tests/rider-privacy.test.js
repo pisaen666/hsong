@@ -62,5 +62,23 @@ ok(/rider_phone_status/.test(fn("handleCheckApplicationStatusSubmit")) && /rider
 ok(/setMyRiderStatus\("on_delivery"\)/.test(fn("handleRiderStartDelivery")) && /setMyRiderStatus\("available"\)/.test(fn("handleRiderCompleteDelivery")), "ไรเดอร์อัปเดตสถานะของตัวเองได้");
 ok(!/firebasedatabase\.app\/(rider_applications|community_riders)\.json"\)/.test(src), "ไม่มีการดึงรายชื่อไรเดอร์แบบไม่แนบบัตรผ่าน");
 
-console.log(fail ? "\n" + fail + " FAILED" : "\nALL PASSED");
-process.exit(fail ? 1 : 0);
+console.log("== ผู้สมัครส่งใบสมัครได้ แม้อ่านรายการทั้งโหนดไม่ได้ (บั๊กที่พบหลังขึ้น v5)");
+const sync = fn("syncKeyedToCloud");
+ok(/_BLIND_WRITE_NODES\.has\(node\)/.test(sync) && /_blindWriteItems\(/.test(sync), "อ่านรายการไม่ได้ + ไม่ใช่เจ้าของ -> เขียนใบสมัครของตัวเองตรง ๆ (ไม่ข้ามเงียบ ๆ)");
+ok(/new Set\(\["rider_applications", "merchant_applications"\]\)/.test(src), "ใช้กับใบสมัครไรเดอร์และร้านเท่านั้น");
+const writes = [];
+const c3 = {
+    db: { ref: p => ({ set: v => { writes.push([p, v]); return Promise.resolve(); } }) },
+    _withTimeout: p => p, console, JSON, Promise, Object,
+    _canonJson: v => JSON.stringify(v), staffKeyId: s => String(s), myMerchantStaffId: () => null
+};
+vm.createContext(c3);
+vm.runInContext("const _blindWritten = {};\n" + fn("_blindWriteItems"), c3);
+(async () => {
+    await c3._blindWriteItems("rider_applications", { RD1: { id: "RD1", status: "pending" }, RD2: { id: "RD2", status: "approved" } }, null);
+    ok(writes.length === 1 && writes[0][0] === "rider_applications/RD1", "ส่งเฉพาะใบที่รออนุมัติ (ข้อมูลเก่าที่อนุมัติแล้วในเครื่อง ไม่ถูกเขียนทับของคนอื่น)");
+    await c3._blindWriteItems("rider_applications", { RD1: { id: "RD1", status: "pending" } }, null);
+    ok(writes.length === 1, "ข้อมูลเดิมไม่เปลี่ยน ไม่ส่งซ้ำ");
+    console.log(fail ? "\n" + fail + " FAILED" : "\nALL PASSED");
+    process.exit(fail ? 1 : 0);
+})();
