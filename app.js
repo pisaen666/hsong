@@ -735,13 +735,18 @@ function refreshOrderAccess() {
             attachOrderChildListeners();
             listenRiderJobs();
             initRiderRealtimeSync();
+            initMerchantRealtimeSync();
+            sanitizePublicStallsInCloud();
         } else {
             purgeRiderListCachesForVisitors();
             const isRider = !!(state.activeRider && state.activeRider.isLoggedIn);
             const isMerchant = !!(state.activeMerchant && state.activeMerchant.isLoggedIn);
             if (isRider || isMerchant) await loadMyStaffSession();
             if (isRider && myRiderStaffId()) listenRiderJobs();
-            if (isMerchant && myMerchantStaffId()) listenStallOrders();
+            if (isMerchant && myMerchantStaffId()) {
+                listenStallOrders();
+                loadMyMerchantApplication(myMerchantStaffId());   // ข้อมูลเต็มของร้านตัวเอง (บัญชี เบอร์) สำหรับแก้ข้อมูล/ดูยอดโอน
+            }
             if (isMerchant) watchMyExpressOrders();
             if ((isRider || isMerchant) && !_myStaffSession && !_anonAuthFailed) _onOrderListDenied({ code: "no-staff-session" });
         }
@@ -1374,6 +1379,12 @@ async function merchantSecretLogin(shopRaw, secretRaw, opts) {
     const secret = normalizeRiderSecret(secretRaw);
     if (!code || !secret) return { ok: false, code: "empty", message: "⚠️ กรุณากรอกรหัสร้าน และรหัสผ่านเข้าระบบ" };
 
+    // กฎ v6: ให้ฐานข้อมูลตรวจรหัสผ่าน (ใบสมัครร้านอ่านได้เฉพาะเจ้าของแล้ว) — ถ้ายังไม่มีข้อมูลสาธารณะของร้านนี้ ใช้วิธีเดิม
+    if (typeof isFirebaseReady === "function" && isFirebaseReady() && typeof _merchantLoginViaServer === "function") {
+        const viaServer = await _merchantLoginViaServer(code, secret);
+        if (viaServer) return viaServer;
+    }
+
     const bad = { ok: false, code: "bad", message: "⚠️ รหัสร้านหรือรหัสผ่านไม่ถูกต้อง" };
     let found = _findMerchantByShopCode(code, loadMerchantApplications(), [MARKET_DATA, ALL_100_STALLS]);
     if (!found.app && !found.stall && opts && typeof opts.fetchRemote === "function") {
@@ -1591,13 +1602,218 @@ function setMyRiderStatus(status) {
 window.setMyRiderStatus = setMyRiderStatus;
 
 // ผู้เข้าชมที่ไม่ใช่เจ้าของ: ลบรายชื่อไรเดอร์/ใบสมัครที่เคยเก็บไว้ในเครื่องสมัยที่ยังเปิดให้ทุกคนอ่าน (มีเบอร์ พร้อมเพย์ LINE)
+// v6: ใบสมัครร้าน (มีบัญชีธนาคาร) ก็ลบเหมือนกัน เหลือเฉพาะใบของร้านที่ล็อกอินอยู่; ข้อมูลร้านในเครื่องตัดช่องส่วนตัวออก
 function purgeRiderListCachesForVisitors() {
     if (isOwnerSignedIn()) return;
     try {
         localStorage.removeItem("talathub_community_riders");
         localStorage.removeItem("talathub_rider_applications");
+        const mySid = (state.activeMerchant && state.activeMerchant.isLoggedIn) ? staffKeyId(state.activeMerchant.stallId) : "";
+        const apps = JSON.parse(localStorage.getItem("talathub_merchant_applications") || "[]");
+        const mine = Array.isArray(apps) ? apps.filter(a => a && mySid && (staffKeyId(a.id) === mySid || (a.stallData && staffKeyId(a.stallData.stallId) === mySid))) : [];
+        localStorage.setItem("talathub_merchant_applications", JSON.stringify(mine));
+        const stalls = JSON.parse(localStorage.getItem("talathub_custom_market_stalls") || "[]");
+        if (Array.isArray(stalls)) localStorage.setItem("talathub_custom_market_stalls", JSON.stringify(stalls.map(s => (s && staffKeyId(s.stallId) === mySid) ? s : sanitizeStallForPublic(s))));
     } catch (e) { }
 }
+
+// =================================================================
+// ข้อมูลร้านค้า (กฎ v6, 2026-09-25) — เจ้าของเลือก: การ์ดร้านแสดงรูป+ชื่อเล่น, เบอร์หลักเห็นได้เฉพาะไรเดอร์ที่ล็อกอินแล้ว
+// - custom_market_stalls (หน้าร้านของลูกค้า) เปิดอ่าน -> ต้องไม่มีช่องใน STALL_PRIVATE_FIELDS (กฎบังคับซ้ำ)
+// - ข้อมูลเต็ม (บัญชี เบอร์ LINE ชื่อจริง) อยู่ที่ merchant_applications/<id>.stallData อ่านได้เฉพาะเจ้าของ + ร้านนั้นเอง
+// - merchant_public/<รหัสร้าน> = { status, loginSalt } สำหรับล็อกอิน (ฐานข้อมูลตรวจรหัสผ่านผ่าน staff_sessions)
+// - merchant_phone_status/<sha256> = { code, status } ให้ผู้สมัครเช็กสถานะด้วยเบอร์
+// - stall_contacts/<รหัสร้าน> = { phone, name } เบอร์หลักของร้าน (เจ้าของ + ไรเดอร์ที่ล็อกอิน + ร้านนั้นเอง)
+// =================================================================
+const STALL_PRIVATE_FIELDS = ["bankName", "bankAccountNo", "bankAccountName", "bankInfo", "bankName2", "bankAccountNo2", "bankAccountName2", "bankInfo2",
+    "accountNo", "promptPayNumber", "promptPayPhone", "phone", "phone2", "contacts", "line", "lineId", "line2", "ownerName", "owner2Name", "loginHash", "loginSalt", "idCard", "address"];
+
+function sanitizeStallForPublic(stall) {
+    if (!stall || typeof stall !== "object") return stall;
+    const out = Object.assign({}, stall);
+    // คำค้นหาร้าน (stallTag) เคยต่อชื่อจริงเจ้าของไว้ด้วย — ตัดออก
+    if (typeof out.stallTag === "string" && stall.ownerName) {
+        out.stallTag = out.stallTag.split(String(stall.ownerName)).join(" ").replace(/\s+/g, " ").trim();
+    }
+    STALL_PRIVATE_FIELDS.forEach(f => { delete out[f]; });
+    return out;
+}
+window.sanitizeStallForPublic = sanitizeStallForPublic;
+
+// ชื่อเจ้าของร้านที่แสดงให้ลูกค้าเห็น = ชื่อเล่นเท่านั้น (ชื่อ-นามสกุลจริงเห็นเฉพาะเจ้าของตลาด)
+function stallOwnerDisplayName(stall) {
+    return (stall && (stall.owner1Nickname || stall.ownerNickname)) || "เจ้าของแผงค้า";
+}
+window.stallOwnerDisplayName = stallOwnerDisplayName;
+
+function merchantPublicKey(code) {
+    return staffKeyId(normalizeShopCode(code));
+}
+async function merchantPhoneKey(phone) {
+    const digits = String(phone || "").replace(/\D/g, "");
+    return digits.length >= 9 ? sha256Hex("hsong-merchant-phone|" + digits) : "";
+}
+
+// เจ้าของ: เผยแพร่ข้อมูลขั้นต่ำของทุกใบสมัครร้าน (สถานะ/salt, สถานะตามเบอร์, เบอร์หลักสำหรับไรเดอร์)
+const _merchantPublicMemo = {};
+let _merchantPublicTimer = null;
+function publishAllMerchantPublic() {
+    if (!isOwnerSignedIn() || !isFirebaseReady()) return;
+    clearTimeout(_merchantPublicTimer);
+    _merchantPublicTimer = setTimeout(async () => {
+        if (!isOwnerSignedIn()) return;
+        for (const app of loadMerchantApplications()) {
+            if (!app || !app.id) continue;
+            const sd = app.stallData || {};
+            const stallId = sd.stallId || app.id;
+            const pub = { status: app.status || "pending" };
+            const salt = app.loginSalt || sd.loginSalt;
+            if (app.status === "approved" && salt) pub.loginSalt = salt;
+            const c1 = (Array.isArray(sd.contacts) && sd.contacts[0]) || {};
+            const phone = String(c1.phone || sd.phone || "").trim();
+            let phoneKey = "";
+            try { phoneKey = await merchantPhoneKey(phone); } catch (e) { }
+            const contact = (app.status === "approved" && phone) ? { phone, name: String(sd.owner1Nickname || c1.name || "").slice(0, 60) } : null;
+            const memoVal = JSON.stringify([pub, stallId, phoneKey, contact]);
+            if (_merchantPublicMemo[app.id] === memoVal) continue;
+            const now = Date.now();
+            const u = {};
+            Array.from(new Set([merchantPublicKey(app.id), merchantPublicKey(stallId)])).forEach(k => { u[`merchant_public/${k}`] = Object.assign({ updatedAt: now }, pub); });
+            if (phoneKey) u[`merchant_phone_status/${phoneKey}`] = { code: String(stallId), status: pub.status, updatedAt: now };
+            u[`stall_contacts/${staffKeyId(stallId)}`] = contact ? Object.assign({ updatedAt: now }, contact) : null;
+            try {
+                await db.ref().update(u);
+                _merchantPublicMemo[app.id] = memoVal;
+            } catch (e) {
+                console.warn("publishAllMerchantPublic failed:", app.id, e && e.message);
+            }
+        }
+    }, 800);
+}
+window.publishAllMerchantPublic = publishAllMerchantPublic;
+
+function removeMerchantPublic(app) {
+    if (!isOwnerSignedIn() || !isFirebaseReady() || !app) return;
+    const sd = app.stallData || {};
+    const stallId = sd.stallId || app.id;
+    Array.from(new Set([merchantPublicKey(app.id), merchantPublicKey(stallId)])).forEach(k => db.ref(`merchant_public/${k}`).remove().catch(() => { }));
+    db.ref(`stall_contacts/${staffKeyId(stallId)}`).remove().catch(() => { });
+    merchantPhoneKey(sd.phone).then(k => { if (k) db.ref(`merchant_phone_status/${k}`).remove().catch(() => { }); }).catch(() => { });
+    delete _merchantPublicMemo[app.id];
+}
+
+// เจ้าของ: ล้างช่องส่วนตัวออกจาก custom_market_stalls บนคลาวด์ (ข้อมูลเก่าก่อน v6 ยังมีบัญชี/เบอร์/ค่ารหัสผ่าน)
+let _stallSanitizeDone = false;
+async function sanitizePublicStallsInCloud() {
+    if (_stallSanitizeDone || !isOwnerSignedIn() || !isFirebaseReady()) return;
+    _stallSanitizeDone = true;
+    try {
+        const val = (await _withTimeout(db.ref("custom_market_stalls").once("value"), 10000)).val() || {};
+        const u = {};
+        Object.entries(val).forEach(([k, s]) => {
+            if (s && typeof s === "object" && STALL_PRIVATE_FIELDS.some(f => f in s)) u[k] = sanitizeStallForPublic(s);
+        });
+        if (Object.keys(u).length) {
+            await db.ref("custom_market_stalls").update(u);
+            console.info("ล้างข้อมูลส่วนตัวออกจากข้อมูลร้านที่เปิดให้ทุกคนอ่านแล้ว " + Object.keys(u).length + " ร้าน");
+        }
+    } catch (e) {
+        _stallSanitizeDone = false;
+        console.warn("sanitizePublicStallsInCloud failed:", e && e.message);
+    }
+}
+window.sanitizePublicStallsInCloud = sanitizePublicStallsInCloud;
+
+// ผู้สมัครเปิดร้าน (ไม่ใช่เจ้าของ): บอกหน้าล็อกอิน/หน้าเช็กสถานะว่า "รออนุมัติ" (สร้างได้ครั้งเดียว)
+const _merchantPendingPublished = {};
+async function createMerchantPublicPending(app) {
+    if (!app || !app.id || app.status !== "pending" || isOwnerSignedIn() || !isFirebaseReady() || _merchantPendingPublished[app.id]) return;
+    _merchantPendingPublished[app.id] = true;
+    const now = Date.now();
+    db.ref(`merchant_public/${merchantPublicKey(app.id)}`).set({ status: "pending", updatedAt: now }).catch(() => { });
+    try {
+        const sd = app.stallData || {};
+        const c1 = (Array.isArray(sd.contacts) && sd.contacts[0]) || {};
+        const k = await merchantPhoneKey(c1.phone || sd.phone);
+        if (k) db.ref(`merchant_phone_status/${k}`).set({ code: String(app.id), status: "pending", updatedAt: now }).catch(() => { });
+    } catch (e) { }
+}
+
+// ล็อกอินแผงค้าโดยให้ฐานข้อมูลตรวจรหัสผ่าน คืนผลแบบ merchantSecretLogin หรือ null (ยังไม่มี merchant_public -> ใช้วิธีเดิม)
+async function _merchantLoginViaServer(code, secret) {
+    const key = merchantPublicKey(code);
+    if (!key) return null;
+    let pub = null;
+    try { pub = (await _withTimeout(db.ref(`merchant_public/${key}`).once("value"), 8000)).val(); }
+    catch (e) { return null; }
+    if (!pub) return null;
+    if (pub.status === "pending") return { ok: false, code: "pending", message: "⏳ ใบสมัครเปิดร้านของคุณยังรอเจ้าของอนุมัติ เมื่ออนุมัติแล้วเจ้าของจะส่งรหัสผ่านให้" };
+    if (pub.status === "rejected") return { ok: false, code: "rejected", message: "❌ ใบสมัครนี้ไม่ผ่านการอนุมัติ กรุณาติดต่อเจ้าของ" };
+    if (!pub.loginSalt) return { ok: false, code: "no-secret", message: "🔑 ร้านนี้ยังไม่มีรหัสผ่านเข้าระบบ กรุณาติดต่อเจ้าของเพื่อขอรหัสผ่านใหม่" };
+    const uid = await ensureAuthUser(8000);
+    if (!uid) return null;
+    let proof;
+    try { proof = await staffProofFromSecret(secret, pub.loginSalt); }
+    catch (e) { return { ok: false, code: "no-crypto", message: "⚠️ เบราว์เซอร์นี้ตรวจรหัสผ่านไม่ได้ กรุณาเปิดผ่านเว็บ https" }; }
+    try {
+        await _withTimeout(db.ref(`staff_sessions/${uid}`).set({ role: "merchant", id: key, proof, at: Date.now() }), 8000);
+    } catch (e) {
+        _noteRiderLoginFail(_MERCHANT_LOGIN_FAIL_KEY);
+        return { ok: false, code: "bad", message: "⚠️ รหัสร้านหรือรหัสผ่านไม่ถูกต้อง" };
+    }
+    _clearRiderLoginFail(_MERCHANT_LOGIN_FAIL_KEY);
+    _myStaffSession = { role: "merchant", id: key };
+    const app = await loadMyMerchantApplication(key);
+    let stall = app ? stallFromApp(app) : null;
+    if (!stall) {
+        try { stall = (await _withTimeout(db.ref(`custom_market_stalls/${key}`).once("value"), 8000)).val(); } catch (e) { }
+    }
+    if (!stall) stall = { stallId: key, stallName: key };
+    if (!stall.stallId) stall.stallId = key;
+    return { ok: true, code: "ok", app, stall, sessionOpened: true };
+}
+
+// ร้านที่ล็อกอินแล้ว: ดึงใบสมัครของตัวเอง (ข้อมูลเต็ม: บัญชี เบอร์) มาไว้ในเครื่อง ใช้แก้ข้อมูลร้าน/ดูยอดโอน
+async function loadMyMerchantApplication(sid) {
+    if (!sid || !isFirebaseReady()) return null;
+    let app = null;
+    try { app = (await _withTimeout(db.ref(`merchant_applications/${sid}`).once("value"), 8000)).val(); } catch (e) { }
+    if (!app) return null;
+    try { localStorage.setItem("talathub_merchant_applications", JSON.stringify([app])); } catch (e) { }
+    if (app.status === "approved" && app.stallData) {
+        const full = stallFromApp(app);
+        [MARKET_DATA, ALL_100_STALLS].forEach(list => {
+            if (!Array.isArray(list)) return;
+            const i = list.findIndex(s => s && s.stallId === full.stallId);
+            if (i >= 0) list[i] = Object.assign({}, list[i], full); else list.unshift(full);
+        });
+    }
+    return app;
+}
+window.loadMyMerchantApplication = loadMyMerchantApplication;
+
+// ร้านแก้เบอร์หลักของตัวเอง: อัปเดตเบอร์ที่ไรเดอร์เห็น
+function saveMyStallContact(stall) {
+    const sid = typeof myMerchantStaffId === "function" ? myMerchantStaffId() : null;
+    if (!sid || !stall || isOwnerSignedIn() || !isFirebaseReady() || staffKeyId(stall.stallId) !== sid) return;
+    const c1 = (Array.isArray(stall.contacts) && stall.contacts[0]) || {};
+    const phone = String(c1.phone || stall.phone || "").trim();
+    if (!phone) return;
+    db.ref(`stall_contacts/${sid}`).set({ phone, name: String(stall.owner1Nickname || c1.name || "").slice(0, 60), updatedAt: Date.now() }).catch(() => { });
+}
+
+// ไรเดอร์ (งานด่วนหน้าร้าน): ขอเบอร์หลักของร้านจาก stall_contacts
+const _stallContactCache = {};
+async function fetchStallContactPhone(stallId) {
+    if (!stallId || !isFirebaseReady()) return "";
+    const key = staffKeyId(stallId);
+    if (key in _stallContactCache) return _stallContactCache[key];
+    let phone = "";
+    try { const v = (await _withTimeout(db.ref(`stall_contacts/${key}`).once("value"), 8000)).val(); phone = (v && v.phone) || ""; } catch (e) { }
+    _stallContactCache[key] = phone;
+    return phone;
+}
+window.fetchStallContactPhone = fetchStallContactPhone;
 
 window.isOwnerSignedIn = isOwnerSignedIn;
 window.verifyOwnerPassword = verifyOwnerPassword;
@@ -1666,7 +1882,8 @@ const _keyOfStall = s => s && s.stallId;
 // (รายการเก่าบนคลาวด์อาจยังมีข้อมูลส่วนตัวติดอยู่ ถ้าไม่ตัดจะเห็นว่า "ต่างกัน" ทุกครั้ง; ตัวเทียบไม่ลบข้อมูลบนคลาวด์เอง)
 const _CLOUD_COMPARE_MAPPERS = {
     rider_applications: stripRiderPrivate,
-    community_riders: stripRiderPrivate
+    community_riders: stripRiderPrivate,
+    custom_market_stalls: sanitizeStallForPublic   // v6: หน้าร้านที่เปิดให้ทุกคนอ่าน ห้ามมีบัญชี/เบอร์/ชื่อจริง/ค่ารหัสผ่าน
 };
 
 // เรียกจากตัวฟัง .on("value") เพื่อบอกว่าตอนนี้คลาวด์มีอะไรอยู่ (จะได้เขียนเฉพาะที่เปลี่ยน)
@@ -10952,8 +11169,7 @@ function renderCatalog() {
         const stallImg = stall.stallImage || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=700&auto=format&fit=crop&q=80';
         const ownerImg = stall.ownerImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80';
         const ownerBannerUrl = (typeof getOrBuildOwnerBanner === "function") ? getOrBuildOwnerBanner(stall) : ownerImg;
-        const phoneNum = stall.phone || '081-234-5678';
-        const ownerNm = stall.ownerName || 'เจ้าของแผงค้า';
+        const ownerNm = stallOwnerDisplayName(stall);   // ลูกค้าเห็นแค่ชื่อเล่น (เจ้าของเลือก 2026-09-25)
         const expText = stall.experience || 'เปิดบริการในตลาดสด';
         const highlightText = stall.highlight || 'สินค้าสดใหม่ คัดเกรดคุณภาพ สะอาด ถูกหลักอนามัย';
         const descriptionText = stall.shopDescription || 'จำหน่ายสินค้าสดคุณภาพดี คัดสรรวันต่อวัน ชั่งน้ำหนักแม่นยำ พร้อมบริการตัดแต่งตามสั่งและจัดส่งตรงถึงบ้านคุณ';
@@ -11128,7 +11344,7 @@ function renderCatalog() {
                         <div class="py-6 px-4 bg-slate-50/90 border border-dashed border-emerald-300/80 rounded-2xl text-center space-y-2">
                             <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-lg font-bold">🏪</div>
                             <p class="text-xs font-bold text-slate-800">แผงค้าใหม่กำลังเตรียมรายการสินค้าลงระบบ</p>
-                            <p class="text-[11px] text-slate-500">สามารถโทรติดต่อสอบถามหรือสั่งซื้อตรงได้ที่ <a href="tel:${escapeHtml(phoneNum)}" class="text-emerald-700 font-black underline">${escapeHtml(phoneNum)}</a></p>
+                            <p class="text-[11px] text-slate-500">ร้านกำลังเพิ่มสินค้า แวะกลับมาดูอีกครั้งเร็ว ๆ นี้</p>
                             ${(state.activeMerchant && state.activeMerchant.stallId === stall.stallId) ? `
                                 <div class="pt-1">
                                     <button onclick="openActiveStallEditor()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm inline-flex items-center gap-1 cursor-pointer active:scale-95 transition-all">
@@ -12357,7 +12573,7 @@ function openStallCatalogModal(stallId) {
     if (iconEl) iconEl.textContent = stall.stallTag ? stall.stallTag.split(" ")[0] : "🏪";
     if (numEl) numEl.textContent = stall.stallNumber;
     if (categoryEl) categoryEl.textContent = normalizeMainCategoryName(stall.category) || stall.category || "ของสด";
-    if (ownerEl) ownerEl.textContent = stall.ownerName ? stall.ownerName.split(" ")[0] : "เจ้าของแผง";
+    if (ownerEl) ownerEl.textContent = stallOwnerDisplayName(stall);
     if (nameEl) nameEl.textContent = stall.stallName;
     if (searchInput) searchInput.value = "";
     if (clearBtn) clearBtn.classList.add("hidden");
@@ -13468,7 +13684,7 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         stallId: firstStall.stallId,
         stallName: firstStall.name,
         stallNumber: firstStall.tag || (stallInfo ? stallInfo.stallNumber : "แผงค้า"),
-        ownerPhone: (stallInfo && stallInfo.phone) ? stallInfo.phone : "081-444-5555"
+        ownerPhone: (stallInfo && stallInfo.phone) ? stallInfo.phone : ""   // v6: เครื่องลูกค้าไม่มีเบอร์ร้าน ไรเดอร์ดึงจาก stall_contacts เอง (เดิมใส่เบอร์สมมติ)
     } : null;
 
     state.activeOrder = {
@@ -16357,7 +16573,7 @@ function renderMerchantView() {
     if (headerStallName) headerStallName.textContent = stall.stallName || "แผงค้าในตลาด";
     if (senderBadge) senderBadge.textContent = realStallNo ? `${realStallNo} • ${catLabel}` : catLabel;
     if (senderName) senderName.textContent = realStallNo ? `${stall.stallName} (${realStallNo})` : stall.stallName;
-    if (senderPhone) senderPhone.textContent = `${stall.ownerName || 'เจ้าของร้าน'} (${stall.phone || '081-999-8888'})`;
+    if (senderPhone) senderPhone.textContent = `${stall.ownerName || stallOwnerDisplayName(stall)} (${stall.phone || '-'})`;
 
     updateMerchantStatusUI(stall);
 
@@ -16708,7 +16924,7 @@ function submitMerchantCall() {
             stallName: currentStall.stallName,
             stallNumber: currentStall.stallNumber || "แผงค้า",
             ownerName: currentStall.ownerName || "เจ้าของร้าน",
-            ownerPhone: currentStall.phone || "081-999-8888"
+            ownerPhone: currentStall.phone || ""
         },
         customerName: custName,
         customerPhone: custPhone,
@@ -17551,12 +17767,16 @@ function callMerchantFromRider(phone) {
     window.location.href = `tel:${clean}`;
 }
 
-function callMerchantFromRiderUI() {
+async function callMerchantFromRiderUI() {
     const order = state.activeOrder;
-    if (order && order.originStall && order.originStall.ownerPhone) {
-        callMerchantFromRider(order.originStall.ownerPhone);
+    const origin = (order && order.originStall) || null;
+    let phone = origin && origin.ownerPhone;
+    // v6: เบอร์หลักของร้านเห็นได้เฉพาะไรเดอร์ที่ล็อกอินแล้ว (stall_contacts) — ออเดอร์จากลูกค้าไม่มีเบอร์ร้านติดมา
+    if (!phone && origin && origin.stallId) phone = await fetchStallContactPhone(origin.stallId);
+    if (phone) {
+        callMerchantFromRider(phone);
     } else {
-        showToast("⚠️ ไม่พบเบอร์โทรศัพท์ของแผงค้า");
+        showToast("⚠️ ไม่พบเบอร์โทรศัพท์ของแผงค้า กรุณาโทรหาฮับ");
     }
 }
 
@@ -21056,6 +21276,7 @@ function deleteMerchantApplication(appId) {
     saveMerchantApplications(apps);
 
     if (appToDelete) removeStaffKey("merchant", (appToDelete.stallData && appToDelete.stallData.stallId) || appToDelete.id);
+    if (appToDelete) removeMerchantPublic(appToDelete);
     if (appToDelete && appToDelete.stallData) {
         const stallId = appToDelete.stallData.stallId;
         const phone = appToDelete.stallData.phone;
@@ -21648,6 +21869,8 @@ window.initRiderRealtimeSync = initRiderRealtimeSync;
 let _isMerchantSyncInitialized = false;
 
 function initMerchantRealtimeSync() {
+    // กฎ v6: ใบสมัครร้านอ่านได้เฉพาะเจ้าของ — ผู้เข้าชมอื่นไม่ต้องดึง (เรียกซ้ำจาก refreshOrderAccess เมื่อเจ้าของล็อกอิน)
+    if (!isOwnerSignedIn()) return;
     if (!isFirebaseReady() || _isMerchantSyncInitialized) return;
     _isMerchantSyncInitialized = true;
 
@@ -21659,6 +21882,7 @@ function initMerchantRealtimeSync() {
 
             localStorage.setItem("talathub_merchant_applications", JSON.stringify(rawList));
             updateAdminStallsBadge();
+            publishAllMerchantPublic();   // สถานะ/salt สำหรับล็อกอิน, สถานะตามเบอร์, เบอร์หลักสำหรับไรเดอร์
 
             // Sync approved stalls into MARKET_DATA and ALL_100_STALLS across all online clients, and remove non-approved
             rawList.forEach(app => {
@@ -21720,7 +21944,7 @@ function initMerchantRealtimeSync() {
         } catch (err) {
             console.warn("Error syncing merchant_applications:", err);
         }
-    });
+    }, () => { _isMerchantSyncInitialized = false; });   // เจ้าของออกจากระบบ -> ถูกตัดสิทธิ์อ่าน ให้เริ่มใหม่ได้เมื่อล็อกอินอีกครั้ง
 }
 window.initMerchantRealtimeSync = initMerchantRealtimeSync;
 
@@ -27291,8 +27515,9 @@ function toggleHubItemOutOfStock(stallIndex, itemIndex) {
 
 function contactExpressStall(stallId, orderId) {
     const info = (typeof findStallInfo === "function") ? findStallInfo(stallId) : null;
-    const phone = (info && info.phone) ? info.phone : "081-444-5555";
+    const phone = (info && info.phone) ? info.phone : "";
     const name = (info && info.stallName) ? info.stallName : "แผงค้าในตลาด";
+    if (!phone) { showToast(`⚠️ ไม่พบเบอร์โทรของ ${name}`); return; }   // เดิมโทรหาเบอร์สมมติที่ใส่ไว้ในโค้ด
     showToast(`📞 เตรียมติดต่อ ${name} (${phone}) สำหรับออเดอร์ด่วน ${orderId}`);
     if (confirm(`โทรหาหน้าร้าน "${name}" (${phone}) เพื่อแจ้งเตือนให้เตรียมของด่วนหรือไม่?`)) {
         window.location.href = `tel:${phone}`;
@@ -28237,6 +28462,10 @@ function renderRiderScreen() {
         if (callMerchantBtn) {
             callMerchantBtn.classList.remove("hidden");
             if (callMerchantText) callMerchantText.textContent = `โทรหาแผงค้า (${origin.ownerPhone || '-'})`;
+            // v6: ออเดอร์จากลูกค้าไม่มีเบอร์ร้าน -> ไรเดอร์ที่ล็อกอินแล้วดึงเบอร์หลักของร้านจาก stall_contacts
+            if (!origin.ownerPhone && origin.stallId && callMerchantText) {
+                fetchStallContactPhone(origin.stallId).then(p => { if (p) callMerchantText.textContent = `โทรหาแผงค้า (${p})`; });
+            }
         }
     } else {
         if (badge) badge.textContent = `ออเดอร์ ${order.orderId}`;
@@ -30869,6 +31098,7 @@ async function saveMerchantStallData() {
         }
 
         await saveMarketDataToStorageAsync();
+        saveMyStallContact(stallObj);   // v6: ร้านแก้เบอร์หลัก -> ไรเดอร์ที่ล็อกอินเห็นเบอร์ใหม่ (stall_contacts)
 
         // Ensure this stall is shown first in customer view & rotation
         if (!state.stallRotation.displayedStallIds) {
@@ -31937,7 +32167,8 @@ function autoSanitizeProductionData() {
 async function fetchOnlineStallsStartup() {
     try {
         const [resApps, resCustom] = await Promise.allSettled([
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json").then(r => r.ok ? r.json() : null),
+            // v6: ใบสมัครร้านอ่านได้เฉพาะเจ้าของ (คนอื่นได้ 401 = ข้ามไป ใช้หน้าร้านที่เปิดอ่านได้แทน)
+            (isOwnerSignedIn() ? authQueryParam().then(q => fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/merchant_applications.json" + q)).then(r => r.ok ? r.json() : null) : Promise.resolve(null)),
             fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/custom_market_stalls.json").then(r => r.ok ? r.json() : null)
         ]);
         const remoteApps = (resApps.status === 'fulfilled' && resApps.value) || null;
@@ -32345,6 +32576,8 @@ function saveMerchantApplications(apps) {
         } catch (storageErr) {
             console.warn("localStorage quota exceeded for merchant_applications:", storageErr);
         }
+        // ผู้สมัครทั่วไป: บอกหน้าล็อกอิน/หน้าเช็กสถานะว่า "รออนุมัติ" (กฎ v6 อ่านใบสมัครไม่ได้แล้ว)
+        if (!isOwnerSignedIn()) (apps || []).forEach(a => { if (a && a.status === "pending") createMerchantPublicPending(a); });
         // เขียนเฉพาะใบสมัครที่เปลี่ยน (ทีละ id) — ผู้ใช้ทั่วไปสร้างได้เฉพาะ pending, อนุมัติ/ลบเป็นสิทธิ์เจ้าของ
         return syncListToCloud("merchant_applications", apps, _keyOfMerchantApp);
     } catch (e) {}
@@ -32358,6 +32591,7 @@ async function saveMerchantApplicationsAsync(apps) {
         } catch (storageErr) {
             console.warn("localStorage quota exceeded for merchant_applications:", storageErr);
         }
+        if (!isOwnerSignedIn()) (apps || []).forEach(a => { if (a && a.status === "pending") createMerchantPublicPending(a); });
         return await syncListToCloud("merchant_applications", apps, _keyOfMerchantApp);
     } catch (e) {
         console.warn("saveMerchantApplicationsAsync error:", e);
@@ -32419,7 +32653,15 @@ async function handleCheckApplicationStatusSubmit() {
     const merchantApps = loadMerchantApplications();
     const riderApps = loadRiderApplications();
 
-    const mApp = merchantApps.find(a => a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === rawPhone);
+    let mApp = merchantApps.find(a => a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === rawPhone);
+    // กฎ v6: ผู้สมัครเปิดร้านอ่านใบสมัครไม่ได้แล้ว — ถามสถานะจาก merchant_phone_status (ค้นด้วยค่าแฮชของเบอร์ที่พิมพ์)
+    if (!mApp && typeof isFirebaseReady === "function" && isFirebaseReady()) {
+        try {
+            const k = await merchantPhoneKey(rawPhone);
+            const ps = k ? (await _withTimeout(db.ref(`merchant_phone_status/${k}`).once("value"), 8000)).val() : null;
+            if (ps && ps.code) mApp = { id: ps.code, accessCode: ps.code, status: ps.status || "pending", stallData: { stallId: ps.code, stallName: "ร้านของคุณ (รหัส " + ps.code + ")", stallNumber: "-", ownerName: "-", phone: input.value.trim() } };
+        } catch (e) { }
+    }
     let rApp = riderApps.find(a => a.phone && a.phone.replace(/[-\s]/g, "") === rawPhone);
     // กฎ v5: ผู้สมัครไรเดอร์อ่านใบสมัครไม่ได้แล้ว — ถามสถานะจาก rider_phone_status (ค้นด้วยค่าแฮชของเบอร์ที่พิมพ์)
     if (!rApp && typeof isFirebaseReady === "function" && isFirebaseReady()) {
@@ -32777,8 +33019,12 @@ async function handleMerchantCodeLoginSubmit() {
     }
     closeMerchantLoginModal();
     _enterMerchantStall(matchedStall.stallId);
-    // ขอสิทธิ์อ่านออเดอร์จากฐานข้อมูล (รหัสผ่านถูกตรวจซ้ำที่กฎฐานข้อมูล)
-    openStaffSession("merchant", matchedStall.stallId, typedSecret, res.loginSalt);
+    if (res.sessionOpened) {
+        refreshOrderAccess();   // ฐานข้อมูลตรวจรหัสผ่านและเปิดสิทธิ์ให้แล้วตอนล็อกอิน
+    } else {
+        // ขอสิทธิ์อ่านออเดอร์จากฐานข้อมูล (รหัสผ่านถูกตรวจซ้ำที่กฎฐานข้อมูล)
+        openStaffSession("merchant", matchedStall.stallId, typedSecret, res.loginSalt);
+    }
 }
 
 

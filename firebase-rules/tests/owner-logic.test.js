@@ -45,7 +45,10 @@ const code = [
     fn("normalizeRiderCode"),
     src.match(/const RIDER_PRIVATE_KEYS = [^;]*;/)[0],
     fn("stripRiderPrivate"),
+    src.match(/const STALL_PRIVATE_FIELDS = \[[^\]]*\];/)[0],
+    fn("sanitizeStallForPublic"),
     fn("_withTimeout"),
+    "function staffKeyId(s){return String(s);} function myMerchantStaffId(){return null;}",
     "function isFirebaseReady(){return ready;} function isOwnerSignedIn(){return owner;}",
     between("const _cloudBaselines = {};", "window.migrateLegacyCloudLists = migrateLegacyCloudLists;")
 ].join("\n");

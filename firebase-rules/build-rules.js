@@ -1,7 +1,16 @@
-// สร้างไฟล์กฎ Firebase รุ่น v5 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
+// สร้างไฟล์กฎ Firebase รุ่น v6 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
 //   node firebase-rules/build-rules.js
-// ผลลัพธ์: hsong-test.rules.v5.json และ hsong-1f342.rules.v5.json
-//   (ไฟล์ .rules.v4.json / v3 / v2 = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+// ผลลัพธ์: hsong-test.rules.v6.json และ hsong-1f342.rules.v6.json
+//   (ไฟล์ .rules.v5.json / v4 / v3 / v2 = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+//
+// v6 (2026-09-25) — ซ่อนข้อมูลส่วนตัวร้านค้า (เจ้าของเลือก: เบอร์หลักเห็นได้เฉพาะไรเดอร์ที่ล็อกอินแล้ว, การ์ดร้านแสดงรูป+ชื่อเล่น):
+//   merchant_applications : อ่านได้เฉพาะเจ้าของ + ร้านนั้นเองหลังล็อกอิน; คนทั่วไปสร้างใบสมัคร pending ได้แต่แก้ของเดิมไม่ได้แล้ว
+//   custom_market_stalls  : ยังเปิดอ่าน (หน้าร้านของลูกค้า) แต่ห้ามมีบัญชีธนาคาร เบอร์ LINE ชื่อจริง ค่ารหัสผ่าน (STALL_PRIVATE_FIELDS)
+//                           แก้ได้เฉพาะเจ้าของ + ร้านนั้นเอง (เดิมใครก็แก้ร้านคนอื่นได้)
+//   stall_catalog_database: แก้ได้เฉพาะเจ้าของ + ร้านนั้นเอง
+//   merchant_public/<รหัสร้าน>        : status + loginSalt สำหรับหน้าล็อกอินร้าน
+//   merchant_phone_status/<sha256>   : { code, status } ให้ผู้สมัครเช็กสถานะด้วยเบอร์
+//   stall_contacts/<รหัสร้าน>          : { phone, name } เบอร์หลักของร้าน — เจ้าของ + ไรเดอร์ที่ล็อกอิน + ร้านนั้นเอง
 //
 // v5 (2026-09-25) — ซ่อนข้อมูลส่วนตัวไรเดอร์:
 //   community_riders, rider_applications : อ่านได้เฉพาะเจ้าของ (ไรเดอร์อ่าน/แก้สถานะได้เฉพาะของตัวเองหลังล็อกอิน)
@@ -53,6 +62,11 @@ function build(uids) {
     const SID = S + "id').val()";
     const RIDER = "(" + STAFF + " && " + S + "role').val() === 'rider')";
     const MERCH = "(" + STAFF + " && " + S + "role').val() === 'merchant')";
+    // ช่องที่ห้ามอยู่ในข้อมูลร้านที่เปิดให้ทุกคนอ่าน (custom_market_stalls) — ต้องตรงกับ STALL_PRIVATE_FIELDS ใน app.js
+    const STALL_PRIVATE_FIELDS = ["bankName", "bankAccountNo", "bankAccountName", "bankInfo", "bankName2", "bankAccountNo2", "bankAccountName2", "bankInfo2",
+        "accountNo", "promptPayNumber", "promptPayPhone", "phone", "phone2", "contacts", "line", "lineId", "line2", "ownerName", "owner2Name", "loginHash", "loginSalt", "idCard", "address"];
+    const noPrivateStallFields = STALL_PRIVATE_FIELDS.map(f => "!newData.child('" + f + "').exists()").join(" && ");
+    const MERCH_SELF = "(" + MERCH + " && $id === " + SID + ")";
     const onlyFields = names => { const o = {}; names.forEach(n => { o[n] = { ".validate": true }; }); o.$other = { ".validate": false }; return o; };
 
     return {
@@ -182,10 +196,12 @@ function build(uids) {
             },
 
             merchant_applications: {
-                ".read": true,
+                ".read": OWNER,
                 "$id": {
-                    // loginHash/loginSalt = รหัสผ่านเข้าระบบของแผงค้า (เก็บเฉพาะค่าแฮช): เจ้าของเท่านั้นตั้ง/เปลี่ยนได้
-                    ".write": "(" + OWNER + ") || (!data.exists() && newData.exists()) || (data.exists() && newData.exists() && " + [same("status"), same("accessCode"), same("id"), same("loginHash"), same("loginSalt")].join(" && ") + ")",
+                    // v6: มีบัญชีธนาคาร/เบอร์/ชื่อจริง -> อ่านได้เฉพาะเจ้าของ + ร้านนั้นเองหลังล็อกอิน
+                    ".read": MERCH + " && ($id === " + SID + " || data.child('stallData/stallId').val() === " + SID + ")",
+                    // คนทั่วไปสร้างใบสมัครใหม่ได้ (pending); แก้ใบเดิมได้เฉพาะร้านนั้นเอง โดยห้ามแตะสถานะ/รหัส/รหัสผ่าน
+                    ".write": "(" + OWNER + ") || (!data.exists() && newData.exists()) || (data.exists() && newData.exists() && " + MERCH + " && ($id === " + SID + " || data.child('stallData/stallId').val() === " + SID + ") && " + [same("status"), same("accessCode"), same("id"), same("loginHash"), same("loginSalt")].join(" && ") + ")",
                     ".validate": "(" + OWNER + ") || (newData.child('id').val() === $id && newData.hasChildren(['id', 'stallData', 'status']) && (data.exists() || (newData.child('status').val() === 'pending' && !newData.child('accessCode').exists() && !newData.child('loginHash').exists() && !newData.child('loginSalt').exists())))"
                 }
             },
@@ -202,15 +218,48 @@ function build(uids) {
             custom_market_stalls: {
                 ".read": true,
                 "$id": {
-                    ".write": "(" + OWNER + ") || (data.exists() && newData.exists() && " + [same("stallId"), same("accessCode"), same("loginHash"), same("loginSalt")].join(" && ") + ")"
+                    // accessCode เป็นแค่รหัสอ้างอิง (ไม่ใช่รหัสผ่านแล้ว) และ loginHash/loginSalt ห้ามอยู่ในหน้าร้านเลย (validate) -> ล็อกแค่ stallId
+                    ".write": "(" + OWNER + ") || (" + MERCH_SELF + " && data.exists() && newData.exists() && " + same("stallId") + ")",
+                    ".validate": noPrivateStallFields
                 }
             },
 
             stall_catalog_database: {
                 ".read": true,
                 "$id": {
-                    ".write": "(" + OWNER + ") || (data.exists() && newData.exists())"
+                    ".write": "(" + OWNER + ") || (" + MERCH_SELF + " && data.exists() && newData.exists())"
                 }
+            },
+
+            merchant_public: {
+                ".read": OWNER,
+                ".write": OWNER,
+                "$code": Object.assign({
+                    ".read": true,
+                    ".write": "!data.exists() && newData.child('status').val() === 'pending' && !newData.child('loginSalt').exists()",
+                    ".validate": "newData.hasChild('status')"
+                }, onlyFields(["status", "loginSalt", "updatedAt"]))
+            },
+
+            merchant_phone_status: {
+                ".read": OWNER,
+                ".write": OWNER,
+                "$h": Object.assign({
+                    ".read": true,
+                    ".write": "!data.exists() && newData.child('status').val() === 'pending'",
+                    ".validate": "newData.hasChildren(['code', 'status']) && $h.length === 64"
+                }, onlyFields(["code", "status", "updatedAt"]))
+            },
+
+            stall_contacts: {
+                ".read": OWNER,
+                ".write": OWNER,
+                "$id": Object.assign({
+                    // เบอร์หลักของร้าน: ไรเดอร์ที่ล็อกอินจริงโทรหาร้านได้ คนแปลกหน้า/ลูกค้าไม่เห็น
+                    ".read": RIDER + " || " + MERCH_SELF,
+                    ".write": MERCH_SELF,
+                    ".validate": "newData.hasChild('phone')"
+                }, onlyFields(["phone", "name", "updatedAt"]))
             },
 
             rider_documents: {
@@ -247,7 +296,7 @@ function build(uids) {
 }
 
 Object.entries(PROJECTS).forEach(([project, uids]) => {
-    const file = path.join(__dirname, project + ".rules.v5.json");
+    const file = path.join(__dirname, project + ".rules.v6.json");
     fs.writeFileSync(file, JSON.stringify(build(uids), null, 2) + "\n");
     console.log("wrote", path.basename(file));
 });

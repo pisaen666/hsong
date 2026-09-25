@@ -11,8 +11,8 @@ const path = require("path");
 const PROJECT = "hsong-test";
 const NODES = ["orders", "order_codes", "order_viewers", "carts", "staff_keys/rider", "staff_keys/merchant", "staff_sessions", "rider_jobs", "stall_orders",
     "rider_applications", "merchant_applications", "community_riders", "custom_market_stalls", "stall_catalog_database",
-    "rider_private", "rider_documents", "daily_reports", "riders", "rider_status", "rider_locations", "active_rider", "rider_public"];
-// rider_phone_status ใช้ค่าแฮชของเบอร์เป็นชื่อ (ไม่ขึ้นต้นด้วย ZZ) — ลบเองโดยคำนวณค่าแฮชของเบอร์ทดสอบ
+    "rider_private", "rider_documents", "daily_reports", "riders", "rider_status", "rider_locations", "active_rider", "rider_public", "merchant_public", "stall_contacts"];
+// rider_phone_status / merchant_phone_status ใช้ค่าแฮชของเบอร์เป็นชื่อ (ไม่ขึ้นต้นด้วย ZZ) — ลบเองโดยคำนวณค่าแฮชของเบอร์ทดสอบ
 const run = args => execSync("firebase " + args + " --project " + PROJECT, { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, MSYS_NO_PATHCONV: "1" } }).toString();
 
 const updates = {};
