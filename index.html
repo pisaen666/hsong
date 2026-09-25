@@ -5314,6 +5314,15 @@
                 </div>
             </div>
 
+            <!-- ร้านนี้ไม่มีเลขพร้อมเพย์จริงในระบบ: เตือนแทนที่จะแสดง/สแกนเลขตัวอย่าง -->
+            <div id="payout-no-number-warning" class="hidden bg-rose-50 border-2 border-rose-400 rounded-2xl p-3 space-y-1">
+                <div class="font-extrabold text-rose-800 text-xs flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-rose-600 text-base">warning</span>
+                    <span>ร้านนี้ยังไม่มีเลขพร้อมเพย์ในระบบ</span>
+                </div>
+                <div class="text-[11px] text-rose-700">กรุณาติดต่อร้านเพื่อขอเลขพร้อมเพย์ก่อนโอนเงิน ห้ามโอนไปที่เลขตัวอย่าง 089-123-4567 เด็ดขาด</div>
+            </div>
+
             <!-- Payout Amount Display -->
             <div class="bg-emerald-50 border-2 border-emerald-500 rounded-2xl p-3 text-center space-y-0.5 shadow-2xs">
                 <div class="text-[11px] text-emerald-800 font-bold">ยอดเงินที่ต้องโอนสุทธิให้แผงค้านี้:</div>
@@ -5323,7 +5332,7 @@
             </div>
 
             <!-- PromptPay QR Code Image -->
-            <div class="text-center space-y-2 py-1">
+            <div id="payout-qr-section" class="text-center space-y-2 py-1">
                 <div class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200/80 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold mx-auto shadow-2xs">
                     <span class="material-symbols-outlined text-xs">qr_code_scanner</span>
                     <span>PromptPay Official QR</span>
@@ -6323,6 +6332,15 @@
                 </div>
             </div>
 
+            <!-- ไรเดอร์คนนี้ไม่มีเลขพร้อมเพย์จริงในระบบ: เตือนแทนที่จะแสดง/สแกนเลขตัวอย่าง -->
+            <div id="rider-payout-no-number-warning" class="hidden bg-rose-50 border-2 border-rose-400 rounded-2xl p-3 space-y-1">
+                <div class="font-extrabold text-rose-800 text-xs flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-rose-600 text-base">warning</span>
+                    <span>ไรเดอร์คนนี้ยังไม่มีเลขพร้อมเพย์ในระบบ</span>
+                </div>
+                <div class="text-[11px] text-rose-700">กรุณาติดต่อไรเดอร์เพื่อขอเลขพร้อมเพย์ก่อนโอนเงิน ห้ามโอนไปที่เลขตัวอย่าง 089-123-4567 เด็ดขาด</div>
+            </div>
+
             <!-- Payout Amount Display -->
             <div class="bg-emerald-50 border-2 border-emerald-500 rounded-2xl p-3 text-center space-y-0.5 shadow-2xs">
                 <div class="text-[11px] text-emerald-800 font-bold">ยอดเงินค่ารอบสุทธิที่ต้องโอนให้ไรเดอร์:</div>
@@ -6332,7 +6350,7 @@
             </div>
 
             <!-- PromptPay QR Code Image -->
-            <div class="text-center space-y-2 py-1">
+            <div id="rider-payout-qr-section" class="text-center space-y-2 py-1">
                 <div class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200/80 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold mx-auto shadow-2xs">
                     <span class="material-symbols-outlined text-xs">qr_code_scanner</span>
                     <span>PromptPay Official QR</span>
@@ -7390,7 +7408,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.64_merchant_doc_verify"></script>
+    <script src="app.js?v=10.65_payout_no_number_warning"></script>
 </body>
 
 </html>

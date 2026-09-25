@@ -6411,7 +6411,7 @@ function findStallInfo(stallId, stallName) {
         stallName: stallName || "แผงค้าทั่วไป",
         stallNumber: stallName && stallName.includes("(") ? stallName.split("(")[1].replace(")", "") : "แผงทั่วไป",
         ownerName: "แม่ค้าประจำแผง",
-        phone: "089-123-4567"
+        phone: ""   // ไม่รู้จักร้านนี้จริง ๆ ไม่ควรใส่เบอร์ตัวอย่างที่ดูเหมือนเบอร์จริง (เดิม "089-123-4567" ทำให้จุดที่เรียกใช้เข้าใจผิดว่ามีเบอร์จริง)
     };
 }
 
@@ -6572,8 +6572,8 @@ function aggregateDailyOperations(targetDateKey) {
                         stallName: (meta && meta.stallName) || st.name,
                         stallNumber: (meta && meta.stallNumber) || "แผงตลาด",
                         ownerName: (meta && meta.ownerName) || "เจ้าของแผง",
-                        phone: (meta && meta.phone) || "089-123-4567",
-                        promptPayPhone: ((meta && meta.phone) || "0891234567").replace(/[^0-9]/g, ""),
+                        phone: (meta && meta.phone) || "",   // ไม่มีเบอร์จริงปล่อยว่างไว้ (เดิมใส่เบอร์ตัวอย่าง ทำให้หน้าโอนเงินเข้าใจผิดว่ามีเบอร์จริง)
+                        promptPayPhone: ((meta && meta.phone) || "").replace(/[^0-9]/g, ""),
                         orderCount: 0,
                         itemsCount: 0,
                         totalAmount: 0,
@@ -7857,7 +7857,10 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
     finalStallName = finalStallName || "แผงค้าในตลาด";
     finalOwner = finalOwner && finalOwner !== "undefined" ? finalOwner : "แม่ค้าประจำแผง";
     finalNumber = finalNumber && finalNumber !== "undefined" ? finalNumber : "แผงตลาด";
-    finalPhone = finalPhone && finalPhone !== "undefined" ? String(finalPhone) : "089-123-4567";
+    // 🔒 เช็กว่ามีเลขพร้อมเพย์จริงก่อนใส่เลขตัวอย่าง 089-123-4567 (เดิมใส่เลขตัวอย่างเงียบ ๆ แล้วสร้าง QR ให้สแกนได้จริง
+    //    เสี่ยงโอนเงินไปเลขที่ไม่มีใครเป็นเจ้าของ) — owner เสนอไว้ 2026-09-25, เจ้าของอนุมัติแล้ว
+    const hasRealPhone = !!(finalPhone && finalPhone !== "undefined" && String(finalPhone).replace(/[^0-9]/g, "").length >= 9);
+    finalPhone = hasRealPhone ? String(finalPhone) : "089-123-4567";
 
     let cleanPhone = finalPhone.replace(/[^0-9]/g, "");
     if (cleanPhone.length < 9) {
@@ -7879,6 +7882,7 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
         gpRate: finalRate,
         phone: finalPhone,
         cleanPhone: cleanPhone,
+        hasRealPhone: hasRealPhone,
         ownerName: finalOwner,
         stallNumber: finalNumber
     };
@@ -7894,11 +7898,13 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
     const gpBreakdownEl = document.getElementById("payout-gp-breakdown-text");
     const qrImg = document.getElementById("payout-qr-image");
     const ppNumEl = document.getElementById("payout-promptpay-number");
+    const warningEl = document.getElementById("payout-no-number-warning");
+    const qrSectionEl = document.getElementById("payout-qr-section");
 
     if (nameEl) nameEl.textContent = _currentPayoutStall.stallName;
     if (zoneEl) zoneEl.textContent = _currentPayoutStall.stallNumber;
     if (ownerEl) ownerEl.textContent = _currentPayoutStall.ownerName;
-    if (phoneEl) phoneEl.textContent = _currentPayoutStall.phone;
+    if (phoneEl) phoneEl.textContent = hasRealPhone ? _currentPayoutStall.phone : "ยังไม่มีเลข";
     if (amountEl) amountEl.textContent = `฿${_currentPayoutStall.amount.toLocaleString()}`;
     if (gpBreakdownEl) {
         if (finalGP > 0) {
@@ -7908,10 +7914,12 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
         }
     }
     if (ppNumEl) ppNumEl.textContent = _currentPayoutStall.phone;
+    if (warningEl) warningEl.classList.toggle("hidden", hasRealPhone);
+    if (qrSectionEl) qrSectionEl.classList.toggle("hidden", !hasRealPhone);
 
-    // สร้าง PromptPay QR Code มาตรฐาน BOT EMVCo 100% พร้อมยอดเงิน
+    // สร้าง PromptPay QR Code มาตรฐาน BOT EMVCo 100% พร้อมยอดเงิน (เฉพาะตอนมีเลขพร้อมเพย์จริงเท่านั้น)
     // ใช้ระบบ Multi-Source Failover เพื่อให้ QR โหลดได้รวดเร็วและไม่มีปัญหา 404/บล็อก
-    if (qrImg) {
+    if (qrImg && hasRealPhone) {
         const payload = generatePromptPayPayload(_currentPayoutStall.cleanPhone, _currentPayoutStall.amount);
         const encoded = encodeURIComponent(payload);
 
@@ -20435,7 +20443,7 @@ function renderAdminStalls() {
                                             </td>
                                             <td class="p-3 text-center">
                                                 <div class="flex items-center justify-center gap-1">
-                                                    <button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, 500, ${jsArg(s.phone || '089-123-4567')}, ${jsArg(s.ownerName || 'เจ้าของแผง')}, ${jsArg(s.stallNumber || 'แผงตลาด')})" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
+                                                    <button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, 500, ${jsArg(s.phone || '')}, ${jsArg(s.ownerName || 'เจ้าของแผง')}, ${jsArg(s.stallNumber || 'แผงตลาด')})" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
                                                         QR โอน
                                                     </button>
                                                     <button onclick="loginAsMerchantStall(${jsArg(s.stallId)})" class="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
@@ -25400,9 +25408,13 @@ window.removeRiderPayoutSlip = removeRiderPayoutSlip;
 
 function openSingleRiderPayoutModal(riderId, amount, phone, name, plate, trips, baseEarned, bonus) {
     const riders = loadCommunityRiders();
-    const r = riders.find(x => x.id === riderId) || { id: riderId, name: name || "ไรเดอร์", phone: phone || "089-123-4567", plate: plate || "-" };
+    const r = riders.find(x => x.id === riderId) || { id: riderId, name: name || "ไรเดอร์", phone: phone || "", plate: plate || "-" };
     
-    let finalPhone = phone || r.promptPay || r.phone || "089-123-4567";
+    // 🔒 เช็กว่ามีเลขพร้อมเพย์จริงก่อนใส่เลขตัวอย่าง 089-123-4567 (เดิมใส่เลขตัวอย่างเงียบ ๆ แล้วสร้าง QR ให้สแกนได้จริง
+    //    เสี่ยงโอนเงินไปเลขที่ไม่มีใครเป็นเจ้าของ) — owner เสนอไว้ 2026-09-25, เจ้าของอนุมัติแล้ว
+    let finalPhone = phone || r.promptPay || r.phone || "";
+    const hasRealPhone = !!(finalPhone && String(finalPhone).replace(/[^0-9]/g, "").length >= 9);
+    finalPhone = hasRealPhone ? finalPhone : "089-123-4567";
     let cleanPhone = String(finalPhone).replace(/[^0-9]/g, "");
     if (cleanPhone.length < 9) {
         cleanPhone = "0891234567";
@@ -25419,6 +25431,7 @@ function openSingleRiderPayoutModal(riderId, amount, phone, name, plate, trips, 
         name: r.name || name,
         phone: finalPhone,
         cleanPhone: cleanPhone,
+        hasRealPhone: hasRealPhone,
         plate: r.plate || plate || "-",
         amount: finalAmount,
         trips: finalTrips,
@@ -25437,10 +25450,14 @@ function openSingleRiderPayoutModal(riderId, amount, phone, name, plate, trips, 
     const breakdownEl = document.getElementById("rider-payout-breakdown-text");
     const qrImg = document.getElementById("rider-payout-qr-image");
     const ppNumEl = document.getElementById("rider-payout-promptpay-number");
+    const warningEl = document.getElementById("rider-payout-no-number-warning");
+    const qrSectionEl = document.getElementById("rider-payout-qr-section");
 
     if (nameEl) nameEl.innerHTML = `<span class="material-symbols-outlined text-purple-600 text-sm">two_wheeler</span><span>${escapeHtml(_currentRiderPayout.name)}</span>`;
     if (plateEl) plateEl.textContent = `ทะเบียน: ${_currentRiderPayout.plate}`;
-    if (phoneEl) phoneEl.textContent = _currentRiderPayout.phone;
+    if (phoneEl) phoneEl.textContent = hasRealPhone ? _currentRiderPayout.phone : "ยังไม่มีเลข";
+    if (warningEl) warningEl.classList.toggle("hidden", hasRealPhone);
+    if (qrSectionEl) qrSectionEl.classList.toggle("hidden", !hasRealPhone);
     if (tripsEl) tripsEl.textContent = `เที่ยววิ่งสำเร็จ: ${_currentRiderPayout.trips} เที่ยว`;
     if (amountEl) amountEl.textContent = `฿${_currentRiderPayout.amount.toLocaleString()}`;
     if (breakdownEl) {
@@ -25448,8 +25465,8 @@ function openSingleRiderPayoutModal(riderId, amount, phone, name, plate, trips, 
     }
     if (ppNumEl) ppNumEl.textContent = _currentRiderPayout.phone;
 
-    // PromptPay QR Code Failover
-    if (qrImg) {
+    // PromptPay QR Code Failover (เฉพาะตอนมีเลขพร้อมเพย์จริงเท่านั้น)
+    if (qrImg && hasRealPhone) {
         const payload = generatePromptPayPayload(_currentRiderPayout.cleanPhone, _currentRiderPayout.amount);
         const encoded = encodeURIComponent(payload);
         const promptpayIoUrl = _currentRiderPayout.amount > 0
@@ -27809,7 +27826,7 @@ function renderHubSettlement() {
             const stallItemsTotal = merchantStallItemsTotal(stall.items);
             const stallGP = Math.round(stallItemsTotal * (gpRate / 100));
             const stallPayout = Math.max(0, stallItemsTotal - stallGP);
-            const stallPhone = meta.phone || "089-123-4567";
+            const stallPhone = meta.phone || "";   // ไม่มีเบอร์จริงปล่อยว่างไว้ ให้ openVendorPayoutModal ตัดสินใจเตือนแทนใส่เบอร์ตัวอย่าง
             const stallOwner = meta.ownerName || "แม่ค้าประจำแผง";
             const stallNum = meta.stallNumber || "แผงตลาด";
             const stallId = stall.stallId || meta.stallId || stall.name;
