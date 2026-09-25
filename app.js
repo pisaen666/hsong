@@ -695,26 +695,29 @@ async function _openStaffSession(role, id, secret, saltHex) {
         console.warn("openStaffSession rejected:", e && e.message);
         return false;
     }
+    _myStaffSession = { role, id: staffKeyId(id) };
     return true;
 }
 
 function closeStaffSession() {
     const uid = getAuthUid();
     if (uid && isFirebaseReady() && !isOwnerUid(uid)) db.ref(`staff_sessions/${uid}`).remove().catch(() => { });
+    _myStaffSession = null;
+    if (typeof stopRiderJobsListener === "function" && !isOwnerSignedIn()) stopRiderJobsListener();
+    if (typeof stopStallOrdersListener === "function") stopStallOrdersListener();
     window._cachedFirebaseOrders = [];
 }
 window.openStaffSession = openStaffSession;
 window.closeStaffSession = closeStaffSession;
 
 // =================================================================
-// ใครดึง "รายการออเดอร์ทั้งหมด" ได้: เจ้าของ (ฮับ/แอดมิน), ไรเดอร์, แม่ค้า
-// ลูกค้าทั่วไปดึงได้เฉพาะออเดอร์ของตัวเองทีละใบ (watchActiveOrderInCloud)
+// ใครดึง "รายการออเดอร์ทั้งหมด" ได้: เจ้าของ (ฮับ/แอดมิน) เท่านั้น
+// ลูกค้าดึงได้เฉพาะออเดอร์ของตัวเองทีละใบ (watchActiveOrderInCloud); ไรเดอร์/แม่ค้าดูงานของตัวเองผ่าน rider_jobs / stall_orders
 // (ฝั่งนี้แค่ไม่ขอสิ่งที่ไม่มีสิทธิ์ สิทธิ์จริงบังคับที่กฎฐานข้อมูล)
 // =================================================================
 function canListAllOrders() {
-    return isOwnerSignedIn() ||
-        !!(state.activeRider && state.activeRider.isLoggedIn) ||
-        !!(state.activeMerchant && state.activeMerchant.isLoggedIn);
+    // กฎ v4: ดึงออเดอร์ทุกใบได้เฉพาะเจ้าของ — ไรเดอร์ใช้ rider_jobs, แม่ค้าใช้ stall_orders (ดู listenRiderJobs / listenStallOrders)
+    return isOwnerSignedIn();
 }
 window.canListAllOrders = canListAllOrders;
 
@@ -731,11 +734,20 @@ function _onOrderListDenied(err) {
 // เรียกทุกครั้งที่สิทธิ์เปลี่ยน (บัตรผ่านพร้อม / เจ้าของล็อกอิน / ไรเดอร์-แม่ค้าล็อกอิน)
 function refreshOrderAccess() {
     if (!isFirebaseReady()) return;
-    ensureAuthUser(8000).then(() => {
-        if (canListAllOrders()) {
+    ensureAuthUser(8000).then(async () => {
+        if (isOwnerSignedIn()) {
             syncAdminOrdersFromCloud();
             listenToFirebaseOrdersForAdmin();
             attachOrderChildListeners();
+            listenRiderJobs();
+        } else {
+            const isRider = !!(state.activeRider && state.activeRider.isLoggedIn);
+            const isMerchant = !!(state.activeMerchant && state.activeMerchant.isLoggedIn);
+            if (isRider || isMerchant) await loadMyStaffSession();
+            if (isRider && myRiderStaffId()) listenRiderJobs();
+            if (isMerchant && myMerchantStaffId()) listenStallOrders();
+            if (isMerchant) watchMyExpressOrders();
+            if ((isRider || isMerchant) && !_myStaffSession && !_anonAuthFailed) _onOrderListDenied({ code: "no-staff-session" });
         }
         watchActiveOrderInCloud();
     });
@@ -768,17 +780,19 @@ window.watchActiveOrderInCloud = watchActiveOrderInCloud;
 // รวมข้อมูลออเดอร์ที่มาจากคลาวด์เข้ากับออเดอร์ที่เครื่องนี้กำลังติดตามอยู่ (ถ้าเป็นใบเดียวกัน)
 function applyActiveOrderCloudUpdate(updatedOrder) {
     if (!updatedOrder || !updatedOrder.orderId) return;
+    _knownCloudOrderIds.add(updatedOrder.orderId);
     if (!(state.activeOrder && state.activeOrder.orderId === updatedOrder.orderId)) return;
     const oldStatus = state.activeOrder.status;
-    const oldRefund = state.activeOrder.refundCashTotal || 0;
+    const oldRefund = orderRefundTotal(state.activeOrder);   // คิดจากรายการของ (แม่ค้าบันทึกของหมด/น้ำหนักได้ แต่เขียนยอดคืนเงินรวมไม่ได้)
     state.activeOrder = { ...state.activeOrder, ...updatedOrder };
     try { localStorage.setItem("talathub_active_order", JSON.stringify(state.activeOrder)); } catch (e) { }
 
     if (state.currentScreen === "tracking") renderTrackingScreen();
     updateHomeActiveOrderBanner();
 
-    if ((updatedOrder.refundCashTotal || 0) > oldRefund) {
-        showToast(`✉️ แจ้งเตือน: มีการคืนเงินสดใส่ซอง ฿${updatedOrder.refundCashTotal}! แตะดูสถานะจัดส่งได้เลย`);
+    const newRefund = orderRefundTotal(state.activeOrder);
+    if (newRefund > oldRefund) {
+        showToast(`✉️ แจ้งเตือน: มีการคืนเงินสดใส่ซอง ฿${newRefund}! แตะดูสถานะจัดส่งได้เลย`);
     } else if (updatedOrder.status === "delivering" && oldStatus !== "delivering") {
         showToast("🛵 ไรเดอร์ออกเดินทางแล้ว! กำลังมาส่งของที่บ้านคุณ");
     } else if (updatedOrder.status === "delivered" && oldStatus !== "delivered") {
@@ -827,6 +841,360 @@ function attachOrderChildListeners() {
     ordersRef.on("child_changed", (snapshot) => applyActiveOrderCloudUpdate(snapshot.val()), stop);
 }
 window.attachOrderChildListeners = attachOrderChildListeners;
+
+// =================================================================
+// ไรเดอร์/แม่ค้าเห็นเฉพาะงานของตัวเอง (กฎ v4, เจ้าของเลือก 2026-09-25)
+// - rider_jobs/<ออเดอร์>  : ใบงานแบบย่อ (จุดรับของ ตำบล ค่ารอบ) ไม่มีชื่อ/เบอร์/ที่อยู่ลูกค้า ไรเดอร์ทุกคนเห็น
+//                           กดรับ = ใส่ assignedRiderId ในออเดอร์ -> ไรเดอร์คนนั้นคนเดียวอ่านออเดอร์เต็มได้
+// - stall_orders/<ร้าน>/<ออเดอร์> : เลขออเดอร์ + ของของร้านนั้นเท่านั้น (แม่ค้าไม่เห็นข้อมูลลูกค้า)
+// - ฮับ (เจ้าของ) เห็นทุกใบงาน จ่ายงานให้ไรเดอร์ได้ และมีเสียง/ป้ายเตือนเมื่อไม่มีใครรับเกิน 10 นาที
+// ทั้งสองสำเนาสร้างโดยเครื่องที่สั่งซื้อ ตอนบันทึกออเดอร์ใหม่ครั้งแรก (saveOrderSideCopiesToCloud)
+// =================================================================
+const RIDER_TRIP_FEE = 40;              // ค่ารอบที่แสดงในใบงาน (ตรงกับรายงาน/หน้ากระเป๋าเงินไรเดอร์)
+const UNCLAIMED_JOB_ALERT_MIN = 10;     // งานไม่มีคนรับนานเท่านี้ ฮับได้เสียง/ป้ายเตือน (เจ้าของกำหนด)
+
+const _knownCloudOrderIds = new Set();  // ออเดอร์ที่อ่านมาจากคลาวด์แล้ว (ห้ามใส่ customerUid ใหม่ทับ)
+const _newOrderIds = new Set();         // ออเดอร์ที่เครื่องนี้เพิ่งสร้าง (ต้องสร้างใบงาน/สำเนาของร้านตาม)
+let _myStaffSession = null;             // { role, id } ของไรเดอร์/แม่ค้าที่ล็อกอินบนเครื่องนี้ (อ่านจาก staff_sessions/<uid>)
+
+function myRiderStaffId() {
+    return (_myStaffSession && _myStaffSession.role === "rider") ? _myStaffSession.id : null;
+}
+function myMerchantStaffId() {
+    return (_myStaffSession && _myStaffSession.role === "merchant") ? _myStaffSession.id : null;
+}
+function riderStaffIdOf(rider) {
+    return rider ? staffKeyId(rider.accessCode || rider.id || rider.riderId || "") : "";
+}
+
+async function loadMyStaffSession() {
+    const uid = getAuthUid();
+    if (!uid || !isFirebaseReady() || isOwnerUid(uid)) { _myStaffSession = null; return null; }
+    try {
+        const v = (await _withTimeout(db.ref(`staff_sessions/${uid}`).once("value"), 8000)).val();
+        _myStaffSession = (v && v.role && v.id) ? { role: v.role, id: v.id } : null;
+    } catch (e) {
+        _myStaffSession = null;
+    }
+    return _myStaffSession;
+}
+
+// ใบงานแบบย่อสำหรับไรเดอร์ — ห้ามใส่ชื่อ เบอร์ ที่อยู่ พิกัดลูกค้า (กฎฐานข้อมูลรับเฉพาะช่องที่กำหนด)
+function buildRiderJobCard(order) {
+    const isExpress = order.orderType === "MERCHANT_EXPRESS" || order.orderType === "CUSTOMER_EXPRESS" || !!order.isExpress;
+    const origin = order.originStall || {};
+    const firstStall = (Array.isArray(order.stalls) && order.stalls[0]) || {};
+    const card = {
+        orderId: String(order.orderId),
+        orderType: String(order.orderType || "HUB_CONSOLIDATED"),
+        pickup: isExpress ? ("หน้าร้าน " + (origin.stallName || firstStall.name || "แผงค้า")) : "ฮับรวมตลาดบ้านบึง",
+        area: String(order.subdistrict || "").slice(0, 80),
+        fee: RIDER_TRIP_FEE,
+        createdAt: Number(order.savedAt) || Number(new Date(order.createdAt)) || Date.now(),
+        status: "open"
+    };
+    const km = Number(order.distanceKm);
+    if (Number.isFinite(km) && km > 0) card.distanceKm = Math.round(km * 10) / 10;
+    return card;
+}
+
+// สำเนาสำหรับแม่ค้า: เลขออเดอร์ + กลุ่มสินค้าของร้านนั้น (stallIndex = ตำแหน่งในออเดอร์เต็ม ใช้ตอนบันทึกกลับ)
+function buildStallOrderCopy(order, idx) {
+    const s = order.stalls[idx] || {};
+    let stall;
+    try { stall = JSON.parse(JSON.stringify({ stallId: s.stallId, name: s.name || "", items: s.items || [], itemsCount: s.itemsCount || 0, pickedCount: s.pickedCount || 0, status: s.status || "picking", ready: !!s.ready })); }
+    catch (e) { stall = { stallId: s.stallId, name: s.name || "", items: [] }; }
+    return { orderId: String(order.orderId), savedAt: Number(order.savedAt) || Date.now(), stallIndex: idx, stall };
+}
+
+function saveOrderSideCopiesToCloud(orderKey, order) {
+    if (!isFirebaseReady() || !order || !_newOrderIds.has(order.orderId)) return;
+    if (!order.customerUid || order.customerUid !== getAuthUid()) return;
+    _newOrderIds.delete(order.orderId);
+    db.ref(`rider_jobs/${orderKey}`).set(buildRiderJobCard(order)).catch(e => console.warn("rider_jobs create failed:", e && e.message));
+    (Array.isArray(order.stalls) ? order.stalls : []).forEach((s, idx) => {
+        if (!s || !s.stallId) return;
+        db.ref(`stall_orders/${staffKeyId(s.stallId)}/${orderKey}`).set(buildStallOrderCopy(order, idx)).catch(() => { });
+    });
+}
+
+// สถานะออเดอร์ (กำลังส่ง/ส่งแล้ว) ไปถึงใบงานไรเดอร์และสำเนาของแม่ค้า
+function syncOrderSideStatus(orderId, status) {
+    if (!isFirebaseReady() || !orderId) return;
+    const key = toFirebaseKey(orderId);
+    if (status === "delivered") db.ref(`rider_jobs/${key}/status`).set("done").catch(() => { });
+    const local = [state.activeOrder, ...(window._cachedFirebaseOrders || [])].find(o => o && o.orderId === orderId && Array.isArray(o.stalls));
+    if (!local) return;
+    local.stalls.forEach(s => {
+        if (s && s.stallId) db.ref(`stall_orders/${staffKeyId(s.stallId)}/${key}/status`).set(String(status)).catch(() => { });
+    });
+}
+
+// ── ใบงานไรเดอร์: ไรเดอร์ที่ล็อกอินจริง + ฮับ (เจ้าของ) ฟังทั้งโหนด ──
+let _riderJobsRef = null;
+function listenRiderJobs() {
+    if (!isFirebaseReady() || _riderJobsRef) return;
+    const ref = db.ref("rider_jobs");
+    _riderJobsRef = ref;
+    ref.on("value", snap => {
+        state.riderJobs = snap.val() || {};
+        onRiderJobsChanged();
+    }, err => {
+        if (_riderJobsRef === ref) _riderJobsRef = null;
+        state.riderJobs = {};
+        _onOrderListDenied(err);
+        onRiderJobsChanged();
+    });
+}
+function stopRiderJobsListener() {
+    if (_riderJobsRef) { try { _riderJobsRef.off(); } catch (e) { } }
+    _riderJobsRef = null;
+    state.riderJobs = {};
+}
+
+function openRiderJobs() {
+    return Object.entries(state.riderJobs || {})
+        .filter(([, j]) => j && j.orderId && j.status === "open" && !j.claimedBy)
+        .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+}
+
+function onRiderJobsChanged() {
+    if (isOwnerSignedIn()) {
+        renderHubRiderJobsPanel();
+        checkUnclaimedJobAlerts();
+    }
+    if (state.activeRider && state.activeRider.isLoggedIn) {
+        const pool = document.getElementById("rider-panel-pool");
+        if (pool && !pool.classList.contains("hidden")) renderRiderJobPool();
+        const badge = document.getElementById("rider-pool-count");
+        if (badge) badge.textContent = openRiderJobs().length;
+        restoreMyRiderJob();
+    }
+}
+
+// ไรเดอร์เปิดเว็บใหม่ / ฮับจ่ายงานให้: โหลดงานที่ตัวเองรับไว้กลับมาเป็นงานปัจจุบัน
+let _restoringRiderJob = false;
+async function restoreMyRiderJob() {
+    const sid = myRiderStaffId();
+    if (!sid || _restoringRiderJob) return;
+    const mine = Object.entries(state.riderJobs || {})
+        .filter(([, j]) => j && j.claimedBy === sid && j.status === "claimed")
+        .sort((a, b) => (a[1].claimedAt || 0) - (b[1].claimedAt || 0));
+    if (!mine.length) return;
+    if (state.activeOrder && mine.some(([k]) => toFirebaseKey(state.activeOrder.orderId) === k) && state.activeOrder.status !== "delivered") return;
+    _restoringRiderJob = true;
+    try {
+        const [key, job] = mine[0];
+        const fresh = (await _withTimeout(db.ref(`orders/${key}`).once("value"), 8000)).val();
+        if (fresh && fresh.orderId) {
+            _knownCloudOrderIds.add(fresh.orderId);
+            state.activeOrder = fresh;
+            try { localStorage.setItem("talathub_active_order", JSON.stringify(fresh)); } catch (e) { }
+            watchActiveOrderInCloud();
+            if (typeof renderRiderScreen === "function") renderRiderScreen();
+            if (job.assignedBy === "hub") showToast(`🛵 ฮับจ่ายงาน ${fresh.orderId} ให้คุณแล้ว ดูรายละเอียดที่แท็บงานปัจจุบัน`);
+        }
+    } catch (e) {
+        console.warn("restoreMyRiderJob failed:", e && e.message);
+    } finally {
+        _restoringRiderJob = false;
+    }
+}
+
+// รับงาน / จ่ายงาน: ใส่ไรเดอร์ในออเดอร์ + ปิดใบงาน พร้อมกันในคำขอเดียว (ถ้ามีคนรับไปก่อน กฎจะปฏิเสธทั้งหมด)
+function _riderAssignUpdates(orderKey, sid, rider, assignedBy) {
+    const now = Date.now();
+    const u = {
+        [`orders/${orderKey}/assignedRiderId`]: sid,
+        [`orders/${orderKey}/riderName`]: (rider && rider.name) || "",
+        [`orders/${orderKey}/riderPhone`]: (rider && rider.phone) || "",
+        [`orders/${orderKey}/riderClaimedAt`]: now,
+        [`rider_jobs/${orderKey}/claimedBy`]: sid,
+        [`rider_jobs/${orderKey}/status`]: "claimed",
+        [`rider_jobs/${orderKey}/claimedAt`]: now
+    };
+    if (assignedBy) u[`rider_jobs/${orderKey}/assignedBy`] = assignedBy;
+    return u;
+}
+
+// ไรเดอร์กดคืนงาน (ยังไม่ได้ออกส่ง): งานกลับไปรอให้คนอื่นรับ ฮับเห็นทันที
+async function releaseRiderJob() {
+    const sid = myRiderStaffId();
+    const order = state.activeOrder;
+    if (!order || !order.orderId) { showToast("⚠️ ไม่มีงานที่รับไว้"); return; }
+    if (!sid || order.assignedRiderId !== sid) { showToast("⚠️ งานนี้ไม่ได้อยู่ในชื่อคุณ คืนงานไม่ได้"); return; }
+    if (order.status === "delivering" || order.status === "delivered") {
+        showToast("⚠️ ออกส่งแล้ว คืนงานไม่ได้ กรุณาโทรแจ้งฮับ");
+        return;
+    }
+    if (!confirm(`คืนงาน ${order.orderId} ให้ไรเดอร์คนอื่นรับแทนใช่ไหม?`)) return;
+    const key = toFirebaseKey(order.orderId);
+    const u = {
+        [`orders/${key}/assignedRiderId`]: null, [`orders/${key}/riderName`]: null, [`orders/${key}/riderPhone`]: null, [`orders/${key}/riderClaimedAt`]: null,
+        [`rider_jobs/${key}/claimedBy`]: null, [`rider_jobs/${key}/status`]: "open", [`rider_jobs/${key}/claimedAt`]: null, [`rider_jobs/${key}/assignedBy`]: null
+    };
+    try {
+        await _withTimeout(db.ref().update(u), 10000);
+    } catch (e) {
+        showToast("⚠️ คืนงานไม่สำเร็จ กรุณาลองอีกครั้ง หรือโทรแจ้งฮับ");
+        return;
+    }
+    if (_watchedOrderRef) { try { _watchedOrderRef.off(); } catch (e) { } _watchedOrderRef = null; _watchedOrderKey = null; }
+    state.activeOrder = null;
+    try { localStorage.removeItem("talathub_active_order"); localStorage.removeItem("hsong_active_order"); } catch (e) { }
+    if (typeof renderRiderScreen === "function") renderRiderScreen();
+    showToast(`↩️ คืนงาน ${order.orderId} แล้ว งานกลับไปรอให้ไรเดอร์คนอื่นรับ`);
+}
+window.releaseRiderJob = releaseRiderJob;
+
+// ── ฮับ: แผงงานที่ยังไม่มีไรเดอร์รับ + จ่ายงาน + เตือนเมื่อค้างเกิน 10 นาที ──
+function renderHubRiderJobsPanel() {
+    const el = document.getElementById("hub-rider-jobs-panel");
+    if (!el) return;
+    const jobs = isOwnerSignedIn() ? openRiderJobs() : [];
+    if (!jobs.length) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+    const riders = (typeof loadCommunityRiders === "function" ? loadCommunityRiders() : []).filter(r => r && riderStaffIdOf(r));
+    const options = riders.map(r => `<option value="${escapeHtml(riderStaffIdOf(r))}">${escapeHtml(r.name || r.id)} (${escapeHtml(r.accessCode || r.id)})</option>`).join("");
+    const now = Date.now();
+    el.classList.remove("hidden");
+    el.innerHTML = `
+        <div class="bg-white rounded-2xl border-2 border-amber-300 p-3 space-y-2">
+            <div class="font-extrabold text-sm text-slate-800 flex items-center gap-1.5">🛵 งานที่ยังไม่มีไรเดอร์รับ (${jobs.length})</div>
+            ${jobs.map(([key, j]) => {
+                const mins = Math.max(0, Math.floor((now - (j.createdAt || now)) / 60000));
+                const late = mins >= UNCLAIMED_JOB_ALERT_MIN;
+                return `
+                <div class="rounded-xl p-2.5 border ${late ? "border-rose-400 bg-rose-50" : "border-slate-200 bg-slate-50"} space-y-2">
+                    <div class="flex items-center justify-between gap-2 flex-wrap text-xs">
+                        <span class="font-mono font-black text-slate-900">${escapeHtml(j.orderId)}</span>
+                        <span class="font-bold ${late ? "text-rose-700" : "text-slate-500"}">${late ? "🚨 " : ""}รอมาแล้ว ${mins} นาที</span>
+                    </div>
+                    <div class="text-xs text-slate-600">📦 ${escapeHtml(j.pickup || "")}${j.area ? " → " + escapeHtml(j.area) : ""}</div>
+                    ${riders.length ? `
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <select id="hub-assign-select-${escapeHtml(key)}" class="flex-1 min-w-0 p-2 border border-slate-300 rounded-lg text-xs font-bold bg-white">${options}</select>
+                        <button type="button" onclick="hubAssignJobToRider(${jsArg(key)})" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold active:scale-95">จ่ายงานให้คนนี้</button>
+                    </div>` : `<div class="text-xs text-rose-700 font-bold">ยังไม่มีไรเดอร์ที่อนุมัติแล้ว</div>`}
+                </div>`;
+            }).join("")}
+        </div>`;
+}
+window.renderHubRiderJobsPanel = renderHubRiderJobsPanel;
+
+async function hubAssignJobToRider(orderKey, riderSid) {
+    if (!requireOwnerAction()) return false;
+    const sel = document.getElementById(`hub-assign-select-${orderKey}`);
+    const sid = riderSid || (sel ? sel.value : "");
+    const rider = (loadCommunityRiders() || []).find(r => riderStaffIdOf(r) === sid);
+    if (!rider) { showToast("⚠️ กรุณาเลือกไรเดอร์"); return false; }
+    const job = (state.riderJobs || {})[orderKey];
+    if (job && job.claimedBy) { showToast("ℹ️ งานนี้มีไรเดอร์รับไปแล้ว"); return false; }
+    try {
+        await _withTimeout(db.ref().update(_riderAssignUpdates(orderKey, sid, rider, "hub")), 10000);
+    } catch (e) {
+        showToast("⚠️ จ่ายงานไม่สำเร็จ งานนี้อาจมีไรเดอร์รับไปแล้ว");
+        return false;
+    }
+    showToast(`🛵 จ่ายงาน ${(job && job.orderId) || orderKey} ให้ ${rider.name || sid} แล้ว`);
+    return true;
+}
+window.hubAssignJobToRider = hubAssignJobToRider;
+
+const _unclaimedAlerted = new Set();
+function checkUnclaimedJobAlerts() {
+    if (!isOwnerSignedIn()) return;
+    const now = Date.now();
+    const late = openRiderJobs().filter(([, j]) => now - (j.createdAt || now) >= UNCLAIMED_JOB_ALERT_MIN * 60000);
+    const fresh = late.filter(([k]) => !_unclaimedAlerted.has(k));
+    fresh.forEach(([k]) => _unclaimedAlerted.add(k));
+    const hubBadge = document.getElementById("hub-badge-count");
+    if (late.length && hubBadge) { hubBadge.classList.remove("hidden"); hubBadge.textContent = "!"; }
+    if (fresh.length) {
+        playOrderAlertSound();
+        showToast(`🚨 มี ${late.length} งานที่ไม่มีไรเดอร์รับเกิน ${UNCLAIMED_JOB_ALERT_MIN} นาที กรุณาจ่ายงานที่หน้าจัดส่ง (ฮับ)`);
+    }
+}
+setInterval(() => { if (isOwnerSignedIn()) { renderHubRiderJobsPanel(); checkUnclaimedJobAlerts(); } }, 30000);
+
+// ── แม่ค้า: ฟังสำเนาออเดอร์ของร้านตัวเอง (stall_orders/<ร้าน>) ──
+let _stallOrdersRef = null;
+function listenStallOrders() {
+    const sid = myMerchantStaffId();
+    if (!isFirebaseReady() || !sid) return;
+    if (_stallOrdersRef && _stallOrdersRef._sid === sid) return;
+    stopStallOrdersListener();
+    const ref = db.ref(`stall_orders/${sid}`);
+    ref._sid = sid;
+    _stallOrdersRef = ref;
+    ref.on("value", snap => {
+        const v = snap.val() || {};
+        state.merchantStallOrders = Object.values(v)
+            .filter(x => x && x.orderId && x.stall)
+            .map(x => ({ orderId: x.orderId, savedAt: x.savedAt, status: x.status || "picking", _stallIndex: x.stallIndex, stalls: [x.stall] }));
+        if (typeof renderMerchantIncomingOrders === "function") renderMerchantIncomingOrders();
+    }, err => {
+        if (_stallOrdersRef === ref) _stallOrdersRef = null;
+        _onOrderListDenied(err);
+    });
+}
+function stopStallOrdersListener() {
+    if (_stallOrdersRef) { try { _stallOrdersRef.off(); } catch (e) { } }
+    _stallOrdersRef = null;
+    state.merchantStallOrders = [];
+}
+
+// แม่ค้าแก้กลุ่มสินค้าของร้านตัวเอง: เขียนทั้งในออเดอร์เต็ม (stalls/<ตำแหน่งจริง>) และในสำเนาของร้าน
+// rel = { "ready": true, "items/0/weighedQty": 0.9, ... }  orderLevel = ช่องระดับออเดอร์ (เจ้าของเท่านั้นเขียนได้)
+function patchMerchantStall(orderId, stallId, rel, orderLevel) {
+    if (!isFirebaseReady() || !orderId || !stallId) return;
+    const key = toFirebaseKey(orderId);
+    const slim = (state.merchantStallOrders || []).find(o => o && o.orderId === orderId);
+    let realIdx = (slim && slim._stallIndex !== undefined && slim._stallIndex !== null) ? slim._stallIndex : -1;
+    if (realIdx < 0) {
+        let hist = [];
+        try { hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]"); } catch (e) { }
+        const full = [state.activeOrder, ...(window._cachedFirebaseOrders || []), ...(Array.isArray(hist) ? hist : [])]
+            .find(o => o && o.orderId === orderId && Array.isArray(o.stalls));
+        realIdx = full ? full.stalls.findIndex(s => s && s.stallId === stallId) : -1;
+    }
+    if (realIdx < 0 && !slim) {
+        showToast("⚠️ บันทึกขึ้นระบบไม่สำเร็จ (ไม่พบออเดอร์นี้) กรุณากดรีเฟรช 🔄 แล้วลองใหม่");
+        return;
+    }
+    const u = {};
+    if (realIdx >= 0) Object.entries(rel).forEach(([p, v]) => { u[`orders/${key}/stalls/${realIdx}/${p}`] = v; });
+    if (slim) Object.entries(rel).forEach(([p, v]) => { u[`stall_orders/${staffKeyId(stallId)}/${key}/stall/${p}`] = v; });
+    if (isOwnerSignedIn() && orderLevel) Object.entries(orderLevel).forEach(([p, v]) => { u[`orders/${key}/${p}`] = v; });
+    if (!Object.keys(u).length) return;
+    db.ref().update(u).catch(e => {
+        console.warn("patchMerchantStall failed:", e && e.message);
+        showToast("⚠️ บันทึกขึ้นระบบไม่สำเร็จ กรุณากดรีเฟรช 🔄 แล้วลองใหม่");
+    });
+}
+window.patchMerchantStall = patchMerchantStall;
+
+// แม่ค้าติดตามสถานะงานด่วนที่ตัวเองเรียกไรเดอร์ (แม่ค้าเป็นเจ้าของออเดอร์ด่วนนั้นจึงอ่านได้)
+const _expressWatchers = {};
+function watchMyExpressOrders() {
+    if (!isFirebaseReady()) return;
+    (state.merchantExpressOrders || []).filter(o => o && o.orderId && o.status !== "delivered").slice(0, 10).forEach(o => {
+        const key = toFirebaseKey(o.orderId);
+        if (_expressWatchers[key]) return;
+        const ref = db.ref(`orders/${key}`);
+        _expressWatchers[key] = ref;
+        ref.on("value", snap => {
+            const v = snap.val();
+            if (!v || !v.orderId) return;
+            _knownCloudOrderIds.add(v.orderId);
+            const i = (state.merchantExpressOrders || []).findIndex(e => e && e.orderId === v.orderId);
+            if (i >= 0) state.merchantExpressOrders[i] = { ...state.merchantExpressOrders[i], ...v };
+            try { localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20))); } catch (e) { }
+            if (typeof renderMerchantActiveDeliveries === "function") renderMerchantActiveDeliveries();
+            if (v.status === "delivered") { try { ref.off(); } catch (e) { } delete _expressWatchers[key]; }
+        }, () => { delete _expressWatchers[key]; });
+    });
+}
+window.watchMyExpressOrders = watchMyExpressOrders;
 
 function signOutOwner() {
     if (typeof auth !== "undefined" && auth) auth.signOut().catch(() => { });
@@ -1481,8 +1849,12 @@ function stampOrderOwner(order) {
         if (known.customerUid) order.customerUid = known.customerUid;
         return order;
     }
+    if (typeof _knownCloudOrderIds !== "undefined" && _knownCloudOrderIds.has(order.orderId)) return order;   // อ่านมาจากคลาวด์ (เช่น ไรเดอร์รับงาน) ไม่ใช่ของใหม่
     const uid = getAuthUid();
-    if (uid) order.customerUid = uid;
+    if (uid) {
+        order.customerUid = uid;
+        if (typeof _newOrderIds !== "undefined") _newOrderIds.add(order.orderId);   // ต้องสร้างใบงานไรเดอร์ + สำเนาของร้านตาม
+    }
     return order;
 }
 window.stampOrderOwner = stampOrderOwner;
@@ -1537,6 +1909,7 @@ function _syncOrderToCloudNow(order) {
             .then(() => {
                 console.log(`☁️ Firebase RTDB sync success for order: ${order.orderId}`);
                 saveOrderTrackCodeToCloud(orderKey, cleanOrder);
+                saveOrderSideCopiesToCloud(orderKey, cleanOrder);
                 // ติดตามสถานะออเดอร์ใบนี้ต่อ (ต้องรอให้เขียนเสร็จก่อน ไม่งั้นกฎยังไม่รู้ว่าเป็นออเดอร์ของเรา)
                 if (state.activeOrder && state.activeOrder.orderId === order.orderId) watchActiveOrderInCloud();
             })
@@ -1564,6 +1937,7 @@ async function _syncOrderViaREST(orderKey, orderData) {
 // ── ORDER STATUS: อัปเดต status ใน Firebase (Hub อัปเดตเพื่อให้มือถือเห็น)
 function updateOrderStatusInFirebase(orderId, newStatus) {
     if (!orderId) return;
+    syncOrderSideStatus(orderId, newStatus);   // ใบงานไรเดอร์ + สำเนาของแม่ค้าเห็นสถานะใหม่ด้วย
     const orderKey = toFirebaseKey(orderId);
     const updatePayload = { status: newStatus, updatedAt: Date.now() };
 
@@ -15278,9 +15652,10 @@ function renderMerchantIncomingOrders() {
     const currentStallId = stall ? stall.stallId : "";
     const currentStallName = stall ? stall.stallName : "";
 
-    // Find orders from activeOrder and history
+    // ออเดอร์ของร้านนี้: สำเนาจาก stall_orders ก่อน (กฎ v4: แม่ค้าไม่เห็นออเดอร์เต็ม) แล้วค่อยของในเครื่อง
     const allOrders = [];
-    if (state.activeOrder) allOrders.push(state.activeOrder);
+    (state.merchantStallOrders || []).forEach(o => { if (o && o.orderId && !allOrders.some(x => x.orderId === o.orderId)) allOrders.push(o); });
+    if (state.activeOrder && !allOrders.some(x => x.orderId === state.activeOrder.orderId)) allOrders.push(state.activeOrder);
     try {
         const hist = JSON.parse(localStorage.getItem("talathub_order_history") || "[]");
         hist.forEach(h => {
@@ -15310,14 +15685,13 @@ function renderMerchantIncomingOrders() {
         if (!order || !order.stalls) return;
         const matchingStallGroup = order.stalls.find(s => s && (s.stallId === currentStallId || (currentStallName && s.name && (s.name.includes(currentStallName) || currentStallName.includes(s.name)))));
         if (matchingStallGroup && matchingStallGroup.items && matchingStallGroup.items.length > 0) {
+            // ไม่ส่งชื่อ/เบอร์/ที่อยู่ลูกค้ามาที่การ์ดของแม่ค้า (เจ้าของเลือก 2026-09-25: แม่ค้าเห็นแค่ของที่ต้องเตรียม)
             allStallOrders.push({
                 orderId: order.orderId,
                 status: order.status || "picking",
                 createdAt: order.savedAt || Date.now(),
-                customerName: order.customerName || "ลูกค้าชุมชน",
-                customerPhone: order.customerPhone || "-",
-                deliveryAddress: order.address || order.houseNumber || "จัดส่งตามพิกัด",
                 items: matchingStallGroup.items,
+                ready: !!matchingStallGroup.ready || ((matchingStallGroup.itemsCount || 0) > 0 && (matchingStallGroup.pickedCount || 0) >= matchingStallGroup.itemsCount),
                 stallTotal: merchantStallItemsTotal(matchingStallGroup.items)
             });
         }
@@ -15484,14 +15858,7 @@ function renderMerchantIncomingOrders() {
             const statusColor = o.status === "delivered" ? "emerald" : (o.status === "delivering" ? "sky" : "amber");
             const statusText = o.status === "delivered" ? "✓ ส่งสำเร็จแล้ว" : (o.status === "delivering" ? "🛵 ไรเดอร์กำลังส่ง" : "⏳ กำลังรวบรวมของสด");
             
-            // Check if this stall has marked items as ready
-            let isStallReady = false;
-            if (state.activeOrder && state.activeOrder.orderId === o.orderId && state.activeOrder.stalls) {
-                const curStallObj = state.activeOrder.stalls.find(s => s.stallId === currentStallId);
-                if (curStallObj && (curStallObj.ready || curStallObj.pickedCount >= curStallObj.itemsCount)) {
-                    isStallReady = true;
-                }
-            }
+            const isStallReady = !!o.ready;
 
             html += `
                 <div class="bg-white rounded-2xl border ${isStallReady ? 'border-emerald-400/80 shadow-md ring-1 ring-emerald-400/40' : 'border-slate-200/80 shadow-xs'} p-3.5 sm:p-4 space-y-3 hover:shadow-md transition-all">
@@ -15553,13 +15920,8 @@ function renderMerchantIncomingOrders() {
                         </div>
                     </div>
 
-                    <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex-wrap gap-2">
-                        <div>
-                            <span>ลูกค้า: <strong>${escapeHtml(o.customerName)}</strong> (${escapeHtml(o.customerPhone)})</span>
-                        </div>
-                        <div class="text-slate-400 text-[10px]">
-                            <span>จุดส่ง: ${escapeHtml(o.deliveryAddress)}</span>
-                        </div>
+                    <div class="text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+                        🛵 ฮับ/ไรเดอร์เป็นผู้จัดส่งถึงลูกค้า
                     </div>
 
                     <!-- Interactive Action Bar for Merchant (ปุ่มปฏิบัติการของแม่ค้า) -->
@@ -15620,6 +15982,7 @@ function mutateOrderEverywhere(orderId, fn) {
         if (changed) localStorage.setItem("talathub_order_history", JSON.stringify(hist));
     } catch (e) { }
     (window._cachedFirebaseOrders || []).forEach(apply);
+    (state.merchantStallOrders || []).forEach(apply);
     return first;
 }
 
@@ -15666,10 +16029,10 @@ function merchantMarkStallReady(orderId, stallId) {
         showToast("⚠️ ไม่พบออเดอร์นี้ในเครื่อง กรุณากดปุ่มรีเฟรช 🔄 แล้วลองใหม่");
         return;
     }
-    const stall = order.stalls[sIdx];
-    const updates = { [`stalls/${sIdx}/ready`]: true, [`stalls/${sIdx}/pickedCount`]: stall.pickedCount };
-    (stall.items || []).forEach((it, i) => { if (it && !it.outOfStock) updates[`stalls/${sIdx}/items/${i}/picked`] = true; });
-    patchOrderInCloud(orderId, updates);
+    const stall = order.stalls[_merchantOrderStallIndex(order, stallId)];
+    const rel = { ready: true, pickedCount: stall.pickedCount };
+    (stall.items || []).forEach((it, i) => { if (it && !it.outOfStock) rel[`items/${i}/picked`] = true; });
+    patchMerchantStall(orderId, stallId, rel);
     showToast("🎉 แผงค้าบันทึกจัดเตรียมของสดเรียบร้อย! ส่งสัญญาณแจ้งฮับมารับของแล้ว 🔔");
     _refreshAfterMerchantOrderChange();
 }
@@ -15693,13 +16056,11 @@ function merchantToggleItemOutOfStock(orderId, stallId, itemIndex) {
         showToast("⚠️ ไม่พบออเดอร์นี้ในเครื่อง กรุณากดปุ่มรีเฟรช 🔄 แล้วลองใหม่");
         return;
     }
-    const it = order.stalls[sIdx].items[itemIndex];
-    patchOrderInCloud(orderId, {
-        [`stalls/${sIdx}/items/${itemIndex}/outOfStock`]: nowOos,
-        [`stalls/${sIdx}/items/${itemIndex}/picked`]: !!it.picked,
-        refundCashTotal: order.refundCashTotal,
-        finalPaidTotal: order.finalPaidTotal
-    });
+    const it = order.stalls[_merchantOrderStallIndex(order, stallId)].items[itemIndex];
+    patchMerchantStall(orderId, stallId, {
+        [`items/${itemIndex}/outOfStock`]: nowOos,
+        [`items/${itemIndex}/picked`]: !!it.picked
+    }, { refundCashTotal: order.refundCashTotal, finalPaidTotal: order.finalPaidTotal });
     showToast(nowOos
         ? `⚠️ แจ้ง "${it.name}" หมดแล้ว คืนเงินลูกค้า ฿${orderItemRefund(it)} ใส่ซอง`
         : `✓ กู้คืน "${it.name}" กลับเข้ารายการแล้ว`);
@@ -15733,12 +16094,10 @@ function merchantSetItemWeight(orderId, stallId, itemIndex) {
         showToast("⚠️ ไม่พบสินค้านี้ในออเดอร์ กรุณากดปุ่มรีเฟรช 🔄 แล้วลองใหม่");
         return;
     }
-    const it = order.stalls[sIdx].items[itemIndex];
-    patchOrderInCloud(orderId, {
-        [`stalls/${sIdx}/items/${itemIndex}/weighedQty`]: weight,
-        refundCashTotal: order.refundCashTotal,
-        finalPaidTotal: order.finalPaidTotal
-    });
+    const it = order.stalls[_merchantOrderStallIndex(order, stallId)].items[itemIndex];
+    patchMerchantStall(orderId, stallId, {
+        [`items/${itemIndex}/weighedQty`]: weight
+    }, { refundCashTotal: order.refundCashTotal, finalPaidTotal: order.finalPaidTotal });
     const refund = orderItemRefund(it);
     showToast(refund > 0
         ? `⚖️ บันทึกน้ำหนัก ${weight} ${orderItemUnit(it)} แล้ว น้อยกว่าที่สั่ง คืนลูกค้า ฿${refund} ใส่ซอง`
@@ -15749,6 +16108,14 @@ window.merchantSetItemWeight = merchantSetItemWeight;
 
 // Helper: Merchant print stall slip
 function merchantPrintStallSlip(orderId, stallId) {
+    // สำเนาของร้าน (stall_orders) มีกลุ่มสินค้าของร้านนี้กลุ่มเดียว อยู่ตำแหน่ง 0
+    const slim = (state.merchantStallOrders || []).find(o => o && o.orderId === orderId);
+    if (slim) {
+        const prev = state.activeOrder;
+        state.activeOrder = slim;
+        try { printStallPickingSlip(orderId, 0); } finally { state.activeOrder = prev; }
+        return;
+    }
     if (state.activeOrder && state.activeOrder.orderId === orderId && state.activeOrder.stalls) {
         const stallIndex = state.activeOrder.stalls.findIndex(s => s.stallId === stallId);
         if (stallIndex !== -1) {
@@ -17355,13 +17722,11 @@ function openAssignRiderModal(orderId) {
         return;
     }
 
-    let fleet = typeof loadCommunityRiders === "function" ? loadCommunityRiders() : [];
+    const fleet = typeof loadCommunityRiders === "function" ? loadCommunityRiders() : [];
     if (fleet.length === 0) {
-        fleet = [
-            { id: "R1", name: "สมศักดิ์ ขับไว (Rider ประจำฮับ)", phone: "082-111-2233", plate: "กข-1234 ชลบุรี", avatar: "🛵", status: "available" },
-            { id: "R2", name: "วินัย ใจถึง (Rider ชุมชน)", phone: "089-222-3344", plate: "1กข-5678 ชลบุรี", avatar: "🛵", status: "available" },
-            { id: "R3", name: "ปรีชา สายฟ้า (Rider ตลาด)", phone: "086-333-4455", plate: "2กง-9999 ชลบุรี", avatar: "🛵", status: "available" }
-        ];
+        // ไม่มีไรเดอร์สมมติ (กติกาโปรเจกต์): ต้องเป็นไรเดอร์จริงที่อนุมัติแล้วเท่านั้น
+        showToast("⚠️ ยังไม่มีไรเดอร์ที่อนุมัติแล้ว จ่ายงานไม่ได้");
+        return;
     }
 
     let modal = document.getElementById("hub-assign-rider-modal");
@@ -17519,39 +17884,39 @@ function assignExpressOrderToRider(param1 = "R1", param2 = null) {
     }
     if (!targetOrder) return;
 
+    if (!requireOwnerAction()) return;
+    // ไรเดอร์ต้องเป็นไรเดอร์จริงที่อนุมัติแล้วเท่านั้น (ไม่มีไรเดอร์สมมติแล้ว) — "R1" = คนแรกที่สถานะว่าง
+    const communityRiders = typeof loadCommunityRiders === "function" ? loadCommunityRiders() : [];
     let rider = null;
-    if (riderChoice && typeof riderChoice === "object" && riderChoice.name) {
-        rider = riderChoice;
+    if (riderChoice && typeof riderChoice === "object") {
+        rider = communityRiders.find(r => riderStaffIdOf(r) === riderStaffIdOf(riderChoice)) || null;
+    } else if (typeof riderChoice === "string" && riderChoice !== "R1") {
+        rider = communityRiders.find(r => r.id === riderChoice || r.accessCode === riderChoice) || null;
     } else {
-        const communityRiders = typeof loadCommunityRiders === "function" ? loadCommunityRiders() : [];
-        if (typeof riderChoice === "string" && riderChoice !== "R1") {
-            rider = communityRiders.find(r => r.id === riderChoice || r.name.includes(riderChoice));
-        }
-        if (!rider) {
-            rider = communityRiders.find(r => r.status === 'available') || communityRiders[0] || (typeof RIDER_DATABASE !== "undefined" && RIDER_DATABASE && RIDER_DATABASE.length > 0 ? RIDER_DATABASE[0] : {
-                id: "R1",
-                name: "สมศักดิ์ ขับไว (Rider ประจำฮับ)",
-                phone: "082-111-2233",
-                plate: "กข-1234 ชลบุรี",
-                avatar: "🛵"
-            });
-        }
+        rider = communityRiders.find(r => r.status === "available") || communityRiders[0] || null;
     }
-
-    targetOrder.assignedRider = rider;
-    targetOrder.status = "assigned";
+    if (!rider || !riderStaffIdOf(rider)) {
+        showToast("⚠️ ยังไม่มีไรเดอร์ที่อนุมัติแล้ว จ่ายงานไม่ได้");
+        return;
+    }
+    const riderSid = riderStaffIdOf(rider);
+    const riderInfo = { id: rider.id, name: rider.name || "", phone: rider.phone || "", plate: rider.plate || "", avatar: rider.avatar || "🛵" };
+    const setAssigned = o => {
+        o.assignedRider = riderInfo;
+        o.assignedRiderId = riderSid;
+        o.riderName = riderInfo.name;
+        o.riderPhone = riderInfo.phone;
+        o.status = "assigned";
+    };
+    setAssigned(targetOrder);
 
     if (state.activeOrder && state.activeOrder.orderId === targetOrder.orderId) {
-        state.activeOrder.assignedRider = rider;
-        state.activeOrder.status = "assigned";
+        setAssigned(state.activeOrder);
     }
 
     if (state.merchantExpressOrders) {
         const found = state.merchantExpressOrders.find(o => o.orderId === targetOrder.orderId);
-        if (found) {
-            found.assignedRider = rider;
-            found.status = "assigned";
-        }
+        if (found) setAssigned(found);
         try {
             localStorage.setItem("hsong_merchant_express_orders", JSON.stringify(state.merchantExpressOrders.slice(0, 20)));
         } catch(e) {}
@@ -17568,6 +17933,13 @@ function assignExpressOrderToRider(param1 = "R1", param2 = null) {
     }
     if (typeof updateOrderStatusInFirebase === "function") {
         updateOrderStatusInFirebase(targetOrder.orderId, "assigned");
+    }
+    // ปิดใบงานไรเดอร์ด้วย (งานนี้ไม่ต้องขึ้นให้ไรเดอร์คนอื่นกดรับอีก) — ไรเดอร์ที่ได้งานจะเห็นงานนี้เองที่แท็บงานปัจจุบัน
+    if (isFirebaseReady()) {
+        const k = toFirebaseKey(targetOrder.orderId);
+        if ((state.riderJobs || {})[k]) {
+            db.ref(`rider_jobs/${k}`).update({ claimedBy: riderSid, status: "claimed", claimedAt: Date.now(), assignedBy: "hub" }).catch(() => { });
+        }
     }
 
     showToast(`🛵 จ่ายงานด่วน ${targetOrder.orderId} ให้ "${rider.name}" เรียบร้อยแล้ว!`);
@@ -18006,6 +18378,7 @@ async function restoreMyActiveOrderFromCloud() {
         const snap = await db.ref(`orders/${toFirebaseKey(mine.orderId)}`).once("value");
         const fresh = snap.val();
         if (fresh && fresh.orderId && fresh.status !== "delivered") {
+            _knownCloudOrderIds.add(fresh.orderId);
             state.activeOrder = fresh;
             try { localStorage.setItem("talathub_active_order", JSON.stringify(fresh)); } catch (e) { }
             renderTrackingScreen();
@@ -25195,51 +25568,20 @@ function printFleetPayoutSlip() {
 }
 
 // ── Smart Dispatching & GPS Simulation
-function dispatchOrderToRider(riderId) {
-    const riders = loadCommunityRiders();
-    const r = riders.find(x => x.id === riderId);
-    if (!r) return;
-
-    let orders = [];
-    try {
-        const raw = localStorage.getItem("hsong_orders");
-        if (raw) orders = JSON.parse(raw);
-    } catch(e) {}
-
-    let targetOrder = orders.find(o => o.status === "paid" || o.status === "preparing");
-    if (!targetOrder) {
-        targetOrder = {
-            orderId: `OD-${Date.now().toString().slice(-4)}`,
-            customerName: "คุณสมหมาย แสนสุข",
-            customerPhone: "081-998-7654",
-            customerAddress: "บ้านเลขที่ 45 หมู่ 3 ซอยเทศบาล 8 หนองชาก",
-            items: [{ name: "หมูสามชั้นสด 1 กก.", qty: 1, price: 160 }, { name: "ผักกาดขาว 500 กรัม", qty: 2, price: 30 }],
-            total: 220,
-            status: "delivering",
-            riderId: r.id,
-            riderName: r.name,
-            riderPhone: r.phone,
-            createdAt: new Date().toISOString()
-        };
-        orders.unshift(targetOrder);
-    } else {
-        targetOrder.status = "delivering";
-        targetOrder.riderId = r.id;
-        targetOrder.riderName = r.name;
-        targetOrder.riderPhone = r.phone;
+// หน้าแอดมิน > ไรเดอร์: จ่าย "งานที่รอนานที่สุด" ให้ไรเดอร์คนนี้ (เดิมสร้างออเดอร์สมมติเมื่อหาไม่เจอ — ลบแล้ว)
+async function dispatchOrderToRider(riderId) {
+    if (!requireOwnerAction()) return;
+    const r = (loadCommunityRiders() || []).find(x => x.id === riderId);
+    if (!r) { showToast("⚠️ ไม่พบไรเดอร์คนนี้"); return; }
+    const jobs = openRiderJobs();
+    if (!jobs.length) { showToast("ℹ️ ตอนนี้ไม่มีงานที่รอไรเดอร์"); return; }
+    const [key, job] = jobs[0];
+    if (!confirm(`จ่ายงาน ${job.orderId} (${job.pickup || ""}) ให้ ${r.name || r.id} ใช่ไหม?`)) return;
+    const ok = await hubAssignJobToRider(key, riderStaffIdOf(r));
+    if (ok) {
+        renderAdminRiders();
+        setTimeout(() => initAdminRiderRadarMap(), 200);
     }
-
-    try {
-        localStorage.setItem("hsong_orders", JSON.stringify(orders));
-    } catch(e) {}
-
-    r.status = "on_delivery";
-    r.tripsCountToday = (r.tripsCountToday || 0) + 1;
-    saveCommunityRiders(riders);
-
-    showToast(`📦 จ่ายออเดอร์ #${targetOrder.orderId} ให้ไรเดอร์ ${r.name} เรียบร้อย! เปลี่ยนสถานะเป็น 'กำลังส่งของ' 🚀`);
-    renderAdminRiders();
-    setTimeout(() => initAdminRiderRadarMap(), 200);
 }
 
 function simulateRiderGpsMovement() {
@@ -26434,7 +26776,7 @@ function renderHubPickingList() {
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             <button type="button" onclick="assignExpressOrderToRider(${jsArg(expOrder.orderId)}, 'R1')" class="py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
                                 <span class="material-symbols-outlined text-sm">two_wheeler</span>
-                                <span>🚀 จ่ายงานให้ไรเดอร์สมศักดิ์ (พร้อมรับงาน)</span>
+                                <span>🚀 จ่ายงานให้ไรเดอร์ที่ว่างคนแรก</span>
                             </button>
                             <button type="button" onclick="openAssignRiderModal(${jsArg(expOrder.orderId)})" class="py-2.5 px-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow-2xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-xs">
                                 <span class="material-symbols-outlined text-sm">group</span>
@@ -27642,6 +27984,13 @@ function renderRiderScreen() {
     const btnCompleteText = document.getElementById("rider-btn-complete-text");
     const btnCompleteIcon = document.getElementById("rider-btn-complete-icon");
     const completedBanner = document.getElementById("rider-completed-banner");
+
+    // ปุ่มคืนงาน: เฉพาะงานที่อยู่ในชื่อไรเดอร์คนนี้ และยังไม่ได้ออกส่ง
+    const releaseBtn = document.getElementById("btn-rider-release-job");
+    if (releaseBtn) {
+        const sid = myRiderStaffId();
+        releaseBtn.classList.toggle("hidden", !(order && sid && order.assignedRiderId === sid && order.status !== "delivering" && order.status !== "delivered"));
+    }
 
     if (!order) {
         if (badge) badge.textContent = "ไม่มีงานค้าง";
@@ -32337,7 +32686,8 @@ function approveHubMerchantExpressSlip(orderId) {
     const modal = document.getElementById("hub-express-slip-modal");
     if (modal) modal.classList.add("hidden");
     showToast(`✅ อนุมัติสลิปโอนเงินค่าส่งด่วนออเดอร์ ${orderId} เรียบร้อยแล้ว`);
-    assignExpressOrderToRider(orderId, 'R1');
+    // ไม่จ่ายงานให้ไรเดอร์อัตโนมัติแล้ว: งานขึ้นในหน้างานรอรับให้ไรเดอร์กดรับเอง ฮับจ่ายงานเองได้จากแผง "งานที่ยังไม่มีไรเดอร์รับ"
+    if (typeof renderHubPickingList === "function") renderHubPickingList();
 }
 window.approveHubMerchantExpressSlip = approveHubMerchantExpressSlip;
 
@@ -32556,28 +32906,20 @@ function renderRiderJobPool() {
     const countBadge = document.getElementById("rider-pool-count");
     if (!container) return;
 
-    let poolOrders = [];
-    
-    // 1. Merchant Express Orders
-    if (state.merchantExpressOrders && state.merchantExpressOrders.length > 0) {
-        poolOrders.push(...state.merchantExpressOrders.filter(o => o && (o.status === "waiting_rider" || !o.riderName)));
+    // ใบงานแบบย่อจาก rider_jobs (กฎ v4): จุดรับของ ตำบล ค่ารอบ — ชื่อ/เบอร์/ที่อยู่ลูกค้าเห็นหลังกดรับงานแล้วเท่านั้น
+    const jobs = openRiderJobs();
+    if (countBadge) countBadge.textContent = jobs.length;
+
+    if (!myRiderStaffId() && !isOwnerSignedIn()) {
+        container.innerHTML = `
+            <div class="bg-white rounded-2xl p-6 border border-amber-300 text-center space-y-2">
+                <h4 class="font-extrabold text-slate-800 text-sm">🔒 เครื่องนี้ยังไม่มีสิทธิ์ดูงาน</h4>
+                <p class="text-xs text-slate-600">กรุณากด ออกจากระบบ แล้วเข้าสู่ระบบใหม่ด้วยเลขไรเดอร์และรหัสผ่าน</p>
+            </div>`;
+        return;
     }
 
-    // 2. Active Customer Express Order
-    if (state.activeOrder && (state.activeOrder.orderType === "CUSTOMER_EXPRESS" || state.activeOrder.isExpress) && !state.activeOrder.riderName && state.activeOrder.status !== "delivered") {
-        if (!poolOrders.some(o => o && o.orderId === state.activeOrder.orderId)) {
-            poolOrders.unshift(state.activeOrder);
-        }
-    }
-
-    // 3. Consolidated Hub Orders
-    if (state.orders && state.orders.length > 0) {
-        poolOrders.push(...state.orders.filter(o => o && (o.status === "waiting_rider" || o.status === "picking_completed" || (!o.riderName && o.status !== "delivered"))));
-    }
-
-    if (countBadge) countBadge.textContent = poolOrders.length;
-
-    if (poolOrders.length === 0) {
+    if (jobs.length === 0) {
         container.innerHTML = `
             <div class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center space-y-3">
                 <div class="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
@@ -32585,7 +32927,7 @@ function renderRiderJobPool() {
                 </div>
                 <div>
                     <h4 class="font-extrabold text-slate-700 text-sm">ยังไม่มีงานรอรับในขณะนี้</h4>
-                    <p class="text-xs text-slate-400 mt-1 max-w-xs mx-auto">ระบบจะแสดงงานทันทีเมื่อมีร้านค้าเรียกไรเดอร์ส่งด่วน ลูกค้าเลือกส่งด่วน หรือฮับรวมรอบสินค้าเสร็จสิ้น</p>
+                    <p class="text-xs text-slate-400 mt-1 max-w-xs mx-auto">งานใหม่จะขึ้นที่นี่ทันทีเมื่อมีลูกค้าสั่งของ หรือร้านค้าเรียกไรเดอร์</p>
                 </div>
                 <div class="pt-1">
                     <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold">
@@ -32598,112 +32940,81 @@ function renderRiderJobPool() {
         return;
     }
 
-    let html = poolOrders.map(job => {
+    container.innerHTML = jobs.map(([key, job]) => {
         const isMerchantExpress = job.orderType === "MERCHANT_EXPRESS";
-        const isCustomerExpress = job.orderType === "CUSTOMER_EXPRESS" || job.isExpress;
+        const isCustomerExpress = job.orderType === "CUSTOMER_EXPRESS";
         const isExpress = isMerchantExpress || isCustomerExpress;
-        const feeText = `฿40 (ค่ารอบมาตรฐาน)`;
-        
-        let originText = `🏬 ฮับรวมตลาดบ้านบึง`;
-        let badgeText = '📦 รวมรอบฮับ';
-        let badgeClass = 'bg-amber-100 text-amber-900';
-
-        if (isCustomerExpress) {
-            const firstStallName = job.originStall?.stallName || (job.stalls && job.stalls[0] ? job.stalls[0].name : 'แผงค้าหน้าร้าน');
-            originText = `⚡ หน้าร้าน ${firstStallName}`;
-            badgeText = '⚡ ส่งด่วนลูกค้า (รับตรงหน้าร้าน)';
-            badgeClass = 'bg-orange-100 text-orange-900 border border-orange-300';
-        } else if (isMerchantExpress) {
-            originText = `🏪 หน้าร้าน ${job.originStall?.stallName || 'แผงค้า'}`;
-            badgeText = '⚡ ส่งด่วนแผงค้า (รับตรงหน้าร้าน)';
-            badgeClass = 'bg-rose-100 text-rose-800 border border-rose-300';
-        }
-
+        const badgeText = isMerchantExpress ? "⚡ ส่งด่วนแผงค้า" : (isCustomerExpress ? "⚡ ส่งด่วนลูกค้า" : "📦 รวมรอบฮับ");
+        const badgeClass = isExpress ? "bg-orange-100 text-orange-900 border border-orange-300" : "bg-amber-100 text-amber-900";
+        const timeText = job.createdAt ? new Date(job.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น." : "";
         return `
-            <div class="bg-white rounded-2xl p-4 border ${isExpress ? 'border-orange-300 shadow-md' : 'border-amber-200 shadow-sm'} space-y-3 relative overflow-hidden hover:border-amber-400 transition-all text-left">
-                <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <div class="bg-white rounded-2xl p-4 border ${isExpress ? "border-orange-300 shadow-md" : "border-amber-200 shadow-sm"} space-y-3 text-left">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2 gap-2 flex-wrap">
                     <div class="flex items-center gap-2">
-                        <span class="px-2.5 py-1 rounded-lg ${badgeClass} text-[11px] font-extrabold flex items-center gap-1">
-                            ${badgeText}
-                        </span>
+                        <span class="px-2.5 py-1 rounded-lg ${badgeClass} text-[11px] font-extrabold">${badgeText}</span>
                         <span class="font-extrabold text-slate-800 text-xs">${escapeHtml(job.orderId)}</span>
                     </div>
-                    <span class="text-[10px] text-slate-400">${job.createdAt ? (typeof job.createdAt === 'number' ? new Date(job.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : job.createdAt) : 'เมื่อสักครู่'}</span>
+                    <span class="text-[10px] text-slate-400">${escapeHtml(timeText)}</span>
                 </div>
                 <div class="grid grid-cols-2 gap-2 text-xs">
                     <div>
                         <div class="text-[10px] text-slate-400 font-medium">จุดรับสินค้า</div>
-                        <div class="font-bold ${isExpress ? 'text-orange-700' : 'text-slate-800'} truncate">${originText}</div>
+                        <div class="font-bold text-slate-800">${escapeHtml(job.pickup || "ฮับรวมตลาดบ้านบึง")}</div>
                     </div>
                     <div>
-                        <div class="text-[10px] text-slate-400 font-medium">ปลายทางจัดส่ง</div>
-                        <div class="font-bold text-slate-800 truncate">📍 ${escapeHtml(job.customerName) || 'ลูกค้า'}</div>
+                        <div class="text-[10px] text-slate-400 font-medium">ปลายทาง (ตำบล)</div>
+                        <div class="font-bold text-slate-800">📍 ${escapeHtml(job.area || "อ.บ้านบึง")}${job.distanceKm ? ` • ${escapeHtml(job.distanceKm)} กม.` : ""}</div>
                     </div>
                 </div>
-                <div class="bg-slate-50 p-2 rounded-xl text-[11px] text-slate-600">
-                    <div class="truncate">🏠 ที่อยู่: ${escapeHtml(job.address) || 'บ้านบึง ชลบุรี'}</div>
-                    ${job.deliveryNote || job.note ? `<div class="text-amber-800 font-medium mt-0.5 truncate">📝 ${escapeHtml(job.deliveryNote) || escapeHtml(job.note)}</div>` : ''}
-                </div>
+                <div class="text-[11px] text-slate-500">ชื่อ เบอร์โทร และที่อยู่ลูกค้า จะแสดงหลังกดรับงาน</div>
                 <div class="flex items-center justify-between pt-1">
                     <div>
                         <span class="text-[10px] text-slate-400">รายได้ค่ารอบ:</span>
-                        <span class="text-sm font-extrabold text-emerald-600 ml-1">${feeText}</span>
+                        <span class="text-sm font-extrabold text-emerald-600 ml-1">฿${Number(job.fee || RIDER_TRIP_FEE)}</span>
                     </div>
-                    <button onclick="claimOrderForRider(${jsArg(job.orderId)})" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer">
+                    <button onclick="claimOrderForRider(${jsArg(key)})" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all">
                         <span>🛵 กดรับงานนี้</span>
                     </button>
                 </div>
             </div>
         `;
     }).join("");
-
-    container.innerHTML = html;
 }
 window.renderRiderJobPool = renderRiderJobPool;
 
-function claimOrderForRider(orderId) {
-    let order = (state.merchantExpressOrders || []).find(o => o && o.orderId === orderId);
-    if (!order) {
-        order = (state.orders || []).find(o => o && o.orderId === orderId);
+// ไรเดอร์กดรับงาน: ถ้ามีคนรับไปก่อน ฐานข้อมูลจะปฏิเสธ (ไม่มีการสร้างออเดอร์สมมติแทนแบบเดิมแล้ว)
+async function claimOrderForRider(orderKey) {
+    const sid = myRiderStaffId();
+    if (!sid) { showToast("🔒 กรุณาออกจากระบบ แล้วเข้าสู่ระบบใหม่ด้วยรหัสผ่าน ก่อนรับงาน"); return; }
+    const job = (state.riderJobs || {})[orderKey];
+    if (!job || job.status !== "open" || job.claimedBy) {
+        showToast("ℹ️ งานนี้มีไรเดอร์คนอื่นรับไปแล้ว");
+        renderRiderJobPool();
+        return;
     }
-    if (!order && state.activeOrder && state.activeOrder.orderId === orderId) {
-        order = state.activeOrder;
+    if (state.activeOrder && state.activeOrder.assignedRiderId === sid && state.activeOrder.status !== "delivered") {
+        showToast("⚠️ คุณมีงานที่ยังส่งไม่เสร็จอยู่ กรุณาส่งให้เสร็จ หรือกดคืนงานก่อน");
+        return;
     }
-    
-    if (!order) {
-        order = {
-            orderId: orderId,
-            orderType: (orderId.startsWith("EXPRESS") || orderId.startsWith("EXP")) ? "CUSTOMER_EXPRESS" : "HUB_CONSOLIDATED",
-            customerName: "คุณลูกค้า (งานด่วน)",
-            customerPhone: "089-123-4567",
-            address: "หมู่บ้านวิเศษสุข ต.บ้านบึง อ.บ้านบึง",
-            deliveryFee: 40,
-            grandTotal: 350,
-            paymentType: "cod",
-            paymentDesc: "COD เก็บเงินปลายทาง ฿350",
-            originStall: { stallName: "เจ๊ไหม หมูสด", stallNumber: "แผง A-04", ownerPhone: "081-444-5555" },
-            status: "picking"
-        };
+    try {
+        await _withTimeout(db.ref().update(_riderAssignUpdates(orderKey, sid, state.activeRider, null)), 10000);
+    } catch (e) {
+        showToast("ℹ️ รับงานไม่สำเร็จ งานนี้อาจมีไรเดอร์คนอื่นรับไปแล้ว");
+        return;
     }
-
-    const riderName = (state.activeRider && state.activeRider.name) ? state.activeRider.name : "ไรเดอร์ประจำชุมชน";
-    const riderPhone = (state.activeRider && state.activeRider.phone) ? state.activeRider.phone : "089-999-8888";
-
-    order.riderName = riderName;
-    order.riderPhone = riderPhone;
-    order.status = "picking";
-    state.activeOrder = order;
-
-    saveActiveOrderToStorage(state.activeOrder);
-    switchRiderMainTab('active');
+    let fresh = null;
+    try { fresh = (await _withTimeout(db.ref(`orders/${orderKey}`).once("value"), 8000)).val(); } catch (e) { }
+    if (!fresh || !fresh.orderId) { showToast("⚠️ รับงานแล้ว แต่โหลดรายละเอียดไม่สำเร็จ กรุณากดรีเฟรช"); return; }
+    _knownCloudOrderIds.add(fresh.orderId);
+    state.activeOrder = fresh;
+    try { localStorage.setItem("talathub_active_order", JSON.stringify(fresh)); } catch (e) { }
+    watchActiveOrderInCloud();
+    switchRiderMainTab("active");
     renderRiderScreen();
-    
-    const isExpress = order.orderType === "MERCHANT_EXPRESS" || order.orderType === "CUSTOMER_EXPRESS" || order.isExpress;
-    if (isExpress) {
-        showToast(`⚡ รับงานด่วน ${orderId} สำเร็จ! กรุณาไปรับของที่หน้าร้านแผงค้าโดยตรง (+฿40 ค่ารอบ)`);
-    } else {
-        showToast(`🎉 รับงาน ${orderId} เรียบร้อยแล้ว! พร้อมออกไปรับของที่ฮับ (+฿40 ค่ารอบ)`);
-    }
+    const isExpress = fresh.orderType === "MERCHANT_EXPRESS" || fresh.orderType === "CUSTOMER_EXPRESS" || fresh.isExpress;
+    showToast(isExpress
+        ? `⚡ รับงานด่วน ${fresh.orderId} สำเร็จ! กรุณาไปรับของที่หน้าร้าน`
+        : `🎉 รับงาน ${fresh.orderId} เรียบร้อยแล้ว! พร้อมออกไปรับของที่ฮับ`);
 }
 window.claimOrderForRider = claimOrderForRider;
 

@@ -25,10 +25,17 @@ function fn(name) {
 
 console.log("== กฎ v3 (ไฟล์ที่สร้างจาก build-rules.js)");
 for (const proj of ["hsong-test", "hsong-1f342"]) {
-    const rules = JSON.parse(fs.readFileSync(path.join(__dirname, "..", proj + ".rules.v3.json"), "utf8")).rules;
+    const rules = JSON.parse(fs.readFileSync(path.join(__dirname, "..", proj + ".rules.v4.json"), "utf8")).rules;
     const o = rules.orders;
     ok(o && o[".read"] !== true && o[".write"] !== true, proj + ": orders ไม่เปิดอ่าน/เขียนให้ทุกคนแล้ว");
-    ok(/staff_sessions/.test(o[".read"]) && /staff_keys/.test(o[".read"]), proj + ": ดึงรายการออเดอร์ได้เฉพาะเจ้าของหรือไรเดอร์/แม่ค้าที่พิสูจน์รหัสผ่านแล้ว");
+    ok(!/staff_sessions/.test(o[".read"]) && /auth\.uid ===/.test(o[".read"]), proj + ": v4 ดึงรายการออเดอร์ทั้งหมดได้เฉพาะเจ้าของ (ไรเดอร์/แม่ค้าไม่ได้แล้ว)");
+    ok(/assignedRiderId'\)\.val\(\) ===/.test(o.$id[".read"]) && /'rider'/.test(o.$id[".read"]), proj + ": ไรเดอร์อ่านได้เฉพาะออเดอร์ที่อยู่ในชื่อตัวเอง");
+    ok(/'merchant'/.test(o.$id.stalls.$idx[".write"]) && /stallId/.test(o.$id.stalls.$idx[".write"]) && !/'merchant'/.test(o.$id[".read"]), proj + ": แม่ค้าเขียนได้เฉพาะกลุ่มของร้านตัวเอง อ่านออเดอร์เต็มไม่ได้");
+    const rj = rules.rider_jobs.$oid;
+    ok(rj.$other && rj.$other[".validate"] === false && !rj.address && !rj.customerName && !rj.customerPhone && !rj.lat, proj + ": ใบงานไรเดอร์รับเฉพาะช่องที่กำหนด (ไม่มีชื่อ/เบอร์/ที่อยู่/พิกัดลูกค้า)");
+    ok(/!data\.child\('claimedBy'\)\.exists\(\)/.test(rj[".write"]), proj + ": กดรับงานได้เฉพาะใบที่ยังไม่มีคนรับ");
+    const so = rules.stall_orders.$sid;
+    ok(/'merchant'/.test(so[".read"]) && /=== \$sid/.test(so[".read"]) && so.$oid.$other[".validate"] === false, proj + ": สำเนาของร้านอ่านได้เฉพาะร้านนั้น และเก็บเฉพาะช่องที่กำหนด");
     ok(/customerUid'\)\.val\(\) === auth\.uid/.test(o.$id[".read"]) && /order_viewers/.test(o.$id[".read"]), proj + ": ลูกค้าอ่านได้เฉพาะออเดอร์ของตัวเอง หรือที่ลงชื่อด้วยรหัสติดตาม");
     ok(/newData\.exists\(\)/.test(o.$id[".write"]), proj + ": ลูกค้า/ไรเดอร์ลบออเดอร์ไม่ได้ (ลบได้เฉพาะเจ้าของ)");
     ok(/newData\.child\('customerUid'\)\.val\(\) === data\.child\('customerUid'\)\.val\(\)/.test(o.$id[".validate"]), proj + ": เปลี่ยนเจ้าของออเดอร์ (customerUid) ไม่ได้");
@@ -100,6 +107,26 @@ vm.runInContext([
     ["rejectMerchantApplication", "deleteMerchantApplication", "deleteStallByAdmin", "reconsiderMerchantApplication"].forEach(n =>
         ok(/removeStaffKey\("merchant"/.test(fn(n)), n + " -> ลบค่าพิสูจน์ของร้าน"));
     ok(/accessCode \|\| res\.rider\.id/.test(fn("submitRiderSecretLogin")) && /saveStaffKey\("rider", app\.accessCode/.test(fn("approveRiderApplication")), "ไรเดอร์: ใช้เลขไรเดอร์ (accessCode) เป็นชื่อหัวข้อทั้งตอนเก็บและตอนล็อกอิน");
+
+    console.log("== v4: ไรเดอร์/แม่ค้าเห็นเฉพาะงานของตัวเอง");
+    ok(/return isOwnerSignedIn\(\);/.test(fn("canListAllOrders")), "ดึงออเดอร์ทุกใบได้เฉพาะเจ้าของ");
+    const card = fn("buildRiderJobCard");
+    ok(!/customerName|customerPhone|address|houseNumber|\blat\b|\blng\b/.test(card), "ใบงานไรเดอร์ไม่หยิบชื่อ/เบอร์/ที่อยู่/พิกัดลูกค้า");
+    const pool = fn("renderRiderJobPool");
+    ok(/openRiderJobs\(\)/.test(pool) && !/customerName|job\.address/.test(pool), "หน้างานรอรับแสดงจากใบงานแบบย่อ ไม่แสดงชื่อ/ที่อยู่ลูกค้า");
+    const claim = fn("claimOrderForRider");
+    ok(!/089-123-4567|คุณลูกค้า \(งานด่วน\)/.test(claim) && /_riderAssignUpdates/.test(claim), "กดรับงาน: ไม่สร้างออเดอร์สมมติแล้ว ใช้การรับงานจริงในฐานข้อมูล");
+    ok(/assignedRiderId/.test(fn("_riderAssignUpdates")) && /rider_jobs\/\$\{orderKey\}\/claimedBy/.test(fn("_riderAssignUpdates")), "รับงาน = ใส่ไรเดอร์ในออเดอร์ + ปิดใบงาน ในคำขอเดียว");
+    ok(/status === "delivering"/.test(fn("releaseRiderJob")) && /\/status`\]: "open"/.test(fn("releaseRiderJob")), "คืนงานได้ก่อนออกส่ง งานกลับไปรอรับ");
+    ok(/UNCLAIMED_JOB_ALERT_MIN = 10;/.test(src) && /playOrderAlertSound\(\)/.test(fn("checkUnclaimedJobAlerts")), "ฮับได้เสียงเตือนเมื่องานไม่มีคนรับเกิน 10 นาที");
+    ok(/hubAssignJobToRider/.test(fn("renderHubRiderJobsPanel")) && /requireOwnerAction\(\)/.test(fn("hubAssignJobToRider")), "ฮับจ่ายงานเองได้ (เจ้าของเท่านั้น)");
+    const merch = fn("renderMerchantIncomingOrders");
+    ok(/merchantStallOrders/.test(merch) && !/customerPhone|deliveryAddress/.test(merch), "การ์ดออเดอร์ของแม่ค้าไม่มีเบอร์/ที่อยู่ลูกค้า");
+    ok(/stall_orders\//.test(fn("patchMerchantStall")) && /isOwnerSignedIn\(\) && orderLevel/.test(fn("patchMerchantStall")), "แม่ค้าบันทึกเฉพาะกลุ่มของร้าน; ยอดคืนเงินรวม = เจ้าของเท่านั้น");
+    ok(/_newOrderIds\.add/.test(fn("stampOrderOwner")) && /saveOrderSideCopiesToCloud\(orderKey, cleanOrder\)/.test(fn("_syncOrderToCloudNow")), "สั่งซื้อใหม่ -> สร้างใบงานไรเดอร์ + สำเนาของร้าน");
+    ok(!/สมศักดิ์|วินัย ใจถึง|ปรีชา สายฟ้า/.test(src), "ไม่มีไรเดอร์สมมติในโค้ด (กติกาโปรเจกต์ข้อ 1)");
+    ok(!/คุณสมหมาย แสนสุข/.test(fn("dispatchOrderToRider")), "จ่ายงานจากหน้าแอดมิน: ไม่สร้างออเดอร์สมมติแล้ว");
+    ok(!/assignExpressOrderToRider/.test(fn("approveHubMerchantExpressSlip")), "อนุมัติสลิปงานด่วน: ไม่สุ่มจ่ายงานให้ไรเดอร์อัตโนมัติ (ให้ไรเดอร์กดรับ/ฮับจ่ายเอง)");
 
     console.log("== ตะกร้าและคำขอ REST");
     ok(!/carts\/\$\{customerId\}|carts\/\$\{cid\}/.test(src), "ไม่ใช้เบอร์โทร/ชื่อเป็นชื่อหัวข้อตะกร้าแล้ว");

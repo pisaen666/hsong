@@ -1,7 +1,14 @@
-// สร้างไฟล์กฎ Firebase รุ่น v3 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
+// สร้างไฟล์กฎ Firebase รุ่น v4 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
 //   node firebase-rules/build-rules.js
-// ผลลัพธ์: hsong-test.rules.v3.json และ hsong-1f342.rules.v3.json
-//   (ไฟล์ .rules.v2.json = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+// ผลลัพธ์: hsong-test.rules.v4.json และ hsong-1f342.rules.v4.json
+//   (ไฟล์ .rules.v3.json / .rules.v2.json = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+//
+// v4 (2026-09-25) — ไรเดอร์/แม่ค้าเห็นเฉพาะงานของตัวเอง (เจ้าของเลือก: ไรเดอร์กดรับเอง + ฮับจ่ายงานได้, แม่ค้าเห็นแค่ของ):
+//   orders        : ดึงทั้งรายการได้เฉพาะเจ้าของ; ไรเดอร์อ่าน/แก้ได้เฉพาะใบที่ assignedRiderId = ตัวเอง (หรือกดรับใบที่ยังไม่มีคนรับ)
+//                   แม่ค้าเขียนได้เฉพาะ stalls/<i> ที่ stallId = ร้านตัวเอง (อ่านออเดอร์เต็มไม่ได้)
+//   rider_jobs    : ใบงานแบบย่อ (จุดรับของ ตำบล ค่ารอบ ไม่มีชื่อ/เบอร์/ที่อยู่ลูกค้า) ไรเดอร์ที่ล็อกอินจริงเห็นทุกใบ
+//                   ลูกค้าสร้างตอนสั่ง; ไรเดอร์กดรับ (claimedBy ว่าง -> ตัวเอง) / คืนงาน / ปิดงาน ได้เฉพาะใบของตัวเอง
+//   stall_orders  : stall_orders/<ร้าน>/<ออเดอร์> = เลขออเดอร์ + ของของร้านนั้น (ไม่มีข้อมูลลูกค้า) อ่านได้เฉพาะร้านนั้น
 //
 // v3 (2026-09-25) — "บัตรผ่าน" (Firebase Anonymous Auth) ทุกเครื่อง:
 //   orders        : เจ้าของ + ไรเดอร์/แม่ค้าที่ล็อกอินด้วยรหัสผ่านจริง (staff) ดึงรายการทั้งหมดได้
@@ -37,6 +44,10 @@ function build(uids) {
     const S = "root.child('staff_sessions/' + auth.uid + '/";
     const STAFF = "auth != null && " + S + "proof').exists() && root.child('staff_keys/' + " + S + "role').val() + '/' + " + S + "id').val()).val() === " + S + "proof').val()";
     const SELF = "auth != null && auth.uid === $uid";
+    const SID = S + "id').val()";
+    const RIDER = "(" + STAFF + " && " + S + "role').val() === 'rider')";
+    const MERCH = "(" + STAFF + " && " + S + "role').val() === 'merchant')";
+    const onlyFields = names => { const o = {}; names.forEach(n => { o[n] = { ".validate": true }; }); o.$other = { ".validate": false }; return o; };
 
     return {
         rules: {
@@ -44,12 +55,47 @@ function build(uids) {
             ".write": false,
 
             orders: {
-                ".read": "(" + OWNER + ") || (" + STAFF + ")",
+                ".read": OWNER,
                 ".write": OWNER,
                 "$id": {
-                    ".read": "auth != null && (data.child('customerUid').val() === auth.uid || root.child('order_viewers/' + $id + '/' + auth.uid).exists())",
-                    ".write": "auth != null && newData.exists() && ((!data.exists() && newData.child('customerUid').val() === auth.uid) || (data.exists() && (data.child('customerUid').val() === auth.uid || (" + STAFF + "))))",
-                    ".validate": "(" + OWNER + ") || (newData.hasChild('orderId') && (!data.exists() || newData.child('customerUid').val() === data.child('customerUid').val()))"
+                    ".read": "auth != null && (data.child('customerUid').val() === auth.uid || root.child('order_viewers/' + $id + '/' + auth.uid).exists() || (" + RIDER + " && data.child('assignedRiderId').val() === " + SID + "))",
+                    ".write": "auth != null && newData.exists() && ((!data.exists() && newData.child('customerUid').val() === auth.uid) || (data.exists() && data.child('customerUid').val() === auth.uid) || (data.exists() && " + RIDER + " && (data.child('assignedRiderId').val() === " + SID + " || (!data.child('assignedRiderId').exists() && newData.child('assignedRiderId').val() === " + SID + "))))",
+                    ".validate": "(" + OWNER + ") || (newData.hasChild('orderId') && (!data.exists() || newData.child('customerUid').val() === data.child('customerUid').val()))",
+                    // ใครใส่ชื่อไรเดอร์ได้: เจ้าของ, ไรเดอร์ใส่ชื่อตัวเอง, หรือคงค่าเดิมไว้ (ลูกค้าบันทึกออเดอร์ทั้งใบ)
+                    assignedRiderId: { ".validate": "(" + OWNER + ") || newData.val() === data.val() || newData.val() === " + SID },
+                    stalls: {
+                        "$idx": {
+                            // แม่ค้าแก้ได้เฉพาะกลุ่มสินค้าของร้านตัวเอง (บันทึกน้ำหนัก แจ้งหมด เตรียมเสร็จ) — อ่านออเดอร์เต็มไม่ได้
+                            ".write": MERCH + " && data.exists() && data.child('stallId').val() === " + SID + " && newData.child('stallId').val() === " + SID
+                        }
+                    }
+                }
+            },
+
+            rider_jobs: {
+                ".read": "(" + OWNER + ") || " + RIDER,
+                ".write": OWNER,
+                "$oid": Object.assign({
+                    ".write": "auth != null && newData.exists() && ((!data.exists() && root.child('orders/' + $oid + '/customerUid').val() === auth.uid) || (" + RIDER + " && data.exists() && ((!data.child('claimedBy').exists() && newData.child('claimedBy').val() === " + SID + ") || data.child('claimedBy').val() === " + SID + ")))",
+                    ".validate": "newData.hasChildren(['orderId', 'status'])"
+                }, onlyFields(["orderId", "orderType", "pickup", "area", "distanceKm", "fee", "createdAt", "claimedAt", "assignedBy"]), {
+                    status: { ".validate": "newData.val() === 'open' || newData.val() === 'claimed' || newData.val() === 'done'" },
+                    claimedBy: { ".validate": "(" + OWNER + ") || newData.val() === " + SID }
+                })
+            },
+
+            stall_orders: {
+                ".read": OWNER,
+                ".write": OWNER,
+                "$sid": {
+                    ".read": MERCH + " && " + SID + " === $sid",
+                    "$oid": Object.assign({
+                        ".write": "auth != null && newData.exists() && ((!data.exists() && root.child('orders/' + $oid + '/customerUid').val() === auth.uid) || (" + MERCH + " && " + SID + " === $sid && data.exists()))",
+                        ".validate": "newData.hasChildren(['orderId', 'stall'])"
+                    }, onlyFields(["orderId", "savedAt", "stallIndex", "stall"]), {
+                        // สถานะออเดอร์ (กำลังส่ง/ส่งแล้ว) ให้ไรเดอร์ที่รับงานนี้อัปเดตให้แม่ค้าเห็นได้
+                        status: { ".write": RIDER + " && root.child('orders/' + $oid + '/assignedRiderId').val() === " + SID, ".validate": "newData.isString()" }
+                    })
                 }
             },
 
@@ -171,7 +217,7 @@ function build(uids) {
 }
 
 Object.entries(PROJECTS).forEach(([project, uids]) => {
-    const file = path.join(__dirname, project + ".rules.v3.json");
+    const file = path.join(__dirname, project + ".rules.v4.json");
     fs.writeFileSync(file, JSON.stringify(build(uids), null, 2) + "\n");
     console.log("wrote", path.basename(file));
 });

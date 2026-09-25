@@ -32,16 +32,18 @@ const ctx = {
     showToast: t => toasts.push(t),
     isMockOrder: () => false,
     toFirebaseKey: s => String(s).replace(/[.#$/[\]]/g, "_"),
-    isFirebaseReady: () => false,
-    RIDER_DB_BASE_URL: "https://example.invalid",
-    fetch: (url, opt) => { patches.push({ url, body: JSON.parse(opt.body) }); return Promise.resolve({}); },
+    // กฎ v4: แม่ค้าเขียนผ่าน patchMerchantStall = db.ref().update({ "orders/<k>/stalls/<i>/...": v, "stall_orders/<ร้าน>/<k>/stall/...": v })
+    isFirebaseReady: () => true,
+    isOwnerSignedIn: () => ctx._owner === true, _owner: false,
+    staffKeyId: s => String(s).replace(/[.#$/[\]]/g, "_"),
+    db: { ref: () => ({ update: u => { patches.push({ body: u }); return Promise.resolve(); } }) },
     renderMerchantIncomingOrders: () => {}, renderMerchantSettlement: () => {}, renderHubPickingList: () => {}, renderTrackingScreen: () => {}
 };
 vm.createContext(ctx);
 vm.runInContext(appSrc.match(/const WEIGHT_UNITS = \[[^\]]*\];/)[0].replace("const ", "var "), ctx);
 ["orderItemUnitPrice", "orderItemOrderedQty", "orderItemUnit", "isWeighedOrderItem", "orderItemWeighedQty", "orderItemBilledQty",
  "orderItemLineTotal", "orderItemRefund", "orderRefundTotal", "merchantStallItemsTotal",
- "merchantWeighInputId", "mutateOrderEverywhere", "patchOrderInCloud", "_merchantOrderStallIndex", "_refreshAfterMerchantOrderChange",
+ "merchantWeighInputId", "mutateOrderEverywhere", "patchMerchantStall", "_merchantOrderStallIndex", "_refreshAfterMerchantOrderChange",
  "merchantMarkStallReady", "merchantToggleItemOutOfStock", "merchantSetItemWeight"].forEach(n => vm.runInContext(fn(n), ctx));
 const C = ctx;
 
@@ -87,8 +89,10 @@ C.merchantSetItemWeight("HS-0924-0212", "APP-SHOP-0001", 0);
 ok(hist().stalls[1].items[0].weighedQty === 0.9, "บันทึกน้ำหนักลงออเดอร์ในเครื่อง (ร้านที่ 2 ในออเดอร์)");
 ok(hist().refundCashTotal === 10 && hist().finalPaidTotal === 160, "เงินคืนในออเดอร์ = 10, ยอดจ่ายสุทธิ = 160");
 let p = patches[patches.length - 1];
-ok(p && /\/orders\/HS-0924-0212\.json$/.test(p.url) && p.body["stalls/1/items/0/weighedQty"] === 0.9 && p.body.refundCashTotal === 10, "ส่งขึ้นคลาวด์เฉพาะช่องที่เปลี่ยน (stalls/1/items/0/weighedQty)");
-ok(!("stalls" in p.body) && !("status" in p.body), "ไม่เขียนทับทั้งออเดอร์ / ไม่แตะสถานะที่ไรเดอร์ตั้ง");
+const O = "orders/HS-0924-0212/";
+ok(p && p.body[O + "stalls/1/items/0/weighedQty"] === 0.9, "ส่งขึ้นคลาวด์เฉพาะช่องที่เปลี่ยน (orders/<k>/stalls/1/items/0/weighedQty)");
+ok(!((O + "refundCashTotal") in p.body), "แม่ค้าไม่เขียนยอดคืนเงินรวม (กฎ v4 ให้แก้ได้แค่กลุ่มของร้านตัวเอง ยอดรวมคิดจากรายการของ)");
+ok(Object.keys(p.body).every(k => k.startsWith(O + "stalls/1/")), "ไม่เขียนทับทั้งออเดอร์ / ไม่แตะสถานะหรือร้านอื่น");
 ok(/คืนลูกค้า ฿10/.test(toasts[toasts.length - 1]), "แจ้งแม่ค้าว่าต้องคืน ฿10");
 
 inputs[C.merchantWeighInputId("HS-0924-0212", 0)] = { value: "abc", focus() {} };
@@ -99,19 +103,43 @@ ok(patches.length === nPatch && hist().stalls[1].items[0].weighedQty === 0.9, "�
 C.merchantToggleItemOutOfStock("HS-0924-0212", "APP-SHOP-0001", 1);
 ok(hist().stalls[1].items[1].outOfStock === true && hist().refundCashTotal === 30, "แจ้งหมดผักบุ้ง 2 กำ: คืน 20 + ชั่งขาด 10 = 30");
 p = patches[patches.length - 1];
-ok(p.body["stalls/1/items/1/outOfStock"] === true && p.body.refundCashTotal === 30, "ส่งสถานะของหมดขึ้นคลาวด์จริง");
+ok(p.body[O + "stalls/1/items/1/outOfStock"] === true, "ส่งสถานะของหมดขึ้นคลาวด์จริง");
 C.merchantToggleItemOutOfStock("HS-0924-0212", "APP-SHOP-0001", 1);
 ok(hist().stalls[1].items[1].outOfStock === false && hist().refundCashTotal === 10, "กดกู้คืนได้");
 
 C.merchantMarkStallReady("HS-0924-0212", "APP-SHOP-0001");
 p = patches[patches.length - 1];
-ok(hist().stalls[1].ready === true && p.body["stalls/1/ready"] === true && p.body["stalls/1/items/0/picked"] === true, "เตรียมของเสร็จ: บันทึกและส่งขึ้นคลาวด์");
-ok(!("stalls/0/ready" in p.body), "ไม่แตะร้านอื่นในออเดอร์เดียวกัน");
+ok(hist().stalls[1].ready === true && p.body[O + "stalls/1/ready"] === true && p.body[O + "stalls/1/items/0/picked"] === true, "เตรียมของเสร็จ: บันทึกและส่งขึ้นคลาวด์");
+ok(!((O + "stalls/0/ready") in p.body), "ไม่แตะร้านอื่นในออเดอร์เดียวกัน");
 ok(C.state.activeOrder.orderId === "MY-OWN-ORDER", "ไม่เปลี่ยนออเดอร์ของแม่ค้าเอง");
 
 const nBefore = patches.length;
 C.merchantToggleItemOutOfStock("NOT-FOUND", "APP-SHOP-0001", 0);
 ok(patches.length === nBefore && /ไม่พบออเดอร์/.test(toasts[toasts.length - 1]), "หาออเดอร์ไม่เจอ: บอกตรง ๆ ไม่ขึ้นว่าสำเร็จ");
+
+console.log("== แม่ค้าบนมือถือจริง: มีแค่สำเนาของร้าน (stall_orders) ไม่มีออเดอร์เต็ม ==");
+store.talathub_order_history = "[]";
+C.state.activeOrder = null;
+C.state.merchantStallOrders = [{ orderId: "HS-0925-0001", status: "picking", _stallIndex: 1,
+    stalls: [{ stallId: "APP-SHOP-0001", items: [{ name: "หมูสับ (กก.)", unit: "กก.", price: 100, qty: 1 }] }] }];
+inputs[C.merchantWeighInputId("HS-0925-0001", 0)] = { value: "0.8", focus() {} };
+C.merchantSetItemWeight("HS-0925-0001", "APP-SHOP-0001", 0);
+p = patches[patches.length - 1];
+ok(C.state.merchantStallOrders[0].stalls[0].items[0].weighedQty === 0.8, "บันทึกน้ำหนักในสำเนาของร้านบนเครื่อง");
+ok(p.body["orders/HS-0925-0001/stalls/1/items/0/weighedQty"] === 0.8, "เขียนลงออเดอร์เต็มที่ตำแหน่งจริงของร้าน (stalls/1) ถึงอ่านออเดอร์เต็มไม่ได้");
+ok(p.body["stall_orders/APP-SHOP-0001/HS-0925-0001/stall/items/0/weighedQty"] === 0.8, "เขียนลงสำเนาของร้านด้วย (แม่ค้าเห็นค่าที่บันทึกหลังรีเฟรช)");
+C.merchantMarkStallReady("HS-0925-0001", "APP-SHOP-0001");
+p = patches[patches.length - 1];
+ok(p.body["orders/HS-0925-0001/stalls/1/ready"] === true && p.body["stall_orders/APP-SHOP-0001/HS-0925-0001/stall/ready"] === true, "เตรียมของเสร็จ: ทั้งออเดอร์เต็มและสำเนา");
+
+console.log("== เจ้าของสลับเข้าร้าน: ยังบันทึกยอดคืนเงินรวมได้ ==");
+C._owner = true;
+C.state.merchantStallOrders = [];
+store.talathub_order_history = JSON.stringify([cloudOrder]);
+C.merchantToggleItemOutOfStock("HS-0924-0212", "APP-SHOP-0001", 1);
+p = patches[patches.length - 1];
+ok(typeof p.body[O + "refundCashTotal"] === "number" && typeof p.body[O + "finalPaidTotal"] === "number", "เจ้าของ: ส่งยอดคืนเงินรวมด้วย");
+C._owner = false;
 
 console.log(fail ? `\n${fail} FAILED` : "\nALL PASSED");
 process.exit(fail ? 1 : 0);
