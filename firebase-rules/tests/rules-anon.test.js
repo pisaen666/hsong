@@ -44,11 +44,14 @@ async function expect(name, wantAllowed, method, path, body) {
     await expect("แก้ฟิลด์อื่น (โดย status/รหัสเดิม) ได้", true, "PUT", `rider_applications/${T}1`, riderApp(`${T}1`, "pending", { nickname: "แก้ได้" }));
     await expect("ลบใบสมัครไม่ได้", false, "DELETE", `rider_applications/${T}1`);
     await expect("เขียนทับทั้งก้อน (วิธีเก่า) ไม่ได้", false, "PUT", `rider_applications`, [riderApp(`${T}9`, "approved")]);
-    await expect("อ่านได้", true, "GET", `rider_applications/${T}1`);
+    // v5: ใบสมัครมีเบอร์/พร้อมเพย์/LINE -> คนแปลกหน้าอ่านไม่ได้แล้ว
+    await expect("คนแปลกหน้าอ่านใบสมัครไม่ได้ (v5)", false, "GET", `rider_applications/${T}1`);
+    await expect("คนแปลกหน้าดูรายการใบสมัครทั้งหมดไม่ได้ (v5)", false, "GET", `rider_applications`);
+    await expect("คนแปลกหน้าดูรายชื่อไรเดอร์ไม่ได้ (v5)", false, "GET", `community_riders`);
 
     console.log("== community_riders ==");
     await expect("สร้างไรเดอร์ใหม่เองไม่ได้", false, "PUT", `community_riders/${T}R1`, { id: `${T}R1`, name: "x", phone: "0811111111", accessCode: `${T}R1`, status: "available" });
-    await expect("แก้ไรเดอร์เดิม: เปลี่ยนสถานะ/พิกัด ได้", true, "PUT", `community_riders/${SEED}R0`, { id: `${SEED}R0`, name: "เดิม", phone: "0822222222", accessCode: `${SEED}R0`, status: "busy", lat: 13.3 });
+    await expect("คนแปลกหน้าแก้ไรเดอร์เดิมไม่ได้แล้ว (v5: ไรเดอร์แก้ได้เฉพาะของตัวเองหลังล็อกอิน)", false, "PUT", `community_riders/${SEED}R0`, { id: `${SEED}R0`, name: "เดิม", phone: "0822222222", accessCode: `${SEED}R0`, status: "busy", lat: 13.3 });
     await expect("แก้ accessCode ของไรเดอร์เดิมไม่ได้", false, "PUT", `community_riders/${SEED}R0`, { id: `${SEED}R0`, name: "เดิม", phone: "0822222222", accessCode: "STOLEN", status: "busy" });
     await expect("แก้ phone ของไรเดอร์เดิมไม่ได้", false, "PUT", `community_riders/${SEED}R0`, { id: `${SEED}R0`, name: "เดิม", phone: "0899999999", accessCode: `${SEED}R0`, status: "busy" });
     await expect("ลบไรเดอร์ไม่ได้", false, "DELETE", `community_riders/${SEED}R0`);
@@ -64,7 +67,7 @@ async function expect(name, wantAllowed, method, path, body) {
     await expect("ไรเดอร์ที่มีรหัสผ่านแล้ว: เปลี่ยน loginSalt ไม่ได้", false, "PUT", `community_riders/${SEED}R2`, { id: `${SEED}R2`, name: "มีรหัส", phone: "0844444444", accessCode: `${SEED}R2`, loginHash: "seedhash", loginSalt: "zz99" });
     await expect("ไรเดอร์ที่มีรหัสผ่านแล้ว: ลบ loginHash ไม่ได้", false, "PUT", `community_riders/${SEED}R2`, { id: `${SEED}R2`, name: "มีรหัส", phone: "0844444444", accessCode: `${SEED}R2`, status: "busy" });
     await expect("ไรเดอร์ที่ยังไม่มีรหัสผ่าน: เติม loginHash เองไม่ได้", false, "PUT", `community_riders/${SEED}R3`, { id: `${SEED}R3`, name: "ไม่มีรหัส", phone: "0855555555", accessCode: `${SEED}R3`, loginHash: "evil", loginSalt: "s" });
-    await expect("ไรเดอร์ที่มีรหัสผ่านแล้ว: อัปเดตสถานะ/พิกัด โดย loginHash เดิม ได้", true, "PUT", `community_riders/${SEED}R2`, { id: `${SEED}R2`, name: "มีรหัส", phone: "0844444444", accessCode: `${SEED}R2`, loginHash: "seedhash", loginSalt: "aa11", status: "busy", lat: 13.3 });
+    await expect("คนแปลกหน้าอัปเดตสถานะไรเดอร์ที่มีรหัสผ่านไม่ได้ (v5: ต้องล็อกอินเป็นไรเดอร์คนนั้น — ดู rules-v5-live)", false, "PUT", `community_riders/${SEED}R2`, { id: `${SEED}R2`, name: "มีรหัส", phone: "0844444444", accessCode: `${SEED}R2`, loginHash: "seedhash", loginSalt: "aa11", status: "busy", lat: 13.3 });
 
     console.log("== merchant_applications ==");
     const mApp = (id, status, extra) => Object.assign({ id, status, stallData: { stallId: id, stallName: "ทดสอบ", phone: "0833333333" } }, extra || {});
@@ -106,7 +109,14 @@ async function expect(name, wantAllowed, method, path, body) {
     await expect("ไม่มีบัตรผ่าน: เขียนตะกร้าไม่ได้", false, "PUT", `carts/${T}C1`, { items: [] });
     await expect("อ่าน staff_keys ไม่ได้ (เฉพาะเจ้าของ)", false, "GET", `staff_keys`);
     await expect("อ่าน order_codes ไม่ได้ (เฉพาะเจ้าของ)", false, "GET", `order_codes`);
-    await expect("ไรเดอร์อัปเดตพิกัดได้ (ยังเปิด)", true, "PUT", `rider_locations/${SEED}R0`, { lat: 13.3, lng: 101.1 });
+    await expect("เขียนโหนดเก่า rider_locations ไม่ได้แล้ว (v5)", false, "PUT", `rider_locations/${SEED}R0`, { lat: 13.3, lng: 101.1 });
+    await expect("เขียนโหนดเก่า riders / active_rider ไม่ได้แล้ว (v5)", false, "PUT", `active_rider`, { x: 1 });
+    await expect("ผู้สมัครสร้างสถานะ pending ของตัวเองได้", true, "PUT", `rider_public/${T}PUB`, { status: "pending" });
+    await expect("อ่านสถานะสาธารณะทีละเลขได้", true, "GET", `rider_public/${T}PUB`);
+    await expect("ดูรายการ rider_public ทั้งหมดไม่ได้", false, "GET", `rider_public`);
+    await expect("แก้สถานะเป็น approved เองไม่ได้", false, "PUT", `rider_public/${T}PUB`, { status: "approved" });
+    await expect("สร้างสถานะที่แนบ salt มาเองไม่ได้", false, "PUT", `rider_public/${T}PUB2`, { status: "pending", loginSalt: "aa" });
+    await expect("ใส่ชื่อ/เบอร์ในข้อมูลสาธารณะไม่ได้", false, "PUT", `rider_public/${T}PUB3`, { status: "pending", phone: "0800000000" });
     await expect("โหนดที่ไม่รู้จักเขียนไม่ได้", false, "PUT", `unknown_node/${T}`, { x: 1 });
     await expect("อ่านรากทั้งฐานข้อมูลไม่ได้", false, "GET", ``);
     await expect("อ่าน rider_private ไม่ได้ (เฉพาะเจ้าของ)", false, "GET", `rider_private`);

@@ -112,14 +112,8 @@ function loadSavedRider() {
                 localStorage.removeItem("talathub_logged_in_rider");
                 return null;
             }
-            if (typeof loadCommunityRiders === "function") {
-                const riders = loadCommunityRiders();
-                const exists = riders.some(r => r && (r.id === (parsed.id || parsed.riderId) || (r.phone && parsed.phone && r.phone.replace(/[-\s]/g, '') === parsed.phone.replace(/[-\s]/g, ''))));
-                if (!exists) {
-                    localStorage.removeItem("talathub_logged_in_rider");
-                    return null;
-                }
-            }
+            // ไม่เช็กกับรายชื่อไรเดอร์ในเครื่องแล้ว (กฎ v5: รายชื่ออ่านได้เฉพาะเจ้าของ เครื่องไรเดอร์จึงไม่มีรายชื่อ)
+            // ไรเดอร์ที่ถูกถอนสิทธิ์จะอ่านงานไม่ได้เองจากฐานข้อมูล (staff_keys ถูกลบ -> refreshOrderAccess แจ้งให้ล็อกอินใหม่)
             return parsed;
         }
     } catch (e) { }
@@ -740,7 +734,9 @@ function refreshOrderAccess() {
             listenToFirebaseOrdersForAdmin();
             attachOrderChildListeners();
             listenRiderJobs();
+            initRiderRealtimeSync();
         } else {
+            purgeRiderListCachesForVisitors();
             const isRider = !!(state.activeRider && state.activeRider.isLoggedIn);
             const isMerchant = !!(state.activeMerchant && state.activeMerchant.isLoggedIn);
             if (isRider || isMerchant) await loadMyStaffSession();
@@ -1313,6 +1309,12 @@ async function riderSecretLogin(numberRaw, secretRaw) {
     const secret = normalizeRiderSecret(secretRaw);
     if (!number || !secret) return { ok: false, code: "empty", message: "⚠️ กรุณากรอกเลขไรเดอร์ และรหัสผ่านเข้าระบบ" };
 
+    // กฎ v5: ให้ฐานข้อมูลตรวจรหัสผ่าน (รายชื่อไรเดอร์พร้อมค่าแฮชอ่านได้เฉพาะเจ้าของแล้ว) — ถ้ายังไม่มีข้อมูลสาธารณะของเลขนี้ ใช้วิธีเดิม
+    if (typeof isFirebaseReady === "function" && isFirebaseReady() && typeof _riderLoginViaServer === "function") {
+        const viaServer = await _riderLoginViaServer(number, secret);
+        if (viaServer) return viaServer;
+    }
+
     const bad = { ok: false, code: "bad", message: "⚠️ เลขไรเดอร์หรือรหัสผ่านไม่ถูกต้อง" };
     const rider = loadCommunityRiders().find(x => (x.id && normalizeRiderCode(x.id) === number) || (x.accessCode && normalizeRiderCode(x.accessCode) === number));
     if (!rider) {
@@ -1425,8 +1427,13 @@ async function submitRiderSecretLogin(numberInputId, secretInputId) {
     if (secEl) secEl.value = "";
     loginRiderWithProfile(res.rider);
     showToast("🎉 เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ " + (res.rider.name || "ไรเดอร์"));
-    // ขอสิทธิ์อ่านออเดอร์จากฐานข้อมูล (รหัสผ่านถูกตรวจซ้ำที่กฎฐานข้อมูล)
-    openStaffSession("rider", res.rider.accessCode || res.rider.id, typedSecret, res.rider.loginSalt);
+    if (res.sessionOpened) {
+        // ฐานข้อมูลตรวจรหัสผ่านและเปิดสิทธิ์ให้แล้วตอนล็อกอิน
+        refreshOrderAccess();
+    } else {
+        // ขอสิทธิ์อ่านออเดอร์จากฐานข้อมูล (รหัสผ่านถูกตรวจซ้ำที่กฎฐานข้อมูล)
+        openStaffSession("rider", res.rider.accessCode || res.rider.id, typedSecret, res.rider.loginSalt);
+    }
 }
 
 // เจ้าของ: สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์ที่อนุมัติแล้ว (รหัสเดิมใช้ไม่ได้ทันที) และแสดงให้เจ้าของส่งต่อ
@@ -1453,6 +1460,144 @@ async function resetRiderLoginSecret(appId) {
     openSimulatedSmsModal(app.phone, cred.secret, name, "rider", app.lineId, app.accessCode);
 }
 window.resetRiderLoginSecret = resetRiderLoginSecret;
+
+// =================================================================
+// ข้อมูลไรเดอร์ที่คนทั่วไปเห็นได้ (กฎ v5, 2026-09-25)
+// - รายชื่อไรเดอร์ (community_riders) และใบสมัคร (rider_applications) มีเบอร์โทร พร้อมเพย์ LINE และค่ารหัสผ่านที่แฮชแล้ว
+//   -> อ่านได้เฉพาะเจ้าของ (ไรเดอร์อ่านได้เฉพาะของตัวเองหลังล็อกอิน)
+// - rider_public/<เลขไรเดอร์> = { status, loginSalt, profileKey } ข้อมูลขั้นต่ำสำหรับหน้าล็อกอิน (ไม่มีชื่อ/เบอร์/แฮช)
+// - rider_phone_status/<sha256(เบอร์)> = { code, status } ให้ผู้สมัครเช็กสถานะด้วยเบอร์ตัวเอง (เดาจากรายการไม่ได้)
+// - ล็อกอิน: ฐานข้อมูลตรวจรหัสผ่านเอง (เขียน staff_sessions ด้วยค่าพิสูจน์) ไม่ต้องใช้แฮชที่เคยเปิดให้ทุกคนอ่าน
+// เจ้าของเป็นคนเขียน rider_public/rider_phone_status (publishAllRiderPublic ทุกครั้งที่รายชื่อเปลี่ยน)
+// ผู้สมัครสร้างได้แค่สถานะ "pending" ของตัวเองครั้งเดียว (createRiderPublicPending)
+// =================================================================
+function riderPublicKey(code) {
+    return staffKeyId(normalizeRiderCode(String(code || "").trim()));
+}
+
+async function sha256Hex(text) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(text)));
+    return _bytesToHex(new Uint8Array(buf));
+}
+async function riderPhoneKey(phone) {
+    const digits = String(phone || "").replace(/\D/g, "");
+    return digits.length >= 9 ? sha256Hex("hsong-rider-phone|" + digits) : "";
+}
+
+// ข้อมูลสาธารณะของใบสมัคร 1 ใบ (ใช้ทั้งตอนเขียนและตอนเทียบว่าเปลี่ยนไหม)
+function buildRiderPublic(app, riders) {
+    const pub = { status: app.status || "pending" };
+    if (app.status === "approved") {
+        const cleanPhone = String(app.phone || "").replace(/[-\s]/g, "");
+        const r = (riders || []).find(x => x && ((app.accessCode && x.accessCode === app.accessCode) || (x.id && x.id === app.id) || (cleanPhone && String(x.phone || "").replace(/[-\s]/g, "") === cleanPhone)));
+        const salt = (r && r.loginSalt) || app.loginSalt;
+        if (salt) pub.loginSalt = salt;
+        const pk = r && _keyOfCommunityRider(r);
+        if (pk) pub.profileKey = _cloudSafeKey(pk);
+    }
+    return pub;
+}
+
+const _riderPublicMemo = {};
+let _riderPublicTimer = null;
+function publishAllRiderPublic() {
+    if (!isOwnerSignedIn() || !isFirebaseReady()) return;
+    clearTimeout(_riderPublicTimer);
+    _riderPublicTimer = setTimeout(async () => {
+        if (!isOwnerSignedIn()) return;
+        const apps = loadRiderApplications();
+        const riders = loadCommunityRiders();
+        for (const app of apps) {
+            if (!app || !app.id) continue;
+            const pub = buildRiderPublic(app, riders);
+            const keys = Array.from(new Set([riderPublicKey(app.id), app.accessCode ? riderPublicKey(app.accessCode) : ""].filter(Boolean)));
+            const code = app.accessCode || app.id;
+            let phoneKey = "";
+            try { phoneKey = await riderPhoneKey(app.phone); } catch (e) { }
+            const memoVal = JSON.stringify(pub) + "|" + code + "|" + phoneKey;
+            if (_riderPublicMemo[app.id] === memoVal) continue;
+            const u = {};
+            keys.forEach(k => { u[`rider_public/${k}`] = Object.assign({ updatedAt: Date.now() }, pub); });
+            if (phoneKey) u[`rider_phone_status/${phoneKey}`] = { code: String(code), status: pub.status, updatedAt: Date.now() };
+            try {
+                await db.ref().update(u);
+                _riderPublicMemo[app.id] = memoVal;
+            } catch (e) {
+                console.warn("publishAllRiderPublic failed:", app.id, e && e.message);
+            }
+        }
+    }, 800);
+}
+window.publishAllRiderPublic = publishAllRiderPublic;
+
+function removeRiderPublic(app) {
+    if (!isOwnerSignedIn() || !isFirebaseReady() || !app) return;
+    [app.id, app.accessCode].filter(Boolean).forEach(c => db.ref(`rider_public/${riderPublicKey(c)}`).remove().catch(() => { }));
+    riderPhoneKey(app.phone).then(k => { if (k) db.ref(`rider_phone_status/${k}`).remove().catch(() => { }); }).catch(() => { });
+    delete _riderPublicMemo[app.id];
+}
+
+// ผู้สมัคร (ไม่ใช่เจ้าของ) หลังส่งใบสมัคร: บอกหน้าล็อกอิน/หน้าเช็กสถานะว่า "รออนุมัติ" (สร้างได้ครั้งเดียว)
+const _riderPendingPublished = {};
+async function createRiderPublicPending(app) {
+    if (!app || !app.id || app.status !== "pending" || isOwnerSignedIn() || !isFirebaseReady() || _riderPendingPublished[app.id]) return;
+    _riderPendingPublished[app.id] = true;
+    const now = Date.now();
+    db.ref(`rider_public/${riderPublicKey(app.id)}`).set({ status: "pending", updatedAt: now }).catch(() => { });
+    try {
+        const k = await riderPhoneKey(app.phone);
+        if (k) db.ref(`rider_phone_status/${k}`).set({ code: String(app.id), status: "pending", updatedAt: now }).catch(() => { });
+    } catch (e) { }
+}
+
+// ล็อกอินไรเดอร์โดยให้ฐานข้อมูลตรวจรหัสผ่าน คืนผลแบบเดียวกับ riderSecretLogin หรือ null (ยังไม่มี rider_public -> ใช้วิธีเดิม)
+async function _riderLoginViaServer(number, secret) {
+    const key = riderPublicKey(number);
+    if (!key) return null;
+    let pub = null;
+    try { pub = (await _withTimeout(db.ref(`rider_public/${key}`).once("value"), 8000)).val(); }
+    catch (e) { return null; }
+    if (!pub) return null;
+    if (pub.status === "pending") return { ok: false, code: "pending", message: "⏳ ใบสมัครของคุณยังรอเจ้าของอนุมัติ เมื่ออนุมัติแล้วเจ้าของจะส่งรหัสผ่านเข้าระบบให้" };
+    if (pub.status === "rejected") return { ok: false, code: "rejected", message: "❌ ใบสมัครนี้ไม่ผ่านการอนุมัติ กรุณาติดต่อเจ้าของตลาด" };
+    if (!pub.loginSalt) return { ok: false, code: "no-secret", message: "🔑 บัญชีนี้ยังไม่มีรหัสผ่านเข้าระบบ กรุณาติดต่อเจ้าของเพื่อขอรหัสผ่านใหม่" };
+    const uid = await ensureAuthUser(8000);
+    if (!uid) return null;
+    let proof;
+    try { proof = await staffProofFromSecret(secret, pub.loginSalt); }
+    catch (e) { return { ok: false, code: "no-crypto", message: "⚠️ เบราว์เซอร์นี้ตรวจรหัสผ่านไม่ได้ กรุณาเปิดผ่านเว็บ https ปกติ" }; }
+    try {
+        await _withTimeout(db.ref(`staff_sessions/${uid}`).set({ role: "rider", id: key, proof, at: Date.now() }), 8000);
+    } catch (e) {
+        _noteRiderLoginFail();
+        return { ok: false, code: "bad", message: "⚠️ เลขไรเดอร์หรือรหัสผ่านไม่ถูกต้อง" };
+    }
+    _clearRiderLoginFail();
+    _myStaffSession = { role: "rider", id: key };
+    let profile = null;
+    if (pub.profileKey) {
+        try { profile = (await _withTimeout(db.ref(`community_riders/${pub.profileKey}`).once("value"), 8000)).val(); } catch (e) { }
+    }
+    const rider = Object.assign({ id: key, accessCode: key, name: "ไรเดอร์" }, profile || {}, { profileKey: pub.profileKey || "" });
+    return { ok: true, code: "ok", rider, sessionOpened: true };
+}
+
+// ไรเดอร์อัปเดตสถานะของตัวเอง (พร้อมรับงาน / กำลังส่ง) ในรายชื่อไรเดอร์ — แก้ได้เฉพาะช่องสถานะของตัวเอง
+function setMyRiderStatus(status) {
+    const pk = state.activeRider && state.activeRider.profileKey;
+    if (!pk || !isFirebaseReady() || isOwnerSignedIn() || !myRiderStaffId()) return;
+    db.ref(`community_riders/${pk}/status`).set(String(status)).catch(() => { });
+}
+window.setMyRiderStatus = setMyRiderStatus;
+
+// ผู้เข้าชมที่ไม่ใช่เจ้าของ: ลบรายชื่อไรเดอร์/ใบสมัครที่เคยเก็บไว้ในเครื่องสมัยที่ยังเปิดให้ทุกคนอ่าน (มีเบอร์ พร้อมเพย์ LINE)
+function purgeRiderListCachesForVisitors() {
+    if (isOwnerSignedIn()) return;
+    try {
+        localStorage.removeItem("talathub_community_riders");
+        localStorage.removeItem("talathub_rider_applications");
+    } catch (e) { }
+}
 
 window.isOwnerSignedIn = isOwnerSignedIn;
 window.verifyOwnerPassword = verifyOwnerPassword;
@@ -21312,6 +21457,9 @@ function saveRiderApplications(apps) {
         });
         localStorage.setItem("talathub_rider_applications", JSON.stringify(stripRiderPrivateList(cleaned)));
 
+        // ผู้สมัครทั่วไป: บอกหน้าล็อกอิน/หน้าเช็กสถานะว่า "รออนุมัติ" (กฎ v5 อ่านใบสมัครไม่ได้แล้ว)
+        if (!isOwnerSignedIn()) cleaned.forEach(a => { if (a && a.status === "pending") createRiderPublicPending(a); });
+
         // เจ้าของแก้ไข/อนุมัติใบสมัคร: ถ้าข้อมูลส่วนตัวเปลี่ยน (หรือยังไม่เคยย้ายไป rider_private) ให้บันทึกลงที่เก็บลับ
         if (isOwnerSignedIn()) {
             cleaned.forEach(a => {
@@ -21333,11 +21481,13 @@ function saveRiderApplications(apps) {
 let _isRiderSyncInitialized = false;
 
 function initRiderRealtimeSync() {
+    // กฎ v5: รายชื่อไรเดอร์/ใบสมัครอ่านได้เฉพาะเจ้าของ — ผู้เข้าชมอื่นไม่ต้องดึง (เรียกซ้ำจาก refreshOrderAccess เมื่อเจ้าของล็อกอิน)
+    if (!isOwnerSignedIn()) return;
     // Instant hydration via REST for both applications & community riders
     try {
         Promise.all([
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/rider_applications.json").then(res => res.ok ? res.json() : null),
-            fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/community_riders.json").then(res => res.ok ? res.json() : null)
+            authQueryParam().then(q => fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/rider_applications.json" + q)).then(res => res.ok ? res.json() : null),
+            authQueryParam().then(q => fetch("https://hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app/community_riders.json" + q)).then(res => res.ok ? res.json() : null)
         ]).then(([appsData, ridersData]) => {
             let apps = [];
             if (appsData) {
@@ -21422,6 +21572,7 @@ function initRiderRealtimeSync() {
             }
 
             updateAdminRiderBadges();
+            publishAllRiderPublic();
 
             if (state.currentRole === "admin") {
                 if (_activeAdminTab === "riders") {
@@ -21433,7 +21584,7 @@ function initRiderRealtimeSync() {
         } catch (err) {
             console.warn("Error syncing rider_applications:", err);
         }
-    });
+    }, () => { _isRiderSyncInitialized = false; });
 
     // 2. Sync Community Riders from Firebase
     db.ref("community_riders").on("value", snapshot => {
@@ -21458,10 +21609,11 @@ function initRiderRealtimeSync() {
                 renderAdminRiders();
             }
             checkCurrentRiderApprovalRealtime(cleaned);
+            publishAllRiderPublic();   // ข้อมูลขั้นต่ำสำหรับหน้าล็อกอิน/เช็กสถานะ (rider_public, rider_phone_status)
         } catch (err) {
             console.warn("Error syncing community_riders:", err);
         }
-    });
+    }, () => { _isRiderSyncInitialized = false; });   // เจ้าของออกจากระบบ -> ถูกตัดสิทธิ์อ่าน ให้เริ่มใหม่ได้เมื่อล็อกอินอีกครั้ง
 }
 window.initRiderRealtimeSync = initRiderRealtimeSync;
 
@@ -24791,6 +24943,7 @@ function deleteRiderApplication(appId) {
         const updated = apps.filter(x => x.id !== appId);
         saveRiderApplications(updated);
         removeRiderDocuments(appId);
+        if (appToDelete) removeRiderPublic(appToDelete);
 
         // Also remove from active community riders if matching
         if (appToDelete) {
@@ -27615,7 +27768,20 @@ function renderRiderApplicationNotice() {
     try { n = JSON.parse(sessionStorage.getItem(_RIDER_APP_NOTICE_KEY) || "null"); } catch (e) { }
     if (!n || !n.code) { box.innerHTML = ""; return; }
     const app = loadRiderApplications().find(a => a.id === n.code);
-    const status = app ? app.status : "pending";
+    const status = app ? app.status : (n.status || "pending");
+    // กฎ v5: ผู้สมัครอ่านใบสมัครไม่ได้แล้ว — ดูสถานะจาก rider_public (มีแค่สถานะ ไม่มีข้อมูลส่วนตัว)
+    if (!app && typeof isFirebaseReady === "function" && isFirebaseReady() && !n._checking) {
+        n._checking = true;
+        db.ref(`rider_public/${riderPublicKey(n.code)}/status`).once("value").then(snap => {
+            const st = snap.val();
+            if (st && st !== n.status) {
+                n.status = st;
+                delete n._checking;
+                try { sessionStorage.setItem(_RIDER_APP_NOTICE_KEY, JSON.stringify(n)); } catch (e) { }
+                renderRiderApplicationNotice();
+            }
+        }).catch(() => { });
+    }
     const palette = status === "approved"
         ? { bg: "bg-emerald-50", border: "border-emerald-400", text: "text-emerald-900", head: "✅ ใบสมัครได้รับอนุมัติแล้ว", hint: "เข้าสู่ระบบรับงานด้วยเลขนี้ และรหัสผ่านที่เจ้าของส่งให้ (พิมพ์ในช่องด้านล่าง) ถ้ายังไม่ได้รับรหัสผ่าน ให้ติดต่อเจ้าของ" }
         : status === "rejected"
@@ -28320,7 +28486,9 @@ function loginRiderWithProfile(r) {
         plate: r.plate || r.license || "-",
         promptPay: r.promptPay || r.phone || "",
         avatar: r.avatar || "🛵",
-        zone: r.zone || "ตลาดวิศิษฐ์ชัย และอำเภอบ้านบึง (ระยะ 5 กม.)"
+        zone: r.zone || "ตลาดวิศิษฐ์ชัย และอำเภอบ้านบึง (ระยะ 5 กม.)",
+        accessCode: r.accessCode || "",
+        profileKey: r.profileKey || ""   // ที่อยู่ข้อมูลของตัวเองใน community_riders (ใช้อัปเดตสถานะของตัวเอง)
     };
     saveRiderToStorage(state.activeRider);
 
@@ -28417,6 +28585,7 @@ function handleRiderStartDelivery() {
             saveCommunityRiders(riders);
         }
     } catch(e) {}
+    setMyRiderStatus("on_delivery");   // เครื่องไรเดอร์ไม่มีรายชื่อแล้ว (กฎ v5) — อัปเดตเฉพาะของตัวเองในฐานข้อมูล
 
     if (order.stalls) {
         order.stalls.forEach(s => {
@@ -28479,6 +28648,7 @@ function handleRiderCompleteDelivery() {
             saveCommunityRiders(riders);
         }
     } catch(e) {}
+    setMyRiderStatus("available");
 
     if (order.stalls) {
         order.stalls.forEach(s => {
@@ -32206,7 +32376,7 @@ function closeStatusCheckModal() {
 }
 window.closeStatusCheckModal = closeStatusCheckModal;
 
-function handleCheckApplicationStatusSubmit() {
+async function handleCheckApplicationStatusSubmit() {
     const input = document.getElementById("status-check-phone-input");
     const resultBox = document.getElementById("status-check-result");
     if (!input || !resultBox) return;
@@ -32222,7 +32392,15 @@ function handleCheckApplicationStatusSubmit() {
     const riderApps = loadRiderApplications();
 
     const mApp = merchantApps.find(a => a.stallData && a.stallData.phone && a.stallData.phone.replace(/[-\s]/g, "") === rawPhone);
-    const rApp = riderApps.find(a => a.phone && a.phone.replace(/[-\s]/g, "") === rawPhone);
+    let rApp = riderApps.find(a => a.phone && a.phone.replace(/[-\s]/g, "") === rawPhone);
+    // กฎ v5: ผู้สมัครไรเดอร์อ่านใบสมัครไม่ได้แล้ว — ถามสถานะจาก rider_phone_status (ค้นด้วยค่าแฮชของเบอร์ที่พิมพ์)
+    if (!rApp && typeof isFirebaseReady === "function" && isFirebaseReady()) {
+        try {
+            const k = await riderPhoneKey(rawPhone);
+            const ps = k ? (await _withTimeout(db.ref(`rider_phone_status/${k}`).once("value"), 8000)).val() : null;
+            if (ps && ps.code) rApp = { id: ps.code, accessCode: ps.code, status: ps.status || "pending", fullName: "ผู้สมัคร (เบอร์ " + input.value.trim() + ")", phone: input.value.trim(), vehiclePlate: "" };
+        } catch (e) { }
+    }
 
     let html = "";
 

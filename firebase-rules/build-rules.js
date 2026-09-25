@@ -1,7 +1,13 @@
-// สร้างไฟล์กฎ Firebase รุ่น v4 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
+// สร้างไฟล์กฎ Firebase รุ่น v5 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
 //   node firebase-rules/build-rules.js
-// ผลลัพธ์: hsong-test.rules.v4.json และ hsong-1f342.rules.v4.json
-//   (ไฟล์ .rules.v3.json / .rules.v2.json = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+// ผลลัพธ์: hsong-test.rules.v5.json และ hsong-1f342.rules.v5.json
+//   (ไฟล์ .rules.v4.json / v3 / v2 = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+//
+// v5 (2026-09-25) — ซ่อนข้อมูลส่วนตัวไรเดอร์:
+//   community_riders, rider_applications : อ่านได้เฉพาะเจ้าของ (ไรเดอร์อ่าน/แก้สถานะได้เฉพาะของตัวเองหลังล็อกอิน)
+//   rider_public/<เลข>                  : status + loginSalt + profileKey (ไม่มีชื่อ/เบอร์/แฮช) อ่านทีละเลขได้ ดูรายการทั้งหมดไม่ได้
+//   rider_phone_status/<sha256>         : { code, status } ให้ผู้สมัครเช็กสถานะด้วยเบอร์ตัวเอง
+//   riders rider_status rider_locations active_rider : โค้ดไม่ได้ใช้แล้ว -> เจ้าของเท่านั้น
 //
 // v4 (2026-09-25) — ไรเดอร์/แม่ค้าเห็นเฉพาะงานของตัวเอง (เจ้าของเลือก: ไรเดอร์กดรับเอง + ฮับจ่ายงานได้, แม่ค้าเห็นแค่ของ):
 //   orders        : ดึงทั้งรายการได้เฉพาะเจ้าของ; ไรเดอร์อ่าน/แก้ได้เฉพาะใบที่ assignedRiderId = ตัวเอง (หรือกดรับใบที่ยังไม่มีคนรับ)
@@ -137,15 +143,37 @@ function build(uids) {
                 }
             },
 
-            riders: open,
-            rider_status: open,
-            rider_locations: open,
-            active_rider: open,
+            // โหนดเก่าที่โค้ดไม่ได้ใช้แล้ว (เคยเปิดให้ใครก็เขียนได้) — เหลือไว้ให้เจ้าของลบได้เท่านั้น
+            riders: { ".read": OWNER, ".write": OWNER },
+            rider_status: { ".read": OWNER, ".write": OWNER },
+            rider_locations: { ".read": OWNER, ".write": OWNER },
+            active_rider: { ".read": OWNER, ".write": OWNER },
+
+            rider_public: {
+                ".read": OWNER,
+                ".write": OWNER,
+                "$code": Object.assign({
+                    ".read": true,
+                    // ผู้สมัครสร้างสถานะ "pending" ของตัวเองได้ครั้งเดียว (ไม่มี salt/profileKey) ที่เหลือเจ้าของเขียน
+                    ".write": "!data.exists() && newData.child('status').val() === 'pending' && !newData.child('loginSalt').exists() && !newData.child('profileKey').exists()",
+                    ".validate": "newData.hasChild('status')"
+                }, onlyFields(["status", "loginSalt", "profileKey", "updatedAt"]))
+            },
+
+            rider_phone_status: {
+                ".read": OWNER,
+                ".write": OWNER,
+                "$h": Object.assign({
+                    ".read": true,
+                    ".write": "!data.exists() && newData.child('status').val() === 'pending'",
+                    ".validate": "newData.hasChildren(['code', 'status']) && $h.length === 64"
+                }, onlyFields(["code", "status", "updatedAt"]))
+            },
 
             daily_reports: { ".read": true, ".write": OWNER },
 
             rider_applications: {
-                ".read": true,
+                ".read": OWNER,
                 "$id": {
                     // loginHash/loginSalt = รหัสผ่านเข้าระบบของไรเดอร์ (เก็บเฉพาะค่าแฮช): เจ้าของเท่านั้นตั้ง/เปลี่ยนได้
                     ".write": "(" + OWNER + ") || (!data.exists() && newData.exists()) || (data.exists() && newData.exists() && " + [same("status"), same("accessCode"), same("id"), same("loginHash"), same("loginSalt")].join(" && ") + ")",
@@ -163,9 +191,11 @@ function build(uids) {
             },
 
             community_riders: {
-                ".read": true,
+                ".read": OWNER,
                 "$id": {
-                    ".write": "(" + OWNER + ") || (data.exists() && newData.exists() && " + [same("id"), same("accessCode"), same("phone"), same("loginHash"), same("loginSalt")].join(" && ") + ")"
+                    // ไรเดอร์อ่าน/แก้ (เช่น สถานะพร้อมรับงาน) ได้เฉพาะของตัวเองหลังล็อกอิน; แก้รหัส/เบอร์/รหัสผ่านไม่ได้
+                    ".read": RIDER + " && data.child('accessCode').val() === " + SID,
+                    ".write": "(" + OWNER + ") || (" + RIDER + " && data.child('accessCode').val() === " + SID + " && data.exists() && newData.exists() && " + [same("id"), same("accessCode"), same("phone"), same("loginHash"), same("loginSalt")].join(" && ") + ")"
                 }
             },
 
@@ -217,7 +247,7 @@ function build(uids) {
 }
 
 Object.entries(PROJECTS).forEach(([project, uids]) => {
-    const file = path.join(__dirname, project + ".rules.v4.json");
+    const file = path.join(__dirname, project + ".rules.v5.json");
     fs.writeFileSync(file, JSON.stringify(build(uids), null, 2) + "\n");
     console.log("wrote", path.basename(file));
 });
