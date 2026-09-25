@@ -851,7 +851,14 @@ window.attachOrderChildListeners = attachOrderChildListeners;
 // - ฮับ (เจ้าของ) เห็นทุกใบงาน จ่ายงานให้ไรเดอร์ได้ และมีเสียง/ป้ายเตือนเมื่อไม่มีใครรับเกิน 10 นาที
 // ทั้งสองสำเนาสร้างโดยเครื่องที่สั่งซื้อ ตอนบันทึกออเดอร์ใหม่ครั้งแรก (saveOrderSideCopiesToCloud)
 // =================================================================
-const RIDER_TRIP_FEE = 40;              // ค่ารอบที่แสดงในใบงาน (ตรงกับรายงาน/หน้ากระเป๋าเงินไรเดอร์)
+// ค่ารอบต่อเที่ยวจริง อ่านจากค่าที่แอดมินตั้งไว้ (talathub_fleet_settings.baseFee, แท็บ "ตั้งค่าค่ารอบ")
+// แทนเลข 40 ที่เคยฝังตายตัว ใช้จุดเดียวนี้ทุกที่ที่ต้องคำนวณ/แสดงค่ารอบต่อเที่ยว
+function getRiderTripFee() {
+    const s = (typeof loadRiderFleetSettings === "function") ? loadRiderFleetSettings() : null;
+    const v = s && Number(s.baseFee);
+    return (typeof v === "number" && !isNaN(v) && v > 0) ? v : 40;
+}
+window.getRiderTripFee = getRiderTripFee;
 const UNCLAIMED_JOB_ALERT_MIN = 10;     // งานไม่มีคนรับนานเท่านี้ ฮับได้เสียง/ป้ายเตือน (เจ้าของกำหนด)
 
 const _knownCloudOrderIds = new Set();  // ออเดอร์ที่อ่านมาจากคลาวด์แล้ว (ห้ามใส่ customerUid ใหม่ทับ)
@@ -890,7 +897,7 @@ function buildRiderJobCard(order) {
         orderType: String(order.orderType || "HUB_CONSOLIDATED"),
         pickup: isExpress ? ("หน้าร้าน " + (origin.stallName || firstStall.name || "แผงค้า")) : "ฮับรวมตลาดบ้านบึง",
         area: String(order.subdistrict || "").slice(0, 80),
-        fee: RIDER_TRIP_FEE,
+        fee: getRiderTripFee(),
         createdAt: Number(order.savedAt) || Number(new Date(order.createdAt)) || Date.now(),
         status: "open"
     };
@@ -6486,6 +6493,7 @@ function aggregateDailyOperations(targetDateKey) {
         }
     };
 
+    const riderTripFee = getRiderTripFee();
     const ridersMap = {};
     const stallsMap = {};
 
@@ -6544,7 +6552,7 @@ function aggregateDailyOperations(targetDateKey) {
         }
         if (o.status === "delivered" || o.status === "on_the_way" || o.status === "dispatched" || o.status === "assigned") {
             ridersMap[rName].tripsCount++;
-            ridersMap[rName].riderFeeEarned += 40; // ค่ารอบ ฿40
+            ridersMap[rName].riderFeeEarned += riderTripFee;
             if (pType === "cod" || pType === "cash") {
                 ridersMap[rName].codCollected += orderTotal;
             }
@@ -7136,7 +7144,7 @@ function renderHubDailyReport(targetDateKey) {
                     <span class="material-symbols-outlined text-sky-600 text-base">sports_motorsports</span>
                     <span>2. เคลียร์เงินไรเดอร์ (Rider Compensation & COD Clearance)</span>
                 </h4>
-                <p class="text-[10px] text-slate-500">ค่ารอบ ฿40/เที่ยว | หักเงินสด COD และเงินทอน | ยอดสุทธิส่งมอบฮับ</p>
+                <p class="text-[10px] text-slate-500">ค่ารอบ ฿${getRiderTripFee()}/เที่ยว | หักเงินสด COD และเงินทอน | ยอดสุทธิส่งมอบฮับ</p>
             </div>
             <div class="text-right">
                 <div class="text-[10px] text-slate-500">ยอดสุทธิรวมที่ฮับต้องรับมอบ:</div>
@@ -8769,7 +8777,7 @@ function printThermalRiderSlip(riderIdentifier, dateKey) {
         <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${escapeHtml(r.riderPhone)}</span></div>
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">1. จำนวนเที่ยวส่งสำเร็จ:</span><span class="slip-value">${r.tripsCount} เที่ยว</span></div>
-        <div class="slip-row"><span class="slip-label">2. ค่ารอบสะสม (+฿40/เที่ยว):</span><span class="slip-value">+฿${r.riderFeeEarned.toLocaleString()}</span></div>
+        <div class="slip-row"><span class="slip-label">2. ค่ารอบสะสม (+฿${getRiderTripFee()}/เที่ยว):</span><span class="slip-value">+฿${r.riderFeeEarned.toLocaleString()}</span></div>
         <div class="slip-row"><span class="slip-label">3. เงินสด COD ที่เก็บมา:</span><span class="slip-value">+฿${r.codCollected.toLocaleString()}</span></div>
         <div class="slip-row"><span class="slip-label">4. เงินทอนคืนลูกค้า (ของขาด):</span><span class="slip-value">${r.refundHanded > 0 ? `-฿${r.refundHanded.toLocaleString()}` : '฿0'}</span></div>
         <div class="settle-box">
@@ -28941,7 +28949,7 @@ function handleRiderCompleteDelivery() {
     openRiderDeliveryCompleteModal();
     const doneMsg = (order.orderType === "MERCHANT_EXPRESS")
         ? `🎉 ส่งมอบของจากร้านค้าถึงมือลูกค้าเรียบร้อยแล้ว! (ค่าส่ง ฿${order.deliveryFee || 20})`
-        : `🎉 ไรเดอร์ (${order.riderName || 'คนขับ'}) ส่งมอบของสดถึงมือลูกค้าเรียบร้อยแล้ว! (+฿40 ค่ารอบ)`;
+        : `🎉 ไรเดอร์ (${order.riderName || 'คนขับ'}) ส่งมอบของสดถึงมือลูกค้าเรียบร้อยแล้ว! (+฿${getRiderTripFee()} ค่ารอบ)`;
     showToast(doneMsg);
 }
 window.handleRiderCompleteDelivery = handleRiderCompleteDelivery;
@@ -33423,7 +33431,7 @@ function renderRiderJobPool() {
                 <div class="flex items-center justify-between pt-1">
                     <div>
                         <span class="text-[10px] text-slate-400">รายได้ค่ารอบ:</span>
-                        <span class="text-sm font-extrabold text-emerald-600 ml-1">฿${Number(job.fee || RIDER_TRIP_FEE)}</span>
+                        <span class="text-sm font-extrabold text-emerald-600 ml-1">฿${Number(job.fee || getRiderTripFee())}</span>
                     </div>
                     <button onclick="claimOrderForRider(${jsArg(key)})" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all">
                         <span>🛵 กดรับงานนี้</span>
@@ -33555,7 +33563,7 @@ function renderRiderWallet() {
 
     let riderRecord = report?.riderSettlement?.riders?.find(r => r.riderName === riderName || r.riderPhone === activeRiderObj.phone) || {
         tripsCount: state.activeOrder && state.activeOrder.status === 'delivered' ? 1 : 0,
-        riderFeeEarned: state.activeOrder && state.activeOrder.status === 'delivered' ? 40 : 0,
+        riderFeeEarned: state.activeOrder && state.activeOrder.status === 'delivered' ? getRiderTripFee() : 0,
         codCollected: 0,
         refundHanded: 0,
         netCashToHub: 0
@@ -33566,7 +33574,7 @@ function renderRiderWallet() {
     const isSettled = Boolean(settledInfo && settledInfo.isSettled);
 
     const trips = riderRecord.tripsCount || 0;
-    const feeEarned = (settledInfo && settledInfo.amount !== undefined) ? settledInfo.amount : (riderRecord.riderFeeEarned || (trips * 40));
+    const feeEarned = (settledInfo && settledInfo.amount !== undefined) ? settledInfo.amount : (riderRecord.riderFeeEarned || (trips * getRiderTripFee()));
     const cod = riderRecord.codCollected || 0;
     const refunds = riderRecord.refundHanded || 0;
     const netHub = cod - feeEarned - refunds;
@@ -33702,7 +33710,7 @@ function renderRiderWallet() {
             <div class="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-3.5 shadow-sm text-center">
                 <div class="text-[10px] text-emerald-700 font-extrabold uppercase">รายได้ค่ารอบสะสมวันนี้</div>
                 <div class="text-2xl font-black text-emerald-600 mt-1">฿${feeEarned.toLocaleString()}</div>
-                <div class="text-[10px] text-emerald-800 mt-0.5">รวม ${trips} รอบจัดส่ง (฿40/รอบ)</div>
+                <div class="text-[10px] text-emerald-800 mt-0.5">รวม ${trips} รอบจัดส่ง (฿${getRiderTripFee()}/รอบ)</div>
             </div>
             <div class="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-3.5 shadow-sm text-center">
                 <div class="text-[10px] text-amber-800 font-extrabold uppercase">เงินสด COD ถือติดตัว</div>
@@ -33751,7 +33759,7 @@ function renderRiderWallet() {
                             <div class="text-[10px] text-slate-500">เสร็จเมื่อ: ${state.activeOrder?.deliveredAt || 'วันนี้'}</div>
                         </div>
                         <div class="text-right">
-                            <div class="font-extrabold text-emerald-600">+฿40</div>
+                            <div class="font-extrabold text-emerald-600">+฿${getRiderTripFee()}</div>
                             <span class="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md font-bold">สำเร็จ</span>
                         </div>
                     </div>
