@@ -123,6 +123,20 @@ reset();
 run("openSingleRiderPayoutModal('RD9', 300, '<img src=x onerror=alert(1)>', 'x')");
 ok(!/<img/.test(el("rider-payout-target-warning").innerHTML), "ข้อความในกล่องเตือนผ่าน escapeHtml");
 
+console.log("== ปุ่ม 'QR โอน' ในตารางร้าน (แอดมิน) ใช้ยอดจริงจากรายงานประจำวัน");
+vm.runInContext(fn("findVendorPayoutEntry"), ctx);
+ctx._vs = [
+    { stallId: "S-A", stallName: "ร้านเอ", totalAmount: 1000, gpAmount: 100, payoutAmount: 900, gpRate: 10 },
+    { stallName: "ร้านไม่มีรหัส", totalAmount: 200, gpAmount: 20, payoutAmount: 180 }
+];
+ok(run("findVendorPayoutEntry(_vs, { stallId: 'S-A', stallName: 'ชื่ออื่น' })").payoutAmount === 900, "หาจากรหัสร้าน");
+ok(run("findVendorPayoutEntry(_vs, { stallId: 'S-X', stallName: 'ร้านไม่มีรหัส' })").payoutAmount === 180, "รายการในรายงานไม่มีรหัสร้าน -> หาจากชื่อ");
+ok(run("findVendorPayoutEntry(_vs, { stallId: 'S-B', stallName: 'ร้านเอ' })") === null, "ชื่อซ้ำแต่รหัสไม่ตรง -> ไม่เอายอดร้านอื่นมา");
+ok(run("findVendorPayoutEntry(null, { stallId: 'S-A' })") === null && run("findVendorPayoutEntry(_vs, null)") === null, "ไม่มีข้อมูล -> null");
+const roster = fn("renderAdminStalls");
+ok(!/openVendorPayoutModal\([^)]*,\s*500\s*,/.test(roster), "ไม่ส่งยอดตายตัว 500 บาทแล้ว");
+ok(/findVendorPayoutEntry\(vendorSettlement\.stalls, s\)/.test(roster) && /ไม่มียอดโอน/.test(roster), "ใช้ยอดจากรายงาน และแสดง 'ไม่มียอดโอน' เมื่อไม่มียอด");
+
 console.log("== หน้าเว็บ + ไม่มีเลขสมมติเหลือในหน้าโอนเงิน");
 for (const pre of ["payout", "rider-payout"]) {
     ok(html.includes(`id="${pre}-target-warning"`) && html.includes(`id="${pre}-qr-section"`), pre + ": มีกล่องเตือน + ส่วน QR ในหน้าเว็บ");
