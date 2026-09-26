@@ -5310,7 +5310,7 @@
                 </div>
                 <div class="text-[11px] text-slate-500 flex items-center justify-between">
                     <span>เจ้าของ: <strong class="text-slate-700" id="payout-owner-name">เฮียส่ง</strong></span>
-                    <span class="text-emerald-700 font-bold" id="payout-phone">089-123-4567</span>
+                    <span class="text-emerald-700 font-bold" id="payout-phone">-</span>
                 </div>
             </div>
 
@@ -5319,11 +5319,14 @@
                 <div class="text-[11px] text-emerald-800 font-bold">ยอดเงินที่ต้องโอนสุทธิให้แผงค้านี้:</div>
                 <div class="text-2xl font-black text-emerald-950" id="payout-amount-text">฿1,420</div>
                 <div class="text-[10px] text-slate-600 font-medium" id="payout-gp-breakdown-text">ยอดขาย ฿1,420 (หัก GP 10% ฿142)</div>
-                <div class="text-[9px] text-slate-400">สแกน QR ด้วยแอปธนาคารใดก็ได้ เพื่อโอนตรงเข้าบัญชีร้านค้า</div>
+                <div id="payout-scan-hint" class="text-[9px] text-slate-400">สแกน QR ด้วยแอปธนาคารใดก็ได้ เพื่อโอนตรงเข้าบัญชีร้านค้า</div>
             </div>
 
+            <!-- ไม่มีเลขพร้อมเพย์ / ใช้บัญชีธนาคาร: กล่องนี้แทน QR (applyPayoutTargetToModal) -->
+            <div id="payout-target-warning" class="hidden"></div>
+
             <!-- PromptPay QR Code Image -->
-            <div class="text-center space-y-2 py-1">
+            <div id="payout-qr-section" class="text-center space-y-2 py-1">
                 <div class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200/80 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold mx-auto shadow-2xs">
                     <span class="material-symbols-outlined text-xs">qr_code_scanner</span>
                     <span>PromptPay Official QR</span>
@@ -5334,7 +5337,7 @@
                 </div>
                 <div class="flex items-center justify-center gap-1.5 text-[11px]">
                     <span class="text-slate-500">หมายเลขพร้อมเพย์: <strong id="payout-promptpay-number"
-                            class="font-mono text-slate-800">089-123-4567</strong></span>
+                            class="font-mono text-slate-800"></strong></span>
                     <button type="button" onclick="copyPayoutPromptPayNumber()"
                         class="text-emerald-700 hover:text-emerald-800 font-bold hover:underline flex items-center gap-0.5 cursor-pointer">
                         <span class="material-symbols-outlined text-xs">content_copy</span>
@@ -6319,7 +6322,7 @@
                 </div>
                 <div class="text-[11px] text-slate-500 flex items-center justify-between">
                     <span id="rider-payout-trips-text">เที่ยววิ่งสำเร็จ: 0 เที่ยว</span>
-                    <span class="text-emerald-700 font-bold" id="rider-payout-phone">089-123-4567</span>
+                    <span class="text-emerald-700 font-bold" id="rider-payout-phone">-</span>
                 </div>
             </div>
 
@@ -6328,11 +6331,14 @@
                 <div class="text-[11px] text-emerald-800 font-bold">ยอดเงินค่ารอบสุทธิที่ต้องโอนให้ไรเดอร์:</div>
                 <div class="text-2xl font-black text-emerald-950" id="rider-payout-amount-text">฿0</div>
                 <div class="text-[10px] text-slate-600 font-medium" id="rider-payout-breakdown-text">ค่ารอบฐาน + โบนัสพิเศษ</div>
-                <div class="text-[9px] text-slate-400">สแกน QR ด้วยแอปธนาคารใดก็ได้ เพื่อโอนตรงเข้าบัญชีพร้อมเพย์ไรเดอร์</div>
+                <div id="rider-payout-scan-hint" class="text-[9px] text-slate-400">สแกน QR ด้วยแอปธนาคารใดก็ได้ เพื่อโอนตรงเข้าบัญชีพร้อมเพย์ไรเดอร์</div>
             </div>
 
+            <!-- ไม่มีเลขพร้อมเพย์ / ใช้บัญชีธนาคาร: กล่องนี้แทน QR (applyPayoutTargetToModal) -->
+            <div id="rider-payout-target-warning" class="hidden"></div>
+
             <!-- PromptPay QR Code Image -->
-            <div class="text-center space-y-2 py-1">
+            <div id="rider-payout-qr-section" class="text-center space-y-2 py-1">
                 <div class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200/80 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold mx-auto shadow-2xs">
                     <span class="material-symbols-outlined text-xs">qr_code_scanner</span>
                     <span>PromptPay Official QR</span>
@@ -6343,7 +6349,7 @@
                 </div>
                 <div class="flex items-center justify-center gap-1.5 text-[11px]">
                     <span class="text-slate-500">หมายเลขพร้อมเพย์: <strong id="rider-payout-promptpay-number"
-                            class="font-mono text-slate-800">089-123-4567</strong></span>
+                            class="font-mono text-slate-800"></strong></span>
                     <button type="button" onclick="copyRiderPayoutPromptPayNumber()"
                         class="text-emerald-700 hover:text-emerald-800 font-bold hover:underline flex items-center gap-0.5 cursor-pointer">
                         <span class="material-symbols-outlined text-xs">content_copy</span>
@@ -7390,7 +7396,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.65_fleet_settings_cloud"></script>
+    <script src="app.js?v=10.66c_payout_no_fake_promptpay"></script>
 </body>
 
 </html>

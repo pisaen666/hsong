@@ -6412,7 +6412,7 @@ function findStallInfo(stallId, stallName) {
         stallName: stallName || "แผงค้าทั่วไป",
         stallNumber: stallName && stallName.includes("(") ? stallName.split("(")[1].replace(")", "") : "แผงทั่วไป",
         ownerName: "แม่ค้าประจำแผง",
-        phone: "089-123-4567"
+        phone: ""
     };
 }
 
@@ -6573,8 +6573,8 @@ function aggregateDailyOperations(targetDateKey) {
                         stallName: (meta && meta.stallName) || st.name,
                         stallNumber: (meta && meta.stallNumber) || "แผงตลาด",
                         ownerName: (meta && meta.ownerName) || "เจ้าของแผง",
-                        phone: (meta && meta.phone) || "089-123-4567",
-                        promptPayPhone: ((meta && meta.phone) || "0891234567").replace(/[^0-9]/g, ""),
+                        phone: (meta && meta.phone) || "",
+                        promptPayPhone: ((meta && meta.phone) || "").replace(/[^0-9]/g, ""),
                         orderCount: 0,
                         itemsCount: 0,
                         totalAmount: 0,
@@ -7820,6 +7820,106 @@ function printViewerSlipThermal() {
 window.printViewerSlipThermal = printViewerSlipThermal;
 
 // ── Modal Controllers: Vendor PromptPay Payout Modal
+// ===== ช่องทางรับเงินของร้าน/ไรเดอร์ในหน้าโอนเงิน (เจ้าของสั่ง 2026-09-26) =====
+// เดิมถ้าไม่มีเลข ระบบใส่เบอร์สมมติ 089-123-4567 แล้วสร้าง QR ให้ = เสี่ยงโอนเงินผิดคน
+// ตอนนี้: มีเลขพร้อมเพย์ถูกรูปแบบ -> QR; ร้านที่ใช้บัญชีธนาคาร -> แสดงเลขบัญชีให้โอนผ่านแอป (สร้าง QR พร้อมเพย์ไม่ได้); ไม่มีเลย -> กล่องเตือนสีแดง ไม่มี QR
+function normalizePromptPayId(raw) {
+    const d = String(raw || "").replace(/\D/g, "");
+    if (d.length === 10 && d[0] === "0") return d;      // เบอร์มือถือ
+    if (d.length === 13 || d.length === 15) return d;   // เลขบัตรประชาชน / e-Wallet
+    return "";
+}
+window.normalizePromptPayId = normalizePromptPayId;
+
+function formatPromptPayId(id) {
+    return id && id.length === 10 ? id.slice(0, 3) + "-" + id.slice(3, 6) + "-" + id.slice(6) : (id || "");
+}
+
+// บัญชีรับเงินของร้าน (บัญชีหลัก + บัญชีสำรอง) จากข้อมูลร้าน หรือจากใบสมัคร (ข้อมูลเต็ม เห็นได้เฉพาะเจ้าของ/ร้านนั้นเอง)
+function merchantBankAccountsFor(stallId, stallName, stall) {
+    const pick = src => {
+        if (!src) return [];
+        const b1 = src.bankInfo || {}, b2 = src.bankInfo2 || {};
+        return [
+            { bankName: src.bankName || b1.bankName || "", accountNo: src.bankAccountNo || b1.accountNo || "", accountName: src.bankAccountName || b1.accountName || "" },
+            { bankName: src.bankName2 || b2.bankName || "", accountNo: src.bankAccountNo2 || b2.accountNo || "", accountName: src.bankAccountName2 || b2.accountName || "" }
+        ].filter(a => String(a.accountNo).replace(/\D/g, "").length >= 10);
+    };
+    let list = pick(stall);
+    if (!list.length && typeof loadMerchantApplications === "function") {
+        const apps = loadMerchantApplications() || [];
+        const app = apps.find(a => a && a.stallData && stallId && (a.stallData.stallId === stallId || a.id === stallId))
+            || apps.find(a => a && a.stallData && stallName && a.stallData.stallName === stallName);
+        list = pick(app && app.stallData);
+    }
+    return list;
+}
+window.merchantBankAccountsFor = merchantBankAccountsFor;
+
+// { type: "promptpay", id, accountName } | { type: "bank", bankName, accountNo, accountName } | { type: "none" }
+function resolveMerchantPayoutTarget(stallId, stallName, stall) {
+    const list = merchantBankAccountsFor(stallId, stallName, stall);
+    const pp = list.find(a => String(a.bankName).startsWith("พร้อมเพย์") && normalizePromptPayId(a.accountNo));
+    if (pp) return { type: "promptpay", id: normalizePromptPayId(pp.accountNo), accountName: pp.accountName };
+    if (list.length) return { type: "bank", bankName: list[0].bankName, accountNo: list[0].accountNo, accountName: list[0].accountName };
+    return { type: "none" };
+}
+window.resolveMerchantPayoutTarget = resolveMerchantPayoutTarget;
+
+// แสดงผลในหน้าต่างโอนเงิน: prefix = "payout" (ร้าน) หรือ "rider-payout" (ไรเดอร์)
+function applyPayoutTargetToModal(prefix, target, amount, whoLabel) {
+    const qrSection = document.getElementById(prefix + "-qr-section");
+    const box = document.getElementById(prefix + "-target-warning");
+    const qrImg = document.getElementById(prefix + "-qr-image");
+    const ppNumEl = document.getElementById(prefix + "-promptpay-number");
+    const scanHint = document.getElementById(prefix + "-scan-hint");   // "สแกน QR ..." ในกล่องยอดเงิน
+    if (scanHint) scanHint.classList.toggle("hidden", target.type !== "promptpay");
+    if (target.type === "promptpay") {
+        if (box) { box.classList.add("hidden"); box.innerHTML = ""; }
+        if (qrSection) qrSection.classList.remove("hidden");
+        if (ppNumEl) ppNumEl.textContent = formatPromptPayId(target.id);
+        if (qrImg) loadPromptPayQrImage(qrImg, target.id, amount);
+        return;
+    }
+    if (qrSection) qrSection.classList.add("hidden");
+    if (qrImg) { qrImg.onerror = null; qrImg.removeAttribute("src"); }
+    if (!box) return;
+    box.classList.remove("hidden");
+    if (target.type === "bank") {
+        box.className = "rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-left space-y-1 text-xs text-amber-950";
+        box.innerHTML = `
+            <div class="font-extrabold">🏦 ${escapeHtml(whoLabel)}รับเงินทางบัญชีธนาคาร (สร้าง QR พร้อมเพย์ไม่ได้)</div>
+            <div>โอนผ่านแอปธนาคารไปที่บัญชีนี้:</div>
+            <div class="font-black">${escapeHtml(target.bankName) || "-"}</div>
+            <div class="font-mono font-black text-base">${escapeHtml(target.accountNo)}</div>
+            <div>ชื่อบัญชี: <strong>${escapeHtml(target.accountName) || "-"}</strong></div>`;
+    } else {
+        box.className = "rounded-2xl border-2 border-rose-400 bg-rose-50 p-3 text-left space-y-1 text-xs text-rose-900";
+        box.innerHTML = `
+            <div class="font-extrabold text-sm">⚠️ ${escapeHtml(whoLabel)}ยังไม่มีเลขพร้อมเพย์หรือเลขบัญชีรับเงิน</div>
+            <div>อย่าเพิ่งโอนเงิน ขอเลขพร้อมเพย์หรือเลขบัญชีจาก${escapeHtml(whoLabel)}ก่อน</div>
+            <div>${prefix === "rider-payout"
+                ? "แล้วใส่เลขที่ปุ่ม “แก้ไขข้อมูล” ในใบสมัครของไรเดอร์คนนี้ (แอดมิน > ไรเดอร์)"
+                : "แล้วให้ร้านเข้าระบบร้าน กด “✏️ แก้ไขบัญชี” ใส่เลขเอง"}</div>`;
+    }
+}
+
+function loadPromptPayQrImage(qrImg, id, amount) {
+    const payload = generatePromptPayPayload(id, amount);
+    const encoded = encodeURIComponent(payload);
+    // 1. promptpay.io  2. quickchart.io  3. api.qrserver.com (สำรอง)
+    const fallbackUrls = [
+        amount > 0 ? `https://promptpay.io/${id}/${amount}.png` : `https://promptpay.io/${id}.png`,
+        `https://quickchart.io/qr?size=250&text=${encoded}`,
+        `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encoded}`
+    ];
+    let urlIndex = 0;
+    qrImg.onerror = function () {
+        if (urlIndex < fallbackUrls.length) qrImg.src = fallbackUrls[urlIndex++];
+    };
+    qrImg.src = fallbackUrls[urlIndex++];
+}
+
 function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, stallNumber, grossAmount, gpAmount, gpRate) {
     let finalStallId = stallId;
     let finalStallName = stallName;
@@ -7858,13 +7958,11 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
     finalStallName = finalStallName || "แผงค้าในตลาด";
     finalOwner = finalOwner && finalOwner !== "undefined" ? finalOwner : "แม่ค้าประจำแผง";
     finalNumber = finalNumber && finalNumber !== "undefined" ? finalNumber : "แผงตลาด";
-    finalPhone = finalPhone && finalPhone !== "undefined" ? String(finalPhone) : "089-123-4567";
+    finalPhone = finalPhone && finalPhone !== "undefined" ? String(finalPhone) : "";
 
-    let cleanPhone = finalPhone.replace(/[^0-9]/g, "");
-    if (cleanPhone.length < 9) {
-        cleanPhone = "0891234567";
-        finalPhone = "089-123-4567";
-    }
+    // ช่องทางรับเงินจริงของร้าน (บัญชีที่ร้านกรอกตอนสมัคร) — ไม่ใช้เบอร์ติดต่อเดาเป็นพร้อมเพย์อีกแล้ว
+    const payoutTarget = resolveMerchantPayoutTarget(finalStallId, finalStallName, meta);
+    const cleanPhone = payoutTarget.type === "promptpay" ? payoutTarget.id : "";
 
     finalAmount = Number(finalAmount || 0);
     finalGross = finalGross !== undefined && finalGross !== null ? Number(finalGross) : finalAmount;
@@ -7880,6 +7978,7 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
         gpRate: finalRate,
         phone: finalPhone,
         cleanPhone: cleanPhone,
+        payoutTarget: payoutTarget,
         ownerName: finalOwner,
         stallNumber: finalNumber
     };
@@ -7899,7 +7998,7 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
     if (nameEl) nameEl.textContent = _currentPayoutStall.stallName;
     if (zoneEl) zoneEl.textContent = _currentPayoutStall.stallNumber;
     if (ownerEl) ownerEl.textContent = _currentPayoutStall.ownerName;
-    if (phoneEl) phoneEl.textContent = _currentPayoutStall.phone;
+    if (phoneEl) phoneEl.textContent = _currentPayoutStall.phone || "-";
     if (amountEl) amountEl.textContent = `฿${_currentPayoutStall.amount.toLocaleString()}`;
     if (gpBreakdownEl) {
         if (finalGP > 0) {
@@ -7908,40 +8007,7 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
             gpBreakdownEl.textContent = `ยอดขาย ฿${finalGross.toLocaleString()} (ไม่มีหักค่าธรรมเนียม)`;
         }
     }
-    if (ppNumEl) ppNumEl.textContent = _currentPayoutStall.phone;
-
-    // สร้าง PromptPay QR Code มาตรฐาน BOT EMVCo 100% พร้อมยอดเงิน
-    // ใช้ระบบ Multi-Source Failover เพื่อให้ QR โหลดได้รวดเร็วและไม่มีปัญหา 404/บล็อก
-    if (qrImg) {
-        const payload = generatePromptPayPayload(_currentPayoutStall.cleanPhone, _currentPayoutStall.amount);
-        const encoded = encodeURIComponent(payload);
-
-        // 1. promptpay.io (ตรงสำหรับ PromptPay ไทย โหลดเร็วมากและรองรับทุกเบราว์เซอร์)
-        // 2. quickchart.io (Global CDN มาตรฐานสูง สำหรับ EMVCo payload)
-        // 3. api.qrserver.com (Fallback สำรอง)
-        const promptpayIoUrl = _currentPayoutStall.amount > 0
-            ? `https://promptpay.io/${_currentPayoutStall.cleanPhone}/${_currentPayoutStall.amount}.png`
-            : `https://promptpay.io/${_currentPayoutStall.cleanPhone}.png`;
-        const quickChartUrl = `https://quickchart.io/qr?size=250&text=${encoded}`;
-        const qrServerUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encoded}`;
-
-        const fallbackUrls = [promptpayIoUrl, quickChartUrl, qrServerUrl];
-        let urlIndex = 0;
-
-        function loadNextQR() {
-            if (urlIndex < fallbackUrls.length) {
-                qrImg.src = fallbackUrls[urlIndex++];
-            }
-        }
-
-        qrImg.onerror = function() {
-            console.warn(`PromptPay QR source failed, trying next fallback (${urlIndex}/${fallbackUrls.length})...`);
-            loadNextQR();
-        };
-
-        loadNextQR();
-    }
-
+    applyPayoutTargetToModal("payout", payoutTarget, _currentPayoutStall.amount, "ร้านนี้");
     modal.classList.remove("hidden");
 }
 
@@ -7999,6 +8065,7 @@ function confirmVendorPayoutSettled() {
 function copyPayoutPromptPayNumber() {
     if (!_currentPayoutStall) return;
     const phoneNum = _currentPayoutStall.cleanPhone;
+    if (!phoneNum) { showToast("⚠️ ไม่มีเลขพร้อมเพย์ให้คัดลอก"); return; }
     if (navigator.clipboard) {
         navigator.clipboard.writeText(phoneNum).then(() => {
             showToast(`📋 คัดลอกหมายเลขพร้อมเพย์ ${phoneNum} เรียบร้อยแล้ว`);
@@ -15378,7 +15445,7 @@ function getEffectiveMerchantStall() {
             stallName: state.activeMerchant.stallName || "แผงค้าของฉัน",
             stallNumber: state.activeMerchant.stallNumber || "แผงค้า",
             ownerName: state.activeMerchant.ownerName || "เจ้าของร้าน",
-            phone: state.activeMerchant.phone || "089-123-4567"
+            phone: state.activeMerchant.phone || ""
         };
     }
 
@@ -15394,7 +15461,7 @@ function getEffectiveMerchantStall() {
             stallName: "แผงค้าของฉัน",
             stallNumber: "แผงค้า",
             ownerName: "เจ้าของร้าน",
-            phone: "089-123-4567"
+            phone: ""
         };
     }
 
@@ -15599,10 +15666,12 @@ function renderMerchantSettlement() {
             ? settledInfo.amount
             : calculatedNetPayout;
 
-        const bank = (stall && stall.bankInfo) ? stall.bankInfo : {
-            bankName: (stall && (stall.bankName || stall.bank)) || "กสิกรไทย (KBank)",
-            accountNo: (stall && (stall.accountNo || stall.bankAccountNo || stall.phone || stall.promptPayPhone)) || "089-123-4567",
-            accountName: (stall && (stall.accountName || stall.bankAccountName || stall.ownerName)) || (stall ? stall.stallName : "เจ้าของร้าน")
+        // บัญชีรับเงินจริงของร้าน (ไม่มี = บอกให้กด แก้ไขบัญชี ไม่ใส่บัญชีสมมติ)
+        const _myAccounts = merchantBankAccountsFor(currentStallId, currentStallName, stall);
+        const bank = _myAccounts[0] || {
+            bankName: "⚠️ ยังไม่มีบัญชีรับเงิน",
+            accountNo: "กด ✏️ แก้ไขบัญชี เพื่อใส่เลขบัญชี",
+            accountName: "-"
         };
 
         const bank2 = (stall && stall.bankInfo2 && (stall.bankInfo2.accountNo || stall.bankInfo2.bankName)) ? stall.bankInfo2 : (stall && (stall.bankAccountNo2 || stall.bankName2) ? {
@@ -19876,7 +19945,7 @@ function renderAdminStalls() {
                 stallNumber: stallMeta.stallNumber || "แผงตลาด",
                 category: normalizeMainCategoryName(stallMeta.category) || stallMeta.category || DEFAULT_STALL_CATEGORY,
                 ownerName: stallMeta.ownerName || "เจ้าของแผง",
-                phone: stallMeta.phone || "089-123-4567",
+                phone: stallMeta.phone || "",
                 customerName: o.customerName || "ลูกค้าชุมชน",
                 customerPhone: o.customerPhone || "-",
                 deliveryAddress: o.address || o.deliveryAddress || "จัดส่งตามพิกัด",
@@ -20436,7 +20505,7 @@ function renderAdminStalls() {
                                             </td>
                                             <td class="p-3 text-center">
                                                 <div class="flex items-center justify-center gap-1">
-                                                    <button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, 500, ${jsArg(s.phone || '089-123-4567')}, ${jsArg(s.ownerName || 'เจ้าของแผง')}, ${jsArg(s.stallNumber || 'แผงตลาด')})" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
+                                                    <button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, 500, ${jsArg(s.phone || '')}, ${jsArg(s.ownerName || 'เจ้าของแผง')}, ${jsArg(s.stallNumber || 'แผงตลาด')})" class="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
                                                         QR โอน
                                                     </button>
                                                     <button onclick="loginAsMerchantStall(${jsArg(s.stallId)})" class="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] active:scale-95 transition-all cursor-pointer">
@@ -25489,14 +25558,13 @@ window.removeRiderPayoutSlip = removeRiderPayoutSlip;
 
 function openSingleRiderPayoutModal(riderId, amount, phone, name, plate, trips, baseEarned, bonus) {
     const riders = loadCommunityRiders();
-    const r = riders.find(x => x.id === riderId) || { id: riderId, name: name || "ไรเดอร์", phone: phone || "089-123-4567", plate: plate || "-" };
-    
-    let finalPhone = phone || r.promptPay || r.phone || "089-123-4567";
-    let cleanPhone = String(finalPhone).replace(/[^0-9]/g, "");
-    if (cleanPhone.length < 9) {
-        cleanPhone = "0891234567";
-        finalPhone = "089-123-4567";
-    }
+    const r = riders.find(x => x.id === riderId) || { id: riderId, name: name || "ไรเดอร์", phone: phone || "", plate: plate || "-" };
+
+    // เลขพร้อมเพย์ของไรเดอร์ (ไม่มี/ผิดรูปแบบ = กล่องเตือน ไม่ใส่เบอร์สมมติแล้ว)
+    const finalPhone = String(phone || r.promptPay || r.phone || "");
+    const ppId = normalizePromptPayId(finalPhone);
+    const payoutTarget = ppId ? { type: "promptpay", id: ppId } : { type: "none" };
+    const cleanPhone = ppId;
 
     const finalAmount = Number(amount || 0);
     const finalTrips = trips !== undefined ? Number(trips) : 0;
@@ -25529,36 +25597,13 @@ function openSingleRiderPayoutModal(riderId, amount, phone, name, plate, trips, 
 
     if (nameEl) nameEl.innerHTML = `<span class="material-symbols-outlined text-purple-600 text-sm">two_wheeler</span><span>${escapeHtml(_currentRiderPayout.name)}</span>`;
     if (plateEl) plateEl.textContent = `ทะเบียน: ${_currentRiderPayout.plate}`;
-    if (phoneEl) phoneEl.textContent = _currentRiderPayout.phone;
+    if (phoneEl) phoneEl.textContent = _currentRiderPayout.phone || "-";
     if (tripsEl) tripsEl.textContent = `เที่ยววิ่งสำเร็จ: ${_currentRiderPayout.trips} เที่ยว`;
     if (amountEl) amountEl.textContent = `฿${_currentRiderPayout.amount.toLocaleString()}`;
     if (breakdownEl) {
         breakdownEl.textContent = `ค่ารอบฐาน ฿${_currentRiderPayout.baseEarned.toLocaleString()} ${_currentRiderPayout.bonus > 0 ? `+ โบนัสพิเศษ ฿${_currentRiderPayout.bonus.toLocaleString()}` : ''} = ยอดโอนสุทธิ ฿${_currentRiderPayout.amount.toLocaleString()}`;
     }
-    if (ppNumEl) ppNumEl.textContent = _currentRiderPayout.phone;
-
-    // PromptPay QR Code Failover
-    if (qrImg) {
-        const payload = generatePromptPayPayload(_currentRiderPayout.cleanPhone, _currentRiderPayout.amount);
-        const encoded = encodeURIComponent(payload);
-        const promptpayIoUrl = _currentRiderPayout.amount > 0
-            ? `https://promptpay.io/${_currentRiderPayout.cleanPhone}/${_currentRiderPayout.amount}.png`
-            : `https://promptpay.io/${_currentRiderPayout.cleanPhone}.png`;
-        const quickChartUrl = `https://quickchart.io/qr?size=250&text=${encoded}`;
-        const qrServerUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encoded}`;
-
-        const fallbackUrls = [promptpayIoUrl, quickChartUrl, qrServerUrl];
-        let urlIndex = 0;
-        function loadNextQR() {
-            if (urlIndex < fallbackUrls.length) {
-                qrImg.src = fallbackUrls[urlIndex++];
-            }
-        }
-        qrImg.onerror = function() {
-            loadNextQR();
-        };
-        loadNextQR();
-    }
+    applyPayoutTargetToModal("rider-payout", payoutTarget, _currentRiderPayout.amount, "ไรเดอร์คนนี้");
 
     // Preload existing slip if already settled
     const targetDateKey = _activeReportDateKey || getReportDateKey(Date.now());
@@ -25599,6 +25644,7 @@ window.closeSingleRiderPayoutModal = closeSingleRiderPayoutModal;
 function copyRiderPayoutPromptPayNumber() {
     if (!_currentRiderPayout) return;
     const phoneNum = _currentRiderPayout.cleanPhone;
+    if (!phoneNum) { showToast("⚠️ ไม่มีเลขพร้อมเพย์ให้คัดลอก"); return; }
     if (navigator.clipboard) {
         navigator.clipboard.writeText(phoneNum).then(() => {
             showToast(`📋 คัดลอกหมายเลขพร้อมเพย์ ${phoneNum} เรียบร้อยแล้ว`);
@@ -27848,7 +27894,7 @@ function renderHubSettlement() {
             const stallItemsTotal = merchantStallItemsTotal(stall.items);
             const stallGP = Math.round(stallItemsTotal * (gpRate / 100));
             const stallPayout = Math.max(0, stallItemsTotal - stallGP);
-            const stallPhone = meta.phone || "089-123-4567";
+            const stallPhone = meta.phone || "";
             const stallOwner = meta.ownerName || "แม่ค้าประจำแผง";
             const stallNum = meta.stallNumber || "แผงตลาด";
             const stallId = stall.stallId || meta.stallId || stall.name;
