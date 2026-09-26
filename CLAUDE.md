@@ -61,6 +61,8 @@ Owner is a solo beginner with low vision: reply in Thai, short sentences, plain 
 
 **Owner phrase `แก้เสร็จแล้ว อัปขึ้นเว็บให้ทดสอบ`** = run `node -c app.js`, bump the `app.js?v=` tag, commit, push to `main`, then verify the live site (https://pisaen666.github.io/hsong/) by fetching it and comparing files with local. Do not open the live page in a browser pane: page start-up syncs to the live Firebase.
 
+**Open discussions (talk only, NOT approved for coding):** `DISCUSSION_OUTSIDE_MARKET_SHOPS.md` = supporting shops outside the market (5-10 km radius), started 2026-09-26. When the owner brings it up, read that file first, summarise where it stands, continue from its section 5, and record every owner decision in its section 6 (with date) and commit. Do not start coding it until the owner explicitly asks.
+
 ## 🧪 5. Safe Testing Recipe (สำคัญ)
 The production database is shared and currently open to everyone. Lesson from 2026-09-20: rider test data leaked into the live DB because the page was reloaded while seeded test data sat in localStorage (app start-up pushes riders from localStorage to the cloud).
 - Sandbox: copy `index.html app.js styles.css firebase-config.js server.js images/` and the `.png` files to a temp folder; replace the host `hsong-1f342-default-rtdb.asia-southeast1.firebasedatabase.app` with `127.0.0.1:9` in `app.js`, `firebase-config.js` and `index.html`; run `PORT=3001 node server.js`; open `http://localhost:3001` (it has its own localStorage). Confirm no real host is left with `grep -c firebasedatabase.app`.
