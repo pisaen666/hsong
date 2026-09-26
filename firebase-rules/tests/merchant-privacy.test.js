@@ -19,7 +19,7 @@ function fn(name) {
 
 console.log("== กฎ v6");
 for (const proj of ["hsong-test", "hsong-1f342"]) {
-    const r = JSON.parse(fs.readFileSync(path.join(__dirname, "..", proj + ".rules.v6.json"), "utf8")).rules;
+    const r = JSON.parse(fs.readFileSync(path.join(__dirname, "..", proj + ".rules.v7.json"), "utf8")).rules;
     ok(r.merchant_applications[".read"] !== true && /auth\.uid ===/.test(r.merchant_applications[".read"]), proj + ": ใบสมัครร้านอ่านได้เฉพาะเจ้าของ");
     ok(/'merchant'/.test(r.merchant_applications.$id[".read"]), proj + ": ร้านอ่านใบสมัครของตัวเองได้หลังล็อกอิน");
     ok(/'merchant'/.test(r.merchant_applications.$id[".write"]) && !/\|\| \(data\.exists\(\) && newData\.exists\(\) && newData\.child\('status'\)/.test(r.merchant_applications.$id[".write"]), proj + ": แก้ใบสมัครเดิมได้เฉพาะร้านนั้นเอง (คนทั่วไปไม่ได้แล้ว)");

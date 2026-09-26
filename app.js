@@ -750,6 +750,7 @@ function refreshOrderAccess() {
             if (isMerchant) watchMyExpressOrders();
             if ((isRider || isMerchant) && !_myStaffSession && !_anonAuthFailed) _onOrderListDenied({ code: "no-staff-session" });
         }
+        listenFleetSettingsFromCloud();   // ค่ารอบไรเดอร์จากฐานข้อมูลกลาง (ทุกเครื่อง)
         watchActiveOrderInCloud();
     });
 }
@@ -23395,10 +23396,87 @@ function loadRiderFleetSettings() {
     };
 }
 
+// ค่ารอบ/โบนัส/เพดาน COD เก็บที่ฐานข้อมูลกลาง app_settings/rider_fleet (กฎ v7: ทุกคนอ่าน เจ้าของเขียน) ทุกเครื่องเห็นตัวเลขเดียวกัน
+// localStorage "talathub_fleet_settings" เป็นแค่สำเนาในเครื่อง ให้ getRiderTripFee() อ่านได้ทันทีแบบไม่ต้องรอเน็ต
+const FLEET_SETTINGS_CLOUD_PATH = "app_settings/rider_fleet";
+const FLEET_SETTING_NUM_FIELDS = ["baseFee", "rainSurchargeAmount", "dailyBonusTrips", "dailyBonusAmount", "maxCodLimit"];
+
+function fleetSettingsForCloud(s) {
+    const out = { rainSurcharge: !!(s && s.rainSurcharge), updatedAt: Date.now() };
+    FLEET_SETTING_NUM_FIELDS.forEach(f => {
+        const v = Number(s && s[f]);
+        if (isFinite(v) && v >= 0) out[f] = v;
+    });
+    return out;
+}
+
+// รับค่าจากฐานข้อมูลกลางมาเก็บเป็นสำเนาในเครื่อง คืน true ถ้าตัวเลขเปลี่ยน
+function applyFleetSettingsFromCloud(v) {
+    if (!v || typeof v !== "object") return false;
+    const cur = loadRiderFleetSettings();
+    const next = Object.assign({}, cur);
+    if (typeof v.rainSurcharge === "boolean") next.rainSurcharge = v.rainSurcharge;
+    FLEET_SETTING_NUM_FIELDS.forEach(f => {
+        const n = Number(v[f]);
+        if (v[f] !== undefined && v[f] !== null && isFinite(n) && n >= 0) next[f] = n;
+    });
+    if (JSON.stringify(next) === JSON.stringify(cur)) return false;
+    try { localStorage.setItem("talathub_fleet_settings", JSON.stringify(next)); } catch (e) {}
+    return true;
+}
+
+async function pushFleetSettingsToCloud(settings) {
+    if (!isFirebaseReady() || !isOwnerSignedIn()) return false;
+    try {
+        await _withTimeout(db.ref(FLEET_SETTINGS_CLOUD_PATH).set(fleetSettingsForCloud(settings)), 8000);
+        return true;
+    } catch (e) {
+        console.warn("[fleet settings] cloud save failed:", e && e.message);
+        return false;
+    }
+}
+
+// ทุกเครื่องฟังค่าจากฐานข้อมูลกลาง (เรียกจาก refreshOrderAccess) ถ้ายังว่างและเป็นเจ้าของ ส่งค่าในเครื่องขึ้นไปเป็นค่าตั้งต้น
+let _fleetSettingsListening = false;
+let _fleetCloudEmpty = false;
+function listenFleetSettingsFromCloud() {
+    if (!isFirebaseReady()) return;
+    if (_fleetSettingsListening) {
+        // เปิดหน้าเว็บก่อนเจ้าของล็อกอิน แล้วฐานข้อมูลกลางยังว่าง: พอเจ้าของล็อกอินค่อยส่งค่าตั้งต้นขึ้นไป
+        if (_fleetCloudEmpty && isOwnerSignedIn()) pushFleetSettingsToCloud(loadRiderFleetSettings());
+        return;
+    }
+    _fleetSettingsListening = true;
+    db.ref(FLEET_SETTINGS_CLOUD_PATH).on("value", snap => {
+        const v = snap.val();
+        _fleetCloudEmpty = !v;
+        if (!v) {
+            if (isOwnerSignedIn()) pushFleetSettingsToCloud(loadRiderFleetSettings());
+            return;
+        }
+        if (applyFleetSettingsFromCloud(v)) {
+            const box = document.getElementById("admin-content-riders");
+            if (box && !box.classList.contains("hidden")) renderAdminRiders();
+        }
+    }, err => {
+        // กฎยังไม่มี app_settings (ก่อนขึ้น v7) = ใช้สำเนาในเครื่องไปก่อน; ครั้งหน้าที่สิทธิ์เปลี่ยนจะลองใหม่
+        _fleetSettingsListening = false;
+        console.warn("[fleet settings] cloud read denied:", err && err.code);
+    });
+}
+window.listenFleetSettingsFromCloud = listenFleetSettingsFromCloud;
+
+// บันทึกในเครื่อง + ส่งขึ้นฐานข้อมูลกลาง; คืน Promise<true> เมื่อขึ้นฐานข้อมูลกลางสำเร็จ
 function saveRiderFleetSettings(settings) {
     try {
         localStorage.setItem("talathub_fleet_settings", JSON.stringify(settings));
     } catch (e) {}
+    return pushFleetSettingsToCloud(settings);
+}
+
+function fleetSettingsSavedToast(okText, cloudOk) {
+    showToast(cloudOk ? okText + " (ทุกเครื่องเห็นตัวเลขนี้)"
+        : "⚠️ บันทึกในเครื่องนี้แล้ว แต่ส่งขึ้นฐานข้อมูลกลางไม่สำเร็จ เครื่องอื่นยังเห็นค่าเดิม (ต้องล็อกอินเจ้าของและต่อเน็ต)");
 }
 
 function renderAdminRiders() {
@@ -24435,30 +24513,41 @@ function setRiderStatus(riderId, newStatus) {
     setTimeout(() => initAdminRiderRadarMap(), 150);
 }
 
-function toggleRainSurcharge() {
+async function toggleRainSurcharge() {
     const s = loadRiderFleetSettings();
     s.rainSurcharge = !s.rainSurcharge;
-    saveRiderFleetSettings(s);
-    if (s.rainSurcharge) {
-        showToast(`🌧️ เปิดโหมดสภาพอากาศแย่ (+฿${s.rainSurchargeAmount} / เที่ยว) แล้ว!`);
-    } else {
-        showToast(`☀️ ปิดโหมดสภาพอากาศแย่ กลับสู่ค่ารอบปกติ`);
-    }
+    const pending = saveRiderFleetSettings(s);
     renderAdminRiders();
+    const cloudOk = await pending;
+    fleetSettingsSavedToast(s.rainSurcharge
+        ? `🌧️ เปิดโหมดสภาพอากาศแย่ (+฿${s.rainSurchargeAmount} / เที่ยว) แล้ว!`
+        : `☀️ ปิดโหมดสภาพอากาศแย่ กลับสู่ค่ารอบปกติ`, cloudOk);
 }
 
-function saveFleetSettingsFromUI(e) {
+async function saveFleetSettingsFromUI(e) {
     if (e && e.preventDefault) e.preventDefault();
     const s = loadRiderFleetSettings();
-    s.baseFee = Number(document.getElementById("fleet-cfg-base-fee")?.value || 40);
+    const baseFee = Number(document.getElementById("fleet-cfg-base-fee")?.value);
+    if (!isFinite(baseFee) || baseFee <= 0 || baseFee > 1000) {
+        showToast("⚠️ ค่ารอบมาตรฐานต้องเป็นตัวเลขมากกว่า 0 และไม่เกิน 1,000 บาท");
+        return;
+    }
+    s.baseFee = baseFee;
     s.rainSurchargeAmount = Number(document.getElementById("fleet-cfg-rain-bonus")?.value || 15);
     s.dailyBonusTrips = Number(document.getElementById("fleet-cfg-target-trips")?.value || 10);
     s.dailyBonusAmount = Number(document.getElementById("fleet-cfg-bonus-amount")?.value || 100);
     s.maxCodLimit = Number(document.getElementById("fleet-cfg-max-cod")?.value || 2500);
-    saveRiderFleetSettings(s);
-    showToast("💾 บันทึกการตั้งค่าค่ารอบและเกณฑ์ COD สำเร็จ!");
+    const cloudOk = await saveRiderFleetSettings(s);
+    fleetSettingsSavedToast("💾 บันทึกการตั้งค่าค่ารอบและเกณฑ์ COD สำเร็จ!", cloudOk);
     renderAdminRiders();
 }
+
+// ปุ่มในหน้า ตั้งค่าระบบ > ไรเดอร์ พาไปหน้าตั้งค่าค่ารอบที่ใช้จริง
+function goToRiderFleetSettings() {
+    switchAdminTab("riders");
+    switchAdminRiderSubTab("settings");
+}
+window.goToRiderFleetSettings = goToRiderFleetSettings;
 
 function settleRiderCod(riderId) {
     const riders = loadCommunityRiders();
@@ -26166,12 +26255,7 @@ function loadSavedHubSettings() {
         merchantOpen: "04:30",
         merchantClose: "17:30",
         payoutTime: "18:30",
-        expressBaseFee: 20,
-        riderBaseFare: 40,
-        riderExtraKm: 5,
-        riderRainBonus: 10,
-        maxCodLimit: 3000,
-        riderCutoff: "18:30"
+        expressBaseFee: 20
     };
     try {
         const saved = localStorage.getItem("hsong_hub_settings");
@@ -26214,12 +26298,6 @@ function saveAdminSettingsConfig(roleKey) {
         s.merchantClose = document.getElementById("cfg-merchant-close")?.value || "17:30";
         s.payoutTime = document.getElementById("cfg-payout-time")?.value || "18:30";
         s.expressBaseFee = Number(document.getElementById("cfg-express-fee")?.value || 20);
-    } else if (roleKey === "rider") {
-        s.riderBaseFare = Number(document.getElementById("cfg-rider-base-fare")?.value || 40);
-        s.riderExtraKm = Number(document.getElementById("cfg-rider-extra-km")?.value || 5);
-        s.riderRainBonus = Number(document.getElementById("cfg-rider-rain-bonus")?.value || 10);
-        s.maxCodLimit = Number(document.getElementById("cfg-max-cod")?.value || 3000);
-        s.riderCutoff = document.getElementById("cfg-rider-cutoff")?.value || "18:30";
     }
     try {
         localStorage.setItem("hsong_hub_settings", JSON.stringify(s));
@@ -26512,58 +26590,19 @@ function renderAdminSettings() {
             </div>
         `;
     } else if (_activeSettingsSubTab === "rider") {
+        // ค่ารอบ / โบนัส / เพดานเงินสด COD ของไรเดอร์ ตั้งได้ที่เดียว: แอดมิน > ไรเดอร์ > ตั้งค่า (loadRiderFleetSettings, เก็บที่ฐานข้อมูลกลาง)
+        // เดิมหน้านี้มีช่องค่ารอบ/COD ของตัวเอง (hsong_hub_settings.riderBaseFare ฯลฯ) ที่ไม่มีโค้ดไหนอ่าน — ลบออกตามที่เจ้าของสั่ง 2026-09-26
         subTabContentHtml = `
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- Card 1: โครงสร้างค่ารอบ -->
-                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
-                    <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
-                        <span class="material-symbols-outlined text-emerald-600">sports_motorsports</span>
-                        <span>1. โครงสร้างค่ารอบ & รายได้ไรเดอร์</span>
-                    </h4>
-                    <div class="space-y-3 text-xs">
-                        <div>
-                            <label class="font-bold text-slate-700 block mb-1">ค่ารอบมาตรฐานต่อเที่ยว (บาท):</label>
-                            <input type="number" id="cfg-rider-base-fare" value="${s.riderBaseFare}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-emerald-700 bg-slate-50">
-                            <span class="text-[11px] text-slate-400">ระยะทางไม่เกิน 3.0 กิโลเมตร</span>
-                        </div>
-                        <div>
-                            <label class="font-bold text-slate-700 block mb-1">ค่าระยะทางส่วนเกิน (บาท / กิโลเมตร):</label>
-                            <input type="number" id="cfg-rider-extra-km" value="${s.riderExtraKm}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
-                            <span class="text-[11px] text-slate-400">คิดเพิ่มเมื่อเกิน 3 กิโลเมตร</span>
-                        </div>
-                        <div>
-                            <label class="font-bold text-slate-700 block mb-1">โบนัสรอบพิเศษ (ฝนตก / เร่งด่วน) (บาท):</label>
-                            <input type="number" id="cfg-rider-rain-bonus" value="${s.riderRainBonus}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Card 2: เพดานเงินสด COD & การเคลียร์เงิน -->
-                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
-                    <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
-                        <span class="material-symbols-outlined text-amber-600">account_balance_wallet</span>
-                        <span>2. เพดานเงินสด COD & การเคลียร์เงิน</span>
-                    </h4>
-                    <div class="space-y-3 text-xs">
-                        <div>
-                            <label class="font-bold text-slate-700 block mb-1">เพดานวงเงินสด COD สูงสุดที่ไรเดอร์ถือได้ (บาท):</label>
-                            <input type="number" id="cfg-max-cod" value="${s.maxCodLimit}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-amber-700 bg-slate-50">
-                            <span class="text-[11px] text-slate-400">หากเกินต้องเข้าเคลียร์เงินสดที่ฮับก่อนรับงานถัดไป</span>
-                        </div>
-                        <div>
-                            <label class="font-bold text-slate-700 block mb-1">เวลาสิ้นสุดการส่งเงินสดประจำวัน:</label>
-                            <input type="text" id="cfg-rider-cutoff" value="${s.riderCutoff}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-slate-50">
-                            <span class="text-[11px] text-slate-400">ส่งมอบเงินสดและเช็คยอดที่ฮับก่อน 18:30 น.</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="md:col-span-2 flex justify-end">
-                    <button onclick="saveAdminSettingsConfig('rider')" class="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
-                        <span class="material-symbols-outlined text-sm">save</span>
-                        <span>บันทึกค่าการตั้งค่าไรเดอร์</span>
-                    </button>
-                </div>
+            <div class="bg-white p-4 sm:p-5 rounded-2xl border-2 border-slate-300 shadow-sm space-y-3">
+                <h4 class="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-emerald-600">sports_motorsports</span>
+                    <span>ค่ารอบและเงินสด COD ของไรเดอร์</span>
+                </h4>
+                <p class="text-xs text-slate-600 leading-relaxed">ตั้งค่ารอบมาตรฐาน โบนัสฝนตก โบนัสเป้าหมาย และเพดานเงินสด COD ได้ที่หน้า <strong>ไรเดอร์ &gt; ตั้งค่า</strong> ที่เดียว ตัวเลขที่บันทึกที่นั่นทุกเครื่องเห็นเหมือนกัน</p>
+                <button onclick="goToRiderFleetSettings()" class="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                    <span>ไปหน้าตั้งค่าค่ารอบไรเดอร์</span>
+                </button>
             </div>
         `;
     }

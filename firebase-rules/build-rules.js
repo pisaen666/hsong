@@ -1,7 +1,11 @@
-// สร้างไฟล์กฎ Firebase รุ่น v6 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
+// สร้างไฟล์กฎ Firebase รุ่น v7 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
 //   node firebase-rules/build-rules.js
-// ผลลัพธ์: hsong-test.rules.v6.json และ hsong-1f342.rules.v6.json
-//   (ไฟล์ .rules.v5.json / v4 / v3 / v2 = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+// ผลลัพธ์: hsong-test.rules.v7.json และ hsong-1f342.rules.v7.json
+//   (ไฟล์ .rules.v6.json / v5 / v4 / v3 / v2 = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+//
+// v7 (2026-09-26) — ค่ารอบไรเดอร์เก็บที่ฐานข้อมูลกลาง (เจ้าของสั่ง: ทุกเครื่องต้องเห็นตัวเลขเดียวกัน):
+//   app_settings/rider_fleet : { baseFee, rainSurcharge, rainSurchargeAmount, dailyBonusTrips, dailyBonusAmount, maxCodLimit, updatedAt }
+//                              ทุกคนอ่านได้ (ไรเดอร์ต้องเห็นค่ารอบ) เขียนได้เฉพาะเจ้าของ; ส่วนอื่นเหมือน v6 ทุกอย่าง
 //
 // v6 (2026-09-25) — ซ่อนข้อมูลส่วนตัวร้านค้า (เจ้าของเลือก: เบอร์หลักเห็นได้เฉพาะไรเดอร์ที่ล็อกอินแล้ว, การ์ดร้านแสดงรูป+ชื่อเล่น):
 //   merchant_applications : อ่านได้เฉพาะเจ้าของ + ร้านนั้นเองหลังล็อกอิน; คนทั่วไปสร้างใบสมัคร pending ได้แต่แก้ของเดิมไม่ได้แล้ว
@@ -186,6 +190,23 @@ function build(uids) {
 
             daily_reports: { ".read": true, ".write": OWNER },
 
+            // v7: ค่ารอบ/โบนัส/เพดาน COD ของไรเดอร์ (loadRiderFleetSettings) — ทุกเครื่องอ่านได้ เจ้าของแก้ได้คนเดียว
+            app_settings: {
+                rider_fleet: {
+                    ".read": true,
+                    ".write": OWNER,
+                    ".validate": "newData.hasChildren(['baseFee'])",
+                    baseFee: { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 1000" },
+                    rainSurcharge: { ".validate": "newData.isBoolean()" },
+                    rainSurchargeAmount: { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000" },
+                    dailyBonusTrips: { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000" },
+                    dailyBonusAmount: { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000" },
+                    maxCodLimit: { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000" },
+                    updatedAt: { ".validate": "newData.isNumber()" },
+                    "$other": { ".validate": false }
+                }
+            },
+
             rider_applications: {
                 ".read": OWNER,
                 "$id": {
@@ -296,7 +317,7 @@ function build(uids) {
 }
 
 Object.entries(PROJECTS).forEach(([project, uids]) => {
-    const file = path.join(__dirname, project + ".rules.v6.json");
+    const file = path.join(__dirname, project + ".rules.v7.json");
     fs.writeFileSync(file, JSON.stringify(build(uids), null, 2) + "\n");
     console.log("wrote", path.basename(file));
 });
