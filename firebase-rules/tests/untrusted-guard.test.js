@@ -7,7 +7,7 @@
 const fs = require("fs");
 const vm = require("vm");
 const path = require("path");
-const src = fs.readFileSync(path.join(__dirname, "..", "..", "app.js"), "utf8");
+const src = fs.readFileSync(path.join(__dirname, "..", "..", "app.js"), "utf8").replace(/\r\n/g, "\n");   // เครื่อง Windows (autocrlf) ได้ไฟล์ CRLF
 
 function between(a, b) {
     const s = src.indexOf(a); const e = src.indexOf(b, s);

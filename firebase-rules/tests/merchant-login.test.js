@@ -7,7 +7,7 @@ const fs = require("fs");
 const vm = require("vm");
 const path = require("path");
 const { webcrypto } = require("crypto");
-const src = fs.readFileSync(path.join(__dirname, "..", "..", "app.js"), "utf8");
+const src = fs.readFileSync(path.join(__dirname, "..", "..", "app.js"), "utf8").replace(/\r\n/g, "\n");   // เครื่อง Windows (autocrlf) ได้ไฟล์ CRLF
 
 function fn(name, isAsync) {
     const start = src.indexOf((isAsync ? "async function " : "function ") + name + "(");
@@ -56,6 +56,7 @@ vm.createContext(ctx);
 vm.runInContext([
     between("const RIDER_SECRET_ALPHABET", "window.riderSecretLogin = riderSecretLogin;"),
     between("// =================================================================\n// รหัสผ่านเข้าระบบแผงค้า", "window.merchantSecretLogin = merchantSecretLogin;"),
+    fn("isRealMerchantPhoto"), fn("getMissingMerchantVerificationItems"),   // ด่านตรวจรูปก่อนอนุมัติ (ทดสอบละเอียดใน merchant-doc-verify.test.js)
     "async " + fn("approveMerchantApplication", true).replace(/^async /, ""),
     "async " + fn("resetMerchantLoginSecret", true).replace(/^async /, ""),
     fn("loginAsMerchantStall"), fn("reopenMyMerchantStall")
@@ -66,7 +67,7 @@ let fail = 0;
 const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) fail++; };
 
 (async () => {
-    const mkApp = (id, status, extra) => Object.assign({ id, status, accessCode: "123456", stallData: { stallId: id, stallName: "ร้านทดสอบ", stallNumber: "A12", phone: "0812345678", lineId: "line1" } }, extra || {});
+    const mkApp = (id, status, extra) => Object.assign({ id, status, accessCode: "123456", stallData: { stallId: id, stallName: "ร้านทดสอบ", stallNumber: "A12", phone: "0812345678", lineId: "line1", ownerImage: "data:image/jpeg;base64,AAAA", stallImage: "data:image/jpeg;base64,BBBB" } }, extra || {});
 
     console.log("== อนุมัติ: สร้างรหัสผ่านลับ เก็บเฉพาะ hash");
     apps = [mkApp("APP-SHOP-1111", "pending")];

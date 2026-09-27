@@ -5310,17 +5310,8 @@
                 </div>
                 <div class="text-[11px] text-slate-500 flex items-center justify-between">
                     <span>เจ้าของ: <strong class="text-slate-700" id="payout-owner-name">เฮียส่ง</strong></span>
-                    <span class="text-emerald-700 font-bold" id="payout-phone">089-123-4567</span>
+                    <span class="text-emerald-700 font-bold" id="payout-phone">-</span>
                 </div>
-            </div>
-
-            <!-- ร้านนี้ไม่มีเลขพร้อมเพย์จริงในระบบ: เตือนแทนที่จะแสดง/สแกนเลขตัวอย่าง -->
-            <div id="payout-no-number-warning" class="hidden bg-rose-50 border-2 border-rose-400 rounded-2xl p-3 space-y-1">
-                <div class="font-extrabold text-rose-800 text-xs flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-rose-600 text-base">warning</span>
-                    <span>ร้านนี้ยังไม่มีเลขพร้อมเพย์ในระบบ</span>
-                </div>
-                <div class="text-[11px] text-rose-700">กรุณาติดต่อร้านเพื่อขอเลขพร้อมเพย์ก่อนโอนเงิน ห้ามโอนไปที่เลขตัวอย่าง 089-123-4567 เด็ดขาด</div>
             </div>
 
             <!-- Payout Amount Display -->
@@ -5328,8 +5319,11 @@
                 <div class="text-[11px] text-emerald-800 font-bold">ยอดเงินที่ต้องโอนสุทธิให้แผงค้านี้:</div>
                 <div class="text-2xl font-black text-emerald-950" id="payout-amount-text">฿1,420</div>
                 <div class="text-[10px] text-slate-600 font-medium" id="payout-gp-breakdown-text">ยอดขาย ฿1,420 (หัก GP 10% ฿142)</div>
-                <div class="text-[9px] text-slate-400">สแกน QR ด้วยแอปธนาคารใดก็ได้ เพื่อโอนตรงเข้าบัญชีร้านค้า</div>
+                <div id="payout-scan-hint" class="text-[9px] text-slate-400">สแกน QR ด้วยแอปธนาคารใดก็ได้ เพื่อโอนตรงเข้าบัญชีร้านค้า</div>
             </div>
+
+            <!-- ไม่มีเลขพร้อมเพย์ / ใช้บัญชีธนาคาร: กล่องนี้แทน QR (applyPayoutTargetToModal) -->
+            <div id="payout-target-warning" class="hidden"></div>
 
             <!-- PromptPay QR Code Image -->
             <div id="payout-qr-section" class="text-center space-y-2 py-1">
@@ -5343,7 +5337,7 @@
                 </div>
                 <div class="flex items-center justify-center gap-1.5 text-[11px]">
                     <span class="text-slate-500">หมายเลขพร้อมเพย์: <strong id="payout-promptpay-number"
-                            class="font-mono text-slate-800">089-123-4567</strong></span>
+                            class="font-mono text-slate-800"></strong></span>
                     <button type="button" onclick="copyPayoutPromptPayNumber()"
                         class="text-emerald-700 hover:text-emerald-800 font-bold hover:underline flex items-center gap-0.5 cursor-pointer">
                         <span class="material-symbols-outlined text-xs">content_copy</span>
@@ -6328,17 +6322,8 @@
                 </div>
                 <div class="text-[11px] text-slate-500 flex items-center justify-between">
                     <span id="rider-payout-trips-text">เที่ยววิ่งสำเร็จ: 0 เที่ยว</span>
-                    <span class="text-emerald-700 font-bold" id="rider-payout-phone">089-123-4567</span>
+                    <span class="text-emerald-700 font-bold" id="rider-payout-phone">-</span>
                 </div>
-            </div>
-
-            <!-- ไรเดอร์คนนี้ไม่มีเลขพร้อมเพย์จริงในระบบ: เตือนแทนที่จะแสดง/สแกนเลขตัวอย่าง -->
-            <div id="rider-payout-no-number-warning" class="hidden bg-rose-50 border-2 border-rose-400 rounded-2xl p-3 space-y-1">
-                <div class="font-extrabold text-rose-800 text-xs flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-rose-600 text-base">warning</span>
-                    <span>ไรเดอร์คนนี้ยังไม่มีเลขพร้อมเพย์ในระบบ</span>
-                </div>
-                <div class="text-[11px] text-rose-700">กรุณาติดต่อไรเดอร์เพื่อขอเลขพร้อมเพย์ก่อนโอนเงิน ห้ามโอนไปที่เลขตัวอย่าง 089-123-4567 เด็ดขาด</div>
             </div>
 
             <!-- Payout Amount Display -->
@@ -6346,8 +6331,11 @@
                 <div class="text-[11px] text-emerald-800 font-bold">ยอดเงินค่ารอบสุทธิที่ต้องโอนให้ไรเดอร์:</div>
                 <div class="text-2xl font-black text-emerald-950" id="rider-payout-amount-text">฿0</div>
                 <div class="text-[10px] text-slate-600 font-medium" id="rider-payout-breakdown-text">ค่ารอบฐาน + โบนัสพิเศษ</div>
-                <div class="text-[9px] text-slate-400">สแกน QR ด้วยแอปธนาคารใดก็ได้ เพื่อโอนตรงเข้าบัญชีพร้อมเพย์ไรเดอร์</div>
+                <div id="rider-payout-scan-hint" class="text-[9px] text-slate-400">สแกน QR ด้วยแอปธนาคารใดก็ได้ เพื่อโอนตรงเข้าบัญชีพร้อมเพย์ไรเดอร์</div>
             </div>
+
+            <!-- ไม่มีเลขพร้อมเพย์ / ใช้บัญชีธนาคาร: กล่องนี้แทน QR (applyPayoutTargetToModal) -->
+            <div id="rider-payout-target-warning" class="hidden"></div>
 
             <!-- PromptPay QR Code Image -->
             <div id="rider-payout-qr-section" class="text-center space-y-2 py-1">
@@ -6361,7 +6349,7 @@
                 </div>
                 <div class="flex items-center justify-center gap-1.5 text-[11px]">
                     <span class="text-slate-500">หมายเลขพร้อมเพย์: <strong id="rider-payout-promptpay-number"
-                            class="font-mono text-slate-800">089-123-4567</strong></span>
+                            class="font-mono text-slate-800"></strong></span>
                     <button type="button" onclick="copyRiderPayoutPromptPayNumber()"
                         class="text-emerald-700 hover:text-emerald-800 font-bold hover:underline flex items-center gap-0.5 cursor-pointer">
                         <span class="material-symbols-outlined text-xs">content_copy</span>
@@ -7408,7 +7396,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.65_payout_no_number_warning"></script>
+    <script src="app.js?v=10.67b_roster_no_payout_contrast"></script>
 </body>
 
 </html>
