@@ -140,10 +140,22 @@ body {
     transform: translate(-50%, 24px);
     transition: opacity 0.25s ease, transform 0.25s ease;
     pointer-events: none;
+    /* left:50% ทำให้กล่องหดเหลือครึ่งจอ: ให้กว้างตามข้อความ แต่ไม่เกิน 92% ของจอ / 420px */
+    width: max-content;
+    max-width: min(92vw, 420px);
 }
 #toast-message.show {
     opacity: 1;
     transform: translate(-50%, 10px);
+}
+/* ข้อความสำคัญ (ผลการบันทึก / ทำไม่สำเร็จ): ค้างจนกดปิด ตัวใหญ่ขึ้น มีกรอบเหลือง กดปุ่มปิดได้ */
+#toast-message.show.toast-sticky {
+    pointer-events: auto;
+    font-size: 20px;
+    line-height: 1.5;
+    border: 3px solid #fbbf24;
+    padding: 16px 20px;
+    bottom: 20px;
 }
 
 /* Delivery Slot Active State */

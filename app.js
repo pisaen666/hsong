@@ -10862,10 +10862,6 @@ function printA4RiderRulesSheet() {
                 <div style="font-size: 16px; font-weight: bold; color: #0284c7;">+฿${s.rainSurchargeAmount || 15} / เที่ยว</div>
             </div>
             <div class="summary-box">
-                <div>โบนัสเป้าหมายความขยัน:</div>
-                <div style="font-size: 16px; font-weight: bold; color: #d97706;">วิ่งครบ ${s.dailyBonusTrips || 10} เที่ยว (+฿${s.dailyBonusAmount || 100})</div>
-            </div>
-            <div class="summary-box">
                 <div>เพดานเงินสด COD ในมือ:</div>
                 <div style="font-size: 16px; font-weight: bold; color: #b91c1c;">ไม่เกิน ฿${(s.maxCodLimit || 2500).toLocaleString()}</div>
             </div>
@@ -15069,7 +15065,7 @@ function submitOrderRating() {
 
     // Open Celebration & Reward Modal
     openReviewRewardModal();
-    showToast(`🎉 รีวิวสำเร็จ! ได้รับ +20 แต้มสะสม และคูปอง FRESH20 แล้ว`);
+    showToast(`🎉 รีวิวสำเร็จ! ได้รับ +20 แต้มสะสม`);
 }
 
 function openReviewRewardModal() {
@@ -15240,7 +15236,7 @@ function redeemRewardItem(rewardName, cost) {
         bar.style.width = `${pct}%`;
     }
 
-    showToast(`🎁 แลกรับ "${rewardName}" สำเร็จ! คูปองถูกบันทึกในกระเป๋าของคุณแล้ว 🎉`);
+    showToast(`🎁 แลกรับ "${rewardName}" สำเร็จ!`);
 }
 
 function copyCouponCode(code) {
@@ -18804,19 +18800,41 @@ window.renderHubSettlement = renderHubSettlement;
 // TOAST NOTIFICATIONS
 // ==========================================
 let toastTimeout;
-function showToast(text) {
+// ข้อความเด้ง (เจ้าของสายตาไม่ดี อ่านไม่ทัน — ขอแก้ 2026-09-28):
+// - ข้อความทั่วไปขึ้น 6 วินาที (เดิม 2.4 วินาที)
+// - ข้อความสำคัญ (ผลการบันทึก / ทำไม่สำเร็จ) ค้างไว้จนกดปุ่ม "ปิด" ตัวหนังสือใหญ่ขึ้น
+const TOAST_SHOW_MS = 6000;
+function isImportantToastText(text) {
+    return /บันทึก|ไม่สำเร็จ|ล้มเหลว/.test(String(text || ""));
+}
+
+function showToast(text, opts) {
     const toast = document.getElementById("toast-message");
     const toastText = document.getElementById("toast-text");
     if (!toast || !toastText) return;
 
+    const sticky = !!(opts && opts.sticky) || isImportantToastText(text);
     toastText.textContent = text;
+    toast.classList.toggle("toast-sticky", sticky);
+    const closeBtn = document.getElementById("toast-close");
+    if (closeBtn) closeBtn.classList.toggle("hidden", !sticky);
     toast.classList.add("show");
 
     clearTimeout(toastTimeout);
-    toastTimeout = setTimeout(() => {
-        toast.classList.remove("show");
-    }, 2400);
+    if (!sticky) {
+        toastTimeout = setTimeout(() => {
+            toast.classList.remove("show");
+        }, TOAST_SHOW_MS);
+    }
 }
+
+function closeToast() {
+    clearTimeout(toastTimeout);
+    const toast = document.getElementById("toast-message");
+    if (toast) toast.classList.remove("show");
+}
+window.showToast = showToast;
+window.closeToast = closeToast;
 
 // ==========================================
 // MERCHANT PARTNER ONBOARDING & SETUP PORTAL
@@ -23830,9 +23848,7 @@ function renderAdminRiders() {
         if (settings.rainSurcharge && trips > 0) {
             bonus += trips * (settings.rainSurchargeAmount || 15);
         }
-        if (trips >= (settings.dailyBonusTrips || 10)) {
-            bonus += (settings.dailyBonusAmount || 100);
-        }
+        // ไม่มีโบนัสครบเป้าเที่ยวแล้ว (เจ้าของสั่งลบ 2026-09-28)
         const totalPayout = (sRec.amount !== undefined) ? sRec.amount : (feeEarned + bonus);
 
         totalCompletedTrips += trips;
@@ -24555,7 +24571,7 @@ function renderAdminRiders() {
                             <span class="material-symbols-outlined text-purple-600 text-xl">tune</span>
                             <span>ตั้งค่าโครงสร้างค่ารอบและระเบียบปฏิบัติ (Rates & Policies)</span>
                         </h4>
-                        <p class="text-xs text-slate-500 mt-0.5">กำหนดค่ารอบมาตรฐาน เบี้ยเลี้ยงสู้ฝน โบนัสเป้าหมาย และเพดานเงินสด COD</p>
+                        <p class="text-xs text-slate-500 mt-0.5">กำหนดค่ารอบเริ่มต้น เบี้ยเลี้ยงสู้ฝน และเพดานเงินสด COD</p>
                     </div>
                     <button onclick="printA4RiderRulesSheet()" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all self-start sm:self-auto cursor-pointer" title="พิมพ์ระเบียบปฏิบัติและกติกาค่ารอบกระดาษ A4 ติดบอร์ดประชาสัมพันธ์">
                         <span class="material-symbols-outlined text-sm font-bold text-amber-400">print</span>
@@ -24604,18 +24620,7 @@ function renderAdminRiders() {
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">เป้าหมายเที่ยววิ่ง (เที่ยว/วัน):</label>
-                                <input type="number" id="fleet-cfg-target-trips" value="${settings.dailyBonusTrips || 10}" min="1" max="50" class="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
-                                <span class="text-[10px] text-slate-400 mt-1 block">จำนวนเที่ยวขั้นต่ำเพื่อรับโบนัสขยัน</span>
-                            </div>
-                            <div>
-                                <label class="font-bold text-slate-700 block mb-1">ยอดเงินโบนัสพิเศษ (฿):</label>
-                                <input type="number" id="fleet-cfg-bonus-amount" value="${settings.dailyBonusAmount || 100}" min="0" max="500" class="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
-                                <span class="text-[10px] text-slate-400 mt-1 block">เงินรางวัลเพิ่มพิเศษเมื่อทำยอดถึงเป้าหมาย</span>
-                            </div>
-                        </div>
+                        <!-- โบนัสครบเป้าเที่ยว (เช่น 10 เที่ยว +100 บาท) ลบแล้ว 2026-09-28: เจ้าของสั่ง เพราะทำให้กำไรต่ำกว่า 10% -->
 
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">เพดานเงินสด COD สูงสุดในมือ (฿):</label>
@@ -24838,8 +24843,6 @@ async function saveFleetSettingsFromUI(e) {
     }
     s.baseFee = baseFee;
     s.rainSurchargeAmount = Number(document.getElementById("fleet-cfg-rain-bonus")?.value || 15);
-    s.dailyBonusTrips = Number(document.getElementById("fleet-cfg-target-trips")?.value || 10);
-    s.dailyBonusAmount = Number(document.getElementById("fleet-cfg-bonus-amount")?.value || 100);
     s.maxCodLimit = Number(document.getElementById("fleet-cfg-max-cod")?.value || 2500);
     const cloudOk = await saveRiderFleetSettings(s);
     fleetSettingsSavedToast("💾 บันทึกการตั้งค่าค่ารอบและเกณฑ์ COD สำเร็จ!", cloudOk);
@@ -26189,9 +26192,7 @@ function renderFleetPayoutModal() {
         if (settings.rainSurcharge && trips > 0) {
             bonus += trips * (settings.rainSurchargeAmount || 15);
         }
-        if (trips >= (settings.dailyBonusTrips || 10)) {
-            bonus += (settings.dailyBonusAmount || 100);
-        }
+        // ไม่มีโบนัสครบเป้าเที่ยวแล้ว (เจ้าของสั่งลบ 2026-09-28)
         const totalPayout = baseEarned + bonus;
 
         grandTotalTrips += trips;
@@ -26334,7 +26335,7 @@ function printFleetPayoutSlip() {
         const base = rep ? (rep.riderFeeEarned || 0) : trips * getRiderTripFee();
         let bonus = 0;
         if (settings.rainSurcharge && trips > 0) bonus += trips * settings.rainSurchargeAmount;
-        if (trips >= settings.dailyBonusTrips) bonus += settings.dailyBonusAmount;
+        // ไม่มีโบนัสครบเป้าเที่ยวแล้ว (เจ้าของสั่งลบ 2026-09-28)
         const net = base + bonus;
 
         grandTotalTrips += trips;
@@ -26711,13 +26712,8 @@ function renderAdminSettings() {
                             <label class="font-bold text-slate-700 block mb-1">ความถี่ของรอบจัดส่ง:</label>
                             <input type="text" value="ส่งออกทุก 30 นาที (รอบเช้า 06:00-11:30 น. / รอบบ่าย 12:00-18:30 น.)" class="w-full p-2.5 rounded-xl border border-slate-200 font-medium text-slate-600 bg-slate-100" readonly>
                         </div>
-                        <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
-                            <span class="font-bold text-emerald-900">🎟️ โปรโมชั่นคูปองต้อนรับลูกค้าใหม่:</span>
-                            <div class="flex items-center gap-2 mt-1">
-                                <input type="text" id="cfg-coupon-code" value="${escapeHtml(s.couponCode)}" class="w-1/2 p-2 rounded-lg border border-emerald-300 font-mono font-bold text-emerald-800 text-xs">
-                                <span class="text-xs">ลด ฿</span>
-                                <input type="number" id="cfg-coupon-discount" value="${s.couponDiscount}" class="w-20 p-2 rounded-lg border border-emerald-300 font-bold text-emerald-800 text-xs">
-                            </div>
+                        <div class="p-3 bg-slate-100 border-2 border-slate-300 rounded-xl">
+                            <span class="font-bold text-slate-800">🎟️ คูปองส่วนลด: ปิดอยู่ (เจ้าของสั่งปิด 28 ก.ย. 2026)</span>
                         </div>
                     </div>
                 </div>
@@ -26880,7 +26876,7 @@ function renderAdminSettings() {
                     <span class="material-symbols-outlined text-emerald-600">sports_motorsports</span>
                     <span>ค่ารอบและเงินสด COD ของไรเดอร์</span>
                 </h4>
-                <p class="text-xs text-slate-600 leading-relaxed">ตั้งค่ารอบมาตรฐาน โบนัสฝนตก โบนัสเป้าหมาย และเพดานเงินสด COD ได้ที่หน้า <strong>ไรเดอร์ &gt; ตั้งค่า</strong> ที่เดียว ตัวเลขที่บันทึกที่นั่นทุกเครื่องเห็นเหมือนกัน</p>
+                <p class="text-xs text-slate-600 leading-relaxed">ตั้งค่ารอบเริ่มต้น โบนัสฝนตก และเพดานเงินสด COD ได้ที่หน้า <strong>ไรเดอร์ &gt; ตั้งค่า</strong> ที่เดียว ตัวเลขที่บันทึกที่นั่นทุกเครื่องเห็นเหมือนกัน</p>
                 <button onclick="goToRiderFleetSettings()" class="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all">
                     <span class="material-symbols-outlined text-sm">arrow_forward</span>
                     <span>ไปหน้าตั้งค่าค่ารอบไรเดอร์</span>
@@ -29621,7 +29617,6 @@ function updateCustomerLoyaltyBanner() {
                         </div>
                         <div class="text-[11px] font-extrabold text-slate-900 flex items-center gap-1.5 mt-0.5 flex-wrap">
                             <span>แต้มสะสม: <strong class="text-emerald-950 font-black text-xs" id="loyalty-banner-points">${pts} แต้ม</strong></span>
-                            <span class="bg-emerald-900 text-emerald-100 text-[10px] px-1.5 py-0.2 rounded font-bold">🎟️ มีคูปองส่วนลด</span>
                         </div>
                     </div>
                 </div>
@@ -29641,7 +29636,6 @@ function updateCustomerLoyaltyBanner() {
                     <div>
                         <div class="flex items-center gap-1.5">
                             <span class="font-black text-xs text-amber-300">ยินดีต้อนรับสู่เฮียส่ง!</span>
-                            <span class="text-[9px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-full">รับ ฿20 ฟรี</span>
                         </div>
                         <div class="text-[11px] text-emerald-100 mt-0.5">
                             <span>แตะเพื่อ <strong>เข้าสู่ระบบ / สมัครสมาชิก</strong> สะสมแต้มรับของรางวัล</span>
@@ -31917,7 +31911,8 @@ function goToHeroBannerSlide(index) {
     const dots = document.querySelectorAll(".hero-dot");
     if (!track) return;
 
-    _currentHeroSlide = (index + 3) % 3;
+    const heroCount = Math.max(1, track.children.length);   // นับป้ายจริง (ลบป้ายคูปองออกแล้ว 2026-09-28)
+    _currentHeroSlide = ((index % heroCount) + heroCount) % heroCount;
     track.style.transform = `translateX(-${_currentHeroSlide * 100}%)`;
 
     dots.forEach((dot, idx) => {
@@ -31971,13 +31966,6 @@ function handleHeroBannerClick(index) {
             catEl.scrollIntoView({ behavior: "smooth", block: "center" });
         }
         showToast("⚡ สั่งของสดตอนนี้ การันตีสดใหม่ส่งไวใน 30 นาที!");
-    } else if (index === 2) {
-        // Slide 3: สิทธิพิเศษลูกค้าใหม่ รับส่วนลด & สะสมแต้มตลาดฮับ
-        const loyaltyBanner = document.getElementById("customer-loyalty-banner");
-        if (loyaltyBanner) {
-            loyaltyBanner.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-        showToast("🎁 สิทธิพิเศษลูกค้าใหม่ รับส่วนลด ฿20 และสะสมแต้มทุกการสั่งซื้อ!");
     }
 }
 
@@ -32145,7 +32133,9 @@ function goToMarketHeroSlide(index) {
     const dots = document.querySelectorAll("#market-hero-dots .market-hero-dot");
     if (!track) return;
 
-    _currentMarketHeroSlide = ((index % 3) + 3) % 3;
+    const marketTrack = document.getElementById("market-hero-track");
+    const marketCount = Math.max(1, marketTrack ? marketTrack.children.length : 1);   // นับป้ายจริง
+    _currentMarketHeroSlide = ((index % marketCount) + marketCount) % marketCount;
     track.style.transform = `translateX(-${_currentMarketHeroSlide * 100}%)`;
 
     if (dots && dots.length > 0) {
@@ -32201,13 +32191,6 @@ function handleMarketHeroClick(index) {
             catEl.scrollIntoView({ behavior: "smooth", block: "center" });
         }
         showToast("⚡ สั่งของสดตอนนี้ การันตีสดใหม่ส่งไวใน 30 นาที!");
-    } else if (index === 2) {
-        // Slide 3: สิทธิพิเศษลูกค้าใหม่ รับส่วนลด & สะสมแต้มตลาดฮับ
-        const loyaltyBanner = document.getElementById("customer-loyalty-banner");
-        if (loyaltyBanner) {
-            loyaltyBanner.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-        showToast("🎁 สิทธิพิเศษลูกค้าใหม่ รับส่วนลด ฿20 และสะสมแต้มทุกการสั่งซื้อ!");
     }
 }
 
