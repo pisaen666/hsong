@@ -12828,7 +12828,23 @@ function filterModalStallCategory(catName) {
 function renderStallCatalogModal() {
     if (!currentModalStallId) return;
 
-    const catalog = getStallCatalogData(currentModalStallId);
+    // 🐛 แก้บั๊ก: หน้าต่างนี้ (เปิดจาก QR หน้าร้าน / ปุ่ม "ดูร้าน" ต่าง ๆ) เดิมไม่เคยแสดง "สินค้าด่วน 10 รายการ" ที่ร้านกรอกตอนสมัครเลย
+    // เพราะ getStallCatalogData() ตั้งใจตัดสินค้าไฮไลท์ออก (กันซ้ำกับที่แสดงในหน้าตลาดหลัก) แต่หน้าต่างนี้ไม่มีที่อื่นแสดงสินค้าไฮไลท์ให้แทน
+    const stallForHighlight = MARKET_DATA.find(s => s.stallId === currentModalStallId) || ALL_100_STALLS.find(s => s.stallId === currentModalStallId);
+    const highlightProducts = (stallForHighlight && Array.isArray(stallForHighlight.products))
+        ? stallForHighlight.products.filter(p => p && p.name && String(p.name).trim())
+        : [];
+    const highlightGroup = highlightProducts.length > 0 ? [{
+        groupName: "สินค้าแนะนำของร้าน",
+        items: highlightProducts.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: Number(p.price) || 0,
+            unit: p.unit || "หน่วย",
+            spec: p.desc || p.badge || ""
+        }))
+    }] : [];
+    const catalog = highlightGroup.concat(getStallCatalogData(currentModalStallId));
     const pillsContainer = document.getElementById("modal-stall-category-pills");
     const listContainer = document.getElementById("modal-stall-product-list");
     const modalCartTotal = document.getElementById("modal-cart-total-price");
@@ -12884,8 +12900,8 @@ function renderStallCatalogModal() {
             listContainer.innerHTML = `
                 <div class="text-center py-12 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6">
                     <span class="material-symbols-outlined text-4xl mb-1 text-slate-300">inventory_2</span>
-                    <p class="text-xs font-bold text-slate-600">ยังไม่มีรายการสินค้าเพิ่มเติมในขณะนี้</p>
-                    <p class="text-[11px] text-slate-400 mt-0.5">ทางร้านค้ายังไม่มีรายการสินค้าเพิ่มเติมในระบบ</p>
+                    <p class="text-xs font-bold text-slate-600">ยังไม่มีรายการสินค้าในร้านนี้ขณะนี้</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">ทางร้านค้ายังไม่ได้ใส่รายการสินค้าในระบบ</p>
                 </div>
             `;
             return;
