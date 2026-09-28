@@ -36,20 +36,26 @@ Object.assign(ctx, {
     closeStaffSession: () => { }
 });
 vm.createContext(ctx);
-["loadSavedHubSettings", "loadMarketStallSettings", "revokeRiderAccessForApplication"].forEach(n => vm.runInContext(extract(n), ctx));
+vm.runInContext("const PRICING = { defaultGpRate: 15 };", ctx);
+["isValidGpRate", "getMerchantGpRate", "loadSavedHubSettings", "loadMarketStallSettings", "revokeRiderAccessForApplication"].forEach(n => vm.runInContext(extract(n), ctx));
 
 let fail = 0;
 const ok = (c, msg) => { console.log((c ? "PASS " : "FAIL ") + msg); if (!c) fail++; };
 
-// ---- GP: single source of truth = 10
-ok(vm.runInContext("loadMarketStallSettings().gpRate", ctx) === 10, "GP default is 10 (no saved settings)");
+// ---- GP: single source of truth = getMerchantGpRate() (app_settings/pricing copy), default 15 (owner 2026-09-28)
+ok(vm.runInContext("loadMarketStallSettings().gpRate", ctx) === 15, "GP default is 15 (no saved settings)");
 store["talathub_market_stall_settings"] = JSON.stringify({ gpRate: 0, openHour: "05:00" });
-ok(vm.runInContext("loadMarketStallSettings().gpRate", ctx) === 10, "stale market gpRate=0 is ignored, still 10");
+ok(vm.runInContext("loadMarketStallSettings().gpRate", ctx) === 15, "stale market gpRate=0 is ignored, still 15");
 ok(vm.runInContext("loadMarketStallSettings().openHour", ctx) === "05:00", "other market settings preserved");
-store["hsong_hub_settings"] = JSON.stringify({ merchantGP: 0 });
-ok(vm.runInContext("loadMarketStallSettings().gpRate", ctx) === 10, "hub merchantGP=0 becomes 10");
-store["hsong_hub_settings"] = JSON.stringify({ merchantGP: 12 });
-ok(vm.runInContext("loadMarketStallSettings().gpRate", ctx) === 12, "owner-set GP 12 is honoured everywhere");
+store["hsong_hub_settings"] = JSON.stringify({ merchantGP: 10 });
+ok(vm.runInContext("loadMarketStallSettings().gpRate", ctx) === 15 && vm.runInContext("loadSavedHubSettings().merchantGP", ctx) === 15, "old local hub merchantGP=10 no longer used -> 15");
+store["talathub_pricing"] = JSON.stringify({ gpRate: 12 });
+ok(vm.runInContext("loadMarketStallSettings().gpRate", ctx) === 12 && vm.runInContext("loadSavedHubSettings().merchantGP", ctx) === 12, "GP 12 from the shared database copy is honoured everywhere");
+store["talathub_pricing"] = JSON.stringify({ gpRate: 0 });
+ok(vm.runInContext("getMerchantGpRate()", ctx) === 15, "broken shared GP (0) -> 15");
+store["talathub_pricing"] = JSON.stringify({ gpRate: 80 });
+ok(vm.runInContext("getMerchantGpRate()", ctx) === 15, "GP over 50 rejected -> 15");
+delete store["talathub_pricing"];
 
 // ---- Revoke rider access
 ctx.ridersDb = [

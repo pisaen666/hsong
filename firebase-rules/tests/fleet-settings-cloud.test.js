@@ -80,7 +80,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
     ok(JSON.stringify(v7) === JSON.stringify(rulesV6), "v7 = v6 + app_settings เท่านั้น (ส่วนอื่นไม่เปลี่ยน)");
 
     console.log("== ค่าจากฐานข้อมูลกลางลงมาทุกเครื่อง");
-    ok(run("getRiderTripFee()") === 40, "ยังไม่มีค่าไหนเลย -> 40 บาท");
+    ok(run("getRiderTripFee()") === 30, "ยังไม่มีค่าไหนเลย -> 30 บาท (ค่ารอบเริ่มต้นใหม่ 2026-09-28)");
     cloud = { baseFee: 55, rainSurcharge: false, rainSurchargeAmount: 15, dailyBonusTrips: 10, dailyBonusAmount: 100, maxCodLimit: 2500, updatedAt: 1 };
     owner = false;
     run("listenFleetSettingsFromCloud()");

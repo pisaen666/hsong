@@ -1088,8 +1088,8 @@
                         </div>
                     </div>
 
-                    <!-- Coupon Selection Card in Checkout (คูปองส่วนลดของฉัน) -->
-                    <div class="bg-white rounded-2xl p-4 shadow-card border border-slate-200/80 space-y-2.5">
+                    <!-- Coupon Selection Card in Checkout (คูปองส่วนลดของฉัน) — ซ่อนไว้: ปิดคูปองชั่วคราว (COUPONS_ENABLED ใน app.js, เจ้าของสั่ง 2026-09-28) -->
+                    <div id="checkout-coupon-card" class="hidden bg-white rounded-2xl p-4 shadow-card border border-slate-200/80 space-y-2.5">
                         <div class="flex items-center justify-between">
                             <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                                 <span
@@ -1109,7 +1109,7 @@
                                 class="flex items-center justify-between p-2.5 rounded-xl border-2 border-emerald-500 bg-emerald-50/60 cursor-pointer transition-all text-xs"
                                 id="coupon-label-fresh20">
                                 <div class="flex items-center gap-2">
-                                    <input type="radio" name="checkout_coupon" value="FRESH20" checked
+                                    <input type="radio" name="checkout_coupon" value="FRESH20"
                                         onchange="selectCheckoutCoupon('FRESH20', 20)"
                                         class="text-emerald-600 focus:ring-emerald-500">
                                     <div>
@@ -1125,7 +1125,7 @@
                                 class="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition-all text-xs"
                                 id="coupon-label-none">
                                 <div class="flex items-center gap-2">
-                                    <input type="radio" name="checkout_coupon" value="none"
+                                    <input type="radio" name="checkout_coupon" value="none" checked
                                         onchange="selectCheckoutCoupon('none', 0)"
                                         class="text-slate-600 focus:ring-slate-500">
                                     <span class="font-medium text-slate-700">ไม่ใช้คูปองส่วนลด</span>
@@ -1250,6 +1250,16 @@
                             <span class="font-medium text-emerald-800" id="summary-delivery-fee"><span
                                     id="checkout-delivery-fee">฿20</span></span>
                         </div>
+                        <!-- ค่าส่งเพิ่มเมื่อยอดสินค้าไม่ถึง 200 บาท (smallOrderFee ใน app.js) -->
+                        <div class="hidden" id="summary-small-order-row">
+                            <div class="flex justify-between text-slate-800">
+                                <span class="font-bold">ค่าส่งเพิ่ม (ยอดสินค้าไม่ถึง ฿200)</span>
+                                <span class="font-bold text-amber-800" id="summary-small-order-fee">+฿0</span>
+                            </div>
+                            <div class="mt-1 text-[12px] font-bold text-amber-900 bg-amber-50 border border-amber-300 rounded-lg px-2 py-1" id="summary-small-order-hint"></div>
+                        </div>
+                        <!-- เกินระยะส่ง 7 กม. -->
+                        <div class="hidden text-[13px] font-bold text-red-800 bg-red-50 border-2 border-red-300 rounded-lg px-2 py-1.5" id="summary-beyond-range-box"></div>
                         <!-- Express Delivery Surcharge Row (ลูกค้าเลือกส่งด่วน) -->
                         <div class="flex justify-between text-slate-600 hidden" id="summary-express-fee-row">
                             <span class="flex items-center gap-1 font-bold text-orange-600">
@@ -2030,7 +2040,7 @@
                                 </div>
                                 <div class="text-right">
                                     <div class="font-black text-lg text-emerald-700" id="merchant-calc-fee">฿0</div>
-                                    <div class="text-[9px] text-slate-400">โอนชำระล่วงหน้าเข้าฮับ</div>
+                                    <div class="text-[11px] font-bold text-slate-700" id="merchant-calc-fee-breakdown">ค่ารอบไรเดอร์ + ค่าแอป ฿20</div>
                                 </div>
                             </div>
 
@@ -5761,7 +5771,8 @@
                             <option value="offline">🔴 พักรอบ / ออฟไลน์</option>
                         </select>
                     </div>
-                    <div>
+                    <!-- ค่ารอบรายคนไม่ได้ใช้แล้ว: ค่ารอบคิดตามระยะของแต่ละเที่ยว (riderTripFeeForOrder) ตั้งค่าเริ่มต้นที่ ไรเดอร์ > ตั้งค่า -->
+                    <div class="hidden">
                         <label class="font-bold text-slate-700 block mb-1">ค่ารอบมาตรฐาน (฿/เที่ยว):</label>
                         <input type="number" id="rider-form-basefee" value="40" min="10" max="200"
                             class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
@@ -7396,7 +7407,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.67b_roster_no_payout_contrast"></script>
+    <script src="app.js?v=10.68_pricing_v2"></script>
 </body>
 
 </html>

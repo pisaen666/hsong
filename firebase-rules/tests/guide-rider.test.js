@@ -72,7 +72,7 @@ ok(/const RIDER_SECRET_LENGTH = 8;/.test(appSrc) && guide.includes("รหัส
 ok(/ผิด 5 ครั้งภายใน 10 นาที ล็อก 5 นาที/.test(appSrc) && guide.includes("ผิดครบ 5 ครั้ง ระบบจะล็อกไว้ 5 นาที"), "กติกาล็อก 5 ครั้ง / 5 นาที ตรงกัน");
 const alphabet = appSrc.match(/const RIDER_SECRET_ALPHABET = "([A-Z0-9]+)"/)[1];
 ok(!/[01OIL]/.test(alphabet) && guide.includes("ไม่มีตัว O I L และไม่มีเลข 0 1"), "คู่มือบอกถูกว่ารหัสไม่มี O I L 0 1");
-ok(/baseFee: 40/.test(appSrc) && guide.includes("ได้ 40 บาทต่อรอบ"), "ค่ารอบ 40 บาท ตรงกับโค้ด");
+ok(/defaultRiderBaseFee: 30/.test(appSrc) && /baseFee: 30,/.test(appSrc) && guide.includes("ได้ 30 บาทต่อรอบ") && guide.includes("เพิ่ม 5 บาททุกครึ่งกิโล") && /stepFee: 5,/.test(appSrc) && /baseKm: 3,/.test(appSrc), "ค่ารอบ 30 บาท (+5 ทุกครึ่ง กม. เกิน 3 กม.) ตรงกับโค้ด");
 
 console.log(fail ? `\n${fail} FAILED` : "\nALL PASSED");
 process.exit(fail ? 1 : 0);

@@ -751,6 +751,7 @@ function refreshOrderAccess() {
             if ((isRider || isMerchant) && !_myStaffSession && !_anonAuthFailed) _onOrderListDenied({ code: "no-staff-session" });
         }
         listenFleetSettingsFromCloud();   // ค่ารอบไรเดอร์จากฐานข้อมูลกลาง (ทุกเครื่อง)
+        listenPricingFromCloud();         // GP ร้านค้าจากฐานข้อมูลกลาง (ทุกเครื่อง)
         watchActiveOrderInCloud();
     });
 }
@@ -852,12 +853,12 @@ window.attachOrderChildListeners = attachOrderChildListeners;
 // - ฮับ (เจ้าของ) เห็นทุกใบงาน จ่ายงานให้ไรเดอร์ได้ และมีเสียง/ป้ายเตือนเมื่อไม่มีใครรับเกิน 10 นาที
 // ทั้งสองสำเนาสร้างโดยเครื่องที่สั่งซื้อ ตอนบันทึกออเดอร์ใหม่ครั้งแรก (saveOrderSideCopiesToCloud)
 // =================================================================
-// ค่ารอบต่อเที่ยวจริง อ่านจากค่าที่แอดมินตั้งไว้ (talathub_fleet_settings.baseFee, แท็บ "ตั้งค่าค่ารอบ")
-// แทนเลข 40 ที่เคยฝังตายตัว ใช้จุดเดียวนี้ทุกที่ที่ต้องคำนวณ/แสดงค่ารอบต่อเที่ยว
+// ค่ารอบเริ่มต้น (ไม่เกิน 3 กม.) อ่านจากค่าที่แอดมินตั้งไว้ (talathub_fleet_settings.baseFee, แท็บ "ตั้งค่าค่ารอบ")
+// ค่ารอบจริงของแต่ละเที่ยวตามระยะทาง = riderTripFeeForOrder / riderTripFeeForKm (โครงสร้างราคา 2026-09-28)
 function getRiderTripFee() {
     const s = (typeof loadRiderFleetSettings === "function") ? loadRiderFleetSettings() : null;
     const v = s && Number(s.baseFee);
-    return (typeof v === "number" && !isNaN(v) && v > 0) ? v : 40;
+    return (typeof v === "number" && !isNaN(v) && v > 0) ? v : 30;
 }
 window.getRiderTripFee = getRiderTripFee;
 const UNCLAIMED_JOB_ALERT_MIN = 10;     // งานไม่มีคนรับนานเท่านี้ ฮับได้เสียง/ป้ายเตือน (เจ้าของกำหนด)
@@ -898,11 +899,11 @@ function buildRiderJobCard(order) {
         orderType: String(order.orderType || "HUB_CONSOLIDATED"),
         pickup: isExpress ? ("หน้าร้าน " + (origin.stallName || firstStall.name || "แผงค้า")) : "ฮับรวมตลาดบ้านบึง",
         area: String(order.subdistrict || "").slice(0, 80),
-        fee: getRiderTripFee(),
+        fee: riderTripFeeForOrder(order),
         createdAt: Number(order.savedAt) || Number(new Date(order.createdAt)) || Date.now(),
         status: "open"
     };
-    const km = Number(order.distanceKm);
+    const km = orderDistanceKm(order);
     if (Number.isFinite(km) && km > 0) card.distanceKm = Math.round(km * 10) / 10;
     return card;
 }
@@ -2845,13 +2846,114 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// Flat delivery fee based on true km distance from Wisit Chai Market
-function calculateDeliveryFee(distanceKm) {
-    if (distanceKm <= 3.0) return 20; // ฿20 within 3km in Ban Bueng town
-    if (distanceKm <= 7.0) return 25; // ฿25 within 7km
-    if (distanceKm <= 12.0) return 35; // ฿35 within 12km
-    return 45; // ฿45 beyond 12km
+// =================================================================
+// โครงสร้างราคา (เจ้าของตัดสินใจ 2026-09-28) เป้าหมาย: แอปกำไร >= 10% ของค่าสินค้าทุกออเดอร์
+// - ค่ารอบไรเดอร์ = ค่ารอบเริ่มต้น (getRiderTripFee, ตั้งได้ในแอดมิน ค่าตั้งต้น 30) ถ้าไม่เกิน 3 กม.
+// - ค่าส่งลูกค้า = 20 บาท ถ้าไม่เกิน 3 กม.
+// - เกิน 3 กม. ทั้งสองอย่าง +5 บาท ทุกครึ่งกิโลที่เริ่ม (3-3.5 = +5, 3.5-4 = +10 ...) ส่งไกลสุด 7 กม.
+// - ยอดสินค้าไม่ถึง 200: ค่าส่งเพิ่ม 100-199 = +5, ต่ำกว่า 100 = +10 (ไม่มียอดขั้นต่ำ)
+// - GP ร้านค้า 15% (getMerchantGpRate, เก็บที่ app_settings/pricing ทุกเครื่องเห็นเท่ากัน)
+// - งานด่วนของแม่ค้า: แม่ค้าจ่าย = ค่ารอบไรเดอร์ตามระยะ + ค่าธรรมเนียมแอป 20 บาท (โอนรวมครั้งเดียวให้แอป)
+// ระยะทางปัดเป็นทศนิยม 1 ตำแหน่งก่อนคิดเงิน ให้ตรงกับตัวเลข "x.x กม." ที่ลูกค้าเห็น
+// =================================================================
+const PRICING = Object.freeze({
+    baseKm: 3,
+    stepKm: 0.5,
+    stepFee: 5,
+    defaultRiderBaseFee: 30,
+    customerBaseFee: 20,
+    maxKm: 7,
+    smallOrderFullAt: 200,
+    smallOrderMidAt: 100,
+    smallOrderFeeMid: 5,
+    smallOrderFeeLow: 10,
+    expressAppFee: 20,
+    defaultGpRate: 15
+});
+
+// คูปองส่วนลด: ปิดไว้ก่อน (เจ้าของสั่ง 2026-09-28) เพราะ FRESH20 ถูกเลือกให้อัตโนมัติทุกออเดอร์ ใช้ได้ไม่จำกัดครั้ง
+// และใครพิมพ์ HEASONG50 ก็ลด 50 บาททุกครั้ง ทำให้กำไรหายหมด; เปิดใหม่ได้เมื่อมีระบบคูปองที่จำกัดครั้ง/มีขั้นต่ำ
+const COUPONS_ENABLED = false;
+
+function pricingKm(distanceKm) {
+    const km = Number(distanceKm);
+    return (isFinite(km) && km > 0) ? Math.round(km * 10) / 10 : 0;
 }
+
+// จำนวนขั้น "ครึ่งกิโล" ที่เกิน 3 กม. (3.1-3.5 = 1 ขั้น, 3.6-4.0 = 2 ขั้น)
+function distanceStepCount(distanceKm) {
+    const km = pricingKm(distanceKm);
+    if (km <= PRICING.baseKm) return 0;
+    return Math.ceil((km - PRICING.baseKm) / PRICING.stepKm - 1e-9);
+}
+
+function isBeyondDeliveryRange(distanceKm) {
+    return pricingKm(distanceKm) > PRICING.maxKm;
+}
+
+// ค่าส่งตามระยะทางที่ลูกค้าจ่าย (ยังไม่รวมค่าส่งเพิ่มเมื่อยอดไม่ถึง 200)
+function calculateDeliveryFee(distanceKm) {
+    return PRICING.customerBaseFee + distanceStepCount(distanceKm) * PRICING.stepFee;
+}
+
+// ค่าส่งเพิ่มเมื่อยอดสินค้าไม่ถึง 200 บาท
+function smallOrderFee(itemsSubtotal) {
+    const s = Number(itemsSubtotal) || 0;
+    if (s >= PRICING.smallOrderFullAt) return 0;
+    if (s >= PRICING.smallOrderMidAt) return PRICING.smallOrderFeeMid;
+    return PRICING.smallOrderFeeLow;
+}
+
+// ค่ารอบไรเดอร์ของเที่ยวที่ระยะนี้
+function riderTripFeeForKm(distanceKm) {
+    return getRiderTripFee() + distanceStepCount(distanceKm) * PRICING.stepFee;
+}
+
+// ระยะของออเดอร์: คิดจากพิกัดปลายทางก่อน (ไม่เชื่อตัวเลขระยะที่เครื่องลูกค้าส่งมา) ถ้าไม่มีพิกัดใช้ distanceKm
+function orderDistanceKm(order) {
+    if (!order) return 0;
+    const lat = Number(order.lat), lng = Number(order.lng);
+    if (isFinite(lat) && isFinite(lng) && lat !== 0 && lng !== 0) {
+        return calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
+    }
+    const km = Number(order.distanceKm);
+    return (isFinite(km) && km > 0) ? km : 0;
+}
+
+function riderTripFeeForOrder(order) {
+    return riderTripFeeForKm(orderDistanceKm(order));
+}
+
+// งานด่วนของแม่ค้า: ค่ารอบไรเดอร์ + ค่าธรรมเนียมแอป
+function merchantExpressFeeForKm(distanceKm) {
+    return riderTripFeeForKm(distanceKm) + PRICING.expressAppFee;
+}
+
+// ข้อความอธิบายค่ารอบ (ใช้ในหน้าไรเดอร์/สลิป)
+function riderFeeRuleText() {
+    return `เริ่ม ฿${getRiderTripFee()} (ไม่เกิน ${PRICING.baseKm} กม.) +฿${PRICING.stepFee} ทุกครึ่ง กม.`;
+}
+
+// ป้ายค่าส่งสำหรับแผนที่: เกิน 7 กม. บอกตรง ๆ ว่าส่งไม่ถึง
+function merchantExpressFeeLabel(distanceKm) {
+    return isBeyondDeliveryRange(distanceKm)
+        ? `เกิน ${PRICING.maxKm} กม. ส่งไม่ถึง`
+        : `฿${merchantExpressFeeForKm(distanceKm)}`;
+}
+
+function deliveryFeeLabel(distanceKm) {
+    return isBeyondDeliveryRange(distanceKm)
+        ? `เกิน ${PRICING.maxKm} กม. ส่งไม่ถึง`
+        : `฿${calculateDeliveryFee(distanceKm)}`;
+}
+
+window.PRICING = PRICING;
+window.calculateDeliveryFee = calculateDeliveryFee;
+window.smallOrderFee = smallOrderFee;
+window.riderTripFeeForKm = riderTripFeeForKm;
+window.riderTripFeeForOrder = riderTripFeeForOrder;
+window.merchantExpressFeeForKm = merchantExpressFeeForKm;
+window.isBeyondDeliveryRange = isBeyondDeliveryRange;
 
 // ==========================================
 // REAL-TIME 30-MINUTE DELIVERY BATCH ENGINE
@@ -3227,7 +3329,7 @@ async function onMapCoordinatesChanged(lat, lng, shouldReverseGeocode) {
     const distEl = document.getElementById("modal-gps-dist");
     const feeEl = document.getElementById("modal-gps-fee");
     if (distEl) distEl.textContent = `${distKm.toFixed(1)} กม.`;
-    if (feeEl) feeEl.textContent = `฿${fee}`;
+    if (feeEl) feeEl.textContent = deliveryFeeLabel(distKm);
 
     const testMapsBtn = document.getElementById("modal-test-maps-btn");
     if (testMapsBtn) {
@@ -3492,7 +3594,7 @@ function applyResolvedGPSLocation(lat, lng, accuracy, sourceName) {
     const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
     const fee = calculateDeliveryFee(distKm);
     const distStr = `${distKm.toFixed(1)} กม.`;
-    const feeStr = `฿${fee}`;
+    const feeStr = deliveryFeeLabel(distKm);
 
     currentPickerCoords.lat = lat;
     currentPickerCoords.lng = lng;
@@ -4620,7 +4722,7 @@ function renderLocationSearchResults(results) {
                     </div>
                 </div>
                 <div class="text-right shrink-0">
-                    <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full whitespace-nowrap">~${distKm.toFixed(1)} กม. (฿${fee})</span>
+                    <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full whitespace-nowrap">~${distKm.toFixed(1)} กม. (${deliveryFeeLabel(distKm)})</span>
                 </div>
             </div>
         `;
@@ -4690,7 +4792,7 @@ function selectLocationSearchResult(item) {
 
     const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
     const fee = calculateDeliveryFee(distKm);
-    showToast(`📍 ปักหมุดที่ "${item.shortTitle || item.title}" (~${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee})`);
+    showToast(`📍 ปักหมุดที่ "${item.shortTitle || item.title}" (~${distKm.toFixed(1)} กม. • ค่าส่ง ${deliveryFeeLabel(distKm)})`);
 }
 
 // 🏪 นำผลลัพธ์ที่ค้นหาไปปักหมุดบนแผนที่ของแผงค้า (ตอนเรียกไรเดอร์ไปส่งปลายทางอื่นที่ไม่ใช่หน้าร้าน)
@@ -4724,7 +4826,7 @@ function _applyLocationResultToMerchantMap(item) {
 
     const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
     const fee = calculateDeliveryFee(distKm);
-    showToast(`📍 ปักหมุดที่ "${item.shortTitle || item.title}" (~${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee})`);
+    showToast(`📍 ปักหมุดที่ "${item.shortTitle || item.title}" (~${distKm.toFixed(1)} กม. • ค่าส่ง ${deliveryFeeLabel(distKm)})`);
 }
 
 function selectQuickLandmark(id) {
@@ -5055,7 +5157,7 @@ function saveGranularDeliveryAddress() {
             lat: lat,
             lng: lng,
             distKm: distKm,
-            fee: fee,
+            fee: merchantExpressFeeForKm(distKm),
             subdistrict: subdistrict || "อ.บ้านบึง จ.ชลบุรี"
         };
         const badge = document.getElementById("merchant-pinned-badge");
@@ -5063,12 +5165,12 @@ function saveGranularDeliveryAddress() {
         const badgeSub = document.getElementById("merchant-pinned-sub");
         if (badge) badge.classList.remove("hidden");
         if (badgeText) badgeText.textContent = `📍 ปักหมุด: ${fullTitle}`;
-        if (badgeSub) badgeSub.textContent = `ระยะทาง ~${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee}`;
+        if (badgeSub) badgeSub.textContent = `ระยะทาง ~${distKm.toFixed(1)} กม. • ค่าส่ง ${merchantExpressFeeLabel(distKm)}`;
         const extraAddr = document.getElementById("merchant-dest-address");
         if (extraAddr && !extraAddr.value) extraAddr.value = fullTitle;
         calculateMerchantFee();
         closeLocationModal();
-        showToast(`📍 ปักหมุดปลายทางลูกค้าสำเร็จ! (~${distKm.toFixed(1)} กม. ค่าส่ง ฿${fee})`);
+        showToast(`📍 ปักหมุดปลายทางลูกค้าสำเร็จ! (~${distKm.toFixed(1)} กม. ค่าส่ง ${merchantExpressFeeLabel(distKm)})`);
         return;
     }
 
@@ -5079,7 +5181,7 @@ function saveGranularDeliveryAddress() {
         soiRoad: soi,
         subdistrict: subdistrict,
         landmark: landmark,
-        detail: `ห่างจากตลาดวิศิษฐ์ชัย ${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee}`,
+        detail: `ห่างจากตลาดวิศิษฐ์ชัย ${distKm.toFixed(1)} กม. • ค่าส่ง ${deliveryFeeLabel(distKm)}`,
         distance: `${distKm.toFixed(1)} กม.`,
         distFromMarketText: `ห่างจากตลาดวิศิษฐ์ชัย ${distKm.toFixed(1)} กม.`,
         fee: fee,
@@ -5093,7 +5195,7 @@ function saveGranularDeliveryAddress() {
     updateDeliveryLocationUI();
     closeLocationModal();
 
-    showToast(`✅ บันทึกที่อยู่สำเร็จ! ไรเดอร์จะนำทาง GPS ถึงหน้าบ้านคุณได้ทันที (ค่าส่ง ฿${fee})`);
+    showToast(`✅ บันทึกที่อยู่สำเร็จ! ไรเดอร์จะนำทาง GPS ถึงหน้าบ้านคุณได้ทันที (ค่าส่ง ${deliveryFeeLabel(distKm)})`);
 }
 
 // Quick neighborhood shortcut selector
@@ -5697,7 +5799,7 @@ const state = {
     favorites: loadSavedFavorites(),     // Persistent favorite stalls list
     customer: loadSavedCustomer(),       // Logged in customer session
     activeMerchant: loadSavedMerchant(), // Logged in merchant session
-    activeCoupon: { code: "FRESH20", discount: 20, desc: "ส่วนลด ฿20 สั่งของสดรอบถัดไป" }, // ✅ เริ่มต้นตรงกับ radio FRESH20 ในหน้า checkout
+    activeCoupon: null, // คูปองปิดอยู่ (COUPONS_ENABLED) — เดิมเลือก FRESH20 ให้อัตโนมัติทุกออเดอร์
     deliveryLocation: loadSavedLocation(), // Active delivery location
     isSearchingGPS: false, // Flag when searching GPS to clear and prevent showing old distance
     cart: loadSavedCart(),               // ✅ โหลดตะกร้าจาก localStorage
@@ -6494,7 +6596,6 @@ function aggregateDailyOperations(targetDateKey) {
         }
     };
 
-    const riderTripFee = getRiderTripFee();
     const ridersMap = {};
     const stallsMap = {};
 
@@ -6553,7 +6654,7 @@ function aggregateDailyOperations(targetDateKey) {
         }
         if (o.status === "delivered" || o.status === "on_the_way" || o.status === "dispatched" || o.status === "assigned") {
             ridersMap[rName].tripsCount++;
-            ridersMap[rName].riderFeeEarned += riderTripFee;
+            ridersMap[rName].riderFeeEarned += riderTripFeeForOrder(o);   // ค่ารอบตามระยะของเที่ยวนี้
             if (pType === "cod" || pType === "cash") {
                 ridersMap[rName].codCollected += orderTotal;
             }
@@ -6590,17 +6691,8 @@ function aggregateDailyOperations(targetDateKey) {
                 const activeItems = (st.items || []).filter(it => !it.outOfStock);
                 activeItems.forEach(it => {
                     const itemQty = Number(it.qty || it.quantity || 1);
-                    let itemTotal = 0;
-                    if (it.subtotal !== undefined) {
-                        itemTotal = Number(it.subtotal);
-                    } else if (it.actualPrice !== undefined) {
-                        itemTotal = Number(it.actualPrice) * itemQty;
-                    } else if (it.unitPrice !== undefined) {
-                        itemTotal = Number(it.unitPrice) * itemQty;
-                    } else {
-                        itemTotal = Number(it.price || 0) * itemQty;
-                    }
-                    stallsMap[sKey].totalAmount += itemTotal;
+                    // ราคา x จำนวน และตามน้ำหนักที่ชั่งจริง (เดิมใช้ subtotal ตอนสั่ง ร้านได้เงินเกินเมื่อชั่งได้น้อย)
+                    stallsMap[sKey].totalAmount += orderItemLineTotal(it);
                     stallsMap[sKey].itemsCount += itemQty;
                 });
             });
@@ -6636,9 +6728,8 @@ function aggregateDailyOperations(targetDateKey) {
         settledRiders
     };
 
-    // โหลดการตั้งค่าระบบเพื่อหาอัตรา GP (มาตรฐานแพลตฟอร์ม 10%)
-    const hubSettings = (typeof loadSavedHubSettings === "function") ? loadSavedHubSettings() : {};
-    const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number" && hubSettings.merchantGP > 0) ? hubSettings.merchantGP : 10;
+    // อัตรา GP จากฐานข้อมูลกลาง (getMerchantGpRate)
+    const gpRate = getMerchantGpRate();
 
     // คำนวณยอดรวมแผงค้า (แยกยอดขายรวม, GP ที่ระบบหัก 10%, และยอดโอนสุทธิ)
     const stallsList = Object.values(stallsMap);
@@ -7145,7 +7236,7 @@ function renderHubDailyReport(targetDateKey) {
                     <span class="material-symbols-outlined text-sky-600 text-base">sports_motorsports</span>
                     <span>2. เคลียร์เงินไรเดอร์ (Rider Compensation & COD Clearance)</span>
                 </h4>
-                <p class="text-[10px] text-slate-500">ค่ารอบ ฿${getRiderTripFee()}/เที่ยว | หักเงินสด COD และเงินทอน | ยอดสุทธิส่งมอบฮับ</p>
+                <p class="text-[10px] text-slate-500">ค่ารอบ ${riderFeeRuleText()} | หักเงินสด COD และเงินทอน | ยอดสุทธิส่งมอบฮับ</p>
             </div>
             <div class="text-right">
                 <div class="text-[10px] text-slate-500">ยอดสุทธิรวมที่ฮับต้องรับมอบ:</div>
@@ -8845,7 +8936,7 @@ function printThermalRiderSlip(riderIdentifier, dateKey) {
         <div class="slip-row"><span class="slip-label">เบอร์โทร:</span><span class="slip-value">${escapeHtml(r.riderPhone)}</span></div>
         <div class="divider-dashed"></div>
         <div class="slip-row"><span class="slip-label">1. จำนวนเที่ยวส่งสำเร็จ:</span><span class="slip-value">${r.tripsCount} เที่ยว</span></div>
-        <div class="slip-row"><span class="slip-label">2. ค่ารอบสะสม (+฿${getRiderTripFee()}/เที่ยว):</span><span class="slip-value">+฿${r.riderFeeEarned.toLocaleString()}</span></div>
+        <div class="slip-row"><span class="slip-label">2. ค่ารอบสะสม (${riderFeeRuleText()}):</span><span class="slip-value">+฿${r.riderFeeEarned.toLocaleString()}</span></div>
         <div class="slip-row"><span class="slip-label">3. เงินสด COD ที่เก็บมา:</span><span class="slip-value">+฿${r.codCollected.toLocaleString()}</span></div>
         <div class="slip-row"><span class="slip-label">4. เงินทอนคืนลูกค้า (ของขาด):</span><span class="slip-value">${r.refundHanded > 0 ? `-฿${r.refundHanded.toLocaleString()}` : '฿0'}</span></div>
         <div class="settle-box">
@@ -10763,8 +10854,8 @@ function printA4RiderRulesSheet() {
 
         <div class="summary-grid">
             <div class="summary-box">
-                <div>ค่ารอบมาตรฐาน:</div>
-                <div style="font-size: 16px; font-weight: bold; color: #047857;">฿${s.baseFee || 40} / เที่ยว</div>
+                <div>ค่ารอบ:</div>
+                <div style="font-size: 16px; font-weight: bold; color: #047857;">${riderFeeRuleText()}</div>
             </div>
             <div class="summary-box">
                 <div>เบี้ยเลี้ยงสู้ฝน (ฝนตก):</div>
@@ -13038,7 +13129,13 @@ function calculateCartTotals() {
     if (stallsCount >= 2) multiStallFee = 10;
     if (stallsCount >= 4) multiStallFee = 15;
 
-    const deliveryFee = (state.deliveryLocation && typeof state.deliveryLocation.fee === "number") ? state.deliveryLocation.fee : 20;
+    // คิดค่าส่งใหม่จากพิกัดทุกครั้ง (ค่า fee ที่เก็บไว้ในที่อยู่เดิมอาจเป็นสูตรเก่า)
+    const loc = state.deliveryLocation;
+    const hasPin = !!(loc && typeof loc.lat === "number" && typeof loc.lng === "number");
+    const distanceKm = hasPin ? pricingKm(calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, loc.lat, loc.lng)) : 0;
+    const deliveryFee = calculateDeliveryFee(distanceKm);
+    const smallFee = itemsCount > 0 ? smallOrderFee(itemsSubtotal) : 0;
+    const beyondRange = hasPin && isBeyondDeliveryRange(distanceKm);
 
     // Express Delivery Fee calculation (เฉพาะกรณีสั่ง 1 แผงค้า และลูกค้าเลือกส่งด่วน)
     let expressFee = 0;
@@ -13050,10 +13147,10 @@ function calculateCartTotals() {
         }
     }
 
-    // Active coupon discount calculation
+    // Active coupon discount calculation (ปิดคูปองชั่วคราว COUPONS_ENABLED = false, เจ้าของสั่ง 2026-09-28)
     let discountAmount = 0;
     let couponCode = "";
-    if (state.activeCoupon) {
+    if (COUPONS_ENABLED && state.activeCoupon) {
         couponCode = state.activeCoupon.code;
         if (couponCode === "FRESH20") {
             discountAmount = 20;
@@ -13064,7 +13161,7 @@ function calculateCartTotals() {
         }
     }
 
-    const grandTotal = Math.max(0, itemsSubtotal + multiStallFee + deliveryFee + expressFee - discountAmount);
+    const grandTotal = Math.max(0, itemsSubtotal + multiStallFee + deliveryFee + smallFee + expressFee - discountAmount);
 
     return {
         itemsCount,
@@ -13072,6 +13169,10 @@ function calculateCartTotals() {
         stallsCount,
         multiStallFee,
         deliveryFee,
+        smallOrderFee: smallFee,
+        amountToSkipSmallFee: smallFee > 0 ? Math.max(0, PRICING.smallOrderFullAt - itemsSubtotal) : 0,
+        distanceKm,
+        beyondRange,
         expressFee,
         isExpress: (expressFee > 0),
         discountAmount,
@@ -13240,7 +13341,7 @@ function renderCheckoutPage() {
         const selectedVal = checkedCouponRadio.value;
         if (selectedVal === "none") {
             state.activeCoupon = null;
-        } else if (selectedVal === "FRESH20" && !state.activeCoupon) {
+        } else if (COUPONS_ENABLED && selectedVal === "FRESH20" && !state.activeCoupon) {
             state.activeCoupon = { code: "FRESH20", discount: 20, desc: "ส่วนลด ฿20 สั่งของสดรอบถัดไป" };
         }
     }
@@ -13255,8 +13356,23 @@ function renderCheckoutPage() {
 
     // Update Distance display if available
     const distEl = document.getElementById("summary-delivery-dist");
-    if (distEl && state.deliveryLocation && state.deliveryLocation.distance) {
-        distEl.textContent = state.deliveryLocation.distance;
+    if (distEl) {
+        distEl.textContent = totals.distanceKm > 0 ? `${totals.distanceKm.toFixed(1)} กม.` : "ยังไม่ปักหมุด";
+    }
+
+    // ค่าส่งเพิ่มเมื่อยอดไม่ถึง 200 + บอกว่าซื้อเพิ่มอีกเท่าไรจะไม่ต้องจ่าย
+    const smallRow = document.getElementById("summary-small-order-row");
+    if (smallRow) {
+        smallRow.classList.toggle("hidden", !(totals.smallOrderFee > 0));
+        setVal("summary-small-order-fee", `+฿${totals.smallOrderFee}`);
+        setVal("summary-small-order-hint", `💡 ซื้อเพิ่มอีก ฿${totals.amountToSkipSmallFee} ไม่ต้องจ่ายค่าส่งเพิ่ม`);
+    }
+    const beyondBox = document.getElementById("summary-beyond-range-box");
+    if (beyondBox) {
+        beyondBox.classList.toggle("hidden", !totals.beyondRange);
+        beyondBox.textContent = totals.beyondRange
+            ? `🚫 ที่อยู่นี้ห่างจากตลาด ${totals.distanceKm.toFixed(1)} กม. เกินระยะส่ง ${PRICING.maxKm} กม. กรุณาเปลี่ยนที่อยู่จัดส่ง`
+            : "";
     }
 
     // Update Delivery Mode UI (Standard vs Express)
@@ -13452,6 +13568,9 @@ function validateOrderPrerequisites() {
     if (!loc || !loc.isSet || isFakeDefaultDeliveryLocation(loc) || typeof loc.lat !== "number" || typeof loc.lng !== "number") {
         if (isFakeDefaultDeliveryLocation(loc)) { state.deliveryLocation = null; saveLocationToStorage(null); updateDeliveryLocationUI(); }
         return { ok: false, action: "location", message: "⚠️ กรุณาระบุที่อยู่จัดส่งของคุณ (ปักหมุดบนแผนที่) ก่อนสั่งซื้อ เพื่อให้ไรเดอร์ไปส่งถูกที่" };
+    }
+    if (totals.beyondRange) {
+        return { ok: false, action: "location", message: `🚫 ที่อยู่จัดส่งห่างจากตลาด ${totals.distanceKm.toFixed(1)} กม. เกินระยะส่ง ${PRICING.maxKm} กม. กรุณาเปลี่ยนที่อยู่จัดส่ง` };
     }
     return { ok: true };
 }
@@ -13782,6 +13901,10 @@ function simulatePaymentSuccess(paymentType = "promptpay") {
         total: Number(totals.grandTotal || 0),
         grandTotal: Number(totals.grandTotal || 0),
         deliveryFee: Number(totals.deliveryFee || 20),
+        smallOrderFee: Number(totals.smallOrderFee || 0),   // ค่าส่งเพิ่มเมื่อยอดไม่ถึง 200 (แยกจากค่าส่งตามระยะ)
+        multiStallFee: Number(totals.multiStallFee || 0),
+        itemsSubtotal: Number(totals.itemsSubtotal || 0),
+        distanceKm: Number(totals.distanceKm || 0),
         payAmountExact: paymentType === "cod" ? Number(totals.grandTotal || 0) : exactPayAmount,   // เก็บเงินปลายทางไม่ต้องมีเศษสตางค์สุ่ม
         paymentType: paymentType,
         paymentDesc: paymentDesc,
@@ -15127,7 +15250,12 @@ function copyCouponCode(code) {
     showToast(`📋 คัดลอกโค้ดส่วนลด "${code}" เรียบร้อยแล้ว!`);
 }
 
+function couponsClosedToast() {
+    showToast("🎟️ ขณะนี้ยังไม่มีคูปองส่วนลดที่ใช้ได้ครับ");
+}
+
 function selectCheckoutCoupon(code, discount) {
+    if (!COUPONS_ENABLED && code !== "none") { state.activeCoupon = null; couponsClosedToast(); renderCheckoutPage(); return; }
     if (code === "none") {
         state.activeCoupon = null;
         showToast("ยกเลิกการใช้คูปองส่วนลด");
@@ -15139,6 +15267,7 @@ function selectCheckoutCoupon(code, discount) {
 }
 
 function applyCouponAndGoCheckout(code, discount) {
+    if (!COUPONS_ENABLED) { state.activeCoupon = null; couponsClosedToast(); return; }
     state.activeCoupon = { code, discount, desc: `ส่วนลด ฿${discount}` };
     closeCustomerWalletModal();
     goToCheckoutScreen();
@@ -15153,6 +15282,7 @@ function applyManualCouponCode() {
         showToast("⚠️ กรุณากรอกโค้ดส่วนลดก่อนครับ");
         return;
     }
+    if (!COUPONS_ENABLED) { input.value = ""; couponsClosedToast(); return; }
 
     if (code === "FRESH20") {
         selectCheckoutCoupon("FRESH20", 20);
@@ -15655,9 +15785,7 @@ function renderMerchantSettlement() {
         }
 
         // GP Calculation (มาตรฐานแพลตฟอร์ม 10%)
-        const hubSettings = (typeof loadSavedHubSettings === "function") ? loadSavedHubSettings() : {};
-        const gpRate = (settledInfo && settledInfo.gpRate > 0) ? settledInfo.gpRate
-            : ((hubSettings && typeof hubSettings.merchantGP === "number" && hubSettings.merchantGP > 0) ? hubSettings.merchantGP : 10);
+        const gpRate = (settledInfo && settledInfo.gpRate > 0) ? settledInfo.gpRate : getMerchantGpRate();
         // ใช้ gpAmount จาก hub record ก่อน (แม่นยำกว่า) แล้วค่อย fallback คำนวณ
         const hubFee = (settledInfo && settledInfo.gpAmount !== undefined) ? settledInfo.gpAmount : Math.round(grossSales * (gpRate / 100));
         const calculatedNetPayout = Math.max(0, grossSales - hubFee);
@@ -16705,7 +16833,20 @@ function calculateMerchantFee() {
 
     if (state.merchantPinnedCoords) {
         const distKm = state.merchantPinnedCoords.distKm;
-        const fee = state.merchantPinnedCoords.fee;
+        // คิดใหม่ทุกครั้งตามโครงสร้างราคาปัจจุบัน (ค่ารอบไรเดอร์ตามระยะ + ค่าธรรมเนียมแอป 20)
+        const fee = merchantExpressFeeForKm(distKm);
+        state.merchantPinnedCoords.fee = fee;
+        if (isBeyondDeliveryRange(distKm)) {
+            if (feeEl) feeEl.textContent = merchantExpressFeeLabel(distKm);
+            if (distDesc) distDesc.textContent = `ระยะ ~${distKm.toFixed(1)} กม. เกินระยะส่ง ${PRICING.maxKm} กม. กรุณาปักหมุดใหม่`;
+            if (pinBtnText) pinBtnText.textContent = `📍 เกิน ${PRICING.maxKm} กม. ส่งไม่ถึง — แตะเพื่อปักหมุดใหม่`;
+            // ปุ่มยังกดได้: submitMerchantCall จะบอกว่าเกินระยะแล้วเปิดแผนที่ให้ปักใหม่
+            if (submitBtnText) submitBtnText.innerHTML = `📍 เกินระยะส่ง ${PRICING.maxKm} กม. — แตะเพื่อปักหมุดใหม่`;
+            if (submitBtnIcon) submitBtnIcon.textContent = "pin_drop";
+            return;
+        }
+        const breakdownEl = document.getElementById("merchant-calc-fee-breakdown");
+        if (breakdownEl) breakdownEl.textContent = `ค่ารอบไรเดอร์ ฿${riderTripFeeForKm(distKm)} + ค่าแอป ฿${PRICING.expressAppFee}`;
         if (feeEl) feeEl.textContent = `฿${fee}`;
         if (btnFeeDisplay) btnFeeDisplay.textContent = `฿${fee}`;
         if (distDesc) distDesc.textContent = `ระยะทางปักหมุดจริง ~${distKm.toFixed(1)} กม. จากตลาดวิศิษฐ์ชัย`;
@@ -16840,12 +16981,12 @@ function _onMerchantMapPinMoved(lat, lng) {
     merchantPickerCoords.lat = lat;
     merchantPickerCoords.lng = lng;
     const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
-    const fee = calculateDeliveryFee(distKm);
+    const fee = merchantExpressFeeForKm(distKm);
 
     const distLabel = document.getElementById("merchant-map-dist-label");
     const feeLabel = document.getElementById("merchant-map-fee-label");
     if (distLabel) distLabel.textContent = `~${distKm.toFixed(2)} กม. จากตลาดวิศิษฐ์ชัย`;
-    if (feeLabel) feeLabel.textContent = `฿${fee}`;
+    if (feeLabel) feeLabel.textContent = merchantExpressFeeLabel(distKm);
     _merchantMapSetConfirmReady(true, distKm, fee);
 }
 
@@ -16856,7 +16997,7 @@ function _merchantMapSetConfirmReady(ready, distKm = 0, fee = 0) {
     if (ready) {
         btn.disabled = false;
         btn.classList.remove("opacity-50", "pointer-events-none");
-        if (label) label.textContent = `✅ ยืนยันปักหมุด (~${distKm.toFixed(1)} กม. ค่าส่ง ฿${fee})`;
+        if (label) label.textContent = `✅ ยืนยันปักหมุด (~${distKm.toFixed(1)} กม. ค่าส่ง ${merchantExpressFeeLabel(distKm)})`;
     } else {
         btn.disabled = true;
         btn.classList.add("opacity-50", "pointer-events-none");
@@ -16901,7 +17042,7 @@ function confirmMerchantMapPin() {
     const lat = merchantPickerCoords.lat;
     const lng = merchantPickerCoords.lng;
     const distKm = calculateDistanceKm(MARKET_ORIGIN.lat, MARKET_ORIGIN.lng, lat, lng);
-    const fee = calculateDeliveryFee(distKm);
+    const fee = merchantExpressFeeForKm(distKm);
 
     // Build title from manual input or coordinates
     const addrInput = document.getElementById("merchant-map-addr-input");
@@ -16924,7 +17065,7 @@ function confirmMerchantMapPin() {
     const badgeSub = document.getElementById("merchant-pinned-sub");
     if (badge) badge.classList.remove("hidden");
     if (badgeText) badgeText.textContent = `📍 ปักหมุด: ${fullTitle}`;
-    if (badgeSub) badgeSub.textContent = `ระยะทาง ~${distKm.toFixed(1)} กม. • ค่าส่ง ฿${fee}`;
+    if (badgeSub) badgeSub.textContent = `ระยะทาง ~${distKm.toFixed(1)} กม. • ค่าส่ง ${merchantExpressFeeLabel(distKm)}`;
 
     // Fill destination address if empty
     const extraAddr = document.getElementById("merchant-dest-address");
@@ -16935,7 +17076,7 @@ function confirmMerchantMapPin() {
 
     // Close modal and show success toast
     closeMerchantMapModal();
-    showToast(`📍 ปักหมุดปลายทางสำเร็จ! ระยะ ~${distKm.toFixed(1)} กม. ค่าส่ง ฿${fee}`);
+    showToast(`📍 ปักหมุดปลายทางสำเร็จ! ระยะ ~${distKm.toFixed(1)} กม. ค่าส่ง ${merchantExpressFeeLabel(distKm)}`);
 }
 
 window.openMerchantDestinationMap = openMerchantDestinationMap;
@@ -16992,7 +17133,13 @@ function submitMerchantCall() {
 
     const currentStall = MARKET_DATA.find(s => s.stallId === activeMerchantStallId) || MARKET_DATA[0];
     const distKm = state.merchantPinnedCoords.distKm;
-    const fee = state.merchantPinnedCoords.fee;
+    if (isBeyondDeliveryRange(distKm)) {
+        showToast(`🚫 ปลายทางห่างจากตลาด ${Number(distKm).toFixed(1)} กม. เกินระยะส่ง ${PRICING.maxKm} กม. กรุณาปักหมุดใหม่`);
+        openMerchantDestinationMap();
+        return;
+    }
+    const riderFee = riderTripFeeForKm(distKm);
+    const fee = riderFee + PRICING.expressAppFee;   // แม่ค้าจ่าย = ค่ารอบไรเดอร์ + ค่าธรรมเนียมแอป (โอนรวมครั้งเดียว)
     const zoneTitle = state.merchantPinnedCoords.title || "พิกัดปักหมุดแผนที่";
     const fullAddress = `${extraAddr} (${zoneTitle})`;
 
@@ -17022,13 +17169,15 @@ function submitMerchantCall() {
         lng: state.merchantPinnedCoords.lng || 101.1214,
         distanceKm: distKm,
         deliveryFee: fee,
+        riderFee: riderFee,
+        appFee: PRICING.expressAppFee,
         isCod: false,
         codAmount: 0,
         isPaid: false,
         paymentStatus: "pending",
         itemDesc: defaultItemDesc,
         grandTotal: fee,
-        paymentDesc: `ค่าบริการจัดส่ง ฿${fee} (ชำระล่วงหน้าเข้าฮับ)`,
+        paymentDesc: `ค่าบริการจัดส่ง ฿${fee} (ค่ารอบไรเดอร์ ฿${riderFee} + ค่าธรรมเนียมแอป ฿${PRICING.expressAppFee}) ชำระล่วงหน้าเข้าฮับ`,
         status: "waiting_rider",
         assignedRider: null,
         stalls: [{
@@ -19484,8 +19633,8 @@ function loadMarketStallSettings() {
             refundPolicy: "cash_envelope"
         };
     }
-    // อัตรา GP มีแหล่งเดียวคือ hubSettings.merchantGP (ค่าเริ่มต้น 10%) ทุกหน้าจอจึงเห็นตรงกัน
-    s.gpRate = loadSavedHubSettings().merchantGP;
+    // อัตรา GP มีแหล่งเดียวคือ getMerchantGpRate() (ฐานข้อมูลกลาง app_settings/pricing) ทุกเครื่องเห็นตรงกัน
+    s.gpRate = getMerchantGpRate();
     return s;
 }
 
@@ -19736,15 +19885,9 @@ function saveMarketStallSettingsFromForm() {
     const settings = loadMarketStallSettings();
     if (gpInput) {
         const gVal = Number(gpInput.value);
-        const gpValid = !isNaN(gVal) && gVal > 0;
-        settings.gpRate = gpValid ? gVal : 10;
-        if (!gpValid) showToast("⚠️ GP ต้องมากกว่า 0% จึงตั้งเป็น 10% ให้");
-        // เก็บที่ hubSettings.merchantGP ที่เดียว (แหล่งเดียวของอัตรา GP)
-        try {
-            const hSettings = loadSavedHubSettings();
-            hSettings.merchantGP = settings.gpRate;
-            localStorage.setItem("hsong_hub_settings", JSON.stringify(hSettings));
-        } catch (e) {}
+        // GP มีแหล่งเดียว = ฐานข้อมูลกลาง (saveMerchantGpRate ตรวจค่าและบอกผลเอง)
+        if (gVal !== getMerchantGpRate()) saveMerchantGpRate(gVal);
+        settings.gpRate = getMerchantGpRate();
     }
     if (openInput) settings.openHour = openInput.value || "04:00";
     if (closeInput) settings.closeHour = closeInput.value || "18:00";
@@ -23473,7 +23616,7 @@ function loadRiderFleetSettings() {
         if (raw) return JSON.parse(raw);
     } catch (e) {}
     return {
-        baseFee: 40,
+        baseFee: 30,
         rainSurcharge: false,
         rainSurchargeAmount: 15,
         dailyBonusTrips: 10,
@@ -23560,6 +23703,80 @@ function saveRiderFleetSettings(settings) {
     return pushFleetSettingsToCloud(settings);
 }
 
+// ── GP ร้านค้า: เก็บที่ฐานข้อมูลกลาง app_settings/pricing (กฎ v8: ทุกคนอ่าน เจ้าของเขียน) ──
+// เดิม GP อยู่ใน localStorage ของเครื่องที่ตั้งค่าเท่านั้น (hsong_hub_settings.merchantGP) เครื่องอื่นเห็นคนละค่า
+// localStorage "talathub_pricing" = สำเนาในเครื่อง ให้ getMerchantGpRate() อ่านได้ทันที
+const PRICING_CLOUD_PATH = "app_settings/pricing";
+
+function isValidGpRate(v) {
+    const n = Number(v);
+    return v !== null && v !== undefined && v !== "" && isFinite(n) && n > 0 && n <= 50;
+}
+
+function getMerchantGpRate() {
+    try {
+        const raw = localStorage.getItem("talathub_pricing");
+        const v = raw ? JSON.parse(raw) : null;
+        if (v && isValidGpRate(v.gpRate)) return Number(v.gpRate);
+    } catch (e) {}
+    return PRICING.defaultGpRate;
+}
+window.getMerchantGpRate = getMerchantGpRate;
+
+function setLocalGpRate(gpRate) {
+    try { localStorage.setItem("talathub_pricing", JSON.stringify({ gpRate: Number(gpRate) })); } catch (e) {}
+}
+
+async function pushPricingToCloud(gpRate) {
+    if (!isFirebaseReady() || !isOwnerSignedIn() || !isValidGpRate(gpRate)) return false;
+    try {
+        await _withTimeout(db.ref(PRICING_CLOUD_PATH).set({ gpRate: Number(gpRate), updatedAt: Date.now() }), 8000);
+        return true;
+    } catch (e) {
+        console.warn("[pricing] cloud save failed:", e && e.message);
+        return false;
+    }
+}
+
+// บันทึก GP ใหม่ (จากหน้าตั้งค่า): สำเนาในเครื่อง + ฐานข้อมูลกลาง แล้วบอกผลตรง ๆ
+async function saveMerchantGpRate(gpRate) {
+    if (!isValidGpRate(gpRate)) {
+        showToast(`⚠️ GP ต้องมากกว่า 0 และไม่เกิน 50% (ตอนนี้ใช้ ${getMerchantGpRate()}%)`);
+        return false;
+    }
+    setLocalGpRate(gpRate);
+    const ok = await pushPricingToCloud(gpRate);
+    fleetSettingsSavedToast(`✅ บันทึก GP ${Number(gpRate)}% แล้ว`, ok);
+    return ok;
+}
+window.saveMerchantGpRate = saveMerchantGpRate;
+
+let _pricingListening = false;
+let _pricingCloudEmpty = false;
+function listenPricingFromCloud() {
+    if (!isFirebaseReady()) return;
+    if (_pricingListening) {
+        if (_pricingCloudEmpty && isOwnerSignedIn()) pushPricingToCloud(getMerchantGpRate());
+        return;
+    }
+    _pricingListening = true;
+    db.ref(PRICING_CLOUD_PATH).on("value", snap => {
+        const v = snap.val();
+        _pricingCloudEmpty = !v;
+        if (!v) {
+            // ครั้งแรก: เจ้าของล็อกอินแล้วส่งค่าตั้งต้น (15%) ขึ้นไป — ไม่ใช้ค่า 10% เก่าที่อาจค้างในเครื่อง
+            if (isOwnerSignedIn()) pushPricingToCloud(getMerchantGpRate());
+            return;
+        }
+        if (isValidGpRate(v.gpRate) && Number(v.gpRate) !== getMerchantGpRate()) setLocalGpRate(v.gpRate);
+    }, err => {
+        // กฎยังไม่มี app_settings/pricing (ก่อนขึ้น v8) = ใช้ค่าในเครื่อง (ค่าตั้งต้น 15%)
+        _pricingListening = false;
+        console.warn("[pricing] cloud read denied:", err && err.code);
+    });
+}
+window.listenPricingFromCloud = listenPricingFromCloud;
+
 function fleetSettingsSavedToast(okText, cloudOk) {
     showToast(cloudOk ? okText + " (ทุกเครื่องเห็นตัวเลขนี้)"
         : "⚠️ บันทึกในเครื่องนี้แล้ว แต่ส่งขึ้นฐานข้อมูลกลางไม่สำเร็จ เครื่องอื่นยังเห็นค่าเดิม (ต้องล็อกอินเจ้าของและต่อเน็ต)");
@@ -23601,7 +23818,7 @@ function renderAdminRiders() {
 
         const rep = reportRiders.find(x => x.riderName === r.name || x.riderPhone === r.phone);
         const trips = rep ? (rep.tripsCount || 0) : (r.tripsCountToday || 0);
-        const feeEarned = rep ? (rep.riderFeeEarned || 0) : (trips * (r.baseFee || settings.baseFee || 40));
+        const feeEarned = rep ? (rep.riderFeeEarned || 0) : (trips * getRiderTripFee());
         const codCollected = rep ? (rep.codCollected || 0) : 0;
         const inHandCod = Math.max(0, codCollected - (Number(r.codSettledToday) || 0));
 
@@ -24375,8 +24592,9 @@ function renderAdminRiders() {
                     <form onsubmit="saveFleetSettingsFromUI(event)" class="space-y-4 text-xs">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                             <div>
-                                <label class="font-bold text-slate-700 block mb-1">ค่ารอบมาตรฐาน (฿/เที่ยว):</label>
-                                <input type="number" id="fleet-cfg-base-fee" value="${settings.baseFee || 40}" min="10" max="200" class="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
+                                <label class="font-bold text-slate-700 block mb-1">ค่ารอบเริ่มต้น (฿/เที่ยว ไม่เกิน ${PRICING.baseKm} กม.):</label>
+                                <p class="text-[12px] font-bold text-slate-700 mb-1">เกิน ${PRICING.baseKm} กม. บวก ฿${PRICING.stepFee} ทุกครึ่ง กม. อัตโนมัติ (ส่งไกลสุด ${PRICING.maxKm} กม.)</p>
+                                <input type="number" id="fleet-cfg-base-fee" value="${settings.baseFee || getRiderTripFee()}" min="10" max="200" class="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-purple-500 outline-none">
                                 <span class="text-[10px] text-slate-400 mt-1 block">ค่าตอบแทนขั้นต่ำต่อเที่ยวที่ไรเดอร์ได้รับ</span>
                             </div>
                             <div>
@@ -24615,7 +24833,7 @@ async function saveFleetSettingsFromUI(e) {
     const s = loadRiderFleetSettings();
     const baseFee = Number(document.getElementById("fleet-cfg-base-fee")?.value);
     if (!isFinite(baseFee) || baseFee <= 0 || baseFee > 1000) {
-        showToast("⚠️ ค่ารอบมาตรฐานต้องเป็นตัวเลขมากกว่า 0 และไม่เกิน 1,000 บาท");
+        showToast("⚠️ ค่ารอบเริ่มต้นต้องเป็นตัวเลขมากกว่า 0 และไม่เกิน 1,000 บาท");
         return;
     }
     s.baseFee = baseFee;
@@ -25964,8 +26182,8 @@ function renderFleetPayoutModal() {
     const riderRows = riders.map(r => {
         const rep = reportRiders.find(x => x.riderName === r.name || x.riderPhone === r.phone);
         const trips = rep ? (rep.tripsCount || 0) : (r.tripsCountToday || 0);
-        const baseFeePerTrip = r.baseFee || settings.baseFee || 40;
-        const baseEarned = trips * baseFeePerTrip;
+        // ค่ารอบตามระยะของแต่ละเที่ยว (จากรายงานประจำวัน) — ไม่ใช่ จำนวนเที่ยว x ค่ารอบเดียว
+        const baseEarned = rep ? (rep.riderFeeEarned || 0) : trips * getRiderTripFee();
         
         let bonus = 0;
         if (settings.rainSurcharge && trips > 0) {
@@ -26105,10 +26323,15 @@ function printFleetPayoutSlip() {
     let grandTotalTrips = 0;
     let grandTotalPayout = 0;
 
+    const slipReport = aggregateDailyOperations(targetDateKey);
+    const slipReportRiders = (slipReport && slipReport.riderSettlement && slipReport.riderSettlement.riders) || [];
+
     let riderRowsHtml = "";
     riders.forEach((r, idx) => {
-        const trips = r.tripsCountToday || 0;
-        const base = trips * (r.baseFee || settings.baseFee || 40);
+        const rep = slipReportRiders.find(x => x.riderName === r.name || x.riderPhone === r.phone);
+        const trips = rep ? (rep.tripsCount || 0) : (r.tripsCountToday || 0);
+        // ค่ารอบตามระยะของแต่ละเที่ยว (ตรงกับหน้าจอโอนเงิน)
+        const base = rep ? (rep.riderFeeEarned || 0) : trips * getRiderTripFee();
         let bonus = 0;
         if (settings.rainSurcharge && trips > 0) bonus += trips * settings.rainSurchargeAmount;
         if (trips >= settings.dailyBonusTrips) bonus += settings.dailyBonusAmount;
@@ -26314,7 +26537,7 @@ function loadSavedHubSettings() {
         hubPhone: "089-123-4567",
         hubLocation: "ล็อคกลาง อาคาร 1 หน้าตลาดวิศิษฐ์ชัย",
         targetPickingTime: 12,
-        merchantGP: 10,
+        merchantGP: getMerchantGpRate(),
         merchantOpen: "04:30",
         merchantClose: "17:30",
         payoutTime: "18:30",
@@ -26325,13 +26548,8 @@ function loadSavedHubSettings() {
         if (saved) {
             const parsed = JSON.parse(saved);
             const settings = Object.assign({}, defaultSettings, parsed);
-            // ถ้า merchantGP <= 0 หรือเป็น NaN/null/undefined (ตกค้างจากนโยบายเดิมหรือข้อผิดพลาด) ปรับเป็น 10%
-            if (typeof settings.merchantGP !== "number" || isNaN(settings.merchantGP) || settings.merchantGP <= 0) {
-                settings.merchantGP = 10;
-                try {
-                    localStorage.setItem("hsong_hub_settings", JSON.stringify(settings));
-                } catch (e) {}
-            }
+            // GP มีแหล่งเดียว = getMerchantGpRate() (ฐานข้อมูลกลาง) ไม่ใช้ค่าเก่าที่ค้างใน hsong_hub_settings
+            settings.merchantGP = getMerchantGpRate();
             return settings;
         }
     } catch (e) {}
@@ -26355,8 +26573,9 @@ function saveAdminSettingsConfig(roleKey) {
         s.targetPickingTime = Number(document.getElementById("cfg-picking-time")?.value || 12);
     } else if (roleKey === "merchant") {
         const gpEl = document.getElementById("cfg-merchant-gp");
-        const gpVal = gpEl ? Number(gpEl.value) : 10;
-        s.merchantGP = (!isNaN(gpVal) && gpVal > 0) ? gpVal : 10;
+        const gpVal = gpEl ? Number(gpEl.value) : getMerchantGpRate();
+        if (gpVal !== getMerchantGpRate()) saveMerchantGpRate(gpVal);   // GP ไปฐานข้อมูลกลาง (มีข้อความบอกผลเอง)
+        s.merchantGP = getMerchantGpRate();
         s.merchantOpen = document.getElementById("cfg-merchant-open")?.value || "04:30";
         s.merchantClose = document.getElementById("cfg-merchant-close")?.value || "17:30";
         s.payoutTime = document.getElementById("cfg-payout-time")?.value || "18:30";
@@ -26608,8 +26827,8 @@ function renderAdminSettings() {
                     <div class="space-y-3 text-xs">
                         <div>
                             <label class="font-bold text-slate-700 block mb-1">ค่าธรรมเนียมส่วนแบ่งระบบ (GP %):</label>
-                            <input type="number" min="1" max="30" id="cfg-merchant-gp" value="${s.merchantGP}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-emerald-700 bg-slate-50">
-                            <span class="text-[11px] text-slate-400">อัตราแนะนำ 10% เพื่อครอบคลุมค่าเช่าและเงินเดือนพนักงานตามแผนธุรกิจ (กำไรสุทธิ 5%)</span>
+                            <input type="number" min="1" max="50" id="cfg-merchant-gp" value="${s.merchantGP}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-emerald-700 bg-slate-50">
+                            <span class="text-[12px] font-bold text-slate-700">ตั้งไว้ ${PRICING.defaultGpRate}% ตามแผนกำไร 10% ต่อออเดอร์ (ทุกเครื่องเห็นค่าเดียวกัน)</span>
                         </div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
@@ -27897,8 +28116,7 @@ function renderHubSettlement() {
 
     // 1. สรุปยอดจ่ายแผงค้า (Grocery Orders)
     if (hasGrocery) {
-        const hubSettings = (typeof loadSavedHubSettings === "function") ? loadSavedHubSettings() : {};
-        const gpRate = (hubSettings && typeof hubSettings.merchantGP === "number" && hubSettings.merchantGP > 0) ? hubSettings.merchantGP : 10;
+        const gpRate = getMerchantGpRate();
         let vendorListHtml = "";
         let vendorTotal = 0;
         let vendorPayoutTotal = 0;
@@ -29072,7 +29290,7 @@ function handleRiderCompleteDelivery() {
     openRiderDeliveryCompleteModal();
     const doneMsg = (order.orderType === "MERCHANT_EXPRESS")
         ? `🎉 ส่งมอบของจากร้านค้าถึงมือลูกค้าเรียบร้อยแล้ว! (ค่าส่ง ฿${order.deliveryFee || 20})`
-        : `🎉 ไรเดอร์ (${order.riderName || 'คนขับ'}) ส่งมอบของสดถึงมือลูกค้าเรียบร้อยแล้ว! (+฿${getRiderTripFee()} ค่ารอบ)`;
+        : `🎉 ไรเดอร์ (${order.riderName || 'คนขับ'}) ส่งมอบของสดถึงมือลูกค้าเรียบร้อยแล้ว! (+฿${riderTripFeeForOrder(order)} ค่ารอบ)`;
     showToast(doneMsg);
 }
 window.handleRiderCompleteDelivery = handleRiderCompleteDelivery;
@@ -33575,7 +33793,7 @@ function renderRiderJobPool() {
                 <div class="flex items-center justify-between pt-1">
                     <div>
                         <span class="text-[10px] text-slate-400">รายได้ค่ารอบ:</span>
-                        <span class="text-sm font-extrabold text-emerald-600 ml-1">฿${Number(job.fee || getRiderTripFee())}</span>
+                        <span class="text-sm font-extrabold text-emerald-600 ml-1">฿${Number(job.fee || riderTripFeeForKm(job.distanceKm))}</span>
                     </div>
                     <button onclick="claimOrderForRider(${jsArg(key)})" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all">
                         <span>🛵 กดรับงานนี้</span>
@@ -33707,7 +33925,7 @@ function renderRiderWallet() {
 
     let riderRecord = report?.riderSettlement?.riders?.find(r => r.riderName === riderName || r.riderPhone === activeRiderObj.phone) || {
         tripsCount: state.activeOrder && state.activeOrder.status === 'delivered' ? 1 : 0,
-        riderFeeEarned: state.activeOrder && state.activeOrder.status === 'delivered' ? getRiderTripFee() : 0,
+        riderFeeEarned: state.activeOrder && state.activeOrder.status === 'delivered' ? riderTripFeeForOrder(state.activeOrder) : 0,
         codCollected: 0,
         refundHanded: 0,
         netCashToHub: 0
@@ -33854,7 +34072,7 @@ function renderRiderWallet() {
             <div class="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-3.5 shadow-sm text-center">
                 <div class="text-[10px] text-emerald-700 font-extrabold uppercase">รายได้ค่ารอบสะสมวันนี้</div>
                 <div class="text-2xl font-black text-emerald-600 mt-1">฿${feeEarned.toLocaleString()}</div>
-                <div class="text-[10px] text-emerald-800 mt-0.5">รวม ${trips} รอบจัดส่ง (฿${getRiderTripFee()}/รอบ)</div>
+                <div class="text-[10px] text-emerald-800 mt-0.5">รวม ${trips} รอบจัดส่ง (ค่ารอบ ${riderFeeRuleText()})</div>
             </div>
             <div class="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-3.5 shadow-sm text-center">
                 <div class="text-[10px] text-amber-800 font-extrabold uppercase">เงินสด COD ถือติดตัว</div>
@@ -33903,7 +34121,7 @@ function renderRiderWallet() {
                             <div class="text-[10px] text-slate-500">เสร็จเมื่อ: ${state.activeOrder?.deliveredAt || 'วันนี้'}</div>
                         </div>
                         <div class="text-right">
-                            <div class="font-extrabold text-emerald-600">+฿${getRiderTripFee()}</div>
+                            <div class="font-extrabold text-emerald-600">+฿${state.activeOrder ? riderTripFeeForOrder(state.activeOrder) : getRiderTripFee()}</div>
                             <span class="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md font-bold">สำเร็จ</span>
                         </div>
                     </div>
