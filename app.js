@@ -29307,6 +29307,7 @@ function openRiderDeliveryCompleteModal() {
         const payDesc = o.paymentDesc || (pType === "bank_transfer" ? "โอน SCB แล้ว" : (isCod ? "💵 เงินสดปลายทาง (COD)" : "📱 ชำระผ่านระบบแล้ว"));
         setVal("rdc-payment-desc", payDesc);
         setVal("rdc-order-amount", `฿${(o.grandTotal || o.total || 0).toLocaleString()}`);
+        setVal("rdc-rider-fee", `+฿${riderTripFeeForOrder(o)} ค่ารอบจัดส่ง`);   // ค่ารอบตามระยะของเที่ยวนี้ (เดิมเขียนตายตัว ฿40)
         setVal("rider-complete-payment-info", `฿${(o.grandTotal || o.total || 0).toLocaleString()} (${payDesc})`);
         setVal("rdc-delivered-time", o.deliveredAt || (new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น."));
 
