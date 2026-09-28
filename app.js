@@ -15053,47 +15053,10 @@ function selectRiderTip(tip) {
     }
 }
 
+// ระบบแต้มสะสม / แลกของรางวัล ลบแล้ว 2026-09-28 (เจ้าของสั่ง: เป็นของตัวอย่าง ทุกคน 160 แต้ม แลกแล้วไม่มีใครส่งของ)
 function submitOrderRating() {
     closeRatingModal();
-
-    // Add 20 loyalty points
-    state.customerPoints = (state.customerPoints || 140) + 20;
-
-    // Update active banner and displays
-    const bannerPts = document.getElementById("loyalty-banner-points");
-    if (bannerPts) bannerPts.textContent = `${state.customerPoints} แต้ม`;
-
-    // Open Celebration & Reward Modal
-    openReviewRewardModal();
-    showToast(`🎉 รีวิวสำเร็จ! ได้รับ +20 แต้มสะสม`);
-}
-
-function openReviewRewardModal() {
-    const modal = document.getElementById("review-reward-modal");
-    if (modal) {
-        modal.classList.remove("hidden");
-        const ptsEl = document.getElementById("user-total-points-display");
-        if (ptsEl) ptsEl.textContent = `${state.customerPoints || 160} แต้ม`;
-    }
-}
-
-function closeReviewRewardModal() {
-    const modal = document.getElementById("review-reward-modal");
-    if (modal) modal.classList.add("hidden");
-}
-
-function openRewardsModal() {
-    const modal = document.getElementById("rewards-modal");
-    if (modal) {
-        modal.classList.remove("hidden");
-        const ptsEl = document.getElementById("rewards-modal-points");
-        if (ptsEl) ptsEl.textContent = `${state.customerPoints || 160} แต้ม`;
-    }
-}
-
-function closeRewardsModal() {
-    const modal = document.getElementById("rewards-modal");
-    if (modal) modal.classList.add("hidden");
+    showToast("🙏 ขอบคุณสำหรับรีวิวครับ");
 }
 
 function openCustomerWalletModal() {
@@ -15101,15 +15064,6 @@ function openCustomerWalletModal() {
     if (!modal) return;
     modal.classList.remove("hidden");
 
-    const pts = state.customerPoints !== undefined ? state.customerPoints : 0;
-    const ptsDisplay = document.getElementById("wallet-points-display");
-    if (ptsDisplay) ptsDisplay.textContent = `${pts} แต้ม`;
-
-    const bar = document.getElementById("wallet-progress-bar");
-    if (bar) {
-        const pct = Math.min(100, Math.round((pts / 100) * 100));
-        bar.style.width = `${pct}%`;
-    }
 
     const idEl = document.getElementById("wallet-customer-id");
     if (idEl) {
@@ -15212,31 +15166,6 @@ function reorderAndGoCheckout() {
     } else {
         showToast("ℹ️ ไม่พบรายการสินค้าเดิมสำหรับสั่งซ้ำ กรุณาเลือกสินค้าจากหน้าตลาด");
     }
-}
-
-function redeemRewardItem(rewardName, cost) {
-    const currentPts = state.customerPoints !== undefined ? state.customerPoints : 60;
-    if (currentPts < cost) {
-        showToast(`⚠️ แต้มสะสมของคุณไม่เพียงพอ (มี ${currentPts} แต้ม • ต้องการ ${cost} แต้ม)`);
-        return;
-    }
-    state.customerPoints = currentPts - cost;
-    const ptsEl = document.getElementById("rewards-modal-points");
-    if (ptsEl) ptsEl.textContent = `${state.customerPoints} แต้ม`;
-    const userPts = document.getElementById("user-total-points-display");
-    if (userPts) userPts.textContent = `${state.customerPoints} แต้ม`;
-    const walletPts = document.getElementById("wallet-points-display");
-    if (walletPts) walletPts.textContent = `${state.customerPoints} แต้ม`;
-    const bannerPts = document.getElementById("loyalty-banner-points");
-    if (bannerPts) bannerPts.textContent = `${state.customerPoints} แต้ม`;
-
-    const bar = document.getElementById("wallet-progress-bar");
-    if (bar) {
-        const pct = Math.min(100, Math.round((state.customerPoints / 100) * 100));
-        bar.style.width = `${pct}%`;
-    }
-
-    showToast(`🎁 แลกรับ "${rewardName}" สำเร็จ!`);
 }
 
 function copyCouponCode(code) {
@@ -29311,6 +29240,7 @@ function openRiderDeliveryCompleteModal() {
         const payDesc = o.paymentDesc || (pType === "bank_transfer" ? "โอน SCB แล้ว" : (isCod ? "💵 เงินสดปลายทาง (COD)" : "📱 ชำระผ่านระบบแล้ว"));
         setVal("rdc-payment-desc", payDesc);
         setVal("rdc-order-amount", `฿${(o.grandTotal || o.total || 0).toLocaleString()}`);
+        setVal("rdc-rider-fee", `+฿${riderTripFeeForOrder(o)} ค่ารอบจัดส่ง`);   // ค่ารอบตามระยะของเที่ยวนี้ (เดิมเขียนตายตัว ฿40)
         setVal("rider-complete-payment-info", `฿${(o.grandTotal || o.total || 0).toLocaleString()} (${payDesc})`);
         setVal("rdc-delivered-time", o.deliveredAt || (new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น."));
 
@@ -29603,25 +29533,24 @@ function updateCustomerLoyaltyBanner() {
 
     if (state.customer && state.customer.isLoggedIn) {
         const id = state.customer.identifier || "ลูกค้า";
-        const pts = state.customerPoints !== undefined ? state.customerPoints : 160;
+        // แต้มสะสม / ระดับสมาชิก ลบแล้ว 2026-09-28 (เป็นของตัวอย่าง) — ป้ายนี้พาไปดูออเดอร์ล่าสุด / สั่งซ้ำ
         banner.innerHTML = `
             <div onclick="openCustomerWalletModal()" class="bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-300 text-slate-950 rounded-2xl p-3 shadow-md border border-amber-300 flex items-center justify-between cursor-pointer hover:shadow-lg active:scale-[0.99] transition-all">
                 <div class="flex items-center gap-2.5">
                     <div class="w-10 h-10 rounded-2xl bg-slate-950 text-amber-300 flex items-center justify-center font-black text-xl shadow-xs shrink-0">
-                        🪙
+                        👤
                     </div>
                     <div>
                         <div class="flex items-center gap-1.5">
-                            <span class="font-black text-xs text-slate-950" id="loyalty-banner-name">คุณ ${id}</span>
-                            <span class="text-[9px] bg-slate-950 text-amber-300 font-black px-1.5 py-0.2 rounded-full">👑 Platinum</span>
+                            <span class="font-black text-xs text-slate-950" id="loyalty-banner-name">คุณ ${escapeHtml(id)}</span>
                         </div>
                         <div class="text-[11px] font-extrabold text-slate-900 flex items-center gap-1.5 mt-0.5 flex-wrap">
-                            <span>แต้มสะสม: <strong class="text-emerald-950 font-black text-xs" id="loyalty-banner-points">${pts} แต้ม</strong></span>
+                            <span>ดูออเดอร์ล่าสุด และสั่งซ้ำได้ในคลิกเดียว</span>
                         </div>
                     </div>
                 </div>
                 <div class="flex items-center text-slate-950 text-xs font-black gap-0.5 shrink-0 bg-white/50 hover:bg-white/70 px-2 py-1.5 rounded-xl transition-all shadow-2xs">
-                    <span>กระเป๋า</span>
+                    <span>ออเดอร์ของฉัน</span>
                     <span class="material-symbols-outlined text-sm">chevron_right</span>
                 </div>
             </div>
@@ -29631,14 +29560,14 @@ function updateCustomerLoyaltyBanner() {
             <div onclick="openCustomerLoginModal()" class="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 text-white rounded-2xl p-3 shadow-md border border-emerald-600 flex items-center justify-between cursor-pointer hover:shadow-lg active:scale-[0.99] transition-all">
                 <div class="flex items-center gap-2.5">
                     <div class="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-xl shadow-xs shrink-0">
-                        🎁
+                        👋
                     </div>
                     <div>
                         <div class="flex items-center gap-1.5">
                             <span class="font-black text-xs text-amber-300">ยินดีต้อนรับสู่เฮียส่ง!</span>
                         </div>
                         <div class="text-[11px] text-emerald-100 mt-0.5">
-                            <span>แตะเพื่อ <strong>เข้าสู่ระบบ / สมัครสมาชิก</strong> สะสมแต้มรับของรางวัล</span>
+                            <span>แตะเพื่อ <strong>เข้าสู่ระบบ</strong> ด้วยเบอร์โทร เพื่อสั่งของและติดตามออเดอร์</span>
                         </div>
                     </div>
                 </div>
