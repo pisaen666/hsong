@@ -5925,6 +5925,47 @@ window.verifyOrderTrackCode = verifyOrderTrackCode;
 window.buildOrderTrackingUrl = buildOrderTrackingUrl;
 window.resolveOrderTrackingAccess = resolveOrderTrackingAccess;
 
+// ลิงก์หน้าร้าน (สำหรับ QR code หน้าแผงค้า): ?shop=<รหัสร้าน> ไม่มีวันหมดอายุ ตราบใดที่ร้านยังอยู่
+function buildStallDeepLink(stallId, baseOverride) {
+    if (!stallId) return "";
+    const base = baseOverride || ((typeof window !== "undefined" && window.location) ? (window.location.origin + window.location.pathname) : "https://pisaen666.github.io/hsong/");
+    return base + "?shop=" + encodeURIComponent(stallId);
+}
+window.buildStallDeepLink = buildStallDeepLink;
+
+// รูป QR code ของลิงก์หน้าร้าน (ใช้ตัวสร้าง QR ตัวเดียวกับที่ใช้อยู่แล้วสำหรับลิงก์ติดตามออเดอร์)
+function stallQrImageUrl(stallId, size) {
+    const link = buildStallDeepLink(stallId);
+    if (!link) return "";
+    return `https://api.qrserver.com/v1/create-qr-code/?size=${size || 260}x${size || 260}&data=${encodeURIComponent(link)}`;
+}
+window.stallQrImageUrl = stallQrImageUrl;
+
+// ลูกค้าสแกน QR หน้าร้าน (?shop=รหัสร้าน) -> เปิดหน้ารายการสินค้าร้านนั้นทันที
+function handleShopDeepLink() {
+    try {
+        const shopId = new URLSearchParams(window.location.search).get("shop");
+        if (!shopId) return false;
+        const stall = MARKET_DATA.find(s => s.stallId === shopId) || ALL_100_STALLS.find(s => s.stallId === shopId);
+        if (!stall) {
+            showToast("⚠️ ไม่พบร้านนี้ในระบบ (รหัสร้านไม่ถูกต้อง หรือร้านถูกลบไปแล้ว)");
+            return true;
+        }
+        switchRole("customer");
+        openStallCatalogModal(stall.stallId);
+        if (stall.isClosed) {
+            showToast(`🔴 ร้าน "${stall.stallName}" พักรับออเดอร์ชั่วคราวอยู่ตอนนี้ ดูสินค้าได้ แต่สั่งซื้อยังไม่ได้`);
+        } else {
+            showToast(`🏪 เปิดหน้าร้าน "${stall.stallName}" จาก QR code เรียบร้อยแล้ว`);
+        }
+        return true;
+    } catch (e) {
+        console.warn("handleShopDeepLink failed", e);
+        return false;
+    }
+}
+window.handleShopDeepLink = handleShopDeepLink;
+
 async function handleTrackingDeepLink() {
     try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -6027,6 +6068,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderTrackingScreen();
     renderDirectoryList();
     updateHomeActiveOrderBanner();
+    handleShopDeepLink();
     handleTrackingDeepLink();
 
     // ✅ Cross-tab sync (same browser): ฟัง storage event
@@ -30229,6 +30271,59 @@ function reopenMyMerchantStall(stallId) {
 }
 window.reopenMyMerchantStall = reopenMyMerchantStall;
 
+// QR code หน้าร้าน: ให้ร้านที่ล็อกอินอยู่ดู/บันทึกรูปซ้ำได้ทุกเมื่อ (ไม่ใช่แค่ตอนอนุมัติครั้งแรก)
+function openMyStallQrModal() {
+    const stallId = activeMerchantStallId || (state.activeMerchant && state.activeMerchant.stallId);
+    if (!stallId) { showToast("⚠️ กรุณาเข้าสู่ระบบแผงค้าก่อน"); return; }
+    const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
+    const modal = document.getElementById("merchant-stall-qr-modal");
+    if (!modal) return;
+
+    const nameEl = document.getElementById("merchant-qr-stall-name");
+    const imgEl = document.getElementById("merchant-qr-img");
+    const linkEl = document.getElementById("merchant-qr-link-text");
+    const link = buildStallDeepLink(stallId);
+
+    if (nameEl) nameEl.textContent = stall ? stall.stallName : "ร้านค้าในตลาด";
+    if (imgEl) imgEl.src = stallQrImageUrl(stallId, 320);
+    if (linkEl) linkEl.textContent = link;
+
+    modal.classList.remove("hidden");
+}
+window.openMyStallQrModal = openMyStallQrModal;
+
+function closeMyStallQrModal() {
+    const modal = document.getElementById("merchant-stall-qr-modal");
+    if (modal) modal.classList.add("hidden");
+}
+window.closeMyStallQrModal = closeMyStallQrModal;
+
+function copyMyStallQrLink() {
+    const stallId = activeMerchantStallId || (state.activeMerchant && state.activeMerchant.stallId);
+    if (!stallId) return;
+    const link = buildStallDeepLink(stallId);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(() => {
+            showToast("📋 คัดลอกลิงก์หน้าร้านเรียบร้อยแล้ว!");
+        }).catch(() => copyTextToClipboard(link));
+    } else {
+        copyTextToClipboard(link);
+    }
+}
+window.copyMyStallQrLink = copyMyStallQrLink;
+
+function sendMyStallQrLineNotice() {
+    const stallId = activeMerchantStallId || (state.activeMerchant && state.activeMerchant.stallId);
+    if (!stallId) return;
+    const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
+    const link = buildStallDeepLink(stallId);
+    const text = `🏪 หน้าร้าน "${stall ? stall.stallName : stallId}" (ตลาดวิศิษฐ์ชัย เฮียส่ง)\nสแกนหรือกดลิงก์นี้เพื่อดูสินค้าและสั่งซื้อได้เลยครับ:\n${link}`;
+    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
+    try { window.location.href = lineUrl; } catch (e) { window.open(lineUrl, "_blank"); }
+    showToast("💬 กำลังเปิดแอป LINE เพื่อส่งลิงก์หน้าร้าน...");
+}
+window.sendMyStallQrLineNotice = sendMyStallQrLineNotice;
+
 function _enterMerchantStall(stallId) {
     closeMerchantLoginModal();
     closeMerchantPortalModal();
@@ -32687,6 +32782,18 @@ function openSimulatedSmsModal(phone, codeVal, name, roleType, lineId, riderNumb
         msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! ใบสมัครเปิดร้านค้าได้รับอนุมัติแล้ว รหัสร้านของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
     }
 
+    // 📱 QR code หน้าร้าน (เฉพาะแผงค้า): ให้เจ้าของกดดู/บันทึกรูปแล้วส่งต่อไปพร้อมรหัสผ่าน (LINE ส่งรูปแนบให้อัตโนมัติไม่ได้ ต้องส่งเอง)
+    const qrSection = document.getElementById("sms-modal-qr-section");
+    if (qrSection) {
+        if (roleType === "merchant" && riderNumber) {
+            const qrImg = document.getElementById("sms-modal-qr-img");
+            if (qrImg) qrImg.src = stallQrImageUrl(riderNumber, 220);
+            qrSection.classList.remove("hidden");
+        } else {
+            qrSection.classList.add("hidden");
+        }
+    }
+
     modal.classList.remove("hidden");
 }
 window.openSimulatedSmsModal = openSimulatedSmsModal;
@@ -32750,8 +32857,10 @@ function getApprovalNotificationText(phone, code, name, roleType, riderNumber) {
             `\n\nเข้าสู่ระบบที่เมนู "4. ไรเดอร์" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nใส่เลขไรเดอร์และรหัสผ่านข้างต้น แล้วเริ่มรับงานได้เลยครับ!`;
     }
     if (roleType === "merchant") {
-        // แผงค้า: รหัสร้าน (สาธารณะ) + รหัสผ่านลับ
-        return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัครเปิดร้านค้าของคุณได้รับการอนุมัติแล้ว 🎉\n\nรหัสร้าน: ${riderNumber || '-'}\nรหัสผ่านเข้าระบบ: ${code}\n\nเข้าสู่ระบบที่เมนู "3. แผงค้า" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nใส่รหัสร้านและรหัสผ่านนี้ (เก็บรหัสผ่านเป็นความลับ อย่าบอกใคร)`;
+        // แผงค้า: รหัสร้าน (สาธารณะ) + รหัสผ่านลับ + ลิงก์/QR หน้าร้าน (ให้ลูกค้าสแกนดูสินค้าร้านนี้ได้โดยตรง)
+        const shopLink = riderNumber ? buildStallDeepLink(riderNumber) : "";
+        return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัครเปิดร้านค้าของคุณได้รับการอนุมัติแล้ว 🎉\n\nรหัสร้าน: ${riderNumber || '-'}\nรหัสผ่านเข้าระบบ: ${code}\n\nเข้าสู่ระบบที่เมนู "3. แผงค้า" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nใส่รหัสร้านและรหัสผ่านนี้ (เก็บรหัสผ่านเป็นความลับ อย่าบอกใคร)` +
+            (shopLink ? `\n\n📱 ลิงก์/QR หน้าร้านของคุณ (ให้ลูกค้าสแกนดูสินค้าร้านได้เลย ไม่มีวันหมดอายุ):\n${shopLink}\n(เปิดลิงก์นี้เพื่อดูรูป QR แล้วบันทึกไปพิมพ์แปะหน้าร้าน หรือส่งให้ลูกค้าได้เลย)` : "");
     }
     const roleTitle = roleType === "merchant" ? "เปิดร้านค้า" : "ร่วมทีมไรเดอร์";
     const roleTarget = roleType === "merchant" ? "3. แผงค้า" : "4. ไรเดอร์";

@@ -1804,6 +1804,12 @@
                     <span>สลับบทบาท:</span>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="openMyStallQrModal()"
+                        class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95"
+                        title="ดู/บันทึกรูป QR หน้าร้านของฉัน">
+                        <span class="material-symbols-outlined text-xs text-amber-400">qr_code_2</span>
+                        <span>QR ร้านฉัน</span>
+                    </button>
                     <button type="button" onclick="switchRole('customer')"
                         class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold flex items-center gap-1 transition-all active:scale-95"
                         title="สลับไปสั่งของสด">
@@ -3566,6 +3572,62 @@
 
             <button type="button" onclick="closeCustomerWalletModal()"
                 class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs active:scale-95 transition-all">
+                ปิดหน้าต่าง
+            </button>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 5.4 MODAL: MERCHANT STALL QR (QR code หน้าร้าน ให้แม่ค้าดู/บันทึกซ้ำได้ทุกเมื่อ) -->
+    <!-- ========================================== -->
+    <div id="merchant-stall-qr-modal"
+        class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-3 sm:p-4 hidden animate-fade-in">
+        <div
+            class="bg-white rounded-3xl p-5 max-w-sm w-full shadow-2xl space-y-3.5 animate-scale-up text-center border border-slate-200">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 text-left">
+                <div class="flex items-center gap-2">
+                    <span class="w-9 h-9 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-xl">qr_code_2</span>
+                    </span>
+                    <div>
+                        <h3 class="font-extrabold text-sm text-slate-900">QR code หน้าร้านของฉัน</h3>
+                        <p class="text-[10px] text-slate-500" id="merchant-qr-stall-name">ร้านค้าในตลาด</p>
+                    </div>
+                </div>
+                <button onclick="closeMyStallQrModal()"
+                    class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+
+            <img id="merchant-qr-img" src="" alt="QR code หน้าร้าน" class="w-52 h-52 mx-auto rounded-2xl border border-amber-200 bg-white shadow-xs" />
+
+            <p class="text-[11px] text-slate-500 leading-snug">
+                ให้ลูกค้าสแกน QR นี้เพื่อเปิดดูรายการสินค้าของร้านคุณได้ทันที<br>
+                รูปนี้ไม่มีวันหมดอายุ พิมพ์แปะหน้าร้าน หรือส่งให้ลูกค้าเก็บไว้ได้เลย
+            </p>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-left">
+                <div class="text-[10px] text-slate-400 mb-0.5">ลิงก์หน้าร้าน:</div>
+                <div class="text-[11px] font-mono text-emerald-700 break-all" id="merchant-qr-link-text">-</div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <button type="button" onclick="copyMyStallQrLink()"
+                    class="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-sm">content_copy</span>
+                    <span>คัดลอกลิงก์</span>
+                </button>
+                <button type="button" onclick="sendMyStallQrLineNotice()"
+                    class="py-2.5 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-all">
+                    <span>💬</span>
+                    <span>ส่งลิงก์ทาง LINE</span>
+                </button>
+            </div>
+            <p class="text-[10px] text-slate-400">แตะค้างที่รูป QR ด้านบนเพื่อบันทึกรูปไปพิมพ์ต่อได้</p>
+
+            <button type="button" onclick="closeMyStallQrModal()"
+                class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium rounded-xl text-xs active:scale-95 transition-all">
                 ปิดหน้าต่าง
             </button>
         </div>
@@ -6858,6 +6920,22 @@
                         id="sms-modal-code">CT4578</strong>
                 </div>
             </div>
+
+            <!-- QR code หน้าร้าน (เฉพาะแผงค้า) — ให้ลูกค้าสแกนดูสินค้าร้านนี้ได้โดยตรง LINE ส่งรูปแนบอัตโนมัติไม่ได้ เจ้าของต้องบันทึก/ส่งต่อเอง -->
+            <div id="sms-modal-qr-section" class="hidden bg-amber-50 border border-amber-200 rounded-2xl p-3 space-y-2 text-left">
+                <div class="text-[11px] font-bold text-amber-900 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-sm text-amber-600">qr_code_2</span>
+                    <span>QR code หน้าร้าน (ให้ลูกค้าสแกนดูสินค้าร้านนี้ได้เลย)</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <img id="sms-modal-qr-img" src="" alt="QR code หน้าร้าน" class="w-24 h-24 rounded-xl border border-amber-300 bg-white shrink-0" />
+                    <p class="text-[10.5px] text-amber-800 leading-snug">
+                        รูปนี้ไม่หมดอายุ พิมพ์แปะหน้าร้านได้เลย<br>
+                        <strong>หมายเหตุ:</strong> LINE แนบรูปให้อัตโนมัติไม่ได้ กด "ส่งแจ้ง LINE" เพื่อส่งข้อความ+ลิงก์ก่อน แล้วค่อยกดขวา/แตะค้างที่รูปนี้เพื่อบันทึกรูปส่งตามไปอีกที
+                    </p>
+                </div>
+            </div>
+
             <div class="space-y-2 pt-1">
                 <div class="grid grid-cols-2 gap-2">
                     <button type="button" onclick="sendRealSmsFromModal()"
