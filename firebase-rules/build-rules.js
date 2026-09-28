@@ -1,7 +1,10 @@
-// สร้างไฟล์กฎ Firebase รุ่น v7 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
+// สร้างไฟล์กฎ Firebase รุ่น v8 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
 //   node firebase-rules/build-rules.js
-// ผลลัพธ์: hsong-test.rules.v7.json และ hsong-1f342.rules.v7.json
-//   (ไฟล์ .rules.v6.json / v5 / v4 / v3 / v2 = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+// ผลลัพธ์: hsong-test.rules.v8.json และ hsong-1f342.rules.v8.json
+//   (ไฟล์ .rules.v7.json / v6 / v5 / v4 / v3 / v2 = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+//
+// v8 (2026-09-28) — GP ร้านค้าเก็บที่ฐานข้อมูลกลาง (โครงสร้างราคาใหม่ เจ้าของตัดสินใจ GP 15%):
+//   app_settings/pricing : { gpRate (0 < x <= 50), updatedAt } ทุกคนอ่านได้ เขียนได้เฉพาะเจ้าของ; ส่วนอื่นเหมือน v7 ทุกอย่าง
 //
 // v7 (2026-09-26) — ค่ารอบไรเดอร์เก็บที่ฐานข้อมูลกลาง (เจ้าของสั่ง: ทุกเครื่องต้องเห็นตัวเลขเดียวกัน):
 //   app_settings/rider_fleet : { baseFee, rainSurcharge, rainSurchargeAmount, dailyBonusTrips, dailyBonusAmount, maxCodLimit, updatedAt }
@@ -204,6 +207,15 @@ function build(uids) {
                     maxCodLimit: { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000" },
                     updatedAt: { ".validate": "newData.isNumber()" },
                     "$other": { ".validate": false }
+                },
+                // v8: GP ร้านค้า (getMerchantGpRate) — ทุกเครื่องอ่านได้ เจ้าของแก้ได้คนเดียว
+                pricing: {
+                    ".read": true,
+                    ".write": OWNER,
+                    ".validate": "newData.hasChildren(['gpRate'])",
+                    gpRate: { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 50" },
+                    updatedAt: { ".validate": "newData.isNumber()" },
+                    "$other": { ".validate": false }
                 }
             },
 
@@ -317,7 +329,7 @@ function build(uids) {
 }
 
 Object.entries(PROJECTS).forEach(([project, uids]) => {
-    const file = path.join(__dirname, project + ".rules.v7.json");
+    const file = path.join(__dirname, project + ".rules.v8.json");
     fs.writeFileSync(file, JSON.stringify(build(uids), null, 2) + "\n");
     console.log("wrote", path.basename(file));
 });

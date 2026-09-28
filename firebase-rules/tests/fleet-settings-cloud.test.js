@@ -80,7 +80,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
     ok(JSON.stringify(v7) === JSON.stringify(rulesV6), "v7 = v6 + app_settings เท่านั้น (ส่วนอื่นไม่เปลี่ยน)");
 
     console.log("== ค่าจากฐานข้อมูลกลางลงมาทุกเครื่อง");
-    ok(run("getRiderTripFee()") === 40, "ยังไม่มีค่าไหนเลย -> 40 บาท");
+    ok(run("getRiderTripFee()") === 30, "ยังไม่มีค่าไหนเลย -> 30 บาท (ค่ารอบเริ่มต้นใหม่ 2026-09-28)");
     cloud = { baseFee: 55, rainSurcharge: false, rainSurchargeAmount: 15, dailyBonusTrips: 10, dailyBonusAmount: 100, maxCodLimit: 2500, updatedAt: 1 };
     owner = false;
     run("listenFleetSettingsFromCloud()");
@@ -99,7 +99,9 @@ const tick = () => new Promise(r => setTimeout(r, 0));
     owner = true; toasts.length = 0;
     Object.assign(inputs, { "fleet-cfg-base-fee": "65", "fleet-cfg-rain-bonus": "20", "fleet-cfg-target-trips": "12", "fleet-cfg-bonus-amount": "150", "fleet-cfg-max-cod": "3000" });
     await run("saveFleetSettingsFromUI()");
-    ok(cloud.baseFee === 65 && cloud.rainSurchargeAmount === 20 && cloud.dailyBonusTrips === 12 && cloud.dailyBonusAmount === 150 && cloud.maxCodLimit === 3000, "ทุกช่องขึ้นฐานข้อมูลกลาง");
+    // โบนัสครบเป้าเที่ยวถูกลบจากหน้าตั้งค่า (เจ้าของสั่ง 2026-09-28): ช่องเก่าในฐานข้อมูลไม่ถูกแก้ และไม่มีโค้ดไหนใช้แล้ว
+    ok(cloud.baseFee === 65 && cloud.rainSurchargeAmount === 20 && cloud.maxCodLimit === 3000, "ทุกช่องที่ยังมีในหน้าตั้งค่าขึ้นฐานข้อมูลกลาง");
+    ok(cloud.dailyBonusTrips !== 12 && cloud.dailyBonusAmount !== 150, "ช่องโบนัสเก่า (ถ้ามีค้างในหน้าเว็บ) ไม่ถูกอ่านไปบันทึก");
     ok(Object.keys(cloud).every(k => ["baseFee", "rainSurcharge", "rainSurchargeAmount", "dailyBonusTrips", "dailyBonusAmount", "maxCodLimit", "updatedAt"].includes(k)), "ส่งเฉพาะช่องที่กฎอนุญาต");
     ok(typeof cloud.updatedAt === "number" && typeof cloud.rainSurcharge === "boolean", "updatedAt เป็นตัวเลข, rainSurcharge เป็น true/false");
     ok(/ทุกเครื่องเห็น/.test(toasts.pop()), "ข้อความบอกว่าทุกเครื่องเห็นตัวเลขนี้");
