@@ -12472,7 +12472,7 @@ function renderSubCategoryProductView() {
     html += `
         <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden p-2 sm:p-2.5 space-y-1.5">
             <!-- Column Header -->
-            <div class="flex items-center justify-between text-[10px] font-extrabold text-slate-400 px-2.5 sm:px-3 pb-1 select-none border-b border-slate-100">
+            <div class="flex items-center justify-between text-[11px] font-extrabold text-slate-600 px-2.5 sm:px-3 pb-1 select-none border-b border-slate-100">
                 <span class="w-6 shrink-0 text-center">ลำดับ</span>
                 <span class="flex-1 min-w-0 pl-2">ชื่อรายการสินค้า</span>
                 <div class="flex items-center gap-2 shrink-0">
@@ -12499,25 +12499,28 @@ function renderSubCategoryProductView() {
                     ${idx + 1}
                 </span>
 
-                <!-- 2. ชื่อรายการสินค้า + ป้าย + ร้านค้า -->
-                <div class="flex-1 min-w-0 flex items-center gap-1.5 pl-1.5 leading-none">
-                    <span class="font-extrabold text-xs sm:text-sm text-slate-900 truncate leading-snug" title="${escapeHtml(item.name)}">
+                <!-- 2. ชื่อรายการสินค้า (บรรทัด 1) + ป้าย/ร้านค้า (บรรทัด 2)
+                     เดิมอยู่บรรทัดเดียวกันหมด จอมือถือ+ตัวอักษรใหญ่ล้นไปทับช่อง "กก." และชื่อสินค้าหายไป (เจ้าของแจ้ง 2026-09-29) -->
+                <div class="flex-1 min-w-0 overflow-hidden flex flex-col gap-0.5 pl-1.5">
+                    <span class="font-extrabold text-xs sm:text-sm text-slate-900 leading-snug line-clamp-2 break-words" title="${escapeHtml(item.name)}">
                         ${escapeHtml(item.name)}
                     </span>
-                    ${item.badge ? `
-                        <span class="text-[8px] sm:text-[9px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.2 rounded shrink-0 leading-none">
-                            ${item.badge}
-                        </span>
-                    ` : ''}
-                    <button type="button" onclick="filterBySingleStall(${jsArg(item.stallId)})" class="text-[9px] sm:text-[10px] text-slate-400 hover:text-emerald-700 font-medium shrink-0 flex items-center gap-0.5 truncate transition-colors" title="${escapeHtml(item.stallName)}">
-                        <span>${isStallFav ? '⭐' : '🏪'}</span>
-                        <span class="underline decoration-slate-200">${escapeHtml(item.stallNumber) || ''} ${stallShort}</span>
-                    </button>
-                    ${item.sourceTier === 2 ? `
-                        <span class="text-[8px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1 py-0.2 rounded shrink-0 hidden sm:inline-block leading-none">
-                            คลัง 50
-                        </span>
-                    ` : ''}
+                    <div class="flex flex-wrap items-center gap-1 min-w-0">
+                        ${item.badge ? `
+                            <span class="text-[10px] font-extrabold text-orange-700 bg-orange-50 border border-orange-200 px-1 py-0.5 rounded shrink-0 leading-none">
+                                ${escapeHtml(item.badge)}
+                            </span>
+                        ` : ''}
+                        <button type="button" onclick="filterBySingleStall(${jsArg(item.stallId)})" class="min-w-0 max-w-full text-left text-[10px] sm:text-[11px] text-slate-700 hover:text-emerald-700 font-semibold flex items-center gap-0.5 transition-colors" title="${escapeHtml(item.stallName)}">
+                            <span class="shrink-0">${isStallFav ? '⭐' : '🏪'}</span>
+                            <span class="underline decoration-slate-300 break-words">${(item.stallNumber && item.stallNumber !== "-") ? escapeHtml(item.stallNumber) + " " : ""}${escapeHtml(stallShort)}</span>
+                        </button>
+                        ${item.sourceTier === 2 ? `
+                            <span class="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1 py-0.5 rounded shrink-0 hidden sm:inline-block leading-none">
+                                คลัง 50
+                            </span>
+                        ` : ''}
+                    </div>
                 </div>
 
                 <!-- 3 & 4. หน่วย + ราคา ขยับเข้ามาชิดกัน -->

@@ -313,7 +313,6 @@ html.text-large .text-lg{font-size:19px;line-height:1.45}
 html.text-large .text-xl{font-size:21px;line-height:1.45}
 html.text-large .text-2xl{font-size:25px;line-height:1.45}
 @media (min-width:640px){
-html.text-large .sm\:text-\[9px\]{font-size:13px;line-height:1.45}
 html.text-large .sm\:text-\[10px\]{font-size:14px;line-height:1.45}
 html.text-large .sm\:text-\[11px\]{font-size:14.5px;line-height:1.45}
 html.text-large .sm\:text-xs{font-size:15px;line-height:1.45}
@@ -350,7 +349,6 @@ html.text-xlarge .text-lg{font-size:21px;line-height:1.45}
 html.text-xlarge .text-xl{font-size:23px;line-height:1.45}
 html.text-xlarge .text-2xl{font-size:27px;line-height:1.45}
 @media (min-width:640px){
-html.text-xlarge .sm\:text-\[9px\]{font-size:15px;line-height:1.45}
 html.text-xlarge .sm\:text-\[10px\]{font-size:16px;line-height:1.45}
 html.text-xlarge .sm\:text-\[11px\]{font-size:16.5px;line-height:1.45}
 html.text-xlarge .sm\:text-xs{font-size:17px;line-height:1.45}
