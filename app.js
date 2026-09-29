@@ -11914,7 +11914,7 @@ function filterByCategory(category) {
     if (subTabs) {
         let subHtml = `
             <button type="button" onclick="selectSubCategory('all_sub')"
-                class="subcat-pill active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-orange-700 text-white shadow-xs shrink-0 transition-all cursor-pointer">
+                class="subcat-pill active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-normal text-left leading-snug max-w-full bg-orange-700 text-white shadow-xs shrink-0 transition-all cursor-pointer">
                 <span>🌟 ทั้งหมดในหมวดนี้</span>
             </button>
         `;
@@ -11926,7 +11926,7 @@ function filterByCategory(category) {
             if (n === 0) {
                 subHtml += `
                 <button type="button" data-empty="1" onclick="showComingSoonCategory(${jsArg(sName)})"
-                    class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap bg-slate-100 text-slate-700 border border-dashed border-slate-400 shrink-0 transition-all cursor-pointer">
+                    class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-normal text-left leading-snug max-w-full bg-slate-100 text-slate-700 border border-dashed border-slate-400 shrink-0 transition-all cursor-pointer">
                     <span>${sName} · เร็ว ๆ นี้</span>
                 </button>
             `;
@@ -11934,7 +11934,7 @@ function filterByCategory(category) {
             }
             subHtml += `
                 <button type="button" onclick="selectSubCategory(${jsArg(sName)})"
-                    class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap bg-white text-slate-800 border border-orange-300 shrink-0 hover:bg-orange-100 transition-all cursor-pointer">
+                    class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-normal text-left leading-snug max-w-full bg-white text-slate-800 border border-orange-300 shrink-0 hover:bg-orange-100 transition-all cursor-pointer">
                     <span>${sName} (${n})</span>
                 </button>
             `;
@@ -11942,9 +11942,7 @@ function filterByCategory(category) {
 
         subTabs.innerHTML = subHtml;
         subTabs.scrollLeft = 0;
-        if (typeof setupDragScroll === 'function') {
-            setupDragScroll('subcategory-tabs');
-        }
+        // แถวนี้เรียงหลายบรรทัดแล้ว ไม่ต้องลากเลื่อน
     }
 
     // เริ่มต้นแสดงรายการทั้งหมดในหมวดหลักนี้
@@ -11997,7 +11995,7 @@ function selectSubCategory(subCat) {
 
         let microHtml = `
             <button type="button" onclick="selectMicroCategory('all_micro')"
-                class="microcat-pill active px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap bg-orange-700 text-white shadow-xs shrink-0 transition-all cursor-pointer">
+                class="microcat-pill active px-2.5 py-1 rounded-xl text-xs font-bold whitespace-normal text-left leading-snug max-w-full bg-orange-700 text-white shadow-xs shrink-0 transition-all cursor-pointer">
                 <span>🌟 ทั้งหมดใน "${subCat}"</span>
             </button>
         `;
@@ -12008,7 +12006,7 @@ function selectSubCategory(subCat) {
             if (n === 0) {
                 microHtml += `
                 <button type="button" data-empty="1" onclick="showComingSoonCategory(${jsArg(mName)})"
-                    class="microcat-pill px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap bg-slate-100 text-slate-700 border border-dashed border-slate-400 shrink-0 transition-all cursor-pointer">
+                    class="microcat-pill px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-normal text-left leading-snug max-w-full bg-slate-100 text-slate-700 border border-dashed border-slate-400 shrink-0 transition-all cursor-pointer">
                     <span>${mName} · เร็ว ๆ นี้</span>
                 </button>
             `;
@@ -12016,7 +12014,7 @@ function selectSubCategory(subCat) {
             }
             microHtml += `
                 <button type="button" onclick="selectMicroCategory(${jsArg(mName)})"
-                    class="microcat-pill px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap bg-white text-slate-800 border border-orange-300 shrink-0 hover:bg-orange-100 transition-all cursor-pointer">
+                    class="microcat-pill px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-normal text-left leading-snug max-w-full bg-white text-slate-800 border border-orange-300 shrink-0 hover:bg-orange-100 transition-all cursor-pointer">
                     <span>${mName} (${n})</span>
                 </button>
             `;
@@ -12024,9 +12022,7 @@ function selectSubCategory(subCat) {
 
         microTabs.innerHTML = microHtml;
         microTabs.scrollLeft = 0;
-        if (typeof setupDragScroll === 'function') {
-            setupDragScroll('microcategory-tabs');
-        }
+        // แถวนี้เรียงหลายบรรทัดแล้ว ไม่ต้องลากเลื่อน
     } else {
         if (microContainer) microContainer.classList.add("hidden");
         if (microTabs) microTabs.innerHTML = "";

@@ -750,22 +750,9 @@
                             </span>
                             <span class="text-[10px] text-orange-800 font-bold bg-white px-2 py-0.5 rounded-full border border-orange-300 whitespace-nowrap shrink-0" id="subcategory-count-hint"></span>
                         </div>
-                        <div class="relative flex items-center gap-1.5">
-                            <button type="button" onclick="scrollSubCategoryTabs(-160)"
-                                class="w-7 h-7 bg-white shadow-xs border border-orange-300 rounded-full flex items-center justify-center text-slate-600 hover:bg-orange-100 hover:text-orange-800 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
-                                title="เลื่อนซ้าย">
-                                <span class="material-symbols-outlined text-xs font-bold">chevron_left</span>
-                            </button>
-                            <!-- Subcategory Tabs: 2-Row Horizontal Scroll Grid -->
-                            <div class="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto py-1 scrollbar-none w-full scroll-smooth cursor-grab active:cursor-grabbing select-none"
-                                id="subcategory-tabs">
-                                <!-- Rendered dynamically by app.js -->
-                            </div>
-                            <button type="button" onclick="scrollSubCategoryTabs(160)"
-                                class="w-7 h-7 bg-white shadow-xs border border-orange-300 rounded-full flex items-center justify-center text-slate-600 hover:bg-orange-100 hover:text-orange-800 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
-                                title="เลื่อนขวา">
-                                <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
-                            </button>
+                        <!-- หมวดรอง: เรียงหลายบรรทัด เห็นครบทุกปุ่ม ไม่ต้องเลื่อน (เจ้าของสั่ง 2026-09-29) -->
+                        <div class="flex flex-wrap gap-1.5 py-1" id="subcategory-tabs">
+                            <!-- Rendered dynamically by app.js -->
                         </div>
                     </div>
 
@@ -778,22 +765,9 @@
                             </span>
                             <span class="text-[10px] text-orange-800 font-bold bg-white px-2 py-0.5 rounded-full border border-orange-300 whitespace-nowrap shrink-0" id="microcategory-count-hint"></span>
                         </div>
-                        <div class="relative flex items-center gap-1.5">
-                            <button type="button" onclick="scrollMicroCategoryTabs(-160)"
-                                class="w-7 h-7 bg-white shadow-xs border border-orange-300 rounded-full flex items-center justify-center text-slate-600 hover:bg-orange-100 hover:text-orange-800 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
-                                title="เลื่อนซ้าย">
-                                <span class="material-symbols-outlined text-xs font-bold">chevron_left</span>
-                            </button>
-                            <!-- Microcategory Tabs: Horizontal Scroll Grid -->
-                            <div class="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto py-1 scrollbar-none w-full scroll-smooth cursor-grab active:cursor-grabbing select-none"
-                                id="microcategory-tabs">
-                                <!-- Rendered dynamically by app.js -->
-                            </div>
-                            <button type="button" onclick="scrollMicroCategoryTabs(160)"
-                                class="w-7 h-7 bg-white shadow-xs border border-orange-300 rounded-full flex items-center justify-center text-slate-600 hover:bg-orange-100 hover:text-orange-800 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
-                                title="เลื่อนขวา">
-                                <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
-                            </button>
+                        <!-- หมวดย่อย: เรียงหลายบรรทัด เห็นครบทุกปุ่ม ไม่ต้องเลื่อน (เจ้าของสั่ง 2026-09-29) -->
+                        <div class="flex flex-wrap gap-1.5 py-1" id="microcategory-tabs">
+                            <!-- Rendered dynamically by app.js -->
                         </div>
                     </div>
                 </div>
@@ -7191,7 +7165,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.75_product_row_fix"></script>
+    <script src="app.js?v=10.76_subcat_wrap"></script>
 </body>
 
 </html>
