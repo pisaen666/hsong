@@ -417,10 +417,16 @@ Problem found 2026-09-21: anyone can write text into the shared database (applic
 - Verified in an offline sandbox with data shaped like the real stall (3 highlight products + 1 catalog item): modal now shows all 4 items in two groups, category pill count correct (4), add-to-cart from a highlight item works.
 - **Deployed same session as 5z13** (`app.js?v=10.71_stall_modal_highlights`) — no rules change, pure display fix.
 
-## 🛵 5z15. Leftover "฿40" rider-fee texts fixed (code `app.js?v=10.72_rider_fee_texts`; on local main 2026-09-29, NOT pushed yet)
+## 🛵 5z15. Leftover "฿40" rider-fee texts fixed (code `app.js?v=10.72_rider_fee_texts`; PUSHED to main 2026-09-29 on the owner's phrase, together with 5z16)
 - Since 5z10 the rider fee is 30 baht up to 3 km + 5 per started half-km, but 5 static texts in `index.html` still said ฿40: the home rider promo pill, the rider sign-up intro, the rider-recruit card, and 2 spots on the rider "delivered" card. Now they say ฿30 + distance steps; the delivered card shows the real fee of that trip (`#rdc-rider-fee`, filled with `riderTripFeeForOrder(o)` next to `rdc-order-amount`).
 - Taken from the abandoned branch `wip/remove-points-system` (commit `a05954d`, made on the other computer). That branch also removed the points system a second, different way; `main` already has its own removal (5z12), so only the ฿40 part was copied. Do not merge that branch.
 - Static texts still say "฿30": if the owner changes the base fee in ไรเดอร์ > ตั้งค่า, these texts must be edited by hand.
+
+## 🎨 5z16. Category rows and search-guide box get separate colours (code `app.js?v=10.73_category_colors`; PUSHED to main 2026-09-29 on the owner's phrase)
+- Owner (2026-09-29, screenshots): main and sub category rows looked like one group (same white background, same dark-green selected chip). Owner chose orange for the inner levels, and blue for the search-steps guide box above them.
+- Now: main categories in a light-green box (`bg-emerald-50 border-2 border-emerald-200`); sub-categories (`#subcategory-bar-container`) in an indented orange box, selected chip `bg-orange-700` white text, unselected white with `border-orange-300` and `text-slate-800 font-semibold`; micro-categories (`#microcategory-bar-container`, was teal) in a further-indented dashed orange box with slightly smaller chips. Count badges are `whitespace-nowrap`. The chip colours are set in BOTH the render templates and the highlight code of `filterByCategory` / `selectSubCategory` / `selectMicroCategory` — change them together.
+- Guide box ("คุณสามารถค้นหารายการสินค้า...", `index.html` GUIDE BOX): `bg-sky-50 border-2 border-sky-300`, icon and step numbers `bg-sky-700`; its inline "ค้นหา" button stays green on purpose (matches the real search button).
+- Checked at 375px on a local hsong-test build (screenshots sent to the owner). Also added `gem/` (instructions + business facts for the owner's Gemini advisor Gem; update `gem/2_ข้อมูลธุรกิจ_สำหรับ_Gem.md` when prices/features change).
 
 ## ⚠️ 6. Known Constraints (update when resolved)
 - (Resolved) Personal data (ID numbers, addresses, driver-license photos in `rider_documents/<riderId>`, `rider_private`) is owner-read only since the owner-auth release.
