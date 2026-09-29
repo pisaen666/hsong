@@ -730,7 +730,7 @@
                     </div>
 
                     <!-- Scrollable Container with Left/Right Arrow Buttons (2 Rows of Main Categories) -->
-                    <div class="relative flex items-center gap-1.5">
+                    <div class="relative flex items-center gap-1.5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-1.5">
                         <!-- Left Arrow Button -->
                         <button onclick="scrollCategoryTabs(-180)"
                             class="w-7 h-7 sm:w-8 sm:h-8 bg-white shadow-md border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
@@ -764,17 +764,17 @@
                     </div>
 
                     <!-- Subcategory Row (Tier 2 - หมวดหมู่รอง เช่น ไก่สดและชิ้นส่วนไก่, หมูสดและชิ้นส่วนหมู) -->
-                    <div id="subcategory-bar-container" class="hidden mt-2.5 pt-2.5 border-t border-slate-200/80 transition-all duration-300">
+                    <div id="subcategory-bar-container" class="hidden mt-2.5 ml-3 p-2.5 bg-orange-50 border-2 border-orange-300 rounded-2xl transition-all duration-300">
                         <div class="flex items-center justify-between mb-1.5 px-0.5">
-                            <span class="text-[11px] font-bold text-slate-700 flex items-center gap-1">
-                                <span class="material-symbols-outlined text-xs text-emerald-600">subdirectory_arrow_right</span>
+                            <span class="text-[11px] font-bold text-orange-900 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs text-orange-700">subdirectory_arrow_right</span>
                                 <span id="subcategory-bar-title">เลือกหมวดหมู่รอง:</span>
                             </span>
-                            <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60" id="subcategory-count-hint"></span>
+                            <span class="text-[10px] text-orange-800 font-bold bg-white px-2 py-0.5 rounded-full border border-orange-300 whitespace-nowrap shrink-0" id="subcategory-count-hint"></span>
                         </div>
                         <div class="relative flex items-center gap-1.5">
                             <button type="button" onclick="scrollSubCategoryTabs(-160)"
-                                class="w-7 h-7 bg-white shadow-xs border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
+                                class="w-7 h-7 bg-white shadow-xs border border-orange-300 rounded-full flex items-center justify-center text-slate-600 hover:bg-orange-100 hover:text-orange-800 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
                                 title="เลื่อนซ้าย">
                                 <span class="material-symbols-outlined text-xs font-bold">chevron_left</span>
                             </button>
@@ -784,7 +784,7 @@
                                 <!-- Rendered dynamically by app.js -->
                             </div>
                             <button type="button" onclick="scrollSubCategoryTabs(160)"
-                                class="w-7 h-7 bg-white shadow-xs border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
+                                class="w-7 h-7 bg-white shadow-xs border border-orange-300 rounded-full flex items-center justify-center text-slate-600 hover:bg-orange-100 hover:text-orange-800 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
                                 title="เลื่อนขวา">
                                 <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
                             </button>
@@ -792,17 +792,17 @@
                     </div>
 
                     <!-- Microcategory Row (Tier 3 - หมวดหมู่ย่อย ชิ้นส่วน/ชนิด เช่น ไก่ตัว, ปีกไก่, โครงไก่) -->
-                    <div id="microcategory-bar-container" class="hidden mt-2 pt-2 border-t border-dashed border-slate-200/80 transition-all duration-300">
+                    <div id="microcategory-bar-container" class="hidden mt-2 ml-6 p-2 bg-orange-50 border-2 border-dashed border-orange-300 rounded-2xl transition-all duration-300">
                         <div class="flex items-center justify-between mb-1.5 px-0.5">
-                            <span class="text-[11px] font-bold text-slate-700 flex items-center gap-1">
-                                <span class="material-symbols-outlined text-xs text-teal-600">keyboard_double_arrow_right</span>
+                            <span class="text-[11px] font-bold text-orange-900 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs text-orange-700">keyboard_double_arrow_right</span>
                                 <span id="microcategory-bar-title">เลือกหมวดหมู่ย่อย (ชิ้นส่วน/ชนิด):</span>
                             </span>
-                            <span class="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/60" id="microcategory-count-hint"></span>
+                            <span class="text-[10px] text-orange-800 font-bold bg-white px-2 py-0.5 rounded-full border border-orange-300 whitespace-nowrap shrink-0" id="microcategory-count-hint"></span>
                         </div>
                         <div class="relative flex items-center gap-1.5">
                             <button type="button" onclick="scrollMicroCategoryTabs(-160)"
-                                class="w-7 h-7 bg-white shadow-xs border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-teal-50 hover:text-teal-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
+                                class="w-7 h-7 bg-white shadow-xs border border-orange-300 rounded-full flex items-center justify-center text-slate-600 hover:bg-orange-100 hover:text-orange-800 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
                                 title="เลื่อนซ้าย">
                                 <span class="material-symbols-outlined text-xs font-bold">chevron_left</span>
                             </button>
@@ -812,7 +812,7 @@
                                 <!-- Rendered dynamically by app.js -->
                             </div>
                             <button type="button" onclick="scrollMicroCategoryTabs(160)"
-                                class="w-7 h-7 bg-white shadow-xs border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-teal-50 hover:text-teal-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
+                                class="w-7 h-7 bg-white shadow-xs border border-orange-300 rounded-full flex items-center justify-center text-slate-600 hover:bg-orange-100 hover:text-orange-800 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
                                 title="เลื่อนขวา">
                                 <span class="material-symbols-outlined text-xs font-bold">chevron_right</span>
                             </button>
@@ -7213,7 +7213,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.72_rider_fee_texts"></script>
+    <script src="app.js?v=10.73_category_colors"></script>
 </body>
 
 </html>

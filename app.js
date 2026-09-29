@@ -11808,7 +11808,7 @@ function filterByCategory(category) {
     if (subTabs) {
         let subHtml = `
             <button type="button" onclick="selectSubCategory('all_sub')"
-                class="subcat-pill active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-emerald-700 text-white shadow-xs shrink-0 transition-all cursor-pointer">
+                class="subcat-pill active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-orange-700 text-white shadow-xs shrink-0 transition-all cursor-pointer">
                 <span>🌟 ทั้งหมดในหมวดนี้</span>
             </button>
         `;
@@ -11816,7 +11816,7 @@ function filterByCategory(category) {
         subs.forEach(sName => {
             subHtml += `
                 <button type="button" onclick="selectSubCategory(${jsArg(sName)})"
-                    class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200/90 shrink-0 hover:bg-slate-50 transition-all cursor-pointer">
+                    class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap bg-white text-slate-800 border border-orange-300 shrink-0 hover:bg-orange-100 transition-all cursor-pointer">
                     <span>${sName}</span>
                 </button>
             `;
@@ -11849,16 +11849,16 @@ function selectSubCategory(subCat) {
 
     // Highlight active subcategory chip
     document.querySelectorAll("#subcategory-tabs .subcat-pill").forEach(pill => {
-        pill.classList.remove("active", "bg-emerald-700", "text-white", "font-bold");
-        pill.classList.add("bg-white", "text-slate-700", "font-medium", "border", "border-slate-200/90");
+        pill.classList.remove("active", "bg-orange-700", "text-white", "font-bold");
+        pill.classList.add("bg-white", "text-slate-800", "font-semibold", "border", "border-orange-300");
     });
 
     const activeSubBtn = (typeof event !== 'undefined' && event && event.currentTarget)
         ? event.currentTarget
         : document.querySelector(`#subcategory-tabs .subcat-pill[onclick*="${subCat}"]`);
     if (activeSubBtn) {
-        activeSubBtn.classList.remove("bg-white", "text-slate-700", "font-medium", "border", "border-slate-200/90");
-        activeSubBtn.classList.add("active", "bg-emerald-700", "text-white", "font-bold", "shadow-xs");
+        activeSubBtn.classList.remove("bg-white", "text-slate-800", "font-semibold", "border", "border-orange-300");
+        activeSubBtn.classList.add("active", "bg-orange-700", "text-white", "font-bold", "shadow-xs");
     }
 
     // จัดการแถบหมวดหมู่ย่อย (Tier 3 - Micro Cuts / Variations)
@@ -11876,7 +11876,7 @@ function selectSubCategory(subCat) {
 
         let microHtml = `
             <button type="button" onclick="selectMicroCategory('all_micro')"
-                class="microcat-pill active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-teal-700 text-white shadow-xs shrink-0 transition-all cursor-pointer">
+                class="microcat-pill active px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap bg-orange-700 text-white shadow-xs shrink-0 transition-all cursor-pointer">
                 <span>🌟 ทั้งหมดใน "${subCat}"</span>
             </button>
         `;
@@ -11884,7 +11884,7 @@ function selectSubCategory(subCat) {
         micros.forEach(mName => {
             microHtml += `
                 <button type="button" onclick="selectMicroCategory(${jsArg(mName)})"
-                    class="microcat-pill px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200/90 shrink-0 hover:bg-teal-50 hover:text-teal-800 transition-all cursor-pointer">
+                    class="microcat-pill px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap bg-white text-slate-800 border border-orange-300 shrink-0 hover:bg-orange-100 transition-all cursor-pointer">
                     <span>${mName}</span>
                 </button>
             `;
@@ -11910,16 +11910,16 @@ function selectMicroCategory(microCat) {
 
     // Highlight active microcategory chip
     document.querySelectorAll("#microcategory-tabs .microcat-pill").forEach(pill => {
-        pill.classList.remove("active", "bg-teal-700", "text-white", "font-bold");
-        pill.classList.add("bg-white", "text-slate-700", "font-medium", "border", "border-slate-200/90");
+        pill.classList.remove("active", "bg-orange-700", "text-white", "font-bold");
+        pill.classList.add("bg-white", "text-slate-800", "font-semibold", "border", "border-orange-300");
     });
 
     const activeMicroBtn = (typeof event !== 'undefined' && event && event.currentTarget)
         ? event.currentTarget
         : document.querySelector(`#microcategory-tabs .microcat-pill[onclick*="${microCat}"]`);
     if (activeMicroBtn) {
-        activeMicroBtn.classList.remove("bg-white", "text-slate-700", "font-medium", "border", "border-slate-200/90");
-        activeMicroBtn.classList.add("active", "bg-teal-700", "text-white", "font-bold", "shadow-xs");
+        activeMicroBtn.classList.remove("bg-white", "text-slate-800", "font-semibold", "border", "border-orange-300");
+        activeMicroBtn.classList.add("active", "bg-orange-700", "text-white", "font-bold", "shadow-xs");
     }
 
     renderCatalog();
