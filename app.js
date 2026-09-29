@@ -11862,6 +11862,30 @@ window.renderMainCategoryGrid = renderMainCategoryGrid;
 window.showComingSoonCategory = showComingSoonCategory;
 window.renderCategoryBreadcrumb = renderCategoryBreadcrumb;
 
+// ปุ่ม "+ ดูหมวดที่ยังไม่มีสินค้า (n)" — หมวดรอง/ย่อยที่ยังว่างถูกพับเก็บไว้ในปุ่มเดียว ให้กล่องส้มสั้นลง (เจ้าของสั่ง 2026-09-29)
+function comingSoonToggleButton(containerId, emptyCount) {
+    if (!emptyCount) return "";
+    return `
+            <button type="button" data-empty="1" data-soon-toggle="1" data-count="${emptyCount}" onclick="toggleComingSoonChips(${jsArg(containerId)}, this)"
+                class="px-3 py-1.5 rounded-xl text-xs font-bold whitespace-normal text-left leading-snug max-w-full bg-white text-slate-800 border-2 border-dashed border-slate-500 shrink-0 hover:bg-slate-100 transition-all cursor-pointer">
+                <span>+ ดูหมวดที่ยังไม่มีสินค้า (${emptyCount})</span>
+            </button>`;
+}
+
+function toggleComingSoonChips(containerId, btn) {
+    const box = document.getElementById(containerId);
+    if (!box || !btn) return;
+    const chips = box.querySelectorAll("[data-soon]");
+    const willShow = btn.getAttribute("data-open") !== "1";
+    chips.forEach(c => c.classList.toggle("hidden", !willShow));
+    btn.setAttribute("data-open", willShow ? "1" : "0");
+    const n = btn.getAttribute("data-count") || chips.length;
+    const label = btn.querySelector("span");
+    if (label) label.textContent = willShow ? "− ซ่อนหมวดที่ยังไม่มีสินค้า" : `+ ดูหมวดที่ยังไม่มีสินค้า (${n})`;
+    box.appendChild(btn);   // ปุ่มอยู่ท้ายแถวเสมอ
+}
+window.toggleComingSoonChips = toggleComingSoonChips;
+
 function filterByCategory(category) {
     state.currentCategoryFilter = category;
     state.currentSingleStall = null;
@@ -11925,8 +11949,8 @@ function filterByCategory(category) {
             .forEach(({ sName, n }) => {
             if (n === 0) {
                 subHtml += `
-                <button type="button" data-empty="1" onclick="showComingSoonCategory(${jsArg(sName)})"
-                    class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-normal text-left leading-snug max-w-full bg-slate-100 text-slate-700 border border-dashed border-slate-400 shrink-0 transition-all cursor-pointer">
+                <button type="button" data-empty="1" data-soon="1" onclick="showComingSoonCategory(${jsArg(sName)})"
+                    class="subcat-pill hidden px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-normal text-left leading-snug max-w-full bg-slate-100 text-slate-700 border border-dashed border-slate-400 shrink-0 transition-all cursor-pointer">
                     <span>${sName} · เร็ว ๆ นี้</span>
                 </button>
             `;
@@ -11940,6 +11964,7 @@ function filterByCategory(category) {
             `;
         });
 
+        subHtml += comingSoonToggleButton("subcategory-tabs", (subHtml.match(/data-soon=/g) || []).length);
         subTabs.innerHTML = subHtml;
         subTabs.scrollLeft = 0;
         // แถวนี้เรียงหลายบรรทัดแล้ว ไม่ต้องลากเลื่อน
@@ -12005,8 +12030,8 @@ function selectSubCategory(subCat) {
             .forEach(({ mName, n }) => {
             if (n === 0) {
                 microHtml += `
-                <button type="button" data-empty="1" onclick="showComingSoonCategory(${jsArg(mName)})"
-                    class="microcat-pill px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-normal text-left leading-snug max-w-full bg-slate-100 text-slate-700 border border-dashed border-slate-400 shrink-0 transition-all cursor-pointer">
+                <button type="button" data-empty="1" data-soon="1" onclick="showComingSoonCategory(${jsArg(mName)})"
+                    class="microcat-pill hidden px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-normal text-left leading-snug max-w-full bg-slate-100 text-slate-700 border border-dashed border-slate-400 shrink-0 transition-all cursor-pointer">
                     <span>${mName} · เร็ว ๆ นี้</span>
                 </button>
             `;
@@ -12020,6 +12045,7 @@ function selectSubCategory(subCat) {
             `;
         });
 
+        microHtml += comingSoonToggleButton("microcategory-tabs", (microHtml.match(/data-soon=/g) || []).length);
         microTabs.innerHTML = microHtml;
         microTabs.scrollLeft = 0;
         // แถวนี้เรียงหลายบรรทัดแล้ว ไม่ต้องลากเลื่อน
