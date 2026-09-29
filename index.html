@@ -715,12 +715,12 @@
                     </div>
                 </div>
 
-                <!-- 1. CATEGORY SUPER-GROUPS (หมวดหมู่วัตถุดิบหลัก 6 หมวด) -->
+                <!-- 1. CATEGORY GRID (หมวดหมู่หลัก 12 ช่อง 4x3 ไม่ต้องเลื่อน + จำนวนสินค้า / "เร็ว ๆ นี้"; สร้างโดย renderMainCategoryGrid ใน app.js) -->
                 <div class="px-4 mt-3">
                     <div class="flex items-center justify-between mb-1.5">
                         <span class="text-[11px] font-bold text-slate-700 flex items-center gap-1">
                             <span>หมวดหมู่วัตถุดิบ</span>
-                            <span class="text-[9px] text-emerald-700 font-medium">(คลิกลูกศร ◀ ▶ หรือลากเมาส์)</span>
+                            
                         </span>
                         <button onclick="openDirectoryModal()"
                             class="text-[10px] text-emerald-700 font-semibold hover:underline flex items-center gap-0.5">
@@ -729,38 +729,16 @@
                         </button>
                     </div>
 
-                    <!-- Scrollable Container with Left/Right Arrow Buttons (2 Rows of Main Categories) -->
-                    <div class="relative flex items-center gap-1.5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-1.5">
-                        <!-- Left Arrow Button -->
-                        <button onclick="scrollCategoryTabs(-180)"
-                            class="w-7 h-7 sm:w-8 sm:h-8 bg-white shadow-md border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
-                            title="เลื่อนซ้าย">
-                            <span class="material-symbols-outlined text-sm font-bold">chevron_left</span>
-                        </button>
+                    <!-- ตารางหมวดหมู่หลัก: ปุ่มถูกสร้างใหม่ทุกครั้งโดย renderMainCategoryGrid() (นับสินค้าจริงของทุกร้าน) -->
+                    <div class="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-1.5">
+                        <div class="grid grid-cols-4 gap-1.5" id="category-tabs"></div>
+                    </div>
 
-                        <!-- Category Tabs: 2-Row Horizontal Scroll Grid with Mouse-Drag Support -->
-                        <div class="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto py-1 scrollbar-none w-full scroll-smooth cursor-grab active:cursor-grabbing select-none"
-                            id="category-tabs">
-                            <button onclick="filterByCategory('all')" class="cat-pill active flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap bg-emerald-700 text-white shadow-sm shrink-0 cursor-pointer"><span>🏠 ทั้งหมด</span></button>
-                            <button onclick="filterByCategory('🥩 เนื้อสัตว์และสัตว์ปีก')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🥩 เนื้อสัตว์และสัตว์ปีก</span></button>
-                            <button onclick="filterByCategory('🦐 อาหารทะเลสดและแปรรูป')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🦐 อาหารทะเลสดและแปรรูป</span></button>
-                            <button onclick="filterByCategory('🥬 ผักสด และเห็ด')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🥬 ผักสด และเห็ด</span></button>
-                            <button onclick="filterByCategory('🍌 ผลไม้สด')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🍌 ผลไม้สด</span></button>
-                            <button onclick="filterByCategory('🌾 ข้าวสาร ของชำ และไข่ไก่')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🌾 ข้าวสาร ของชำ และไข่ไก่</span></button>
-                            <button onclick="filterByCategory('🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว แช่แข็ง</span></button>
-                            <button onclick="filterByCategory('🍲 อาหารปรุงสุก ของทอด และพร้อมทาน')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🍲 อาหารปรุงสุก ของทอด พร้อมทาน</span></button>
-                            <button onclick="filterByCategory('🧋 เครื่องดื่ม ขนมหวาน และเบเกอรี่')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🧋 เครื่องดื่ม ขนมหวาน เบเกอรี่</span></button>
-                            <button onclick="filterByCategory('💐 ดอกไม้สด และสังฆภัณฑ์')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>💐 ดอกไม้สด และสังฆภัณฑ์</span></button>
-                            <button onclick="filterByCategory('📦 บรรจุภัณฑ์ ของใช้ และอื่นๆ')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>📦 บรรจุภัณฑ์ ของใช้ และอื่นๆ</span></button>
-                            <button onclick="filterByCategory('🏷️ อื่นๆ')" class="cat-pill flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-slate-700 border border-slate-200 shrink-0 hover:bg-slate-50 cursor-pointer"><span>🏷️ อื่นๆ</span></button>
-                        </div>
-
-                        <!-- Right Arrow Button -->
-                        <button onclick="scrollCategoryTabs(180)"
-                            class="w-7 h-7 sm:w-8 sm:h-8 bg-white shadow-md border border-slate-200 rounded-full flex items-center justify-center text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 shrink-0 z-10 transition-transform active:scale-90 cursor-pointer"
-                            title="เลื่อนขวา">
-                            <span class="material-symbols-outlined text-sm font-bold">chevron_right</span>
-                        </button>
+                    <!-- แถบ "กำลังดู" บอกหมวดที่เลือกอยู่แบบเต็ม ๆ (ปุ่มหมวดรอง/ย่อยอาจโดนตัดขอบ) + ปุ่มล้าง -->
+                    <div id="category-breadcrumb" class="hidden mt-2 items-center gap-2 bg-white border-2 border-slate-300 rounded-xl px-3 py-2">
+                        <span class="text-xs font-bold text-slate-800 shrink-0">กำลังดู:</span>
+                        <span id="category-breadcrumb-text" class="text-xs font-extrabold text-slate-900 flex-1 min-w-0 leading-snug"></span>
+                        <button type="button" onclick="filterByCategory('all')" class="shrink-0 text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white px-2.5 py-1.5 rounded-lg active:scale-95 cursor-pointer">✕ ล้าง</button>
                     </div>
 
                     <!-- Subcategory Row (Tier 2 - หมวดหมู่รอง เช่น ไก่สดและชิ้นส่วนไก่, หมูสดและชิ้นส่วนหมู) -->
@@ -7213,7 +7191,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.73_category_colors"></script>
+    <script src="app.js?v=10.74_category_grid"></script>
 </body>
 
 </html>

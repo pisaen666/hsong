@@ -11127,6 +11127,7 @@ function renderCatalog() {
     const container = document.getElementById("products-catalog-container");
     const singleStallBanner = document.getElementById("single-stall-banner");
     if (!container) return;
+    renderMainCategoryGrid();   // ตารางหมวดหมู่หลัก + จำนวนสินค้าล่าสุด
 
     // Dual-Tier Navigation: หากเลือกหมวดหลักและเลือกหมวดหมู่ย่อย ให้แสดงหน้ารวม 15 รายการคัดสรร
     if (state.currentCategoryFilter && state.currentCategoryFilter !== "all" && state.currentSubCategoryFilter) {
@@ -11745,25 +11746,129 @@ function toggleFavoriteStall(stallId) {
     renderCatalog();
 }
 
+// ── หมวดหมู่หลักแบบตาราง 4x3 + จำนวนสินค้า + หมวดว่าง "เร็ว ๆ นี้" + แถบ "กำลังดู" (เจ้าของสั่ง 2026-09-29) ──
+//   เดิมเป็นแถบเลื่อนซ้าย-ขวา 2 แถว เห็นแค่ 4 จาก 12 ปุ่ม และกดหมวดที่ไม่มีสินค้าแล้วเจอ "แสดง 0 จาก 0 รายการ"
+//   จำนวนนับด้วย getSubCategoryProducts ตัวเดียวกับหน้าแสดงสินค้า จึงตรงกับที่ลูกค้าจะเห็นเสมอ
+//   ใช้ var (ไม่ใช่ const) เพราะ renderCatalog อาจถูกเรียกก่อนบรรทัดนี้ทำงาน (const จะ error ช่วงนั้น)
+var MAIN_CATEGORY_SHORT_LABELS = {
+    "🥩 เนื้อสัตว์และสัตว์ปีก": "เนื้อสัตว์",
+    "🦐 อาหารทะเลสดและแปรรูป": "อาหารทะเล",
+    "🥬 ผักสด และเห็ด": "ผัก เห็ด",
+    "🍌 ผลไม้สด": "ผลไม้",
+    "🌾 ข้าวสาร ของชำ และไข่ไก่": "ของชำ ไข่",
+    "🧊 อาหารแปรรูป เส้นก๋วยเตี๋ยว และของแช่แข็ง": "แช่แข็ง เส้น",
+    "🍲 อาหารปรุงสุก ของทอด และพร้อมทาน": "พร้อมทาน",
+    "🧋 เครื่องดื่ม ขนมหวาน และเบเกอรี่": "ขนม น้ำ",
+    "💐 ดอกไม้สด และสังฆภัณฑ์": "ดอกไม้",
+    "📦 บรรจุภัณฑ์ ของใช้ และอื่นๆ": "ของใช้",
+    "🏷️ อื่นๆ": "อื่น ๆ"
+};
+
+function mainCategoryEmoji(cat) {
+    return String(cat || "").split(" ")[0] || "🏷️";
+}
+
+function mainCategoryShortLabel(cat) {
+    const map = MAIN_CATEGORY_SHORT_LABELS || {};
+    if (map[cat]) return map[cat];
+    return String(cat || "").replace(/^[^\s\w\u0E00-\u0E7F]+\s*/, "").trim();
+}
+
+// จำนวนสินค้าที่ลูกค้าจะเห็นเมื่อกดหมวดนี้ (0 = ยังไม่มีร้านขาย)
+function countCategoryProducts(mainCat, subCat, microCat) {
+    try {
+        const r = getSubCategoryProducts(mainCat, subCat || "all_sub", microCat || "all_micro", "", 1000000);
+        return (r && r.totalFound) || 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function renderMainCategoryGrid() {
+    const grid = document.getElementById("category-tabs");
+    if (!grid) return;
+    const current = state.currentCategoryFilter || "all";
+    const tiles = [{ key: "all", emoji: "🏠", label: "ทั้งหมด", full: "ทั้งหมด" }]
+        .concat(getMainCategories().map(c => ({ key: c, emoji: mainCategoryEmoji(c), label: mainCategoryShortLabel(c), full: c })));
+
+    grid.innerHTML = tiles.map(t => {
+        const n = countCategoryProducts(t.key);
+        const isActive = t.key === current;
+        const isEmpty = n === 0 && t.key !== "all" && !isActive;
+        let cls, countCls, countText;
+        if (isActive) {
+            cls = "active bg-emerald-700 border-emerald-700 text-white shadow-sm";
+            countCls = "text-white";
+            countText = n > 0 ? `${n} รายการ` : "เร็ว ๆ นี้";
+        } else if (isEmpty) {
+            cls = "bg-slate-100 border-dashed border-slate-400 text-slate-700";
+            countCls = "text-slate-700";
+            countText = "เร็ว ๆ นี้";
+        } else {
+            cls = "bg-white border-emerald-300 text-slate-800 hover:bg-emerald-100";
+            countCls = "text-emerald-800";
+            countText = `${n} รายการ`;
+        }
+        const action = isEmpty ? `showComingSoonCategory(${jsArg(t.full)})` : `filterByCategory(${jsArg(t.key)})`;
+        return `
+            <button type="button" onclick="${action}" title="${escapeHtml(t.full)}" aria-label="${escapeHtml(t.full)} ${countText}"
+                class="cat-pill ${cls} flex flex-col items-center justify-start gap-0.5 px-1 py-2 rounded-xl border-2 cursor-pointer active:scale-95 transition-all">
+                <span class="text-2xl leading-none ${isEmpty ? "opacity-50" : ""}">${t.emoji}</span>
+                <span class="text-xs font-bold leading-tight text-center">${escapeHtml(t.label)}</span>
+                <span class="text-[11px] font-bold leading-tight text-center ${countCls}">${countText}</span>
+            </button>`;
+    }).join("");
+}
+
+function showComingSoonCategory(label) {
+    const name = (MAIN_CATEGORY_SHORT_LABELS || {})[label] ? mainCategoryShortLabel(label) : String(label || "");
+    showToast(`หมวด "${name}" ยังไม่มีร้านขาย เร็ว ๆ นี้ครับ`);
+}
+
+// แถบ "กำลังดู: หมวดหลัก › หมวดรอง › หมวดย่อย [✕ ล้าง]"
+function renderCategoryBreadcrumb() {
+    const bar = document.getElementById("category-breadcrumb");
+    const text = document.getElementById("category-breadcrumb-text");
+    if (!bar || !text) return;
+    const main = state.currentCategoryFilter;
+    if (!main || main === "all") {
+        bar.classList.add("hidden");
+        bar.classList.remove("flex");
+        return;
+    }
+    const parts = [main];
+    const sub = state.currentSubCategoryFilter;
+    const micro = state.currentMicroCategoryFilter;
+    if (sub && sub !== "all_sub" && sub !== "all_cat") parts.push(sub);
+    if (sub && sub !== "all_sub" && micro && micro !== "all_micro") parts.push(micro);
+    text.textContent = parts.join(" › ");
+    bar.classList.remove("hidden");
+    bar.classList.add("flex");
+}
+
+// เลื่อนแถบปุ่มแนวนอนให้ปุ่มที่เลือกอยู่เห็นเต็มปุ่ม (ไม่โดนตัดขอบ)
+function scrollChipIntoView(containerId, btn) {
+    const c = document.getElementById(containerId);
+    if (!c || !btn) return;
+    requestAnimationFrame(() => {
+        const cr = c.getBoundingClientRect();
+        const br = btn.getBoundingClientRect();
+        if (br.left < cr.left) c.scrollLeft -= (cr.left - br.left) + 8;
+        else if (br.right > cr.right) c.scrollLeft += (br.right - cr.right) + 8;
+    });
+}
+
+window.renderMainCategoryGrid = renderMainCategoryGrid;
+window.showComingSoonCategory = showComingSoonCategory;
+window.renderCategoryBreadcrumb = renderCategoryBreadcrumb;
+
 function filterByCategory(category) {
     state.currentCategoryFilter = category;
     state.currentSingleStall = null;
     state.subCategoryPage = 1;
     state.subCategorySearchQuery = "";
 
-    // Highlight main category tab
-    document.querySelectorAll("#category-tabs .cat-pill").forEach(pill => {
-        pill.classList.remove("active", "bg-emerald-700", "text-white", "font-bold");
-        pill.classList.add("bg-white", "text-slate-700", "font-medium");
-    });
-
-    const activeBtn = (typeof event !== 'undefined' && event && event.currentTarget)
-        ? event.currentTarget
-        : document.querySelector(`#category-tabs .cat-pill[onclick*="${category}"]`);
-    if (activeBtn) {
-        activeBtn.classList.remove("bg-white", "text-slate-700", "font-medium");
-        activeBtn.classList.add("active", "bg-emerald-700", "text-white", "font-bold");
-    }
+    // ปุ่มหมวดหลักที่เลือก: renderCatalog() -> renderMainCategoryGrid() วาดใหม่พร้อมจำนวนสินค้า
 
     const subContainer = document.getElementById("subcategory-bar-container");
     const subTabs = document.getElementById("subcategory-tabs");
@@ -11790,6 +11895,7 @@ function filterByCategory(category) {
         renderFavoriteStallsBar();
         renderCatalog();
         updateStallRotationUI();
+        renderCategoryBreadcrumb();
         return;
     }
 
@@ -11813,11 +11919,23 @@ function filterByCategory(category) {
             </button>
         `;
 
-        subs.forEach(sName => {
+        // หมวดที่มีสินค้าขึ้นก่อน หมวด "เร็ว ๆ นี้" ไปอยู่ท้าย (ลูกค้าไม่ต้องเลื่อนผ่านหมวดว่าง)
+        subs.map(sName => ({ sName, n: countCategoryProducts(category, sName) }))
+            .sort((a, b) => (b.n > 0) - (a.n > 0))
+            .forEach(({ sName, n }) => {
+            if (n === 0) {
+                subHtml += `
+                <button type="button" data-empty="1" onclick="showComingSoonCategory(${jsArg(sName)})"
+                    class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap bg-slate-100 text-slate-700 border border-dashed border-slate-400 shrink-0 transition-all cursor-pointer">
+                    <span>${sName} · เร็ว ๆ นี้</span>
+                </button>
+            `;
+                return;
+            }
             subHtml += `
                 <button type="button" onclick="selectSubCategory(${jsArg(sName)})"
                     class="subcat-pill px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap bg-white text-slate-800 border border-orange-300 shrink-0 hover:bg-orange-100 transition-all cursor-pointer">
-                    <span>${sName}</span>
+                    <span>${sName} (${n})</span>
                 </button>
             `;
         });
@@ -11833,6 +11951,7 @@ function filterByCategory(category) {
     state.currentSubCategoryFilter = "all_sub";
     state.currentMicroCategoryFilter = "all_micro";
     renderCatalog();
+    renderCategoryBreadcrumb();
     const subContainerEl = document.getElementById("subcategory-bar-container");
     if (subContainerEl) {
         setTimeout(() => {
@@ -11849,6 +11968,7 @@ function selectSubCategory(subCat) {
 
     // Highlight active subcategory chip
     document.querySelectorAll("#subcategory-tabs .subcat-pill").forEach(pill => {
+        if (pill.dataset.empty) return;
         pill.classList.remove("active", "bg-orange-700", "text-white", "font-bold");
         pill.classList.add("bg-white", "text-slate-800", "font-semibold", "border", "border-orange-300");
     });
@@ -11859,6 +11979,7 @@ function selectSubCategory(subCat) {
     if (activeSubBtn) {
         activeSubBtn.classList.remove("bg-white", "text-slate-800", "font-semibold", "border", "border-orange-300");
         activeSubBtn.classList.add("active", "bg-orange-700", "text-white", "font-bold", "shadow-xs");
+        scrollChipIntoView("subcategory-tabs", activeSubBtn);
     }
 
     // จัดการแถบหมวดหมู่ย่อย (Tier 3 - Micro Cuts / Variations)
@@ -11881,11 +12002,22 @@ function selectSubCategory(subCat) {
             </button>
         `;
 
-        micros.forEach(mName => {
+        micros.map(mName => ({ mName, n: countCategoryProducts(state.currentCategoryFilter, subCat, mName) }))
+            .sort((a, b) => (b.n > 0) - (a.n > 0))
+            .forEach(({ mName, n }) => {
+            if (n === 0) {
+                microHtml += `
+                <button type="button" data-empty="1" onclick="showComingSoonCategory(${jsArg(mName)})"
+                    class="microcat-pill px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap bg-slate-100 text-slate-700 border border-dashed border-slate-400 shrink-0 transition-all cursor-pointer">
+                    <span>${mName} · เร็ว ๆ นี้</span>
+                </button>
+            `;
+                return;
+            }
             microHtml += `
                 <button type="button" onclick="selectMicroCategory(${jsArg(mName)})"
                     class="microcat-pill px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap bg-white text-slate-800 border border-orange-300 shrink-0 hover:bg-orange-100 transition-all cursor-pointer">
-                    <span>${mName}</span>
+                    <span>${mName} (${n})</span>
                 </button>
             `;
         });
@@ -11901,6 +12033,7 @@ function selectSubCategory(subCat) {
     }
 
     renderCatalog();
+    renderCategoryBreadcrumb();
 }
 
 function selectMicroCategory(microCat) {
@@ -11910,6 +12043,7 @@ function selectMicroCategory(microCat) {
 
     // Highlight active microcategory chip
     document.querySelectorAll("#microcategory-tabs .microcat-pill").forEach(pill => {
+        if (pill.dataset.empty) return;
         pill.classList.remove("active", "bg-orange-700", "text-white", "font-bold");
         pill.classList.add("bg-white", "text-slate-800", "font-semibold", "border", "border-orange-300");
     });
@@ -11920,9 +12054,11 @@ function selectMicroCategory(microCat) {
     if (activeMicroBtn) {
         activeMicroBtn.classList.remove("bg-white", "text-slate-800", "font-semibold", "border", "border-orange-300");
         activeMicroBtn.classList.add("active", "bg-orange-700", "text-white", "font-bold", "shadow-xs");
+        scrollChipIntoView("microcategory-tabs", activeMicroBtn);
     }
 
     renderCatalog();
+    renderCategoryBreadcrumb();
 }
 
 function scrollSubCategoryTabs(amount) {
@@ -32691,7 +32827,6 @@ function initTalatHubApp() {
     initHeroBannerCarousel();
     initMarketHeroCarousel();
     if (typeof setupDragScroll === 'function') {
-        setupDragScroll('category-tabs');
         setupDragScroll('main-role-selector-bar');   // แถบสลับบทบาท 5 ปุ่ม: บนคอมจอไม่กว้างพอ (โดยเฉพาะโหมดตัวอักษรใหญ่) ต้องลากเลื่อนดูปุ่มที่เกินได้
         setupDragScroll('top-auth-buttons-container'); // แถวปุ่ม "เปิดร้าน/สมัครไรเดอร์": จอแคบ+ตัวอักษรใหญ่ อาจล้นแถวได้เช่นกัน
     }
