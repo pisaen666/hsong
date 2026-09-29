@@ -64,7 +64,8 @@ t.ctx.showToast("ข้อความพิเศษ", { sticky: true });
 ok(t.timers.length === 0, "สั่งค้างเองได้ด้วย { sticky: true }");
 ok(/id="toast-close"[^>]*onclick="closeToast\(\)"/.test(html) && /✕ ปิดข้อความนี้/.test(html), "มีปุ่ม '✕ ปิดข้อความนี้' ในกล่องข้อความ");
 ok(/#toast-message\.show\.toast-sticky \{[^}]*pointer-events: auto;[^}]*font-size: 20px;/.test(css), "ข้อความสำคัญ: กดได้ ตัวใหญ่ 20px");
-ok(/styles\.css\?v=10\.06b_toast_wide/.test(html), "เลื่อนเลขเวอร์ชัน styles.css แล้ว");
+// เลขเวอร์ชันต้องใหม่กว่าก่อนแก้ข้อความเด้ง (10.06b_toast_wide ขึ้นไป) — ไม่ตรึงเลขตายตัว เพราะงานหลังจากนี้เลื่อนเลขต่อได้
+ok(/styles\.css\?v=(10\.06b_|10\.0[7-9]|10\.[1-9]\d|1[1-9]\.)/.test(html), "เลื่อนเลขเวอร์ชัน styles.css แล้ว");
 ok(/width: max-content;\s*max-width: min\(92vw, 420px\);/.test(css), "กล่องข้อความกว้างตามข้อความ (ไม่หดเหลือครึ่งจอ)");
 
 console.log("== 2) แถบแดงเว็บทดสอบ");
