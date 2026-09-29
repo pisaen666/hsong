@@ -428,6 +428,14 @@ Problem found 2026-09-21: anyone can write text into the shared database (applic
 - Guide box ("คุณสามารถค้นหารายการสินค้า...", `index.html` GUIDE BOX): `bg-sky-50 border-2 border-sky-300`, icon and step numbers `bg-sky-700`; its inline "ค้นหา" button stays green on purpose (matches the real search button).
 - Checked at 375px on a local hsong-test build (screenshots sent to the owner). Also added `gem/` (instructions + business facts for the owner's Gemini advisor Gem; update `gem/2_ข้อมูลธุรกิจ_สำหรับ_Gem.md` when prices/features change).
 
+## 🧮 5z17. Category grid 4x3 + product counts + "เร็ว ๆ นี้" + "กำลังดู" bar (code `app.js?v=10.74_category_grid`; PUSHED to main 2026-09-29 on the owner's phrase)
+- Owner decisions 2026-09-29 (round 1 of a category redesign; round 2 = sub-categories as wrapping chips, round 3 = time-of-day suggested categories, not started): main categories as a grid with no scrolling; empty categories shown greyed with "เร็ว ๆ นี้" (owner chose this over hiding them, because there are few shops at launch); a "now viewing" bar.
+- `#category-tabs` is now an empty `grid grid-cols-4` filled by `renderMainCategoryGrid()` (called at the top of `renderCatalog()`, so counts follow the latest shop data): 12 tiles = ทั้งหมด + 11 taxonomy keys, short labels in `MAIN_CATEGORY_SHORT_LABELS` (a `var`, because `renderCatalog` may run before that line), counts from `countCategoryProducts()` = `getSubCategoryProducts(...).totalFound` (same engine as the product view). Arrow buttons and drag-scroll for the main row were removed.
+- Empty category (count 0): grey dashed tile/chip, tap -> `showComingSoonCategory()` toast, no filtering. Sub/micro chips show `(n)`, empty ones `· เร็ว ๆ นี้` with `data-empty` (skipped by the highlight reset in `selectSubCategory`/`selectMicroCategory`), and non-empty chips are sorted first.
+- `#category-breadcrumb` ("กำลังดู: main › sub › micro [✕ ล้าง]") via `renderCategoryBreadcrumb()`; selected sub/micro chip scrolled into view with `scrollChipIntoView()`.
+- Checked at 375px on a local hsong-test build (1 real product: meat tile "1 รายการ", others "เร็ว ๆ นี้"; meat > หมูสด shows the bar and sorted chips). Performance: counts scan every stall x 12 categories on each `renderCatalog` — fine now; add a cache if there are ~100 shops and the home page feels slow.
+- Seen, not fixed (pre-existing): in the sub-category product list row the stall name overlaps the unit "กก.".
+
 ## ⚠️ 6. Known Constraints (update when resolved)
 - (Resolved) Personal data (ID numbers, addresses, driver-license photos in `rider_documents/<riderId>`, `rider_private`) is owner-read only since the owner-auth release.
 - (Resolved 2026-09-20) Admin/hub PINs and the admin "test mode" quick login were removed; see section 5b.
