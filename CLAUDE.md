@@ -434,7 +434,7 @@ Problem found 2026-09-21: anyone can write text into the shared database (applic
 - Empty category (count 0): grey dashed tile/chip, tap -> `showComingSoonCategory()` toast, no filtering. Sub/micro chips show `(n)`, empty ones `· เร็ว ๆ นี้` with `data-empty` (skipped by the highlight reset in `selectSubCategory`/`selectMicroCategory`), and non-empty chips are sorted first.
 - `#category-breadcrumb` ("กำลังดู: main › sub › micro [✕ ล้าง]") via `renderCategoryBreadcrumb()`; selected sub/micro chip scrolled into view with `scrollChipIntoView()`.
 - Checked at 375px on a local hsong-test build (1 real product: meat tile "1 รายการ", others "เร็ว ๆ นี้"; meat > หมูสด shows the bar and sorted chips). Performance: counts scan every stall x 12 categories on each `renderCatalog` — fine now; add a cache if there are ~100 shops and the home page feels slow.
-- Seen, not fixed (pre-existing): in the sub-category product list row the stall name overlaps the unit "กก.".
+- Fixed right after (`app.js?v=10.75_product_row_fix`, `styles.css?v=10.07_product_row_fix`, PUSHED 2026-09-29): in `renderSubCategoryProductView` rows the name, badge and shop name were on one line and overflowed onto the unit box (the name disappeared). Now name on line 1 (`line-clamp-2`), badge + shop name on a wrapping line 2, column `overflow-hidden`; shop name and column header are dark (no slate-400); a lone "-" stall number is hidden. `toast-coupon-bonus-banner.test.js` now accepts newer `styles.css?v=` tags.
 
 ## ⚠️ 6. Known Constraints (update when resolved)
 - (Resolved) Personal data (ID numbers, addresses, driver-license photos in `rider_documents/<riderId>`, `rider_private`) is owner-read only since the owner-auth release.
