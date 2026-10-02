@@ -5774,6 +5774,10 @@ const SUB_CATEGORY_SYNONYMS = {
     "อื่นๆ": ["อื่นๆ", "อื่น ๆ", "เบ็ดเตล็ด", "ทั่วไป", "ของใช้อื่นๆ", "สินค้าอื่นๆ"]
 };
 
+// รวมทุกคำจาก SUB_CATEGORY_SYNONYMS ให้เป็นลิสต์คำเดียวแบบไม่ซ้ำ ใช้ทำ "คำแนะนำ" ตอนลูกค้าพิมพ์ค้นหา
+// (เช่น พิมพ์ "หมู" แล้วแอปแนะนำ "หมูบด" / "หมูสามชั้น" ให้เลือกต่อ แทนที่จะต้องพิมพ์เองจนครบ)
+const SEARCH_SUGGESTION_KEYWORDS = Array.from(new Set(Object.values(SUB_CATEGORY_SYNONYMS).flat())).filter(Boolean);
+
 // 2. Application Reactive State
 const state = {
     screenMode: (function() {
@@ -12443,6 +12447,13 @@ function getSubCategoryProducts(mainCat, subCat, microCat, searchQuery = "", req
     };
 }
 
+// 🐛 แก้บั๊ก 2026-10-03: เดิมฟังก์ชันเดียว (renderSubCategoryProductView) สร้าง HTML ของ "ทั้งหน้า" ใหม่ทุกครั้ง
+// รวมถึงช่อง <input> ค้นหาเองด้วย แล้ว container.innerHTML = html ทับทั้งก้อน - แปลว่าทุกตัวอักษรที่พิมพ์
+// ช่อง <input> ตัวเดิม (ที่ผู้ใช้กำลังโฟกัสอยู่) ถูกลบทิ้งแล้วสร้างใหม่ทุกครั้ง เคอร์เซอร์เลยหลุดโฟกัสทันทีที่พิมพ์
+// ตัวแรก ต้องแตะจอ/คลิกช่องค้นหาใหม่ทุกตัวอักษร (เจ้าของแจ้ง 2026-10-03 พร้อมภาพหน้าจอ)
+// แก้โดยแยกเป็น 2 ฟังก์ชัน: renderSubCategoryProductView() วาดเฉพาะกรอบนอก (หัวข้อ+ช่องค้นหา) ครั้งเดียวตอน
+// เข้าหมวดนี้ใหม่ ส่วน renderSubCategoryResults() วาดเฉพาะ "รายการสินค้า" ที่เปลี่ยนไปตามคำค้นหา/หน้าถัดไป
+// ลงใน div ย่อย (#subcat-results-wrapper) เท่านั้น - ช่องค้นหาตัวเดิมไม่ถูกแตะต้องเลยจึงไม่เสียโฟกัส
 function renderSubCategoryProductView() {
     const container = document.getElementById("subcategory-products-container") || document.getElementById("products-catalog-container");
     if (!container) return;
@@ -12450,18 +12461,12 @@ function renderSubCategoryProductView() {
     const mainCat = state.currentCategoryFilter;
     const subCat = state.currentSubCategoryFilter;
     const microCat = state.currentMicroCategoryFilter;
-    const requestedCount = (state.subCategoryPage || 1) * 15;
     const query = state.subCategorySearchQuery || "";
-
-    const queryResult = getSubCategoryProducts(mainCat, subCat, microCat, query, requestedCount);
-    const items = queryResult.items || [];
-    const totalFound = queryResult.totalFound || 0;
-    const hasMore = queryResult.hasMore;
 
     const subCatDisplayTitle = (subCat === "all_sub" || subCat === "all_cat" || !subCat) ? `ทั้งหมดใน "${mainCat}"` : subCat;
     const microCatDisplayTitle = (microCat && microCat !== "all_micro") ? microCat : "";
 
-    let html = `
+    container.innerHTML = `
         <div class="space-y-3 pb-6">
             <!-- 1. Breadcrumb & Overview Bar (3-Tier Navigation) -->
             <div class="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white rounded-2xl p-3 sm:p-3.5 shadow-md flex items-center justify-between flex-wrap gap-2">
@@ -12479,8 +12484,8 @@ function renderSubCategoryProductView() {
                     </div>
                     <h2 class="text-sm sm:text-base font-extrabold flex items-center gap-1.5 mt-1 text-white">
                         <span>รายการคัดสรรยอดนิยม 15 รายการ</span>
-                        <span class="bg-emerald-500/40 text-emerald-100 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-400/40">
-                            แสดง ${items.length} จาก ${totalFound} รายการ
+                        <span id="subcat-count-badge" class="bg-emerald-500/40 text-emerald-100 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-400/40">
+                            แสดง 0 จาก 0 รายการ
                         </span>
                     </h2>
                 </div>
@@ -12492,24 +12497,53 @@ function renderSubCategoryProductView() {
                 </div>
             </div>
 
-            <!-- 2. In-Category Quick Filter & Search Bar -->
-            <div class="relative flex items-center">
+            <!-- 2. In-Category Quick Filter & Search Bar (คงที่ ไม่ถูกวาดซ้ำตอนพิมพ์ค้นหา กันเคอร์เซอร์หลุดโฟกัส) -->
+            <div class="relative flex items-center" id="subcategory-search-wrapper">
                 <span class="material-symbols-outlined absolute left-3 text-emerald-700 text-base">search</span>
-                <input type="text"
-                    value="${escapeHtml(state.subCategorySearchQuery) || ''}"
+                <input type="text" id="subcategory-search-input"
+                    value="${escapeHtml(query)}"
                     oninput="handleSubCategorySearch(this.value)"
+                    onfocus="renderSubCategorySearchSuggestions(this.value)"
                     placeholder="ค้นหาใน ${microCatDisplayTitle || subCatDisplayTitle} (เช่น อกไก่, น่อง, โครงไก่)..."
                     class="w-full pl-9 pr-8 py-2 rounded-xl bg-white text-slate-800 placeholder-slate-400 text-xs font-bold border border-emerald-600/30 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-xs transition-all">
-                ${state.subCategorySearchQuery ? `
-                    <button onclick="handleSubCategorySearch('')" class="absolute right-2.5 text-slate-400 hover:text-slate-700 text-sm" title="ล้างคำค้นหา">
-                        <span class="material-symbols-outlined text-base">cancel</span>
-                    </button>
-                ` : ''}
+                <button onclick="clearSubCategorySearch()" id="subcategory-search-clear-btn" class="absolute right-2.5 text-slate-400 hover:text-slate-700 text-sm ${query ? '' : 'hidden'}" title="ล้างคำค้นหา">
+                    <span class="material-symbols-outlined text-base">cancel</span>
+                </button>
             </div>
+            <!-- 🔎 คำแนะนำคำค้นหาในหมวดนี้ -->
+            <div id="subcategory-search-suggestions" class="hidden flex flex-wrap gap-1.5"></div>
+
+            <!-- 3. รายการสินค้า (วาดซ้ำได้อิสระจากช่องค้นหาด้านบน โดย renderSubCategoryResults()) -->
+            <div id="subcat-results-wrapper"></div>
+        </div>
     `;
 
+    renderSubCategoryResults();
+}
+
+function renderSubCategoryResults() {
+    const wrapper = document.getElementById("subcat-results-wrapper");
+    if (!wrapper) return;
+
+    const mainCat = state.currentCategoryFilter;
+    const subCat = state.currentSubCategoryFilter;
+    const microCat = state.currentMicroCategoryFilter;
+    const requestedCount = (state.subCategoryPage || 1) * 15;
+    const query = state.subCategorySearchQuery || "";
+
+    const queryResult = getSubCategoryProducts(mainCat, subCat, microCat, query, requestedCount);
+    const items = queryResult.items || [];
+    const totalFound = queryResult.totalFound || 0;
+    const hasMore = queryResult.hasMore;
+
+    const subCatDisplayTitle = (subCat === "all_sub" || subCat === "all_cat" || !subCat) ? `ทั้งหมดใน "${mainCat}"` : subCat;
+    const microCatDisplayTitle = (microCat && microCat !== "all_micro") ? microCat : "";
+
+    const countBadge = document.getElementById("subcat-count-badge");
+    if (countBadge) countBadge.textContent = `แสดง ${items.length} จาก ${totalFound} รายการ`;
+
     if (items.length === 0) {
-        html += `
+        wrapper.innerHTML = `
             <div class="text-center py-12 px-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
                 <span class="material-symbols-outlined text-4xl text-slate-300">inventory_2</span>
                 <h4 class="font-extrabold text-sm text-slate-700">ยังไม่พบรายการสินค้าใน "${microCatDisplayTitle || subCatDisplayTitle}"</h4>
@@ -12520,13 +12554,12 @@ function renderSubCategoryProductView() {
                     </button>
                 </div>
             </div>
-        </div>`;
-        container.innerHTML = html;
+        `;
         return;
     }
 
     // 3. Product Table List (ตารางแนวนอน คมชัด อ่านง่าย ไม่ถูกบีบ)
-    html += `
+    let html = `
         <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden p-2 sm:p-2.5 space-y-1.5">
             <!-- Column Header -->
             <div class="flex items-center justify-between text-[11px] font-extrabold text-slate-600 px-2.5 sm:px-3 pb-1 select-none border-b border-slate-100">
@@ -12650,20 +12683,90 @@ function renderSubCategoryProductView() {
         </div>
     `;
 
-    container.innerHTML = html;
+    wrapper.innerHTML = html;
 }
 
 function loadMoreSubCategoryProducts() {
     state.subCategoryPage = (state.subCategoryPage || 1) + 1;
-    renderSubCategoryProductView();
+    renderSubCategoryResults();
     showToast("📦 ดึงรายการเพิ่มเติมอีก 15 รายการเรียบร้อยแล้ว");
 }
+
+// เหมือนกับช่องค้นหาหลัก (ดู handleSearch): หน่วงเวลาเรียก renderSubCategoryResults() (งานหนัก วนสินค้า
+// ทั้งหมดในหมวด) จนกว่าจะหยุดพิมพ์ 280 มิลลิวินาที กันหน้าจอค้างระหว่างพิมพ์ ส่วนคำแนะนำทำงานทันทีทุกตัวอักษร
+let _subCategorySearchDebounceTimer = null;
 
 function handleSubCategorySearch(query) {
     state.subCategorySearchQuery = query;
     state.subCategoryPage = 1;
-    renderSubCategoryProductView();
+    renderSubCategorySearchSuggestions(query);
+    const clearBtn = document.getElementById("subcategory-search-clear-btn");
+    if (clearBtn) {
+        if (query.trim().length > 0) clearBtn.classList.remove("hidden");
+        else clearBtn.classList.add("hidden");
+    }
+    if (_subCategorySearchDebounceTimer) clearTimeout(_subCategorySearchDebounceTimer);
+    _subCategorySearchDebounceTimer = setTimeout(renderSubCategoryResults, 280);
 }
+
+function clearSubCategorySearch() {
+    if (_subCategorySearchDebounceTimer) clearTimeout(_subCategorySearchDebounceTimer);
+    state.subCategorySearchQuery = "";
+    state.subCategoryPage = 1;
+    const input = document.getElementById("subcategory-search-input");
+    const clearBtn = document.getElementById("subcategory-search-clear-btn");
+    if (input) input.value = "";
+    if (clearBtn) clearBtn.classList.add("hidden");
+    hideSubCategorySearchSuggestions();
+    renderSubCategoryResults();
+}
+
+// 🔎 คำแนะนำคำค้นหาในหมวดนี้ (ใช้ลิสต์คำเดียวกับช่องค้นหาหลักหน้าแรก)
+function renderSubCategorySearchSuggestions(query) {
+    const box = document.getElementById("subcategory-search-suggestions");
+    if (!box) return;
+    const list = getSearchSuggestions(query);
+    if (list.length === 0) {
+        box.innerHTML = "";
+        box.classList.add("hidden");
+        return;
+    }
+    box.innerHTML = list.map(kw => `
+        <button type="button" onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" onclick="handleSubCategoryQuickSearch(${jsArg(kw)})" class="px-2.5 py-1 bg-white active:bg-emerald-100 hover:bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold shrink-0">${escapeHtml(kw)}</button>
+    `).join("");
+    box.classList.remove("hidden");
+}
+
+function hideSubCategorySearchSuggestions() {
+    const box = document.getElementById("subcategory-search-suggestions");
+    if (box) {
+        box.innerHTML = "";
+        box.classList.add("hidden");
+    }
+}
+
+function handleSubCategoryQuickSearch(keyword) {
+    if (_subCategorySearchDebounceTimer) clearTimeout(_subCategorySearchDebounceTimer);
+    const input = document.getElementById("subcategory-search-input");
+    if (input) input.value = keyword;
+    state.subCategorySearchQuery = keyword;
+    state.subCategoryPage = 1;
+    const clearBtn = document.getElementById("subcategory-search-clear-btn");
+    if (clearBtn) {
+        if (keyword.trim().length > 0) clearBtn.classList.remove("hidden");
+        else clearBtn.classList.add("hidden");
+    }
+    hideSubCategorySearchSuggestions();
+    renderSubCategoryResults();
+}
+
+// ปิดกล่องคำแนะนำเมื่อแตะ/คลิกนอกกล่องค้นหาในหมวด
+document.addEventListener("pointerdown", function (e) {
+    const subcatSearchWrapper = document.getElementById("subcategory-search-wrapper");
+    if (subcatSearchWrapper && !subcatSearchWrapper.contains(e.target)) {
+        hideSubCategorySearchSuggestions();
+    }
+});
 
 window.filterByCategory = filterByCategory;
 window.selectSubCategory = selectSubCategory;
@@ -12672,6 +12775,10 @@ window.scrollSubCategoryTabs = scrollSubCategoryTabs;
 window.scrollMicroCategoryTabs = scrollMicroCategoryTabs;
 window.loadMoreSubCategoryProducts = loadMoreSubCategoryProducts;
 window.handleSubCategorySearch = handleSubCategorySearch;
+window.clearSubCategorySearch = clearSubCategorySearch;
+window.handleSubCategoryQuickSearch = handleSubCategoryQuickSearch;
+window.renderSubCategorySearchSuggestions = renderSubCategorySearchSuggestions;
+window.renderSubCategoryResults = renderSubCategoryResults;
 window.renderSubCategoryProductView = renderSubCategoryProductView;
 window.getMainCategories = getMainCategories;
 window.getSubCategories = getSubCategories;
@@ -12796,6 +12903,12 @@ function filterBySingleStall(stallId) {
     showToast("กรองเฉพาะแผงที่เลือกแล้ว");
 }
 
+// 🐛 แก้บั๊ก: เดิม renderCatalog() (งานหนัก วนทุกร้าน+สินค้า สร้าง HTML ใหม่ทั้งหมด) ถูกเรียกทันทีทุกตัวอักษรที่พิมพ์
+// บนมือถือเครื่องแรง ๆ ทำให้หน้าจอค้างนิดหน่อย แต่บนเครื่องที่ช้า/จอเล็กทำให้พิมพ์ต่อไม่ได้ต้องแตะช่องค้นหาใหม่ทุกครั้ง
+// (เบราว์เซอร์มือถือมักจะปิดคีย์บอร์ด/เสียโฟกัสถ้าหน้าจอค้างนานระหว่างพิมพ์) จึงหน่วงเวลาเรียก renderCatalog()
+// ให้รอจนกว่าจะหยุดพิมพ์ 280 มิลลิวินาที ส่วนคำแนะนำ (renderSearchSuggestions) เบากว่ามากจึงยังทำงานทันทีทุกตัวอักษร
+let _searchDebounceTimer = null;
+
 function handleSearch(val) {
     state.searchQuery = val;
     const clearBtn = document.getElementById("market-search-clear-btn");
@@ -12803,23 +12916,81 @@ function handleSearch(val) {
         if (val.trim().length > 0) clearBtn.classList.remove("hidden");
         else clearBtn.classList.add("hidden");
     }
-    renderCatalog();
+    renderSearchSuggestions(val);
+    if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+    _searchDebounceTimer = setTimeout(renderCatalog, 280);
 }
 
 function clearSearchInput() {
+    if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
     state.searchQuery = "";
     const input = document.getElementById("market-search-input");
     const clearBtn = document.getElementById("market-search-clear-btn");
     if (input) input.value = "";
     if (clearBtn) clearBtn.classList.add("hidden");
+    hideSearchSuggestions();
     renderCatalog();
 }
 
 function handleQuickSearch(keyword) {
+    if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
     const input = document.getElementById("market-search-input");
     if (input) input.value = keyword;
-    handleSearch(keyword);
+    state.searchQuery = keyword;
+    const clearBtn = document.getElementById("market-search-clear-btn");
+    if (clearBtn) {
+        if (keyword.trim().length > 0) clearBtn.classList.remove("hidden");
+        else clearBtn.classList.add("hidden");
+    }
+    hideSearchSuggestions();
+    renderCatalog();
 }
+
+// 🔎 คำแนะนำคำค้นหา: พิมพ์คำว่า "หมู" แล้วแสดงคำที่เกี่ยวข้อง (หมูบด/หมูสามชั้น/...) สูงสุด 10 คำ ให้กดเลือกต่อได้เลย
+function getSearchSuggestions(query) {
+    const q = (query || "").trim().toLowerCase();
+    if (!q) return [];
+    const startsWith = [];
+    const includesOnly = [];
+    SEARCH_SUGGESTION_KEYWORDS.forEach(kw => {
+        const lower = kw.toLowerCase();
+        if (lower === q) return; // ไม่ต้องแนะนำคำที่พิมพ์ตรงกับที่มีอยู่แล้วเป๊ะ ๆ
+        if (lower.startsWith(q)) startsWith.push(kw);
+        else if (lower.includes(q)) includesOnly.push(kw);
+    });
+    return startsWith.concat(includesOnly).slice(0, 10);
+}
+
+function renderSearchSuggestions(query) {
+    const box = document.getElementById("market-search-suggestions");
+    if (!box) return;
+    const list = getSearchSuggestions(query);
+    if (list.length === 0) {
+        box.innerHTML = "";
+        box.classList.add("hidden");
+        return;
+    }
+    box.innerHTML = list.map(kw => `
+        <button type="button" onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" onclick="handleQuickSearch(${jsArg(kw)})" class="px-2.5 py-1 bg-white active:bg-emerald-100 hover:bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold shrink-0">${escapeHtml(kw)}</button>
+    `).join("");
+    box.classList.remove("hidden");
+}
+
+function hideSearchSuggestions() {
+    const box = document.getElementById("market-search-suggestions");
+    if (box) {
+        box.innerHTML = "";
+        box.classList.add("hidden");
+    }
+}
+
+// ปิดกล่องคำแนะนำเมื่อแตะ/คลิกนอกกล่องค้นหาหลัก
+document.addEventListener("pointerdown", function (e) {
+    const marketSearchWrapper = document.getElementById("market-search-wrapper");
+    if (marketSearchWrapper && !marketSearchWrapper.contains(e.target)) {
+        hideSearchSuggestions();
+    }
+});
 
 // ==========================================
 // 100 STALLS DIRECTORY MODAL
@@ -25350,7 +25521,7 @@ function initAdminRiderRadarMap() {
         L.marker([centerLat, centerLng], { icon: hubIcon })
             .addTo(_adminRiderRadarMap)
             .bindPopup(`
-                <div style="font-family: 'Prompt', sans-serif; font-size: 12px; line-height: 1.4;">
+                <div style="font-family: 'IBM Plex Sans Thai', sans-serif; font-size: 12px; line-height: 1.4;">
                     <div style="font-weight: 800; color: #581c87;">🏛️ ศูนย์กลางตลาดสดวิศิษฐ์ชัย (Hub)</div>
                     <div style="color: #64748b; font-size: 11px;">จุดรับของ & กระจายสินค้าหลัก</div>
                 </div>
@@ -25393,7 +25564,7 @@ function initAdminRiderRadarMap() {
 
             const marker = L.marker([rLat, rLng], { icon: riderIcon }).addTo(_adminRiderRadarMap);
             marker.bindPopup(`
-                <div style="font-family: 'Prompt', sans-serif; font-size: 11px; line-height: 1.5; min-width: 160px;">
+                <div style="font-family: 'IBM Plex Sans Thai', sans-serif; font-size: 11px; line-height: 1.5; min-width: 160px;">
                     <div style="font-weight: 800; font-size: 12px; color: #0f172a;">${escapeHtml(r.avatar) || '🛵'} ${escapeHtml(r.name)}</div>
                     <div style="color: #64748b; font-family: monospace;">ทะเบียน: ${escapeHtml(r.plate) || '-'} ${r.motorcycleModel ? `• ${r.motorcycleModel}` : ''}</div>
                     <div style="font-weight: bold; margin-top: 2px;">สถานะ: ${statusText}</div>
@@ -25433,7 +25604,7 @@ function initAdminRiderRadarMap() {
                 L.marker([destLat, destLng], { icon: destIcon })
                     .addTo(_adminRiderRadarMap)
                     .bindPopup(`
-                        <div style="font-family: 'Prompt', sans-serif; font-size: 11px;">
+                        <div style="font-family: 'IBM Plex Sans Thai', sans-serif; font-size: 11px;">
                             <b style="color: #b91c1c;">🏠 ปลายทางส่งของสด</b><br>
                             ไรเดอร์: ${escapeHtml(r.name)}<br>
                             <span style="color: #64748b;">กำลังเดินทางจัดส่ง</span>
@@ -30181,7 +30352,7 @@ async function buildOwnerBannerCanvas(stall) {
             const displayName = `✨ ${name.trim()}`;
             ctx.save();
 
-            ctx.font = `bold ${fontSize}px 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif`;
+            ctx.font = `bold ${fontSize}px 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif`;
             const textMetrics = ctx.measureText(displayName);
             const padX = 36;
             const badgeW = Math.max(textMetrics.width + (padX * 2), 220);

@@ -47,7 +47,21 @@ write("firebase-config.js", cfg);
 fs.cpSync(path.join(root, "images"), path.join(pub, "images"), { recursive: true });
 
 // ตั้งค่า Firebase CLI ให้ชี้ hsong-test เท่านั้น
-fs.writeFileSync(path.join(out, "firebase.json"), JSON.stringify({ hosting: { public: "public" } }));
+// 🐛 แก้บั๊ก 2026-10-03: ไม่ได้ตั้ง header เอง มาก่อน ทำให้ Firebase Hosting ใช้ค่า default (Cache-Control: max-age=3600)
+//   กับ "ทุกไฟล์" รวมถึง index.html/app.js เอง - นานกว่าที่เอกสารเคยเข้าใจไว้ (10 นาทีของ GitHub Pages ฝั่งเว็บจริง)
+//   ผลคือถ้าเจ้าของเคยเปิดเว็บทดสอบมาก่อนแล้วเจอ build ใหม่ไม่ถึง 1 ชม. เบราว์เซอร์จะยังโชว์ไฟล์เก่าค้างอยู่
+//   (ทั้ง PC และมือถือ) แม้จะ deploy ใหม่แล้วก็ตาม - ให้ไฟล์หลักของเว็บทดสอบ "ห้ามแคช" เลย กันปัญหานี้ซ้ำอีก
+fs.writeFileSync(path.join(out, "firebase.json"), JSON.stringify({
+    hosting: {
+        public: "public",
+        headers: [
+            {
+                source: "**/*.@(html|js|css)",
+                headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }]
+            }
+        ]
+    }
+}));
 fs.writeFileSync(path.join(out, ".firebaserc"), JSON.stringify({ projects: { default: "hsong-test" } }));
 
 // ตรวจความปลอดภัย: ต้องไม่เหลือ host จริง และต้องเป็น hsong-test

@@ -10,11 +10,14 @@
     <title>เฮียส่ง - เพียงคุณสั่ง เราไปส่ง ทุกรายการจากตลาดถึงมือคุณ</title>
 
 
-    <!-- Fonts: Prompt & Inter -->
+    <!-- Fonts: IBM Plex Sans Thai & Inter -->
+    <!-- 🔤 เปลี่ยนฟอนต์หลักจาก Prompt (ตัวหนา/กว้าง) เป็น IBM Plex Sans Thai (เพรียว อ่านง่ายกว่า) ตามที่เจ้าของขอ
+         2026-10-03 พร้อมภาพเปรียบเทียบจากแอปร้านค้าอื่น - ทดสอบเทียบสดแล้วว่าบางลงชัดเจนโดยยังคงความหนา/เข้มของ
+         font-bold เดิมไว้ (กันปัญหาตัวอักษรจางลงสำหรับเจ้าของที่สายตาไม่ดี) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
         rel="stylesheet">
 
     <!-- Google Material Symbols -->
@@ -47,7 +50,7 @@
                         "text-muted": "#64748b"
                     },
                     fontFamily: {
-                        sans: ['Prompt', 'Inter', 'sans-serif'],
+                        sans: ['IBM Plex Sans Thai', 'Inter', 'sans-serif'],
                     },
                     boxShadow: {
                         'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
@@ -67,7 +70,7 @@
             if (m !== "normal") document.documentElement.classList.add("text-" + m);
         })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=10.07_product_row_fix">
+    <link rel="stylesheet" href="styles.css?v=10.08_font_ibm_plex_thai">
 </head>
 
 <body
@@ -618,10 +621,11 @@
                 </div>
 
                 <!-- 🔍 MAIN SEARCH BOX (ย้ายมาอยู่ระหว่างเปิดรับออเดอร์ และ ดูผัง 100 ร้าน) -->
-                <div class="px-4 mt-2.5">
+                <div class="px-4 mt-2.5" id="market-search-wrapper">
                     <div class="relative flex items-center">
                         <span class="material-symbols-outlined absolute left-3.5 text-emerald-700 text-lg">search</span>
                         <input type="text" id="market-search-input" oninput="handleSearch(this.value)"
+                            onfocus="renderSearchSuggestions(this.value)"
                             placeholder="พิมพ์ค้นหาวัตถุดิบ (เช่น ซี่โครงหมู, อกไก่, ผักกาดขาว, กุ้ง)..."
                             class="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-white text-slate-800 placeholder-slate-400 text-xs font-bold border-2 border-emerald-600/30 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm transition-all">
                         <button onclick="clearSearchInput()" id="market-search-clear-btn"
@@ -629,6 +633,8 @@
                             <span class="material-symbols-outlined text-base">cancel</span>
                         </button>
                     </div>
+                    <!-- 🔎 คำแนะนำคำค้นหา (เช่น พิมพ์ "หมู" แล้วโชว์ "หมูบด/หมูสามชั้น" ให้กดเลือกต่อ) -->
+                    <div id="market-search-suggestions" class="hidden flex flex-wrap gap-1.5 mt-2"></div>
                 </div>
 
                 <!-- 🌟 HERO 3-BANNER CAROUSEL (สลับ 3 ป้ายอัตโนมัติ สัดส่วน 4:1 สูงครึ่งหนึ่งของป้ายหลัก) -->
@@ -7195,7 +7201,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.80_remove_stall_highlight_desc"></script>
+    <script src="app.js?v=10.83_font_ibm_plex_thai"></script>
 </body>
 
 </html>
