@@ -11386,8 +11386,6 @@ function renderCatalog() {
         const ownerBannerUrl = (typeof getOrBuildOwnerBanner === "function") ? getOrBuildOwnerBanner(stall) : ownerImg;
         const ownerNm = stallOwnerDisplayName(stall);   // ลูกค้าเห็นแค่ชื่อเล่น (เจ้าของเลือก 2026-09-25)
         const expText = stall.experience || 'เปิดบริการในตลาดสด';
-        const highlightText = stall.highlight || 'สินค้าสดใหม่ คัดเกรดคุณภาพ สะอาด ถูกหลักอนามัย';
-        const descriptionText = stall.shopDescription || 'จำหน่ายสินค้าสดคุณภาพดี คัดสรรวันต่อวัน ชั่งน้ำหนักแม่นยำ พร้อมบริการตัดแต่งตามสั่งและจัดส่งตรงถึงบ้านคุณ';
         const isFav = state.favorites && state.favorites.includes(stall.stallId);
         const extraCatalog = getStallCatalogData(stall.stallId);
         const extraItemsCount = extraCatalog.reduce((sum, g) => sum + (g.items ? g.items.length : 0), 0);
@@ -11502,27 +11500,6 @@ function renderCatalog() {
                                     <span class="text-[9px] text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded font-bold">สลับรูป ↺</span>
                                 </button>
                             </div>
-                        </div>
-
-                        <!-- Row 2: 3. ข้อความไฮไลท์เพื่อให้ลูกค้ารู้ว่าที่ร้านขายอะไร (Highlight Tagline) -->
-                        <div class="mt-3 px-3 py-1.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-amber-900 flex items-start gap-2 shadow-xs">
-                            <span class="material-symbols-outlined text-amber-600 text-base shrink-0 mt-0.5">stars</span>
-                            <div class="text-[11px] leading-snug">
-                                <span class="font-extrabold text-amber-900">ไฮไลท์สินค้า:</span>
-                                <span class="font-medium text-slate-800 ml-1">${highlightText}</span>
-                            </div>
-                        </div>
-
-                        <!-- Row 3: 4. รายละเอียดของสินค้าที่จำหน่าย (Description ไม่เกิน 150 ตัวอักษร) -->
-                        <div class="mt-2 text-[11px] text-slate-600 leading-relaxed bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/70">
-                            <div class="flex items-center justify-between font-bold text-slate-700 mb-1 text-[10px]">
-                                <span class="flex items-center gap-1 text-emerald-700">
-                                    <span class="material-symbols-outlined text-xs">local_mall</span>
-                                    รายละเอียดสินค้าที่จำหน่าย
-                                </span>
-                                <span class="text-slate-400 font-normal text-[9px]">${descriptionText.length} ตัวอักษร</span>
-                            </div>
-                            <p class="text-slate-600 leading-normal">${descriptionText}</p>
                         </div>
 
                     </div>
