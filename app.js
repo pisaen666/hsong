@@ -11127,7 +11127,7 @@ function renderCatalog() {
     const container = document.getElementById("products-catalog-container");
     const singleStallBanner = document.getElementById("single-stall-banner");
     if (!container) return;
-    renderMainCategoryGrid();   // ตารางหมวดหมู่หลัก + จำนวนสินค้าล่าสุด
+    renderCategoryMenuTrigger();   // ปุ่มเดียวโชว์หมวดที่เลือกอยู่ + จำนวนสินค้าล่าสุด (ลิสต์เต็มอยู่ใน #category-menu-modal กดเปิดเอง)
 
     // Dual-Tier Navigation: หากเลือกหมวดหลักและเลือกหมวดหมู่ย่อย ให้แสดงหน้ารวม 15 รายการคัดสรร
     if (state.currentCategoryFilter && state.currentCategoryFilter !== "all" && state.currentSubCategoryFilter) {
@@ -11784,40 +11784,83 @@ function countCategoryProducts(mainCat, subCat, microCat) {
     }
 }
 
-function renderMainCategoryGrid() {
-    const grid = document.getElementById("category-tabs");
-    if (!grid) return;
+// ปุ่มเดียวหน้าแรก (ไม่ใช่ตาราง 4x3 แล้ว — เจ้าของขอ 2026-10-02 ตามรูปแบบ Lotus's go fresh): โชว์หมวดที่เลือกอยู่ กดแล้วค่อยเปิดลิสต์เต็มใน #category-menu-modal
+function renderCategoryMenuTrigger() {
+    const current = state.currentCategoryFilter || "all";
+    const emojiEl = document.getElementById("category-menu-button-emoji");
+    const labelEl = document.getElementById("category-menu-button-label");
+    const countEl = document.getElementById("category-menu-button-count");
+    if (!emojiEl || !labelEl || !countEl) return;
+    if (current === "all") {
+        emojiEl.textContent = "🏠";
+        labelEl.textContent = "ทั้งหมด (เลือกหมวดหมู่)";
+        countEl.textContent = "";
+        return;
+    }
+    const n = countCategoryProducts(current);
+    emojiEl.textContent = mainCategoryEmoji(current);
+    labelEl.textContent = mainCategoryShortLabel(current);
+    countEl.textContent = n > 0 ? `${n} รายการ` : "เร็ว ๆ นี้";
+}
+
+// ลิสต์หมวดหมู่หลักแบบเต็มจอ (ในป็อปอัพ #category-menu-modal) — นับสินค้าจริงของทุกร้านเหมือนตารางเดิม
+function renderCategoryMenuModalList() {
+    const list = document.getElementById("category-menu-modal-list");
+    if (!list) return;
     const current = state.currentCategoryFilter || "all";
     const tiles = [{ key: "all", emoji: "🏠", label: "ทั้งหมด", full: "ทั้งหมด" }]
         .concat(getMainCategories().map(c => ({ key: c, emoji: mainCategoryEmoji(c), label: mainCategoryShortLabel(c), full: c })));
 
-    grid.innerHTML = tiles.map(t => {
+    list.innerHTML = tiles.map(t => {
         const n = countCategoryProducts(t.key);
         const isActive = t.key === current;
         const isEmpty = n === 0 && t.key !== "all" && !isActive;
-        let cls, countCls, countText;
+        let rowCls, countCls, countText;
         if (isActive) {
-            cls = "active bg-emerald-700 border-emerald-700 text-white shadow-sm";
+            rowCls = "bg-emerald-700 border-emerald-700 text-white";
             countCls = "text-white";
             countText = n > 0 ? `${n} รายการ` : "เร็ว ๆ นี้";
         } else if (isEmpty) {
-            cls = "bg-slate-100 border-dashed border-slate-400 text-slate-700";
+            rowCls = "bg-slate-100 border-dashed border-slate-400 text-slate-700";
             countCls = "text-slate-700";
             countText = "เร็ว ๆ นี้";
         } else {
-            cls = "bg-white border-emerald-300 text-slate-800 hover:bg-emerald-100";
+            rowCls = "bg-white border-emerald-200 text-slate-800 hover:bg-emerald-50";
             countCls = "text-emerald-800";
             countText = `${n} รายการ`;
         }
-        const action = isEmpty ? `showComingSoonCategory(${jsArg(t.full)})` : `filterByCategory(${jsArg(t.key)})`;
+        const action = isEmpty ? `showComingSoonCategory(${jsArg(t.full)})` : `selectCategoryFromMenu(${jsArg(t.key)})`;
+        const markEl = isActive
+            ? '<span class="material-symbols-outlined text-lg shrink-0">check_circle</span>'
+            : '<span class="material-symbols-outlined text-lg text-slate-300 shrink-0">chevron_right</span>';
+        // ตัดอิโมจินำหน้าออกจากข้อความ เพราะมีไอคอนอิโมจิแยกแสดงอยู่แล้วทางซ้าย (ไม่งั้นจะเห็นอิโมจิซ้ำ 2 อัน)
+        const textOnly = t.full.replace(/^[^\s\w฀-๿]+\s*/, "").trim() || t.full;
         return `
-            <button type="button" onclick="${action}" title="${escapeHtml(t.full)}" aria-label="${escapeHtml(t.full)} ${countText}"
-                class="cat-pill ${cls} flex flex-col items-center justify-start gap-0.5 px-1 py-2 rounded-xl border-2 cursor-pointer active:scale-95 transition-all">
-                <span class="text-2xl leading-none ${isEmpty ? "opacity-50" : ""}">${t.emoji}</span>
-                <span class="text-xs font-bold leading-tight text-center">${escapeHtml(t.label)}</span>
-                <span class="text-[11px] font-bold leading-tight text-center ${countCls}">${countText}</span>
+            <button type="button" onclick="${action}"
+                class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 ${rowCls} active:scale-[0.98] transition-all cursor-pointer">
+                <span class="text-xl leading-none shrink-0 ${isEmpty ? "opacity-50" : ""}">${t.emoji}</span>
+                <span class="text-sm font-bold flex-1 text-left truncate">${escapeHtml(textOnly)}</span>
+                <span class="text-[11px] font-bold shrink-0 whitespace-nowrap ${countCls}">${countText}</span>
+                ${markEl}
             </button>`;
     }).join("");
+}
+
+function openCategoryMenuModal() {
+    renderCategoryMenuModalList();
+    const modal = document.getElementById("category-menu-modal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeCategoryMenuModal() {
+    const modal = document.getElementById("category-menu-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+// เลือกหมวดหมู่หลักจากลิสต์ในป็อปอัพ แล้วปิดป็อปอัพให้เห็นสินค้าเลย (หมวดรอง/ย่อยยังโผล่แบบเดิมในหน้าหลัก)
+function selectCategoryFromMenu(category) {
+    filterByCategory(category);
+    closeCategoryMenuModal();
 }
 
 function showComingSoonCategory(label) {
@@ -11858,7 +11901,11 @@ function scrollChipIntoView(containerId, btn) {
     });
 }
 
-window.renderMainCategoryGrid = renderMainCategoryGrid;
+window.renderCategoryMenuTrigger = renderCategoryMenuTrigger;
+window.renderCategoryMenuModalList = renderCategoryMenuModalList;
+window.openCategoryMenuModal = openCategoryMenuModal;
+window.closeCategoryMenuModal = closeCategoryMenuModal;
+window.selectCategoryFromMenu = selectCategoryFromMenu;
 window.showComingSoonCategory = showComingSoonCategory;
 window.renderCategoryBreadcrumb = renderCategoryBreadcrumb;
 
@@ -12097,6 +12144,15 @@ function scrollMicroCategoryTabs(amount) {
     }
 }
 
+// แตกป้ายหมวดย่อย (ระดับ 3) ที่เป็นข้อความรวมคั่นด้วย "/" เช่น "ไส้กรอก / ฮอทดอก / ปูอัด"
+// ให้เป็นคำเดี่ยวๆ ไว้ใช้เดาว่าสินค้าที่ไม่ได้เลือกหมวดย่อยไว้ควรอยู่หมวดไหน (เหมือนกับ SUB_CATEGORY_SYNONYMS ของหมวดรอง)
+function splitCompoundCategoryLabel(label) {
+    return String(label || "")
+        .split("/")
+        .map(s => s.trim())
+        .filter(s => s && s !== "อื่นๆ" && s !== "อื่น ๆ");
+}
+
 // ── Smart 3-Tier Category Matching Engine ──
 function matchItemToSubCategory(item, mainCat, subCat, microCat) {
     if (!item) return false;
@@ -12212,7 +12268,9 @@ function matchItemToSubCategory(item, mainCat, subCat, microCat) {
             if (name.includes(targetMicro) || desc.includes(targetMicro)) {
                 microMatched = true;
             } else {
-                const syns = SUB_CATEGORY_SYNONYMS[microCat] || [];
+                // คำที่ใช้เดา: ทั้งลิสต์ synonym ที่ตั้งไว้เอง (ถ้ามี) และคำที่แตกจากป้ายหมวดย่อยเอง
+                // (ป้ายหมวดย่อยส่วนใหญ่เป็นข้อความรวมคั่นด้วย "/" เช่น "ไส้กรอก / ฮอทดอก / ปูอัด" อยู่แล้ว)
+                const syns = (SUB_CATEGORY_SYNONYMS[microCat] || []).concat(splitCompoundCategoryLabel(microCat));
                 for (const syn of syns) {
                     const synLower = syn.toLowerCase();
                     if (synLower === "อื่นๆ" || synLower === "อื่น ๆ") continue;
@@ -12718,7 +12776,7 @@ function scrollDirectoryCategoryTabs(amount) {
 
 // Enable Mouse Drag-to-Scroll on PC Desktop
 function enableDragToScroll() {
-    ['category-tabs', 'subcategory-tabs', 'favorite-stalls-list', 'modal-stall-category-pills', 'directory-category-tabs', 'merchant-portal-tab-bar'].forEach(id => {
+    ['subcategory-tabs', 'favorite-stalls-list', 'modal-stall-category-pills', 'directory-category-tabs', 'merchant-portal-tab-bar'].forEach(id => {
         const slider = document.getElementById(id);
         if (!slider) return;
 
@@ -31340,6 +31398,8 @@ async function saveMerchantStallData() {
         const HIGHLIGHT_COUNT = 10;
         const products = [];
         const highlightNames = [];
+        // รายการสินค้าที่ยังเลือกหมวดรอง/หมวดย่อยไม่ครบ ไว้เตือนร้านค้าก่อนบันทึกจริง (ไม่งั้นลูกค้าอาจหาสินค้าไม่เจอตอนกดดูหมวดหมู่เฉพาะเจาะจง)
+        const categoryWarnings = [];
         for (let i = 0; i < HIGHLIGHT_COUNT; i++) {
             const name = document.getElementById(`m-p-name-${i}`)?.value.trim() || "";
             const badge = document.getElementById(`m-p-badge-${i}`)?.value.trim() || "";
@@ -31351,6 +31411,11 @@ async function saveMerchantStallData() {
             const subCat = document.getElementById(`m-p-subcat-${i}`)?.value || "";
             const microCat = document.getElementById(`m-p-microcat-${i}`)?.value || "";
             if (name) {
+                if (!subCat) {
+                    categoryWarnings.push({ label: name, reason: "ยังไม่เลือกหมวดรอง", el: document.getElementById(`m-p-subcat-${i}`) });
+                } else if (!microCat) {
+                    categoryWarnings.push({ label: name, reason: "ยังไม่เลือกหมวดย่อย (ชิ้นส่วน/ชนิด)", el: document.getElementById(`m-p-microcat-${i}`) });
+                }
                 products.push({
                     id: `${activeMerchantStallId}_p${i + 1}`,
                     name: name,
@@ -31408,6 +31473,11 @@ async function saveMerchantStallData() {
             const group = mainCatVal || subCatVal || "หมวดหมู่ทั่วไป";
 
             if (itemName) {
+                if (!subCatVal) {
+                    categoryWarnings.push({ label: itemName, reason: "ยังไม่เลือกหมวดรอง", el: subCatEl || mainCatEl });
+                } else if (!microCatVal) {
+                    categoryWarnings.push({ label: itemName, reason: "ยังไม่เลือกหมวดย่อย (ชิ้นส่วน/ชนิด)", el: microCatEl });
+                }
                 if (!groupMap[group]) groupMap[group] = [];
                 groupMap[group].push({
                     id: `cat_${activeMerchantStallId}_${idx + 1}`,
@@ -31426,6 +31496,32 @@ async function saveMerchantStallData() {
             groupName: g,
             items: groupMap[g]
         }));
+
+        // เตือนร้านค้าถ้ามีสินค้าเลือกหมวดหมู่ไม่ครบ (ไม่บล็อกการบันทึก แค่ให้เลือกว่าจะย้อนกลับไปแก้ก่อนไหม)
+        if (categoryWarnings.length > 0) {
+            const shownWarnings = categoryWarnings.slice(0, 5);
+            const lines = shownWarnings.map(w => `• ${w.label} — ${w.reason}`).join("\n");
+            const more = categoryWarnings.length > 5 ? `\n...และอีก ${categoryWarnings.length - 5} รายการ` : "";
+            const proceed = confirm(
+                `⚠️ พบสินค้า ${categoryWarnings.length} รายการที่ยังเลือกหมวดหมู่ไม่ครบ:\n\n${lines}${more}\n\n` +
+                `ถ้าไม่เลือกให้ครบ ลูกค้าอาจหาสินค้านี้ไม่เจอตอนกดดูหมวดหมู่เฉพาะเจาะจง\n\n` +
+                `กด "ตกลง (OK)" เพื่อบันทึกต่อไปเลย (ไม่แนะนำ)\nกด "ยกเลิก (Cancel)" เพื่อกลับไปเลือกหมวดหมู่ให้ครบก่อน`
+            );
+            if (!proceed) {
+                switchMerchantPortalTab("tab-products");
+                const firstEl = shownWarnings[0] && shownWarnings[0].el;
+                if (firstEl) {
+                    firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
+                    firstEl.focus();
+                    firstEl.classList.add("border-rose-500", "ring-2", "ring-rose-400", "bg-rose-50");
+                }
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = origSubmitHtml;
+                }
+                return;
+            }
+        }
 
         // Auto-populate Highlight products from catalog if products list is empty
         if (products.length === 0 && catalogGroups && catalogGroups.length > 0) {
@@ -32170,7 +32266,7 @@ function handleHeroBannerClick(index) {
         showToast("🏪 ดูผัง 100 แผงค้า สั่งหลายร้าน รวมส่งรอบเดียวได้เลยครับ");
     } else if (index === 1) {
         // Slide 2: สด ๆ ใหม่ ๆ จากร้านค้า ส่งไวใน 30 นาที
-        const catEl = document.getElementById("category-tabs");
+        const catEl = document.getElementById("category-menu-section");
         if (catEl) {
             catEl.scrollIntoView({ behavior: "smooth", block: "center" });
         }
@@ -32395,7 +32491,7 @@ function handleMarketHeroClick(index) {
         showToast("🏪 ดูผัง 100 แผงค้า สั่งหลายร้าน รวมส่งรอบเดียวได้เลยครับ");
     } else if (index === 1) {
         // Slide 2: สด ๆ ใหม่ ๆ จากร้านค้า ส่งไวใน 30 นาที
-        const catEl = document.getElementById("category-tabs");
+        const catEl = document.getElementById("category-menu-section");
         if (catEl) {
             catEl.scrollIntoView({ behavior: "smooth", block: "center" });
         }
