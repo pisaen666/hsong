@@ -1,4 +1,4 @@
-﻿// firebase-config.js — TalatHub (เฮียส่ง) Firebase Realtime Database Setup
+﻿// firebase-config.js — TalatHub (Hub2U) Firebase Realtime Database Setup
 // ไฟล์นี้ initialize Firebase และ export database reference สำหรับใช้ใน app.js
 
 const firebaseConfig = {

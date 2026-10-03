@@ -530,7 +530,7 @@ window.syncOwnerOnlyTestUi = syncOwnerOnlyTestUi;
 function applyOwnerSession(user) {
     const signedIn = !!user && isOwnerUid(user.uid);
     if (signedIn) {
-        state.activeAdmin = { isLoggedIn: true, name: "เฮียส่ง", role: "Super Admin", uid: user.uid, email: user.email || "", loggedInAt: Date.now() };
+        state.activeAdmin = { isLoggedIn: true, name: "Hub2U", role: "Super Admin", uid: user.uid, email: user.email || "", loggedInAt: Date.now() };
         state.activeHub = { isLoggedIn: true, name: "ฝ่ายจัดเตรียมสินค้า & ระบบจัดส่ง (ฮับ)", role: "hub_admin", uid: user.uid, loggedInAt: Date.now() };
     } else {
         state.activeAdmin = null;
@@ -799,7 +799,7 @@ function applyActiveOrderCloudUpdate(updatedOrder) {
     } else if (updatedOrder.status === "delivering" && oldStatus !== "delivering") {
         showToast("🛵 ไรเดอร์ออกเดินทางแล้ว! กำลังมาส่งของที่บ้านคุณ");
     } else if (updatedOrder.status === "delivered" && oldStatus !== "delivered") {
-        showToast("✅ จัดส่งสำเร็จแล้ว! ขอบคุณที่ใช้บริการเฮียส่ง 🙏");
+        showToast("✅ จัดส่งสำเร็จแล้ว! ขอบคุณที่ใช้บริการ Hub2U 🙏");
     }
 }
 
@@ -6121,7 +6121,7 @@ function goToHomePage() {
     renderFavoriteStallsBar();
     renderCatalog();
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast("🏠 ยินดีต้อนรับสู่ เฮียส่ง (หน้าหลัก)");
+    showToast("🏠 ยินดีต้อนรับสู่ Hub2U (หน้าหลัก)");
 }
 
 function goToMarketScreen() {
@@ -8170,7 +8170,7 @@ function confirmVendorPayoutSettled() {
     const payoutRecord = {
         isSettled: true,
         settledAt: Date.now(),
-        settledBy: (state.activeAdmin && state.activeAdmin.name) ? `${state.activeAdmin.name} (${state.activeAdmin.role || 'Admin'})` : "เฮียส่ง (Super Admin)",
+        settledBy: (state.activeAdmin && state.activeAdmin.name) ? `${state.activeAdmin.name} (${state.activeAdmin.role || 'Admin'})` : "Hub2U (Super Admin)",
         amount: _currentPayoutStall.amount,
         grossAmount: _currentPayoutStall.grossAmount || _currentPayoutStall.amount,
         gpAmount: _currentPayoutStall.gpAmount || 0,
@@ -10952,7 +10952,7 @@ function printA4RiderRulesSheet() {
 
         <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 10.5px; color: #475569; background: #f8fafc;">
             <div style="font-weight: bold; margin-bottom: 4px;">ช่องทางติดต่อประสานงานด่วน:</div>
-            <div>• ฝ่ายจัดส่งและผู้จัดการฮับวิศิษฐ์ชัย: 089-123-4567 (เฮียส่ง) | LINE: @talathub</div>
+            <div>• ฝ่ายจัดส่งและผู้จัดการฮับวิศิษฐ์ชัย: 089-123-4567 (Hub2U) | LINE: @talathub</div>
             <div>• ที่ตั้งศูนย์กระจายสินค้า: ตลาดสดวิศิษฐ์ชัย ตำบลบ้านหนองชาก อำเภอบ้านบึง จังหวัดชลบุรี</div>
         </div>
     `;
@@ -15173,8 +15173,8 @@ function sendRiderLineMessage(event) {
     const orderId = (state.activeOrder && state.activeOrder.orderId) ? state.activeOrder.orderId : "";
     const riderName = (state.activeOrder && state.activeOrder.riderName) || "ไรเดอร์";
     const msg = orderId 
-        ? `สวัสดีครับ ${riderName} ขอสอบถามเรื่องออเดอร์ ${orderId} (เฮียส่ง) ครับ`
-        : `สวัสดีครับ ขอสอบถามบริการจัดส่งของสดตลาดวิศิษฐ์ชัย (เฮียส่ง) ครับ`;
+        ? `สวัสดีครับ ${riderName} ขอสอบถามเรื่องออเดอร์ ${orderId} (Hub2U) ครับ`
+        : `สวัสดีครับ ขอสอบถามบริการจัดส่งของสดตลาดวิศิษฐ์ชัย (Hub2U) ครับ`;
     const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
 
     showToast("💬 กำลังเปิด LINE ส่งข้อความถึงไรเดอร์...");
@@ -20360,7 +20360,7 @@ function printA4MerchantRules() {
     const settings = loadMarketStallSettings();
     const content = `
         <div class="a4-header" style="text-align: center; border-bottom: 2px solid #7c3aed; padding-bottom: 12px; margin-bottom: 20px;">
-            <div style="font-size: 20px; font-weight: 900; color: #4c1d95;">ระเบียบปฏิบัติสำหรับ 100 แผงค้า ตลาดสดวิศิษฐ์ชัย (เฮียส่ง)</div>
+            <div style="font-size: 20px; font-weight: 900; color: #4c1d95;">ระเบียบปฏิบัติสำหรับ 100 แผงค้า ตลาดสดวิศิษฐ์ชัย (Hub2U)</div>
             <div style="font-size: 12px; color: #64748b; margin-top: 4px;">ประกาศใช้อย่างเป็นทางการสำหรับผู้เช่าแผงและผู้ประกอบการค้าทุกแผง</div>
         </div>
         <div style="font-size: 12px; line-height: 1.8; color: #1e293b; space-y-4;">
@@ -20392,7 +20392,7 @@ function printA4MerchantRules() {
             </div>
             <div style="text-align: center;">
                 <div>ลงชื่อ ....................................................</div>
-                <div style="margin-top: 4px; font-weight: bold; color: #4c1d95;">( เฮียส่ง ผู้บริหารตลาดสดวิศิษฐ์ชัย )</div>
+                <div style="margin-top: 4px; font-weight: bold; color: #4c1d95;">( Hub2U ผู้บริหารตลาดสดวิศิษฐ์ชัย )</div>
             </div>
         </div>
     `;
@@ -22022,7 +22022,7 @@ function printA4MerchantApplication(appId) {
             </div>
             <div style="text-align: center; width: 200px;">
                 <div style="border-bottom: 1px solid #94a3b8; height: 35px;"></div>
-                <div style="font-size: 11px; margin-top: 4px;">(ลงชื่อผู้จัดการตลาด / เฮียส่ง)</div>
+                <div style="font-size: 11px; margin-top: 4px;">(ลงชื่อผู้จัดการตลาด / Hub2U)</div>
             </div>
         </div>
     `;
@@ -22048,7 +22048,7 @@ function printA4MerchantDirectory() {
 
     const content = `
         <div class="a4-header">
-            <div class="a4-title">ทำเนียบแผงค้าตลาดวิศิษฐ์ชัย (เฮียส่ง) - Vendors Directory</div>
+            <div class="a4-title">ทำเนียบแผงค้าตลาดวิศิษฐ์ชัย (Hub2U) - Vendors Directory</div>
             <div class="a4-meta">พิมพ์เมื่อ: ${printTime} • จำนวนทั้งหมด ${stalls.length} แผงค้า</div>
         </div>
         <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 10px;">
@@ -26274,7 +26274,7 @@ function confirmRiderPayoutSettled() {
     const payoutRecord = {
         isSettled: true,
         settledAt: Date.now(),
-        settledBy: (state.activeAdmin && state.activeAdmin.name) ? `${state.activeAdmin.name} (${state.activeAdmin.role || 'Admin'})` : "เฮียส่ง (Super Admin)",
+        settledBy: (state.activeAdmin && state.activeAdmin.name) ? `${state.activeAdmin.name} (${state.activeAdmin.role || 'Admin'})` : "Hub2U (Super Admin)",
         amount: _currentRiderPayout.amount,
         trips: _currentRiderPayout.trips,
         baseEarned: _currentRiderPayout.baseEarned,
@@ -26848,7 +26848,7 @@ let _activeSettingsSubTab = "customer";
 
 function getDefaultSettingsNote(roleKey) {
     if (roleKey === "customer") {
-        return "📢 ประกาศและเงื่อนไขถึงลูกค้าตลาดวิศิษฐ์ชัย:\n1. สินค้าสดทุกรายการคัดสรรจาก 100 แผงค้าในตลาดสด ชั่งน้ำหนักจริงก่อนส่งมอบ\n2. กรณีสินค้าเสียหาย ไม่สด หรือไม่ตรงตามที่สั่ง ยินดีคืนเงินหรือเปลี่ยนสินค้าให้ทันทีภายใน 24 ชั่วโมง\n3. จัดส่งรอบละ 30 นาที ตรงเวลา ค่าส่งเหมาจ่ายเริ่มต้น ฿20 รวมได้ทุกแผงค้า\n4. ติดต่อศูนย์บริการลูกค้า โทร. 089-123-4567 (เฮียส่ง)";
+        return "📢 ประกาศและเงื่อนไขถึงลูกค้าตลาดวิศิษฐ์ชัย:\n1. สินค้าสดทุกรายการคัดสรรจาก 100 แผงค้าในตลาดสด ชั่งน้ำหนักจริงก่อนส่งมอบ\n2. กรณีสินค้าเสียหาย ไม่สด หรือไม่ตรงตามที่สั่ง ยินดีคืนเงินหรือเปลี่ยนสินค้าให้ทันทีภายใน 24 ชั่วโมง\n3. จัดส่งรอบละ 30 นาที ตรงเวลา ค่าส่งเหมาจ่ายเริ่มต้น ฿20 รวมได้ทุกแผงค้า\n4. ติดต่อศูนย์บริการลูกค้า โทร. 089-123-4567 (Hub2U)";
     } else if (roleKey === "hub") {
         return "📋 คู่มือและระเบียบปฏิบัติงานฝ่ายจัดเตรียมสินค้า (ฮับ):\n1. เมื่อมีออเดอร์เข้า ให้ตรวจสอบใบจัดของ (Picking List) แล้วแยกตะกร้าตามแผงค้าทันที\n2. สินค้าสดต้องชั่งน้ำหนักให้ตรงตามบิล และติดสติกเกอร์รหัสออเดอร์ให้ชัดเจน\n3. เนื้อสัตว์และอาหารทะเลสดต้องใส่น้ำแข็งหลอดในถุงเพื่อคงความสดก่อนส่งมอบให้ไรเดอร์\n4. ตรวจสอบสลิปโอนเงินทุกรายการ หากเป็นออเดอร์ COD ให้แจ้งไรเดอร์เก็บเงินสดให้ครบถ้วน";
     } else if (roleKey === "merchant") {
@@ -26897,7 +26897,7 @@ function loadSavedHubSettings() {
         orderCutoff: "18:00",
         couponCode: "FRESH20",
         couponDiscount: 20,
-        hubName: "ศูนย์กระจายสินค้าตลาดวิศิษฐ์ชัย (เฮียส่ง)",
+        hubName: "ศูนย์กระจายสินค้าตลาดวิศิษฐ์ชัย (Hub2U)",
         hubPhone: "089-123-4567",
         hubLocation: "ล็อคกลาง อาคาร 1 หน้าตลาดวิศิษฐ์ชัย",
         targetPickingTime: 12,
@@ -27099,7 +27099,7 @@ function renderAdminSettings() {
                             <span class="material-symbols-outlined text-purple-600 text-2xl">account_balance</span>
                             <div>
                                 <div class="font-bold text-slate-900">บัญชีธนาคาร SCB</div>
-                                <div class="text-[11px] text-purple-700 font-medium">✓ 411-1-30573-7 (เฮียส่ง)</div>
+                                <div class="text-[11px] text-purple-700 font-medium">✓ 411-1-30573-7 (Hub2U)</div>
                             </div>
                         </div>
                         <div class="p-3.5 rounded-xl border-2 border-amber-500 bg-amber-50/50 flex items-center gap-3">
@@ -27397,7 +27397,7 @@ function generateLineOrderMessage(order) {
         ? "✅ ยอดเข้าบัญชีแล้ว (ตรวจสอบแล้ว)"
         : (order.paymentType === "cod" ? "💵 รอเก็บเงินสดปลายทาง (COD)" : "⏳ แนบสลิปแล้ว • รอฮับ/แอดมินตรวจยอดเข้าบัญชี");
 
-    return `🛒【ตลาดสดเฮียส่ง】ยืนยันการรับออเดอร์เรียบร้อยแล้ว! 🥦🥩
+    return `🛒【ตลาดสด Hub2U】ยืนยันการรับออเดอร์เรียบร้อยแล้ว! 🥦🥩
 ━━━━━━━━━━━━━━━━━━
 📦 รหัสออเดอร์: ${order.orderId}
 ⏰ เวลาสั่งซื้อ: ${timeStr} น. (${slot.slotText})
@@ -28251,7 +28251,7 @@ function sendOutOfStockLineNotice() {
     const refund = orderRefundTotal(order);
     const cleanOrderId = (order.orderId || "").replace(/#/g, '');
     const trackUrl = buildOrderTrackingUrl(order, "https://pisaen666.github.io/hsong/");
-    const msg = `🔔【เฮียส่ง】แจ้งเตือนเรื่องสินค้าออเดอร์ ${order.orderId}:\nขออภัยครับ มีสินค้าที่หมด หรือชั่งได้น้อยกว่าที่สั่ง ได้แก่:\n${oosList.map(n => `• ${n}`).join('\n')}\n━━━━━━━━━━━━━━━━━━\n✉️ คืนเงินสดใส่ซอง: ฿${refund}\nทีมงานตัดรายการออก และไรเดอร์ได้นำเงินสดทอนจำนวน ฿${refund} ใส่ซองใสแนบไปกับถุงของสดเรียบร้อยแล้วครับ 🛵💨\n━━━━━━━━━━━━━━━━━━\n👉 แตะลิงก์นี้เพื่อดูสถานะจัดส่ง & ซองเงินทอนของคุณ:\n${trackUrl}`;
+    const msg = `🔔【Hub2U】แจ้งเตือนเรื่องสินค้าออเดอร์ ${order.orderId}:\nขออภัยครับ มีสินค้าที่หมด หรือชั่งได้น้อยกว่าที่สั่ง ได้แก่:\n${oosList.map(n => `• ${n}`).join('\n')}\n━━━━━━━━━━━━━━━━━━\n✉️ คืนเงินสดใส่ซอง: ฿${refund}\nทีมงานตัดรายการออก และไรเดอร์ได้นำเงินสดทอนจำนวน ฿${refund} ใส่ซองใสแนบไปกับถุงของสดเรียบร้อยแล้วครับ 🛵💨\n━━━━━━━━━━━━━━━━━━\n👉 แตะลิงก์นี้เพื่อดูสถานะจัดส่ง & ซองเงินทอนของคุณ:\n${trackUrl}`;
 
     if (isMobileDevice()) {
         window.location.href = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
@@ -29924,7 +29924,7 @@ function renderAuthHeaderButtons() {
                 <div class="flex items-center gap-1 sm:gap-1.5 bg-purple-950/90 border border-purple-500/40 px-2 sm:px-3 py-1 rounded-lg sm:rounded-xl text-xs shadow-xs shrink-0">
                     <span class="text-[11px] sm:text-xs text-purple-300 font-bold flex items-center gap-1 cursor-pointer" onclick="switchRole('admin')">
                         <span class="material-symbols-outlined text-sm sm:text-base text-purple-400">admin_panel_settings</span>
-                        <span>${escapeHtml(state.activeAdmin.name) || 'เฮียส่ง'}</span>
+                        <span>${escapeHtml(state.activeAdmin.name) || 'Hub2U'}</span>
                     </span>
                     <button onclick="switchRole('admin')" class="hidden sm:inline-block text-[10px] md:text-xs text-purple-200 bg-purple-800/80 hover:bg-purple-700 px-1.5 md:px-2 py-0.5 rounded-lg font-bold transition-all">
                         Admin
@@ -29997,7 +29997,7 @@ function updateCustomerLoyaltyBanner() {
                     </div>
                     <div>
                         <div class="flex items-center gap-1.5">
-                            <span class="font-black text-xs text-amber-300">ยินดีต้อนรับสู่เฮียส่ง!</span>
+                            <span class="font-black text-xs text-amber-300">ยินดีต้อนรับสู่ Hub2U!</span>
                         </div>
                         <div class="text-[11px] text-emerald-100 mt-0.5">
                             <span>แตะเพื่อ <strong>เข้าสู่ระบบ / สมัครสมาชิก</strong></span>
@@ -30701,7 +30701,7 @@ function sendMyStallQrLineNotice() {
     if (!stallId) return;
     const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
     const link = buildStallDeepLink(stallId);
-    const text = `🏪 หน้าร้าน "${stall ? stall.stallName : stallId}" (ตลาดวิศิษฐ์ชัย เฮียส่ง)\nสแกนหรือกดลิงก์นี้เพื่อดูสินค้าและสั่งซื้อได้เลยครับ:\n${link}`;
+    const text = `🏪 หน้าร้าน "${stall ? stall.stallName : stallId}" (ตลาดวิศิษฐ์ชัย Hub2U)\nสแกนหรือกดลิงก์นี้เพื่อดูสินค้าและสั่งซื้อได้เลยครับ:\n${link}`;
     const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
     try { window.location.href = lineUrl; } catch (e) { window.open(lineUrl, "_blank"); }
     showToast("💬 กำลังเปิดแอป LINE เพื่อส่งลิงก์หน้าร้าน...");
@@ -31052,7 +31052,7 @@ function registerNewMerchantStall() {
 
     document.getElementById("merchant-portal-badge").textContent = "✨ ลงทะเบียนแผงค้าใหม่";
     document.getElementById("merchant-portal-category-text").textContent = "ของสด";
-    document.getElementById("merchant-portal-title").textContent = "เทมเพลตเปิดแผงค้าใหม่ (เฮียส่ง Partner)";
+    document.getElementById("merchant-portal-title").textContent = "เทมเพลตเปิดแผงค้าใหม่ (Hub2U Partner)";
 
     // Clear shop name
     if (document.getElementById("m-stall-name")) document.getElementById("m-stall-name").value = "";
@@ -31963,7 +31963,7 @@ function previewMerchantLiveStore() {
     const bankAccountName2 = document.getElementById("m-bank-account-name-2") ? document.getElementById("m-bank-account-name-2").value.trim() : "";
 
     const highlight = document.getElementById("m-highlight")?.value.trim() || "ของสดคุณภาพดี คัดเกรดสดใหม่";
-    const desc = document.getElementById("m-desc")?.value.trim() || "จำหน่ายของสดคุณภาพดีประจำตลาดสดวิศิษฐ์ชัย (เฮียส่ง)";
+    const desc = document.getElementById("m-desc")?.value.trim() || "จำหน่ายของสดคุณภาพดีประจำตลาดสดวิศิษฐ์ชัย (Hub2U)";
     const stallImage = document.getElementById("m-stall-image-url")?.value.trim() || MERCHANT_PRESET_IMAGES.stall.chicken;
     const stallImage2 = document.getElementById("m-stall2-image-url")?.value.trim() || "";
     const stallImage3 = document.getElementById("m-stall3-image-url")?.value.trim() || "";
@@ -33198,9 +33198,9 @@ function openSimulatedSmsModal(phone, codeVal, name, roleType, lineId, riderNumb
         : "กรุณาคัดลอกข้อความนี้ส่งให้ " + name + " ทาง LINE/SMS เอง (ระบบไม่ได้ส่งให้ และจะไม่แสดงรหัสผ่านนี้อีก)";
     if (msgEl && roleType !== "merchant") {
         // ไรเดอร์: เข้าสู่ระบบด้วย "เลขไรเดอร์ + รหัสผ่านลับ" (รหัสผ่านนี้แสดงครั้งเดียว ระบบไม่เก็บรหัสจริง)
-        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! ใบสมัครไรเดอร์ได้รับอนุมัติแล้ว เลขไรเดอร์ของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
+        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (Hub2U): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! ใบสมัครไรเดอร์ได้รับอนุมัติแล้ว เลขไรเดอร์ของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
     } else if (msgEl) {
-        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (เฮียส่ง): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! ใบสมัครเปิดร้านค้าได้รับอนุมัติแล้ว รหัสร้านของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
+        msgEl.innerHTML = "ตลาดวิศิษฐ์ชัย (Hub2U): ยินดีด้วยครับคุณ <strong>" + escapeHtml(name) + "</strong>! ใบสมัครเปิดร้านค้าได้รับอนุมัติแล้ว รหัสร้านของคุณคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(riderNumber || "-") + "</strong> รหัสผ่านเข้าสู่ระบบคือ <strong class=\"text-amber-300 text-base font-black tracking-wider\">" + escapeHtml(codeVal) + "</strong> ใช้ทั้งสองอย่างเข้าสู่ระบบ " + roleNum + " และเก็บรหัสผ่านเป็นความลับ อย่าบอกใคร";
     }
 
     // 📱 QR code หน้าร้าน (เฉพาะแผงค้า): ให้เจ้าของกดดู/บันทึกรูปแล้วส่งต่อไปพร้อมรหัสผ่าน (LINE ส่งรูปแนบให้อัตโนมัติไม่ได้ ต้องส่งเอง)
@@ -33274,18 +33274,18 @@ window.testLoginWithGeneratedCode = testLoginWithGeneratedCode;
 function getApprovalNotificationText(phone, code, name, roleType, riderNumber) {
     if (roleType !== "merchant") {
         // ไรเดอร์: เลขไรเดอร์ + รหัสผ่านลับ (ไม่มีการล็อกอินด้วยเบอร์โทรอีกต่อไป)
-        return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัครร่วมทีมไรเดอร์ของคุณได้รับการอนุมัติเรียบร้อยแล้ว!\n🛵 เลขไรเดอร์: ${riderNumber || '-'}\n🔑 รหัสผ่านเข้าระบบ: ${code}\n(เก็บรหัสผ่านเป็นความลับ อย่าบอกใคร)` +
+        return `[ตลาดวิศิษฐ์ชัย (Hub2U)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัครร่วมทีมไรเดอร์ของคุณได้รับการอนุมัติเรียบร้อยแล้ว!\n🛵 เลขไรเดอร์: ${riderNumber || '-'}\n🔑 รหัสผ่านเข้าระบบ: ${code}\n(เก็บรหัสผ่านเป็นความลับ อย่าบอกใคร)` +
             `\n\nเข้าสู่ระบบที่เมนู "4. ไรเดอร์" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nใส่เลขไรเดอร์และรหัสผ่านข้างต้น แล้วเริ่มรับงานได้เลยครับ!`;
     }
     if (roleType === "merchant") {
         // แผงค้า: รหัสร้าน (สาธารณะ) + รหัสผ่านลับ + ลิงก์/QR หน้าร้าน (ให้ลูกค้าสแกนดูสินค้าร้านนี้ได้โดยตรง)
         const shopLink = riderNumber ? buildStallDeepLink(riderNumber) : "";
-        return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัครเปิดร้านค้าของคุณได้รับการอนุมัติแล้ว 🎉\n\nรหัสร้าน: ${riderNumber || '-'}\nรหัสผ่านเข้าระบบ: ${code}\n\nเข้าสู่ระบบที่เมนู "3. แผงค้า" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nใส่รหัสร้านและรหัสผ่านนี้ (เก็บรหัสผ่านเป็นความลับ อย่าบอกใคร)` +
+        return `[ตลาดวิศิษฐ์ชัย (Hub2U)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัครเปิดร้านค้าของคุณได้รับการอนุมัติแล้ว 🎉\n\nรหัสร้าน: ${riderNumber || '-'}\nรหัสผ่านเข้าระบบ: ${code}\n\nเข้าสู่ระบบที่เมนู "3. แผงค้า" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nใส่รหัสร้านและรหัสผ่านนี้ (เก็บรหัสผ่านเป็นความลับ อย่าบอกใคร)` +
             (shopLink ? `\n\n📱 ลิงก์/QR หน้าร้านของคุณ (ให้ลูกค้าสแกนดูสินค้าร้านได้เลย ไม่มีวันหมดอายุ):\n${shopLink}\n(เปิดลิงก์นี้เพื่อดูรูป QR แล้วบันทึกไปพิมพ์แปะหน้าร้าน หรือส่งให้ลูกค้าได้เลย)` : "");
     }
     const roleTitle = roleType === "merchant" ? "เปิดร้านค้า" : "ร่วมทีมไรเดอร์";
     const roleTarget = roleType === "merchant" ? "3. แผงค้า" : "4. ไรเดอร์";
-    return `[ตลาดวิศิษฐ์ชัย (เฮียส่ง)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัคร${roleTitle}ของคุณได้รับการอนุมัติเรียบร้อยแล้ว!\n🔑 รหัสผ่าน 6 หลักเข้าใช้งาน: ${code}\n(หรือล็อกอินด้วยเบอร์โทร: ${phone || '-'})` +
+    return `[ตลาดวิศิษฐ์ชัย (Hub2U)]\nเรียนคุณ ${name || 'ผู้สมัคร'}\nใบสมัคร${roleTitle}ของคุณได้รับการอนุมัติเรียบร้อยแล้ว!\n🔑 รหัสผ่าน 6 หลักเข้าใช้งาน: ${code}\n(หรือล็อกอินด้วยเบอร์โทร: ${phone || '-'})` +
         `\n\nนำรหัสนี้ไปเข้าสู่ระบบที่เมนู "${roleTarget}" ได้ที่:\nhttps://pisaen666.github.io/hsong/\nเริ่มเปิดร้าน/รับงานได้ทันทีครับ!`;
 }
 window.getApprovalNotificationText = getApprovalNotificationText;

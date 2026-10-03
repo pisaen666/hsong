@@ -22,7 +22,7 @@ write("app.js", read("app.js").split(PROD_HOST).join(TEST_HOST));
 
 // index.html (ชื่อแท็บ + กันหลงเหลือ host จริง)
 let html = read("index.html").split(PROD_HOST).join(TEST_HOST);
-html = html.replace("<title>เฮียส่ง", "<title>[ทดสอบ] เฮียส่ง");
+html = html.replace("<title>Hub2U", "<title>[ทดสอบ] Hub2U");
 // แถบแดงตัวใหญ่บนสุดของหน้า (เจ้าของขอ 2026-09-28: เว็บทดสอบหน้าตาเหมือนเว็บจริง ดูชื่อแท็บไม่ทัน)
 // ใส่เฉพาะเว็บทดสอบเท่านั้น — index.html ของเว็บจริงไม่มีแถบนี้
 const TEST_BANNER = '<div id="test-site-banner" style="width:100%;box-sizing:border-box;background:#b91c1c;color:#ffffff;font-weight:900;font-size:20px;line-height:1.4;text-align:center;padding:10px 16px;border-bottom:4px solid #7f1d1d">⚠️ เว็บทดสอบ — ไม่ใช่เว็บจริง (ข้อมูลในนี้ไม่ถึงลูกค้าจริง)</div>';
