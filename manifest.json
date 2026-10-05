@@ -1,0 +1,17 @@
+{
+    "name": "Hub2U - ตลาดสดวิศิษฐ์ชัย",
+    "short_name": "Hub2U",
+    "description": "สั่งของสดครบ 100 แผง ส่งตรงถึงบ้านคุณ จากตลาดวิศิษฐ์ชัย อ.บ้านบึง",
+    "start_url": "./",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#f1f5f9",
+    "theme_color": "#ea580c",
+    "lang": "th",
+    "icons": [
+        { "src": "images/pwa_icon_192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+        { "src": "images/pwa_icon_512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+        { "src": "images/pwa_icon_maskable_512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    ]
+}
