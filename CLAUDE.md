@@ -1,5 +1,14 @@
 # Project Guidelines: TalatHub / Hsong (ตลาดสดบ้านบึง - ตลาดวิศิษฐ์ชัย)
 
+## 🔄 0. กฎการทำงานข้ามเครื่อง (ที่บ้าน / ที่ทำงาน)
+- เมื่อผู้ใช้พิมพ์ "เริ่มงาน": รัน `git pull`, อ่านไฟล์นี้และ `git log -5`, แล้วสรุปสถานะและงานค้างให้ผู้ใช้
+- เมื่อผู้ใช้พิมพ์ "เลิกงาน": อัปเดตหัวข้อ "สถานะปัจจุบัน" ด้านล่าง, `git add`, commit ด้วยข้อความที่บอกว่าทำอะไร, แล้ว `git push`
+- ก่อน push ให้เช็ค `git status` ว่าไม่มีไฟล์ลับ (.env, key) ติดไป
+- ประวัติแชทกับ Claude ไม่ตามไปอีกเครื่อง ดังนั้นสิ่งที่ตกลงกันไว้ต้องเขียนลงไฟล์นี้ก่อน push เสมอ
+
+### สถานะปัจจุบัน
+- (อัปเดตทุกครั้งที่เลิกงาน: ทำอะไรเสร็จ / ค้างอะไร / ขั้นต่อไปคืออะไร)
+
 ## 📌 1. Project Overview & Architecture
 - **Type**: Single Page Application (SPA) for community fresh market delivery.
 - **Frontend**: Vanilla HTML5 (`index.html`), Vanilla JavaScript (`app.js`), Tailwind CSS (CDN).
