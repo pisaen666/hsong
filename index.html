@@ -9,7 +9,14 @@
     <meta http-equiv="Expires" content="0">
     <title>Hub2U - เพียงคุณสั่ง เราไปส่ง ทุกรายการจากตลาดถึงมือคุณ</title>
     <link rel="icon" type="image/png" href="images/logo_hub2u_icon.png">
-    <link rel="apple-touch-icon" href="images/logo_hub2u_icon.png">
+    <!-- 📱 PWA: เพิ่มลงหน้าจอหลักมือถือได้ (เปิดแบบเต็มจอ ไม่มีแถบที่อยู่เว็บ) -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ea580c">
+    <!-- apple-touch-icon ต้องพื้นทึบ (ไม่โปร่งใส) เพราะ iOS แสดงส่วนโปร่งใสเป็นสีดำ ไม่ใช้ไฟล์โลโก้โปร่งใสตัวเดียวกับ favicon -->
+    <link rel="apple-touch-icon" href="images/pwa_icon_512.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Hub2U">
 
 
     <!-- Fonts: IBM Plex Sans Thai & Inter -->
