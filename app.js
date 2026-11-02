@@ -2924,6 +2924,14 @@ const PRICING = Object.freeze({
 // และใครพิมพ์ HEASONG50 ก็ลด 50 บาททุกครั้ง ทำให้กำไรหายหมด; เปิดใหม่ได้เมื่อมีระบบคูปองที่จำกัดครั้ง/มีขั้นต่ำ
 const COUPONS_ENABLED = false;
 
+// ช่องทางติดต่อฮับช่องทางเดียว: LINE OA (เจ้าของสั่ง 2026-11-02 — ห้ามโชว์เบอร์โทรฮับที่ไหนอีก ไม่ว่าร้านค้าหรือลูกค้า)
+const HUB_LINE_OA_URL = "https://lin.ee/61O4EyH";
+const HUB_LINE_OA_LABEL = "LINE OA (Hub2U)";
+
+// ⚠️ เลขพร้อมเพย์ของฮับ (รับเงินค่าส่งด่วนจากร้านค้า ขั้นตอนที่ 2 ของ "เรียกไรเดอร์ด่วน") — ยังเป็นเบอร์สมมติ 081-999-8888
+// รอเจ้าของแจ้งเลขพร้อมเพย์จริงของฮับ แล้วแก้ค่านี้ที่เดียว (ห้ามเดา/แต่งเลขเอง เพราะเป็นบัญชีรับเงินจริง)
+const HUB_PROMPTPAY_ID = "0819998888";
+
 function pricingKm(distanceKm) {
     const km = Number(distanceKm);
     return (isFinite(km) && km > 0) ? Math.round(km * 10) / 10 : 0;
@@ -9117,7 +9125,7 @@ function printThermalRiderSlipFromFleet(riderId) {
         <div class="divider-dashed" style="margin-top: 8px;"></div>
         <div class="slip-footer">
             <div>ฮับตลาดวิศิษฐ์ชัย • ศูนย์บริการจัดส่งสินค้าสด</div>
-            <div>ติดต่อผู้จัดการฮับ: 089-123-4567</div>
+            <div>ติดต่อฝ่ายจัดส่ง: ${HUB_LINE_OA_LABEL}</div>
         </div>
     `;
     executePrintHtml(`บัตรไรเดอร์_${rider.name}`, content, true);
@@ -9294,7 +9302,7 @@ function printThermalOrderSlip(orderId, dateKey) {
         <div class="slip-footer">
             <div>ขอบคุณที่อุดหนุนตลาดสดฮับวิศิษฐ์ชัย</div>
             <div>คัดสดจากแผง สะอาด ส่งไว ถึงหน้าบ้านคุณ 100%</div>
-            <div style="margin-top: 2px;">สอบถาม / ติดต่อฮับ: 089-123-4567</div>
+            <div style="margin-top: 2px;">สอบถาม / ติดต่อฮับ: ${HUB_LINE_OA_LABEL}</div>
         </div>
     `;
 
@@ -9356,7 +9364,7 @@ function printStallPickingSlip(orderId, stallIndex) {
         </div>
         <div class="slip-footer" style="margin-top: 8px;">
             <div>*** ใบสั่งจัดของสดสำหรับส่งมอบให้ฮับรวบรวมถุง ***</div>
-            <div>สอบถาม / ปัญหาของสด: 089-123-4567</div>
+            <div>สอบถาม / ปัญหาของสด: ${HUB_LINE_OA_LABEL}</div>
         </div>
     `;
 
@@ -11002,7 +11010,7 @@ function printA4RiderRulesSheet() {
 
         <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 10.5px; color: #475569; background: #f8fafc;">
             <div style="font-weight: bold; margin-bottom: 4px;">ช่องทางติดต่อประสานงานด่วน:</div>
-            <div>• ฝ่ายจัดส่งและผู้จัดการฮับวิศิษฐ์ชัย: 089-123-4567 (Hub2U) | LINE: @talathub</div>
+            <div>• ฝ่ายจัดส่งและผู้จัดการฮับวิศิษฐ์ชัย: ${HUB_LINE_OA_LABEL} (${HUB_LINE_OA_URL})</div>
             <div>• ที่ตั้งศูนย์กระจายสินค้า: ตลาดสดวิศิษฐ์ชัย ตำบลบ้านหนองชาก อำเภอบ้านบึง จังหวัดชลบุรี</div>
         </div>
     `;
@@ -17613,15 +17621,17 @@ function openMerchantPaymentModal(order) {
     const amountEl = document.getElementById("m-pay-amount");
     const qrImg = document.getElementById("m-pay-qr-img");
     const timeEl = document.getElementById("m-pay-time");
+    const promptPayNumEl = document.getElementById("m-pay-promptpay-number");
 
     if (orderIdEl) orderIdEl.textContent = order.orderId;
     if (timeEl) timeEl.textContent = `${order.time} (~${order.distanceKm} กม.)`;
     if (originEl) originEl.textContent = `${order.originStall.stallName} (${order.originStall.stallNumber})`;
     if (destEl) destEl.textContent = `${order.customerName} - ${order.address}`;
     if (amountEl) amountEl.textContent = `฿${order.deliveryFee}`;
+    if (promptPayNumEl) promptPayNumEl.textContent = formatThaiPhone(HUB_PROMPTPAY_ID);
 
     if (qrImg) {
-        qrImg.src = `https://promptpay.io/0819998888/${order.deliveryFee}.png`;
+        qrImg.src = `https://promptpay.io/${HUB_PROMPTPAY_ID}/${order.deliveryFee}.png`;
         qrImg.onerror = function() {
             this.onerror = null;
             this.src = "promptpay_qr.png";
@@ -17638,15 +17648,15 @@ function closeMerchantPaymentModal() {
 }
 
 function copyHubPromptPayNumber() {
-    const phone = "0819998888";
+    const phone = HUB_PROMPTPAY_ID;
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(phone).then(() => {
-            showToast("📋 คัดลอกเลขพร้อมเพย์ฮับ 081-999-8888 สำเร็จ!");
+            showToast(`📋 คัดลอกเลขพร้อมเพย์ฮับ ${phone} สำเร็จ!`);
         }).catch(() => {
-            showToast("เบอร์พร้อมเพย์ฮับ: 081-999-8888");
+            showToast(`เบอร์พร้อมเพย์ฮับ: ${phone}`);
         });
     } else {
-        showToast("เบอร์พร้อมเพย์ฮับ: 081-999-8888");
+        showToast(`เบอร์พร้อมเพย์ฮับ: ${phone}`);
     }
 }
 
@@ -18382,17 +18392,20 @@ function callRiderFromMerchant(param) {
                 <div>
                     <h3 class="font-extrabold text-base text-slate-900">ฮับกำลังจัดสรรไรเดอร์</h3>
                     <p class="text-slate-500 text-[11px] mt-1 leading-relaxed">
-                        ขณะนี้ออเดอร์อยู่ในคิวจัดสรรไรเดอร์ประจำตลาด หากมีเรื่องด่วน สามารถโทรติดต่อฮับกลางได้โดยตรง
+                        ขณะนี้ออเดอร์อยู่ในคิวจัดสรรไรเดอร์ประจำตลาด หากมีเรื่องด่วน ติดต่อฮับได้ทาง LINE OA โดยตรง
                     </p>
                 </div>
-                <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 text-[11px]">
-                    <span class="text-slate-500">ศูนย์ประสานงานฮับ:</span>
-                    <div class="font-black text-slate-800 text-base font-mono">081-999-8888</div>
+                <div class="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 text-[11px] flex items-center gap-2">
+                    <img src="images/line_oa_qr.png" alt="LINE Official QR" class="w-9 h-9 object-contain rounded-lg border border-slate-200 bg-white p-0.5 shrink-0">
+                    <div class="text-left">
+                        <span class="text-slate-500 block">ศูนย์ประสานงานฮับ:</span>
+                        <div class="font-black text-slate-800 text-xs">${HUB_LINE_OA_LABEL}</div>
+                    </div>
                 </div>
                 <div class="space-y-2 pt-1">
-                    <a href="tel:0819998888" class="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
-                        <span class="material-symbols-outlined text-base">call</span>
-                        <span>โทรติดต่อฮับกลาง (081-999-8888)</span>
+                    <a href="${HUB_LINE_OA_URL}" target="_blank" rel="noopener noreferrer" class="w-full py-3 bg-[#06C755] text-white rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs">
+                        <span class="material-symbols-outlined text-base">chat</span>
+                        <span>ติดต่อฮับทาง LINE OA</span>
                     </a>
                     <button type="button" onclick="document.getElementById('merchant-call-rider-modal').classList.add('hidden')" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold active:scale-95 transition-all text-xs">
                         ปิดหน้าต่าง
@@ -19106,7 +19119,7 @@ function printMerchantExpressSlip(orderId) {
 
         <div class="text-center" style="font-size:10px; margin-top:4px;">
             🙏 ขอบคุณที่ใช้บริการไรเดอร์ตลาดวิศิษฐ์ชัย<br>
-            โทรแจ้งปัญหาฮับ: 081-999-8888
+            แจ้งปัญหาฮับ: ${HUB_LINE_OA_LABEL}
         </div>
 
         <script>
@@ -26981,7 +26994,7 @@ let _activeSettingsSubTab = "customer";
 
 function getDefaultSettingsNote(roleKey) {
     if (roleKey === "customer") {
-        return "📢 ประกาศและเงื่อนไขถึงลูกค้าตลาดวิศิษฐ์ชัย:\n1. สินค้าสดทุกรายการคัดสรรจาก 100 แผงค้าในตลาดสด ชั่งน้ำหนักจริงก่อนส่งมอบ\n2. กรณีสินค้าเสียหาย ไม่สด หรือไม่ตรงตามที่สั่ง ยินดีคืนเงินหรือเปลี่ยนสินค้าให้ทันทีภายใน 24 ชั่วโมง\n3. จัดส่งรอบละ 30 นาที ตรงเวลา ค่าส่งเหมาจ่ายเริ่มต้น ฿20 รวมได้ทุกแผงค้า\n4. ติดต่อศูนย์บริการลูกค้า โทร. 089-123-4567 (Hub2U)";
+        return "📢 ประกาศและเงื่อนไขถึงลูกค้าตลาดวิศิษฐ์ชัย:\n1. สินค้าสดทุกรายการคัดสรรจาก 100 แผงค้าในตลาดสด ชั่งน้ำหนักจริงก่อนส่งมอบ\n2. กรณีสินค้าเสียหาย ไม่สด หรือไม่ตรงตามที่สั่ง ยินดีคืนเงินหรือเปลี่ยนสินค้าให้ทันทีภายใน 24 ชั่วโมง\n3. จัดส่งรอบละ 30 นาที ตรงเวลา ค่าส่งเหมาจ่ายเริ่มต้น ฿20 รวมได้ทุกแผงค้า\n4. ติดต่อศูนย์บริการลูกค้าทาง " + HUB_LINE_OA_LABEL;
     } else if (roleKey === "hub") {
         return "📋 คู่มือและระเบียบปฏิบัติงานฝ่ายจัดเตรียมสินค้า (ฮับ):\n1. เมื่อมีออเดอร์เข้า ให้ตรวจสอบใบจัดของ (Picking List) แล้วแยกตะกร้าตามแผงค้าทันที\n2. สินค้าสดต้องชั่งน้ำหนักให้ตรงตามบิล และติดสติกเกอร์รหัสออเดอร์ให้ชัดเจน\n3. เนื้อสัตว์และอาหารทะเลสดต้องใส่น้ำแข็งหลอดในถุงเพื่อคงความสดก่อนส่งมอบให้ไรเดอร์\n4. ตรวจสอบสลิปโอนเงินทุกรายการ หากเป็นออเดอร์ COD ให้แจ้งไรเดอร์เก็บเงินสดให้ครบถ้วน";
     } else if (roleKey === "merchant") {
@@ -34064,7 +34077,7 @@ function viewHubMerchantExpressSlip(orderId) {
     }
     modal.classList.remove("hidden");
 
-    const slipImg = order.slipImage || `https://promptpay.io/0819998888/${order.deliveryFee || 20}.png`;
+    const slipImg = order.slipImage || `https://promptpay.io/${HUB_PROMPTPAY_ID}/${order.deliveryFee || 20}.png`;
 
     modal.innerHTML = `
         <div class="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-scale-up text-left text-slate-800 text-xs">
