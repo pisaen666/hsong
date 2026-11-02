@@ -43,6 +43,7 @@ const ctx = {
     generatePromptPayPayload: (id, amt) => "PAYLOAD:" + id + ":" + amt,
     loadMerchantApplications: () => apps,
     loadCommunityRiders: () => riders,
+    getMerchantGpRate: () => 15,
     findStallInfo: (id, name) => ({ stallId: id, stallName: name || "ร้านทดสอบ", ownerName: "ป้าแดง", stallNumber: "-", phone: "" })
 };
 vm.createContext(ctx);

@@ -8161,7 +8161,7 @@ function openVendorPayoutModal(stallId, stallName, amount, phone, ownerName, sta
     finalAmount = Number(finalAmount || 0);
     finalGross = finalGross !== undefined && finalGross !== null ? Number(finalGross) : finalAmount;
     finalGP = finalGP !== undefined && finalGP !== null ? Number(finalGP) : 0;
-    finalRate = finalRate !== undefined && finalRate !== null ? Number(finalRate) : 10;
+    finalRate = finalRate !== undefined && finalRate !== null ? Number(finalRate) : getMerchantGpRate();
 
     _currentPayoutStall = {
         stallId: finalStallId,
@@ -8231,7 +8231,7 @@ function confirmVendorPayoutSettled() {
         amount: _currentPayoutStall.amount,
         grossAmount: _currentPayoutStall.grossAmount || _currentPayoutStall.amount,
         gpAmount: _currentPayoutStall.gpAmount || 0,
-        gpRate: _currentPayoutStall.gpRate || 10,
+        gpRate: _currentPayoutStall.gpRate || getMerchantGpRate(),
         orderCount: _currentPayoutStall.orderCount || 0,
         stallName: _currentPayoutStall.stallName,
         stallId: _currentPayoutStall.stallId,
@@ -21107,7 +21107,7 @@ function renderAdminStalls() {
                                                         if (!v || amt <= 0) {
                                                             return `<span class="px-2 py-1 bg-slate-100 text-slate-700 border border-slate-400 font-bold rounded-lg text-[10px] whitespace-nowrap" title="ไม่มียอดขายวันที่ ${escapeHtml(targetDateKey)}">ไม่มียอดโอน</span>`;
                                                         }
-                                                        return `<button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, ${amt}, ${jsArg(s.phone || '')}, ${jsArg(s.ownerName || 'เจ้าของแผง')}, ${jsArg(s.stallNumber || 'แผงตลาด')}, ${Number(v.totalAmount) || 0}, ${Number(v.gpAmount) || 0}, ${Number(v.gpRate) || 10})" class="px-2 py-1 ${v.isSettled ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200'} border font-bold rounded-lg text-[10px] whitespace-nowrap active:scale-95 transition-all cursor-pointer">
+                                                        return `<button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, ${amt}, ${jsArg(s.phone || '')}, ${jsArg(s.ownerName || 'เจ้าของแผง')}, ${jsArg(s.stallNumber || 'แผงตลาด')}, ${Number(v.totalAmount) || 0}, ${Number(v.gpAmount) || 0}, ${Number(v.gpRate) || getMerchantGpRate()})" class="px-2 py-1 ${v.isSettled ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200'} border font-bold rounded-lg text-[10px] whitespace-nowrap active:scale-95 transition-all cursor-pointer">
                                                         ${v.isSettled ? 'โอนแล้ว' : 'QR โอน'} ฿${amt.toLocaleString()}
                                                     </button>`;
                                                     })()}
