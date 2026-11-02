@@ -6066,6 +6066,7 @@ async function handleTrackingDeepLink() {
 document.addEventListener("DOMContentLoaded", () => {
     updateDeliveryLocationUI();
     renderAuthHeaderButtons();
+    applyRiderSelfRegistrationVisibility();
     renderFavoriteStallsBar();
     renderCatalog();
     updateCartUI();
@@ -19540,7 +19541,7 @@ function switchRole(targetRole) {
         renderRiderScreen();
         if (!state.activeRider || !state.activeRider.isLoggedIn) {
             const curRiders = loadCommunityRiders();
-            if (!curRiders || curRiders.length === 0) {
+            if (RIDER_SELF_REGISTRATION_ENABLED && (!curRiders || curRiders.length === 0)) {
                 if (typeof switchRiderGuestTab === "function") {
                     switchRiderGuestTab("register");
                 }
@@ -22097,6 +22098,26 @@ window.switchAdminRiderRosterView = switchAdminRiderRosterView;
 
 const DEFAULT_COMMUNITY_RIDERS = [];
 
+// ⏸️ พักฟีเจอร์ "สมัครไรเดอร์ออนไลน์" ชั่วคราว (คำสั่งเจ้าของ 2026-11-02): ใช้พนักงานประจำของร้านแทน
+// ดู handleRiderFormSubmit (ปุ่ม "+ มอบหมายพนักงานเป็นไรเดอร์" ในแอดมิน) สำหรับวิธีใหม่ — ขั้นตอนรับงาน/ค่ารอบ/COD เหมือนไรเดอร์ปกติทุกประการ
+// โค้ด/ข้อมูลเดิมของระบบสมัครออนไลน์ไม่ได้ถูกลบ เปิดกลับมาใช้ได้ด้วยการตั้งค่านี้เป็น true อย่างเดียว
+const RIDER_SELF_REGISTRATION_ENABLED = false;
+
+// ซ่อนทางเข้าสมัครไรเดอร์สาธารณะทุกจุดเมื่อปิดฟีเจอร์ (ปุ่มหัวเว็บ, แบนเนอร์หน้าแรก, แท็บสมัครในศูนย์ไรเดอร์, ลิงก์ในหน้าล็อกอิน)
+function applyRiderSelfRegistrationVisibility() {
+    const idsToHideWhenDisabled = [
+        "btn-rider-register",
+        "rider-recruit-banner-card",
+        "rider-guest-tab-btn-register",
+        "rider-login-open-register-btn"
+    ];
+    idsToHideWhenDisabled.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle("hidden", !RIDER_SELF_REGISTRATION_ENABLED);
+    });
+}
+window.applyRiderSelfRegistrationVisibility = applyRiderSelfRegistrationVisibility;
+
 // Mock sample IDs to remove legacy dummy data
 const MOCK_COMMUNITY_RIDER_IDS = ["RIDER-001", "RIDER-002", "RIDER-003", "RIDER-004", "RD6735", "RD0313", "RD6436"];
 const MOCK_RIDER_APP_IDS = ["APP-RD-101"];
@@ -22733,6 +22754,10 @@ function goToAdminRiderSettlement(riderId) {
 window.goToAdminRiderSettlement = goToAdminRiderSettlement;
 
 function openRiderRegisterModal() {
+    if (!RIDER_SELF_REGISTRATION_ENABLED) {
+        showToast("ขณะนี้ปิดรับสมัครไรเดอร์ทั่วไปชั่วคราว กรุณาติดต่อเจ้าของร้านโดยตรง");
+        return;
+    }
     const modal = document.getElementById("rider-register-modal");
     if (!modal) return;
 
@@ -24534,13 +24559,14 @@ function renderAdminRiders() {
                             <span class="material-symbols-outlined text-sm font-bold text-slate-700">description</span>
                             <span>📄 พิมพ์ทำเนียบ A4</span>
                         </button>
+                        ${RIDER_SELF_REGISTRATION_ENABLED ? `
                         <button onclick="openRiderRegisterModal()" class="px-3 py-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white font-bold rounded-xl text-xs shadow-sm flex items-center gap-1.5 active:scale-95 transition-all">
                             <span class="material-symbols-outlined text-sm">how_to_reg</span>
                             <span>ฟอร์มสมัครไรเดอร์</span>
-                        </button>
+                        </button>` : ``}
                         <button onclick="openAddRiderModal()" class="px-3.5 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all">
                             <span class="material-symbols-outlined text-sm font-bold">person_add</span>
-                            <span>+ เพิ่มไรเดอร์ใหม่</span>
+                            <span>+ มอบหมายพนักงานเป็นไรเดอร์</span>
                         </button>
                     </div>
                 </div>
@@ -24567,7 +24593,7 @@ function renderAdminRiders() {
                             <div class="col-span-full py-12 text-center bg-white rounded-3xl border border-slate-200 space-y-2">
                                 <span class="material-symbols-outlined text-4xl text-slate-300">person_off</span>
                                 <div class="font-bold text-sm text-slate-600">ยังไม่มีไรเดอร์ในทะเบียน</div>
-                                <button onclick="openAddRiderModal()" class="px-4 py-2 bg-purple-700 text-white font-bold rounded-xl text-xs shadow-md">เพิ่มไรเดอร์คนแรก</button>
+                                <button onclick="openAddRiderModal()" class="px-4 py-2 bg-purple-700 text-white font-bold rounded-xl text-xs shadow-md">มอบหมายพนักงานเป็นไรเดอร์คนแรก</button>
                             </div>
                         ` : riders.map(r => `
                             <div class="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all p-4 space-y-3">
@@ -25303,7 +25329,7 @@ function printThermalRiderSlipFromFleet(riderId) {
 function openAddRiderModal() {
     const modal = document.getElementById("rider-form-modal");
     if (!modal) return;
-    document.getElementById("rider-form-modal-title").textContent = "เพิ่มไรเดอร์ใหม่เข้าสู่ระบบ";
+    document.getElementById("rider-form-modal-title").textContent = "มอบหมายพนักงานเป็นไรเดอร์";
     document.getElementById("rider-form-id").value = "";
     document.getElementById("rider-form-name").value = "";
     document.getElementById("rider-form-phone").value = "";
@@ -25317,6 +25343,7 @@ function openAddRiderModal() {
     if (bankEl) bankEl.value = "กสิกรไทย";
     document.getElementById("rider-form-status").value = "available";
     document.getElementById("rider-form-basefee").value = "40";
+    document.getElementById("rider-form-staff-note")?.classList.remove("hidden");
     modal.style.zIndex = "9999";
     modal.classList.remove("hidden");
 }
@@ -25342,6 +25369,7 @@ function openEditRiderModal(riderId) {
     if (bankEl) bankEl.value = r.bank || "กสิกรไทย";
     document.getElementById("rider-form-status").value = r.status || "available";
     document.getElementById("rider-form-basefee").value = r.baseFee || 40;
+    document.getElementById("rider-form-staff-note")?.classList.add("hidden");
     modal.style.zIndex = "9999";
     modal.classList.remove("hidden");
 }
@@ -25351,21 +25379,21 @@ function closeRiderFormModal() {
     if (modal) modal.classList.add("hidden");
 }
 
-function handleRiderFormSubmit(e) {
+async function handleRiderFormSubmit(e) {
     if (e && e.preventDefault) e.preventDefault();
     const id = document.getElementById("rider-form-id")?.value;
     const name = document.getElementById("rider-form-name")?.value.trim();
     const phone = document.getElementById("rider-form-phone")?.value.trim();
-    const plate = document.getElementById("rider-form-plate")?.value.trim();
+    const plate = document.getElementById("rider-form-plate")?.value.trim() || "-";
     const motorcycleModel = document.getElementById("rider-form-model")?.value.trim() || "";
-    const zone = document.getElementById("rider-form-zone")?.value.trim();
+    const zone = document.getElementById("rider-form-zone")?.value.trim() || "ตำบลบ้านหนองชาก / อำเภอบ้านบึง";
     const promptPay = document.getElementById("rider-form-promptpay")?.value.trim() || "";
     const bank = document.getElementById("rider-form-bank")?.value || "กสิกรไทย";
     const status = document.getElementById("rider-form-status")?.value || "available";
     const baseFee = Number(document.getElementById("rider-form-basefee")?.value || 40);
 
-    if (!name || !phone || !plate) {
-        showToast("⚠️ กรุณากรอกข้อมูลชื่อ เบอร์โทร และทะเบียนรถให้ครบถ้วน");
+    if (!name || !phone) {
+        showToast("⚠️ กรุณากรอกข้อมูลชื่อและเบอร์โทรให้ครบถ้วน");
         return;
     }
 
@@ -25400,35 +25428,83 @@ function handleRiderFormSubmit(e) {
                 saveRiderApplications(apps);
             }
         }
+        saveCommunityRiders(riders);
+        closeRiderFormModal();
+        renderAdminRiders();
+        setTimeout(() => initAdminRiderRadarMap(), 150);
         showToast(`💾 บันทึกการแก้ไขข้อมูล ${name} เรียบร้อยแล้ว`);
-    } else {
-        // New
-        const newRider = {
-            id: `RIDER-${Date.now().toString().slice(-4)}`,
-            name,
-            phone,
-            plate,
-            motorcycleModel,
-            zone,
-            promptPay,
-            bank,
-            status,
-            baseFee,
-            lat: Number((MARKET_ORIGIN.lat + (Math.random() - 0.5) * 0.01).toFixed(4)),
-            lng: Number((MARKET_ORIGIN.lng + (Math.random() - 0.5) * 0.01).toFixed(4)),
-            avatar: "🛵",
-            rating: 5.0,
-            tripsCountToday: 0,
-            codSettledToday: 0
-        };
-        riders.push(newRider);
-        showToast(`🎉 เพิ่มไรเดอร์ใหม่ ${name} เข้าสู่ระบบแล้ว!`);
+        return;
     }
 
+    // มอบหมายพนักงานเป็นไรเดอร์ใหม่ — ไม่ผ่านฟอร์มสมัครสาธารณะ/ตรวจเอกสาร เพราะเป็นพนักงานที่เจ้าของรู้จักตัวตนอยู่แล้ว
+    // ต้องสร้างรหัสผ่านเข้าระบบทันที (เดิมปุ่มนี้สร้างแค่ข้อมูล community_riders เฉยๆ โดยไม่มี loginHash เลย ทำให้ล็อกอินไม่ได้)
+    if (!requireOwnerAction()) return;
+    const cleanNewPhone = phone.replace(/[-\s]/g, "");
+    const dupe = riders.find(x => (x.phone || "").replace(/[-\s]/g, "") === cleanNewPhone);
+    if (dupe) {
+        showToast(`⚠️ เบอร์นี้มีไรเดอร์อยู่แล้ว (${dupe.name}) ใช้ปุ่ม "รหัสเข้าระบบ" ของคนเดิมแทนถ้าต้องการรหัสผ่านใหม่`);
+        return;
+    }
+
+    let cred;
+    try { cred = await makeRiderLoginCredential(); }
+    catch (err) { showToast("⚠️ สร้างรหัสผ่านไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return; }
+
+    const accessCode = generate6DigitAccessCode("RD");
+    const nowIso = new Date().toISOString();
+    const apps = loadRiderApplications();
+    apps.push({
+        id: accessCode,
+        accessCode,
+        fullName: name,
+        nickname: "",
+        phone,
+        lineId: "",
+        plate,
+        motorcycleModel,
+        zone,
+        promptPayNumber: promptPay || phone,
+        promptPayBank: bank,
+        status: "approved",
+        submittedAt: nowIso,
+        approvedAt: nowIso,
+        docsVerifiedAt: nowIso,
+        docsVerifiedBy: (state.activeAdmin && state.activeAdmin.name) || "เจ้าของ",
+        notes: "มอบหมายเป็นพนักงานไรเดอร์โดยตรงจากแอดมิน (ไม่ผ่านฟอร์มสมัครสาธารณะ)",
+        loginSalt: cred.loginSalt,
+        loginHash: cred.loginHash
+    });
+    saveRiderApplications(apps);
+    saveStaffKey("rider", accessCode, cred.staffProof);
+
+    const newRider = {
+        id: `RIDER-${Date.now().toString().slice(-4)}`,
+        name,
+        phone,
+        plate,
+        motorcycleModel,
+        zone,
+        promptPay: promptPay || phone,
+        bank,
+        status,
+        lat: Number((MARKET_ORIGIN.lat + (Math.random() - 0.5) * 0.01).toFixed(4)),
+        lng: Number((MARKET_ORIGIN.lng + (Math.random() - 0.5) * 0.01).toFixed(4)),
+        avatar: "🛵",
+        rating: 5.0,
+        tripsCountToday: 0,
+        codSettledToday: 0,
+        accessCode,
+        loginSalt: cred.loginSalt,
+        loginHash: cred.loginHash
+    };
+    riders.push(newRider);
     saveCommunityRiders(riders);
+
     closeRiderFormModal();
     renderAdminRiders();
     setTimeout(() => initAdminRiderRadarMap(), 150);
+    showToast(`🎉 มอบหมาย ${name} เป็นไรเดอร์แล้ว! ดูรหัสผ่านเข้าระบบในกล่องข้อความ (ส่งให้พนักงานด้วย)`);
+    openSimulatedSmsModal(phone, cred.secret, name, "rider", "", accessCode);
 }
 
 function deleteCommunityRider(riderId) {
@@ -28659,6 +28735,12 @@ function clearHubSettlementVendor(vendorName, btn = null) {
 function goToRiderRegisterScreen() {
     setActiveRoleView("rider");
     renderRiderScreen();
+    if (!RIDER_SELF_REGISTRATION_ENABLED) {
+        switchRiderGuestTab("login");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        showToast("ขณะนี้ปิดรับสมัครไรเดอร์ทั่วไปชั่วคราว กรุณาติดต่อเจ้าของร้านโดยตรง");
+        return;
+    }
     switchRiderGuestTab("register");
     window.scrollTo({ top: 0, behavior: "smooth" });
     showToast("📝 ยินดีต้อนรับสู่หน้าลงทะเบียนสมัครไรเดอร์ตลาดวิศิษฐ์ชัย");
@@ -28691,6 +28773,7 @@ function switchRiderGuestTab(tabKey) {
         }
         renderOnPageRidersList();
     }
+    applyRiderSelfRegistrationVisibility();
 }
 window.switchRiderGuestTab = switchRiderGuestTab;
 
@@ -29914,6 +29997,7 @@ function renderAuthHeaderButtons() {
     }
 
     container.innerHTML = html;
+    applyRiderSelfRegistrationVisibility();
 
     // 3. Admin Section (ย้ายไปไว้ที่แถบด้านล่างสุด)
     const bottomAdminContainer = document.getElementById("bottom-admin-container");
