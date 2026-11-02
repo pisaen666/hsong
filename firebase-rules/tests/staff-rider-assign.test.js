@@ -78,6 +78,7 @@ const ctx = {
     generate6DigitAccessCode: prefix => (prefix || "RD") + "8021",
     MARKET_ORIGIN: { lat: 13.3, lng: 101.1 },
     setTimeout: (f) => f(),
+    confirm: () => true,
     state: { activeAdmin: { name: "เจ้าของ" } },
     closeRiderFormModal: () => { closedModal = true; },
     renderAdminRiders: () => { },
@@ -91,7 +92,8 @@ Object.assign(ctx, {
 vm.createContext(ctx);
 vm.runInContext([
     between("const RIDER_SECRET_ALPHABET", "window.riderSecretLogin = riderSecretLogin;"),
-    "async " + fn("handleRiderFormSubmit", true).replace(/^async /, "")
+    "async " + fn("handleRiderFormSubmit", true).replace(/^async /, ""),
+    "async " + fn("resetRiderLoginSecretForRider", true).replace(/^async /, "")
 ].join("\n"), ctx);
 const run = js => vm.runInContext(js, ctx);
 const runAsync = js => vm.runInContext(`(${js})()`, ctx);
@@ -136,6 +138,31 @@ const runAsync = js => vm.runInContext(`(${js})()`, ctx);
     ok(riders[0].name === "ทดสอบ พนักงานร้าน (แก้ไข)", "แก้ไขชื่อสำเร็จ");
     ok(riders[0].loginHash === oldHash, "แก้ไขข้อมูลทั่วไป ไม่ไปแตะรหัสผ่านเดิม (ต้องใช้ปุ่ม 'รหัสเข้าระบบ' ถ้าจะสร้างใหม่)");
     ok(staffKeyCalls.length === staffKeyCountBefore, "แก้ไขไม่เรียก saveStaffKey ซ้ำ");
+
+    console.log("== resetRiderLoginSecretForRider: ซ่อมไรเดอร์เก่าที่ไม่มีรหัสผ่าน/เลขไรเดอร์เลย (บั๊กที่เจอจริง 2026-11-02) ==");
+    riders = [{ id: "RIDER-8768", name: "เฮียส่ง (ทดสอบเก่า)", phone: "0805687733", status: "available" }];
+    apps = []; // ไรเดอร์เก่าไม่มีใบสมัครคู่กันเลย (สร้างด้วยปุ่มรุ่นก่อนแก้)
+    owner = true; toasts.length = 0; smsCalls.length = 0; staffKeyCalls.length = 0;
+    await runAsync("async () => { await resetRiderLoginSecretForRider('RIDER-8768'); }");
+    ok(!!riders[0].accessCode && /^RD/.test(riders[0].accessCode), "ซ่อมเลขไรเดอร์ (accessCode) ให้ใหม่ ขึ้นต้นด้วย RD");
+    ok(!!riders[0].loginSalt && !!riders[0].loginHash, "ซ่อมรหัสผ่านเข้าระบบให้ใหม่");
+    ok(apps.length === 1 && apps[0].id === riders[0].accessCode && apps[0].status === "approved", "สร้างใบสมัครคู่กันให้ใหม่ด้วย (เดิมไม่มีเลย)");
+    ok(smsCalls.length === 1 && smsCalls[0][5] === riders[0].accessCode, "เปิดกล่องข้อความแสดงเลขไรเดอร์ + รหัสผ่านใหม่");
+
+    console.log("== resetRiderLoginSecretForRider: ไรเดอร์ปกติที่มีใบสมัครคู่กันอยู่แล้ว ==");
+    const prevHash = riders[0].loginHash;
+    const prevAccessCode = riders[0].accessCode;
+    await runAsync("async () => { await resetRiderLoginSecretForRider('RIDER-8768'); }");
+    ok(riders[0].accessCode === prevAccessCode, "เลขไรเดอร์เดิมไม่เปลี่ยน (เปลี่ยนแค่รหัสผ่าน)");
+    ok(riders[0].loginHash !== prevHash, "รหัสผ่านเปลี่ยนเป็นค่าใหม่จริง");
+    ok(apps.length === 1, "ไม่สร้างใบสมัครซ้ำ (อัปเดตใบเดิม)");
+
+    console.log("== resetRiderLoginSecretForRider: ไม่ใช่เจ้าของทำไม่ได้ ==");
+    owner = false; toasts.length = 0;
+    const beforeHash = riders[0].loginHash;
+    await runAsync("async () => { await resetRiderLoginSecretForRider('RIDER-8768'); }");
+    ok(riders[0].loginHash === beforeHash && toasts.includes("owner-required"), "ไม่ใช่เจ้าของ สร้างรหัสผ่านใหม่ไม่ได้");
+    owner = true;
 
     if (fail > 0) { console.log(`\n${fail} FAILED`); process.exit(1); }
     console.log("\nALL PASSED");

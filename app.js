@@ -1481,6 +1481,55 @@ async function resetRiderLoginSecret(appId) {
 }
 window.resetRiderLoginSecret = resetRiderLoginSecret;
 
+// สร้าง/ซ่อมรหัสผ่านไรเดอร์โดยตรงจากหน้าทำเนียบไรเดอร์ (community_riders) — ต่างจาก resetRiderLoginSecret ตรงที่
+// ไม่ต้องพึ่งใบสมัคร (rider_applications) ที่ตรงกันอยู่ก่อน: ถ้าไม่เจอใบสมัครคู่กัน หรือไม่มีเลขไรเดอร์ (accessCode) เลย
+// จะสร้างให้ใหม่ทั้งคู่ (ซ่อมไรเดอร์เก่าที่ไม่มีรหัสผ่านใช้งานได้ เช่นที่มอบหมายไว้ก่อนแก้ไขฟีเจอร์นี้)
+async function resetRiderLoginSecretForRider(riderId) {
+    if (!requireOwnerAction()) return;
+    const riders = loadCommunityRiders();
+    const r = riders.find(x => x.id === riderId);
+    if (!r) { showToast("⚠️ ไม่พบไรเดอร์คนนี้ในระบบ"); return; }
+    const name = r.name || "ไรเดอร์";
+    if (!confirm(`สร้างรหัสผ่านเข้าระบบใหม่ให้ "${name}" ?\n\nรหัสเดิมจะใช้ไม่ได้ทันที และต้องส่งรหัสใหม่ให้ไรเดอร์เอง`)) return;
+
+    let cred;
+    try { cred = await makeRiderLoginCredential(); }
+    catch (e) { showToast("⚠️ สร้างรหัสไม่สำเร็จ (เบราว์เซอร์ไม่รองรับ) กรุณาเปิดผ่านเว็บ https"); return; }
+
+    if (!r.accessCode) r.accessCode = generate6DigitAccessCode("RD");
+    r.loginSalt = cred.loginSalt;
+    r.loginHash = cred.loginHash;
+    saveCommunityRiders(riders);
+    saveStaffKey("rider", r.accessCode, cred.staffProof);
+
+    const apps = loadRiderApplications();
+    const cleanPhone = (r.phone || "").replace(/[-\s]/g, "");
+    let app = apps.find(x => x.id === r.accessCode) || apps.find(x => (x.phone || "").replace(/[-\s]/g, "") === cleanPhone && cleanPhone);
+    if (app) {
+        app.accessCode = r.accessCode;
+        app.loginSalt = cred.loginSalt;
+        app.loginHash = cred.loginHash;
+        app.status = "approved";
+    } else {
+        const nowIso = new Date().toISOString();
+        apps.push({
+            id: r.accessCode, accessCode: r.accessCode, fullName: name, nickname: "", phone: r.phone || "", lineId: "",
+            plate: r.plate || "-", motorcycleModel: r.motorcycleModel || "", zone: r.zone || "",
+            promptPayNumber: r.promptPay || r.phone || "", promptPayBank: r.bank || "กสิกรไทย",
+            status: "approved", submittedAt: nowIso, approvedAt: nowIso,
+            docsVerifiedAt: nowIso, docsVerifiedBy: (state.activeAdmin && state.activeAdmin.name) || "เจ้าของ",
+            notes: "สร้าง/ซ่อมรหัสผ่านจากหน้าทำเนียบไรเดอร์โดยแอดมิน",
+            loginSalt: cred.loginSalt, loginHash: cred.loginHash
+        });
+    }
+    saveRiderApplications(apps);
+
+    renderAdminRiders();
+    showToast(`🔑 สร้างรหัสผ่านใหม่ให้ ${name} แล้ว! ดูรหัสในกล่องข้อความ`);
+    openSimulatedSmsModal(r.phone, cred.secret, name, "rider", "", r.accessCode);
+}
+window.resetRiderLoginSecretForRider = resetRiderLoginSecretForRider;
+
 // =================================================================
 // ข้อมูลไรเดอร์ที่คนทั่วไปเห็นได้ (กฎ v5, 2026-09-25)
 // - รายชื่อไรเดอร์ (community_riders) และใบสมัคร (rider_applications) มีเบอร์โทร พร้อมเพย์ LINE และค่ารหัสผ่านที่แฮชแล้ว
@@ -24482,6 +24531,10 @@ function renderAdminRiders() {
                                 </div>
 
                                 <div class="flex items-center gap-1">
+                                    <button onclick="resetRiderLoginSecretForRider(${jsArg(r.id)})" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all" title="สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์คนนี้">
+                                        <span class="material-symbols-outlined text-xs">key</span>
+                                        <span>รหัสผ่านใหม่</span>
+                                    </button>
                                     <button onclick="openEditRiderModal(${jsArg(r.id)})" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1 active:scale-95 transition-all" title="แก้ไขข้อมูลไรเดอร์">
                                         <span class="material-symbols-outlined text-xs">edit</span>
                                         <span>แก้ไข</span>
@@ -24646,6 +24699,10 @@ function renderAdminRiders() {
                                         <span>สลิป 80mm</span>
                                     </button>
                                     <div class="flex items-center gap-1">
+                                        <button onclick="resetRiderLoginSecretForRider(${jsArg(r.id)})" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl text-[11px] flex items-center gap-1" title="สร้างรหัสผ่านเข้าระบบใหม่ให้ไรเดอร์คนนี้">
+                                            <span class="material-symbols-outlined text-xs">key</span>
+                                            <span>รหัสผ่านใหม่</span>
+                                        </button>
                                         <button onclick="openEditRiderModal(${jsArg(r.id)})" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] flex items-center gap-1">
                                             <span class="material-symbols-outlined text-xs">edit</span>
                                             <span>แก้ไข</span>
