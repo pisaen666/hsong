@@ -7,18 +7,18 @@
 - ประวัติแชทกับ Claude ไม่ตามไปอีกเครื่อง ดังนั้นสิ่งที่ตกลงกันไว้ต้องเขียนลงไฟล์นี้ก่อน push เสมอ
 
 ### สถานะปัจจุบัน
-- อัปเดตล่าสุด 2026-11-04 (เลิกงาน)
-- เซสชันนี้ (เครื่องนี้) ไม่ได้แก้โค้ดอะไรเพิ่ม — แค่ "เริ่มงาน" แล้วตรวจสถานะ/สรุปงานค้างให้เจ้าของ แล้ว "เลิกงาน" เลย
-- ทำเสร็จไปแล้วก่อนเซสชันนี้ (**push ขึ้นเว็บจริงแล้วทั้งหมด**, commit ล่าสุด `84f3ed0`):
-  1. (2026-11-02, `9f87753`) เปลี่ยนรูป `banner_2.jpg` เป็นลาย Hub2U ใหม่ (ของเดิมมีชื่อ "เฮียส่ง" ฝังในภาพ) + แก้บั๊ก GP ที่ fallback เป็น 10% ผิด (ตอนนี้ fallback ไปที่อัตราจริง 15% แทน) + ถ่ายรูปคู่มือร้านค้า `m25-settlement.jpg` ใหม่ให้ตรง 15%
-  2. (2026-11-04 เช้า, `827bdb0`) เปลี่ยนรูป `banner_1.jpg` → `banner_1.webp` ลายใหม่ Hub2U (ของเดิมมีชื่อแบรนด์เก่า "Talaad Sod Fresh" ฝังในภาพ)
-  3. (2026-11-04 เช้า, `8ef142b` + `84f3ed0`) แก้ข้อความ subtitle หัวเว็บและท้ายเว็บให้ตรงกัน เป็น "แอปให้บริการซื้อของจากทุกร้านในตลาดวิศิษฐ์ชัยส่งตรงถึงบ้านคุณ"
-- **ยังไม่ได้ยืนยัน:** เจ้าของยังไม่ได้ทดสอบสแกน QR พร้อมเพย์ฮับจริง (เลข 0815887400) ด้วยแอปธนาคารเพื่อเช็คว่าชื่อบัญชีที่ขึ้นถูกต้อง — **ควรทำเป็นอย่างแรกเมื่อเริ่มงานครั้งหน้า** ก่อนเปิดใช้งานจริงกับร้านค้า
+- อัปเดตล่าสุด 2026-11-05
+- ทำเสร็จในเซสชันนี้ (**push ขึ้นเว็บจริงแล้วทั้งหมด**, commit ล่าสุด `2323b50`):
+  1. **ยืนยัน QR พร้อมเพย์ฮับแล้ว** — เจ้าของสแกนเลข `0815887400` ด้วยแอปธนาคารจริง (SCB) เช็คชื่อบัญชีถูกต้อง พร้อมใช้งานจริงกับร้านค้า/ลูกค้าได้แล้ว (งานค้างจากเซสชันก่อนหน้าเสร็จแล้ว)
+  2. ยืนยันแล้วว่า **PWA มีอยู่ในเว็บจริงด้วย** ไม่ใช่แค่เว็บทดสอบ (เคยทำไปแล้วตั้งแต่ 2026-10-05, ดู 5z23) — เจ้าของเข้าใจผิดว่ามีแค่เว็บทดสอบ ช่วยลบไอคอนเก่าแล้วติดตั้งใหม่จากเว็บจริงให้
+  3. สร้างโฟลเดอร์ `ref-img/` (ไม่ได้ commit เข้า git ตั้งใจ — เป็นที่เก็บรูปอ้างอิงในเครื่องของเจ้าของเท่านั้น ไม่ใช่โค้ดเว็บ) รวบรวมรูปแบนเนอร์/โลโก้ที่ใช้จริงในเว็บ + สร้าง QR ลิงก์เข้าเว็บแอป + QR พร้อมเพย์ไว้ให้
+  4. (`2323b50`) **เปลี่ยนค่าบริการรวมหลายร้าน** จากขั้นบันได 10/15 บาท เป็น **ร้านละ 10 บาท (สูตร (จำนวนร้าน-1)×10)** พร้อม**เพดานห้ามสั่งเกิน 4 ร้านต่อออเดอร์** ตามคำขอเจ้าของ (ต้นทุนค่าเช่าตลาดขึ้น) — รายละเอียดเต็มดูหัวข้อ 5z24
+- **ยังไม่ได้ยืนยัน:** เจ้าของยังไม่ได้ทดลองสั่งจริงบนเว็บจริงเพื่อเช็คว่าค่าบริการรวมหลายร้านแบบใหม่ (10/20/30 บาท) และเพดาน 4 ร้านทำงานถูกต้องในสถานการณ์จริง (ทดสอบแล้วแค่ใน sandbox)
 - ค้างอยู่ (เดิม):
   - โดเมน `hub2u.net`: ยังไม่ได้ต่อเข้า GitHub Pages (รอเจ้าของส่ง DNS/IP)
   - `hero_banner_1.png` / `hero_banner_2.png` ยังไม่ได้ตรวจว่ามีชื่อแบรนด์เก่าฝังอยู่ในภาพหรือไม่ (banner_1 และ banner_2 แก้เป็น Hub2U แล้ว)
   - แก้เล็กน้อย: `คู่มือสื่อสารกับ_Claude.md` เขียนว่ากฎปัจจุบันคือ v7 แต่ production ใช้ v8 แล้ว (ตั้งแต่ 2026-09-28)
-- ขั้นต่อไปที่แนะนำ: เริ่มงานครั้งหน้าด้วยการทดสอบสแกน QR พร้อมเพย์ฮับจริงก่อน; ถ้าจดโดเมนเสร็จแล้ว ให้ส่งข้อมูล DNS มา; ถ้ามีเวลาตรวจ hero_banner_1/2 ด้วย
+- ขั้นต่อไปที่แนะนำ: เริ่มงานครั้งหน้าด้วยการลองสั่งจริงข้ามหลายร้านบนเว็บจริงเพื่อยืนยันค่าบริการใหม่; ถ้าจดโดเมนเสร็จแล้ว ให้ส่งข้อมูล DNS มา; ถ้ามีเวลาตรวจ hero_banner_1/2 ด้วย
 
 ## 📌 1. Project Overview & Architecture
 - **Type**: Single Page Application (SPA) for community fresh market delivery.
@@ -507,6 +507,19 @@ Problem found 2026-09-21: anyone can write text into the shared database (applic
 - `firebase-rules/tools/build-test-site.js` updated to also copy `manifest.json` to the test site (it already copies the whole `images/` folder, so the 3 new icon PNGs came along automatically).
 - **Verified on hsong-test:** `manifest.json` fetches with 200 and valid JSON, all 3 icon URLs return 200, `theme-color` meta reads back correctly, page is a secure context (HTTPS) and `serviceWorker` API exists (unused). Could NOT verify the actual "Add to Home Screen" banner itself from here — Chrome's install-prompt heuristics (and the automated browser pane used for testing) don't reliably fire `beforeinstallprompt` outside a real user session, so this needs the owner to actually try it on a real Android phone (Chrome) and iPhone (Safari) to confirm the install flow and resulting icon/splash screen look right.
 - **Done 2026-10-05:** owner installed the PWA on a real phone (choose "ติดตั้ง", not "สร้างทางลัด"); branch merged to main via PR #1. Second logo revision (transparent background, no "Hub2u.net" text under the art) is in the same commit. Service worker still intentionally NOT added (see reason above).
+
+## 📱 5z23b. PWA confirmed live on production too, not just hsong-test (verified 2026-11-05)
+- Owner thought only the test site had a working PWA install. Checked production (`https://pisaen666.github.io/hsong/`) directly: `manifest.json` and all 3 icon URLs return 200, `theme-color`/`apple-touch-icon`/`apple-mobile-web-app-*` meta tags are present in the live `index.html` — PWA has been live on production since 5z23 (2026-10-05), nothing new was pushed for this. Likely cause of the owner's confusion: the earlier real-phone install test in 5z23 may have been done from `hsong-test.web.app`, or an old PWA icon from the test site was still sitting on the phone's home screen. Walked the owner through: (1) long-press and remove the old home-screen icon, (2) on the real site's Chrome menu use "Add to Home screen" (this phone's Chrome shows that label instead of "Install app" — same real install, not a shortcut, since the site has a valid manifest + icons).
+
+## 💵 5z24. Multi-stall service fee changed to per-shop + 4-shop order cap (code `app.js?v=10.90_multistall_fee_cap`; PUSHED to main 2026-11-05 on the owner's explicit request, commit `2323b50`, live files verified byte-identical)
+- **Owner's reason (2026-11-05):** the market management raised the annual stall rental fee, so the owner recalculated operating costs and decided the multi-stall service fee (charged to the customer when ordering from more than one stall in one order, see the home-page banner "รวมบิลร้านเค้าต่าง ๆ สั่งหลายแผง ค่าส่งรอบเดียว") needed to go up.
+- **Before:** flat 10 baht for 2-3 stalls, flat 15 baht for 4+ stalls (no cap on how many stalls an order could contain).
+- **Now:** 1 stall = ฿0 (unchanged); 2-4 stalls = **(จำนวนร้าน-1)×10 บาท** (2=10, 3=20, 4=30); **ordering from more than 4 stalls in one order is blocked entirely** — owner's stated reason: more stalls in one order raises the chance of operational mistakes (mixing up items/payouts across many shops), not just a pricing decision.
+- **Code:** `PRICING.multiStallFeePerShop = 10` and `PRICING.maxStallsPerOrder = 4` (new fields in the `PRICING` object, `app.js`). `calculateCartTotals()`'s `multiStallFee` is now `(min(stallsCount, maxStallsPerOrder) - 1) * multiStallFeePerShop` (the `min()` is just a safety net for any old cart already saved with 5+ stalls before this change; new carts can never reach that). New `canAddStallToCart(stallId)` returns true if the stall is already in the cart (always allowed to add more of what's already there) or the cart currently has fewer than `maxStallsPerOrder` distinct stalls; both `addToCart()` and `addToCartFromModal()` call it right after the closed-stall check and refuse with a toast ("สั่งได้สูงสุด 4 ร้านต่อออเดอร์ครับ...") before adding an item from what would be a 5th stall.
+- **Does NOT affect:** GP rate, rider fee, delivery fee by distance, express delivery (still single-stall only, unrelated gate) — only the multi-stall service fee and a new hard cap on stall count per order.
+- Test: `firebase-rules/tests/pricing-structure.test.js` extended (6 new checks: fee table for 1-4 stalls, `canAddStallToCart` behavior at the cap boundary and below it, both add-to-cart functions reference the new guard). Full suite (71 checks total) passes.
+- Verified live in an offline sandbox (fake `127.0.0.1:9` host, no cloud writes, 5 fake test stalls seeded): added items from stalls 1-4 successfully (cart grew 1→2→3→4 distinct stalls), adding from a 5th stall was blocked (cart stayed at 4, toast shown); `calculateCartTotals()` returned multiStallFee 0/10/20/30 for 1/2/3/4 stalls exactly as designed.
+- Pushed directly to production on the owner's explicit instruction ("commit และ push ขึ้นเว็บจริงให้ผมด้วย") — not yet separately confirmed by the owner placing a real multi-stall test order on the live site.
 
 ## ⚠️ 6. Known Constraints (update when resolved)
 - (Resolved) Personal data (ID numbers, addresses, driver-license photos in `rider_documents/<riderId>`, `rider_private`) is owner-read only since the owner-auth release.
