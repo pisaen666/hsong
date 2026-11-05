@@ -7,18 +7,22 @@
 - ประวัติแชทกับ Claude ไม่ตามไปอีกเครื่อง ดังนั้นสิ่งที่ตกลงกันไว้ต้องเขียนลงไฟล์นี้ก่อน push เสมอ
 
 ### สถานะปัจจุบัน
-- อัปเดตล่าสุด 2026-11-05
-- ทำเสร็จในเซสชันนี้ (**push ขึ้นเว็บจริงแล้วทั้งหมด**, commit ล่าสุด `2323b50`):
+- อัปเดตล่าสุด 2026-11-05 (เลิกงานที่ทำงาน เจ้าของจะไปต่อที่บ้าน)
+- ทำเสร็จในเซสชันนี้ (**push ขึ้นเว็บจริงแล้วทั้งหมด**, commit ล่าสุด `a7c9819`):
   1. **ยืนยัน QR พร้อมเพย์ฮับแล้ว** — เจ้าของสแกนเลข `0815887400` ด้วยแอปธนาคารจริง (SCB) เช็คชื่อบัญชีถูกต้อง พร้อมใช้งานจริงกับร้านค้า/ลูกค้าได้แล้ว (งานค้างจากเซสชันก่อนหน้าเสร็จแล้ว)
   2. ยืนยันแล้วว่า **PWA มีอยู่ในเว็บจริงด้วย** ไม่ใช่แค่เว็บทดสอบ (เคยทำไปแล้วตั้งแต่ 2026-10-05, ดู 5z23) — เจ้าของเข้าใจผิดว่ามีแค่เว็บทดสอบ ช่วยลบไอคอนเก่าแล้วติดตั้งใหม่จากเว็บจริงให้
   3. สร้างโฟลเดอร์ `ref-img/` (ไม่ได้ commit เข้า git ตั้งใจ — เป็นที่เก็บรูปอ้างอิงในเครื่องของเจ้าของเท่านั้น ไม่ใช่โค้ดเว็บ) รวบรวมรูปแบนเนอร์/โลโก้ที่ใช้จริงในเว็บ + สร้าง QR ลิงก์เข้าเว็บแอป + QR พร้อมเพย์ไว้ให้
   4. (`2323b50`) **เปลี่ยนค่าบริการรวมหลายร้าน** จากขั้นบันได 10/15 บาท เป็น **ร้านละ 10 บาท (สูตร (จำนวนร้าน-1)×10)** พร้อม**เพดานห้ามสั่งเกิน 4 ร้านต่อออเดอร์** ตามคำขอเจ้าของ (ต้นทุนค่าเช่าตลาดขึ้น) — รายละเอียดเต็มดูหัวข้อ 5z24
-- **ยังไม่ได้ยืนยัน:** เจ้าของยังไม่ได้ทดลองสั่งจริงบนเว็บจริงเพื่อเช็คว่าค่าบริการรวมหลายร้านแบบใหม่ (10/20/30 บาท) และเพดาน 4 ร้านทำงานถูกต้องในสถานการณ์จริง (ทดสอบแล้วแค่ใน sandbox)
+  5. (`a7c9819`) แก้ข้อความป้ายแบนเนอร์หน้าแรก "ดูสินค้าสด 100 แผง" → "ร้านต่าง ๆ ในตลาดวิศิษฐ์ชัย" + **แก้บั๊กปุ่ม "เช็กจุดส่ง 30 นาที"** บนแบนเนอร์สไลด์ 2 ที่เคยพาไปหน้าหมวดหมู่สินค้าแบบไม่เกี่ยวข้อง ตอนนี้พาไปส่วนรอบจัดส่ง+ระบุที่อยู่แทน (ตรงกับชื่อป้ายจริง) — รายละเอียดเต็มดูหัวข้อ 5z25
+- **ยังไม่ได้ยืนยัน:**
+  - เจ้าของยังไม่ได้ทดลองสั่งจริงบนเว็บจริงเพื่อเช็คว่าค่าบริการรวมหลายร้านแบบใหม่ (10/20/30 บาท) และเพดาน 4 ร้านทำงานถูกต้องในสถานการณ์จริง (ทดสอบแล้วแค่ใน sandbox)
+  - เจ้าของยังไม่ได้ลองคลิกป้าย "เช็กจุดส่ง 30 นาที" บนเว็บจริงด้วยตัวเองหลังแก้ (ทดสอบแล้วแค่ใน sandbox)
 - ค้างอยู่ (เดิม):
   - โดเมน `hub2u.net`: ยังไม่ได้ต่อเข้า GitHub Pages (รอเจ้าของส่ง DNS/IP)
   - `hero_banner_1.png` / `hero_banner_2.png` ยังไม่ได้ตรวจว่ามีชื่อแบรนด์เก่าฝังอยู่ในภาพหรือไม่ (banner_1 และ banner_2 แก้เป็น Hub2U แล้ว)
   - แก้เล็กน้อย: `คู่มือสื่อสารกับ_Claude.md` เขียนว่ากฎปัจจุบันคือ v7 แต่ production ใช้ v8 แล้ว (ตั้งแต่ 2026-09-28)
-- ขั้นต่อไปที่แนะนำ: เริ่มงานครั้งหน้าด้วยการลองสั่งจริงข้ามหลายร้านบนเว็บจริงเพื่อยืนยันค่าบริการใหม่; ถ้าจดโดเมนเสร็จแล้ว ให้ส่งข้อมูล DNS มา; ถ้ามีเวลาตรวจ hero_banner_1/2 ด้วย
+  - `handleMarketHeroClick` (carousel อีกตัวที่คนละจุดในแอป) มีโค้ดเดิมที่พาไปหน้าหมวดหมู่สินค้าเหมือนที่เพิ่งแก้ใน `handleHeroBannerClick` — ยังไม่ได้แก้ เพราะเจ้าของยังไม่ได้แจ้งว่ามีปัญหาเดียวกันตรงนั้น (ดู 5z25)
+- ขั้นต่อไปที่แนะนำ: เริ่มงานครั้งหน้า (ที่บ้าน) ด้วยการลองสั่งจริงข้ามหลายร้าน + ลองคลิกป้าย "เช็กจุดส่ง" บนเว็บจริงเพื่อยืนยันทั้งสองเรื่อง; ถ้าจดโดเมนเสร็จแล้ว ให้ส่งข้อมูล DNS มา; ถ้ามีเวลาตรวจ hero_banner_1/2 ด้วย
 
 ## 📌 1. Project Overview & Architecture
 - **Type**: Single Page Application (SPA) for community fresh market delivery.
@@ -520,6 +524,13 @@ Problem found 2026-09-21: anyone can write text into the shared database (applic
 - Test: `firebase-rules/tests/pricing-structure.test.js` extended (6 new checks: fee table for 1-4 stalls, `canAddStallToCart` behavior at the cap boundary and below it, both add-to-cart functions reference the new guard). Full suite (71 checks total) passes.
 - Verified live in an offline sandbox (fake `127.0.0.1:9` host, no cloud writes, 5 fake test stalls seeded): added items from stalls 1-4 successfully (cart grew 1→2→3→4 distinct stalls), adding from a 5th stall was blocked (cart stayed at 4, toast shown); `calculateCartTotals()` returned multiStallFee 0/10/20/30 for 1/2/3/4 stalls exactly as designed.
 - Pushed directly to production on the owner's explicit instruction ("commit และ push ขึ้นเว็บจริงให้ผมด้วย") — not yet separately confirmed by the owner placing a real multi-stall test order on the live site.
+
+## 🏷️ 5z25. Home page: banner pill text + hero banner "เช็กจุดส่ง" click destination fixed (code `app.js?v=10.91_hero_banner_label_fix`; PUSHED to main 2026-11-05, commit `a7c9819`, live files verified byte-identical)
+- **Owner's request 1 (screenshot):** change the small label pill on hero banner slide 1 (on `banner_1.webp`) from "ดูสินค้าสด 100 แผง" to **"ร้านต่าง ๆ ในตลาดวิศิษฐ์ชัย"** (`index.html`, no behavior change — the pill still just labels the click-to-open-stall-directory action). Verified at 375px: text fits the pill, no overflow.
+- **Owner's request 2 (2 screenshots):** the pill **"เช็กจุดส่ง 30 นาที"** on hero banner slide 2 (on `banner_2.jpg`, the Hub2U speed-themed slide) looked "แปลกๆ" (odd) when clicked — found the real bug: `handleHeroBannerClick(1)` in `app.js` scrolled to `category-menu-section` (the product category picker) with an unrelated toast ("⚡ สั่งของสดตอนนี้...") — completely mismatched with what the label "เช็กจุดส่ง 30 นาที" (check delivery point, 30 min) promises.
+- **Fix (owner approved the recommendation before coding):** `handleHeroBannerClick(1)` now scrolls to `inpage-location-container` instead — the same section the home-page "ระบุที่อยู่จัดส่ง" quick-action button targets (see 5h), which already shows (a) the next delivery round time box ("ไรเดอร์ส่งของทุก 30 นาที" — matches the "30 นาที" in the label) directly above (b) the address/location picker (matches "จุดส่ง" in the label). Toast text changed to "📍 ดูรอบจัดส่งและระบุที่อยู่ของคุณได้เลย" to match the new destination. Chose this over either relabeling the pill or rewiring it to a brand-new "check coverage" feature, since the target content already exists and literally matches what the label says — smallest change, most honest result.
+- **Scope note:** only `handleHeroBannerClick` (the home-page hero-banner-carousel) was touched. The separate `handleMarketHeroClick` (a different carousel, `market-hero-carousel-container`, used elsewhere in the app) has the identical old category-scroll code for its own slide 2, but the owner's screenshots were specifically about the home-page hero banner pill, so that second carousel was left alone — flag it later if the owner notices the same mismatch there.
+- No new automated test (pure UI copy + scroll-target change) — verified in an offline sandbox (fake `127.0.0.1:9` host): banner 1 pill text renders without overflow at 375px; calling `handleHeroBannerClick(1)` directly scrolled to and revealed the delivery-round box + location picker with the new toast text, confirmed with `getBoundingClientRect()` and a screenshot. Existing `toast-coupon-bonus-banner.test.js` (which also touches `handleHeroBannerClick`) still passes.
 
 ## ⚠️ 6. Known Constraints (update when resolved)
 - (Resolved) Personal data (ID numbers, addresses, driver-license photos in `rider_documents/<riderId>`, `rider_private`) is owner-read only since the owner-auth release.
