@@ -39,7 +39,7 @@ vm.runInContext([
     fn("pricingKm"), fn("distanceStepCount"), fn("isBeyondDeliveryRange"), fn("calculateDeliveryFee"),
     fn("smallOrderFee"), fn("riderTripFeeForKm"), fn("orderDistanceKm"), fn("riderTripFeeForOrder"),
     fn("merchantExpressFeeForKm"), fn("merchantExpressFeeLabel"), fn("deliveryFeeLabel"),
-    fn("isValidGpRate"), fn("getMerchantGpRate"), fn("calculateCartTotals")
+    fn("isValidGpRate"), fn("getMerchantGpRate"), fn("calculateCartTotals"), fn("canAddStallToCart")
 ].join("\n"), ctx);
 const run = js => vm.runInContext(js, ctx);
 
@@ -109,6 +109,24 @@ ctx.state.cart = [{ stallId: "A", price: 100, qty: 1 }, { stallId: "B", price: 1
 ctx.state.deliveryLocation = pin(2);
 t = run("calculateCartTotals()");
 ok(t.smallOrderFee === 0 && t.multiStallFee === 10 && t.grandTotal === 250 + 10 + 20, "ยอด ฿250 สองร้าน 2 กม. -> ไม่มีค่าส่งเพิ่ม, ค่าหลายร้าน ฿10 คงเดิม");
+
+console.log("== ค่าบริการรวมหลายร้าน ร้านละ 10 บาท (เจ้าของปรับ 2026-11-05) และเพดาน 4 ร้านต่อออเดอร์");
+ok(run("PRICING.multiStallFeePerShop") === 10 && run("PRICING.maxStallsPerOrder") === 4, "ค่าตั้งต้น: ร้านละ 10 บาท, สูงสุด 4 ร้าน");
+[[1, 0], [2, 10], [3, 20], [4, 30]].forEach(([stalls, fee]) => {
+    ctx.state.cart = Array.from({ length: stalls }, (_, i) => ({ stallId: "S" + i, price: 50, qty: 1 }));
+    ctx.state.deliveryLocation = pin(1);
+    t = run("calculateCartTotals()");
+    ok(t.stallsCount === stalls && t.multiStallFee === fee, `${stalls} ร้าน -> ค่าบริการรวมหลายร้าน ฿${fee} ((${stalls}-1)x10${stalls === 1 ? ", ไม่มีค่าบริการ" : ""})`);
+});
+ok(run('canAddStallToCart("S0")') === true, "ร้านที่มีของในตะกร้าอยู่แล้ว เพิ่มสินค้าซ้ำได้เสมอ แม้ตะกร้าเต็ม 4 ร้าน");
+ok(run('canAddStallToCart("S99")') === false, "ตะกร้ามี 4 ร้านเต็มแล้ว ห้ามเพิ่มร้านที่ 5");
+ctx.state.cart = [{ stallId: "A", price: 50, qty: 1 }, { stallId: "B", price: 50, qty: 1 }];
+ok(run('canAddStallToCart("C")') === true, "ตะกร้ามีแค่ 2 ร้าน ยังเพิ่มร้านที่ 3 ได้");
+ok(/canAddStallToCart/.test(fn("addToCart")) && /canAddStallToCart/.test(fn("addToCartFromModal")), "ทั้ง addToCart และ addToCartFromModal เช็คเพดาน 4 ร้านก่อนเพิ่มของจากร้านใหม่");
+
+ctx.state.cart = [{ stallId: "A", price: 100, qty: 1 }, { stallId: "B", price: 150, qty: 1 }];
+ctx.state.deliveryLocation = pin(2);
+t = run("calculateCartTotals()");
 ctx.state.deliveryLocation = pin(8);
 t = run("calculateCartTotals()");
 ok(t.beyondRange === true, "ที่อยู่ 8 กม. -> beyondRange");

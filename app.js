@@ -2917,7 +2917,9 @@ const PRICING = Object.freeze({
     smallOrderFeeMid: 5,
     smallOrderFeeLow: 10,
     expressAppFee: 20,
-    defaultGpRate: 15
+    defaultGpRate: 15,
+    multiStallFeePerShop: 10,
+    maxStallsPerOrder: 4
 });
 
 // คูปองส่วนลด: ปิดไว้ก่อน (เจ้าของสั่ง 2026-09-28) เพราะ FRESH20 ถูกเลือกให้อัตโนมัติทุกออเดอร์ ใช้ได้ไม่จำกัดครั้ง
@@ -13416,11 +13418,24 @@ function renderStallCatalogModal() {
 
 let pendingAddToCart = null;
 
+// เช็คก่อนเพิ่มสินค้าจากร้านใหม่ลงตะกร้า: ถ้าร้านนี้ยังไม่อยู่ในตะกร้า และตะกร้ามีครบ maxStallsPerOrder ร้านแล้ว ห้ามเพิ่ม
+function canAddStallToCart(stallId) {
+    const effectiveId = stallId || "stall_chicken";
+    const existingStallIds = new Set((state.cart || []).map(item => item && (item.stallId || "stall_chicken")).filter(Boolean));
+    if (existingStallIds.has(effectiveId)) return true;
+    return existingStallIds.size < PRICING.maxStallsPerOrder;
+}
+window.canAddStallToCart = canAddStallToCart;
+
 function addToCartFromModal(stallId, productId, name, price, unit) {
     if (!state.cart) state.cart = [];
     const stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
     if (stall && stall.isClosed) {
         showToast(`🔴 ร้าน "${stall.stallName}" พักรับออเดอร์ชั่วคราว ไม่สามารถสั่งซื้อได้ในขณะนี้`);
+        return;
+    }
+    if (!canAddStallToCart(stall ? stall.stallId : stallId)) {
+        showToast(`⚠️ สั่งได้สูงสุด ${PRICING.maxStallsPerOrder} ร้านต่อออเดอร์ครับ เอาร้านอื่นออกจากตะกร้าก่อน หรือสั่งร้านนี้เป็นออเดอร์ใหม่`);
         return;
     }
     const existing = state.cart.find(item => item && (item.productId === productId || item.id === productId));
@@ -13456,6 +13471,10 @@ function addToCart(stallId, productId) {
     let stall = MARKET_DATA.find(s => s.stallId === stallId) || ALL_100_STALLS.find(s => s.stallId === stallId);
     if (stall && stall.isClosed) {
         showToast(`🔴 ร้าน "${stall.stallName}" พักรับออเดอร์ชั่วคราว ไม่สามารถสั่งซื้อได้ในขณะนี้`);
+        return;
+    }
+    if (!canAddStallToCart(stall ? stall.stallId : stallId)) {
+        showToast(`⚠️ สั่งได้สูงสุด ${PRICING.maxStallsPerOrder} ร้านต่อออเดอร์ครับ เอาร้านอื่นออกจากตะกร้าก่อน หรือสั่งร้านนี้เป็นออเดอร์ใหม่`);
         return;
     }
     let product = null;
@@ -13603,9 +13622,11 @@ function calculateCartTotals() {
     const uniqueStalls = new Set(state.cart.map(item => item.stallId || "stall_chicken"));
     const stallsCount = uniqueStalls.size;
 
+    // ค่าบริการรวมหลายร้าน: ร้านแรกไม่คิด ร้านที่ 2 เป็นต้นไปคิดร้านละ 10 บาท (เจ้าของปรับ 2026-11-05 ตามต้นทุนค่าเช่าที่เพิ่มขึ้น)
     let multiStallFee = 0;
-    if (stallsCount >= 2) multiStallFee = 10;
-    if (stallsCount >= 4) multiStallFee = 15;
+    if (stallsCount >= 2) {
+        multiStallFee = (Math.min(stallsCount, PRICING.maxStallsPerOrder) - 1) * PRICING.multiStallFeePerShop;
+    }
 
     // คิดค่าส่งใหม่จากพิกัดทุกครั้ง (ค่า fee ที่เก็บไว้ในที่อยู่เดิมอาจเป็นสูตรเก่า)
     const loc = state.deliveryLocation;
