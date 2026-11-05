@@ -32587,12 +32587,12 @@ function handleHeroBannerClick(index) {
         openDirectoryModal();
         showToast("🏪 ดูผัง 100 แผงค้า สั่งหลายร้าน รวมส่งรอบเดียวได้เลยครับ");
     } else if (index === 1) {
-        // Slide 2: สด ๆ ใหม่ ๆ จากร้านค้า ส่งไวใน 30 นาที
-        const catEl = document.getElementById("category-menu-section");
-        if (catEl) {
-            catEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Slide 2: ป้าย "เช็กจุดส่ง 30 นาที" -> พาไปส่วนรอบจัดส่ง + ระบุที่อยู่ (เดิมพาไปหมวดหมู่สินค้าซึ่งไม่ตรงกับชื่อป้าย แก้ 2026-11-05 ตามคำแนะนำที่เจ้าของเห็นด้วย)
+        const locEl = document.getElementById("inpage-location-container");
+        if (locEl) {
+            locEl.scrollIntoView({ behavior: "smooth", block: "start" });
         }
-        showToast("⚡ สั่งของสดตอนนี้ การันตีสดใหม่ส่งไวใน 30 นาที!");
+        showToast("📍 ดูรอบจัดส่งและระบุที่อยู่ของคุณได้เลย");
     }
 }
 
