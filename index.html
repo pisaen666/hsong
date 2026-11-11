@@ -1020,25 +1020,7 @@
                                 </button>
                             </label>
 
-                            <!-- Option 3: COD Cash on Delivery -->
-                            <label id="payment-label-cod" onclick="selectPaymentMethod('cod')"
-                                class="payment-method-card flex items-center justify-between p-3 rounded-2xl border border-slate-200 bg-white hover:bg-amber-50/40 cursor-pointer transition-all">
-                                <div class="flex items-center gap-2.5">
-                                    <input type="radio" name="payment_method" value="cod"
-                                        onchange="selectPaymentMethod('cod')"
-                                        class="text-amber-600 focus:ring-amber-500">
-                                    <div>
-                                        <div class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                                            <span>เก็บเงินสดปลายทาง (COD)</span>
-                                            <span
-                                                class="bg-amber-500 text-slate-950 text-[9px] px-1.5 py-0.2 rounded-md font-bold">เงินสด</span>
-                                        </div>
-                                        <div class="text-[11px] text-slate-500 mt-0.5">จ่ายเงินสดกับไรเดอร์เมื่อรับของสด
-                                        </div>
-                                    </div>
-                                </div>
-                                <span class="material-symbols-outlined text-amber-600 text-xl">payments</span>
-                            </label>
+                            <!-- COD (เก็บเงินปลายทาง) ถูกนำออก: เจ้าของสั่ง 2026-11-11 ต้องโอนก่อนเท่านั้น -->
                         </div>
                     </div>
 
@@ -1212,7 +1194,7 @@
                             </div>
                             <div class="mt-1 text-[12px] font-bold text-amber-900 bg-amber-50 border border-amber-300 rounded-lg px-2 py-1" id="summary-small-order-hint"></div>
                         </div>
-                        <!-- เกินระยะส่ง 7 กม. -->
+                        <!-- เกินระยะส่ง 3 กม. -->
                         <div class="hidden text-[13px] font-bold text-red-800 bg-red-50 border-2 border-red-300 rounded-lg px-2 py-1.5" id="summary-beyond-range-box"></div>
                         <!-- Express Delivery Surcharge Row (ลูกค้าเลือกส่งด่วน) -->
                         <div class="flex justify-between text-slate-600 hidden" id="summary-express-fee-row">
@@ -7213,7 +7195,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.91_hero_banner_label_fix"></script>
+    <script src="app.js?v=10.92_gp20_3km_no_cod"></script>
 </body>
 
 </html>

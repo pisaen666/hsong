@@ -527,6 +527,13 @@ Problem found 2026-09-21: anyone can write text into the shared database (applic
 - **Scope note:** only `handleHeroBannerClick` (the home-page hero-banner-carousel) was touched. The separate `handleMarketHeroClick` (a different carousel, `market-hero-carousel-container`, used elsewhere in the app) has the identical old category-scroll code for its own slide 2, but the owner's screenshots were specifically about the home-page hero banner pill, so that second carousel was left alone — flag it later if the owner notices the same mismatch there.
 - No new automated test (pure UI copy + scroll-target change) — verified in an offline sandbox (fake `127.0.0.1:9` host): banner 1 pill text renders without overflow at 375px; calling `handleHeroBannerClick(1)` directly scrolled to and revealed the delivery-round box + location picker with the new toast text, confirmed with `getBoundingClientRect()` and a screenshot. Existing `toast-coupon-bonus-banner.test.js` (which also touches `handleHeroBannerClick`) still passes.
 
+## 🎯 5z26. GP 20%, ส่งไกลสุด 3 กม., ยกเลิกเก็บเงินปลายทาง (code `app.js?v=10.92_gp20_3km_no_cod`; commit แล้ว ยังไม่ push ณ 2026-11-11)
+- **เจ้าของสั่ง 2026-11-11:** (1) GP = 20% ทุกที่ (2) รับส่งไม่เกิน 3 กม. (3) ไม่มีเก็บเงินปลายทาง ต้องโอนก่อน (4) ยังไม่ใช้ hub2u.net ให้ใช้ลิงก์ github.io จนกว่าเจ้าของแจ้ง (5) ลบข้อความ 7 กม. / เก็บเงินปลายทางในสกิล
+- โค้ด: `PRICING.maxKm` 7→3, `PRICING.defaultGpRate` 15→20 (ค่าสำรองของรายงานเก่าที่เคย || 10 ใช้ `PRICING.defaultGpRate` แล้ว); นำตัวเลือก COD ออกจากหน้าชำระเงิน (`index.html`) และ `processOrderCheckout` / `simulatePaymentSuccess("cod")` ปฏิเสธพร้อมข้อความ; คู่มือร้านค้า GP 20% / 3 กม.; ตารางค่าส่งเกิน 3 กม. ยังอยู่ในโค้ดแต่ใช้ไม่ถึง
+- **ต้องทำตอนขึ้นเว็บจริง:** GP จริงอ่านจาก `app_settings/pricing` (ตอนนี้ในฐานข้อมูลจริงยังเป็น 15) → หลัง push เจ้าของต้องล็อกอิน แอดมิน > ตั้งค่า > GP ใส่ 20 แล้วบันทึก (ผมเขียน production เองไม่ได้) และต้องแจ้งร้านค้าเรื่อง GP 20% ก่อน push
+- ยังค้างโค้ดเก่าของ COD (รายงาน/สลิป/ไรเดอร์เคลียร์เงินสด, ข้อความยินยอมสมัครไรเดอร์) ไว้เพื่ออ่านออเดอร์เก่า ยังไม่ลบ
+- ทดสอบ: pricing-structure, guide-merchant, guide-rider และชุดอื่นผ่านหมด (แก้ตัวเลขเป็น 3 กม./GP 20)
+
 ## ⚠️ 6. Known Constraints (update when resolved)
 - (Resolved) Personal data (ID numbers, addresses, driver-license photos in `rider_documents/<riderId>`, `rider_private`) is owner-read only since the owner-auth release.
 - (Resolved 2026-09-20) Admin/hub PINs and the admin "test mode" quick login were removed; see section 5b.

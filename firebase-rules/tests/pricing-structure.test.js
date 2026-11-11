@@ -50,9 +50,9 @@ table.forEach(([km, rider, cust]) => {
     ok(run(`riderTripFeeForKm(${km})`) === rider && run(`calculateDeliveryFee(${km})`) === cust,
         `${km} กม. -> ไรเดอร์ ฿${rider}, ลูกค้า ฿${cust}`);
 });
-ok(!run("isBeyondDeliveryRange(7.0)") && !run("isBeyondDeliveryRange(7.04)"), "7.0 กม. (และ 7.04 ที่แสดงเป็น 7.0) ยังส่งได้");
-ok(run("isBeyondDeliveryRange(7.1)") && run("isBeyondDeliveryRange(12)"), "เกิน 7 กม. ส่งไม่ได้");
-ok(/ส่งไม่ถึง/.test(run("deliveryFeeLabel(8)")) && run("deliveryFeeLabel(3)") === "฿20", "ป้ายค่าส่งบนแผนที่บอก 'ส่งไม่ถึง' เมื่อเกิน 7 กม.");
+ok(!run("isBeyondDeliveryRange(3.0)") && !run("isBeyondDeliveryRange(3.04)"), "3.0 กม. (และ 3.04 ที่แสดงเป็น 3.0) ยังส่งได้");
+ok(run("isBeyondDeliveryRange(3.1)") && run("isBeyondDeliveryRange(12)"), "เกิน 3 กม. ส่งไม่ได้");
+ok(/ส่งไม่ถึง/.test(run("deliveryFeeLabel(8)")) && run("deliveryFeeLabel(3)") === "฿20", "ป้ายค่าส่งบนแผนที่บอก 'ส่งไม่ถึง' เมื่อเกิน 3 กม.");
 
 console.log("== ค่าส่งเพิ่มเมื่อยอดไม่ถึง 200");
 [[0, 10], [50, 10], [99, 10], [99.5, 10], [100, 5], [150, 5], [199, 5], [200, 0], [950, 0]].forEach(([s, f]) =>
@@ -63,12 +63,12 @@ store.talathub_fleet_settings = JSON.stringify({ baseFee: 35 });
 ok(run("riderTripFeeForKm(4)") === 45 && run("calculateDeliveryFee(4)") === 30, "ตั้งค่ารอบเริ่มต้น 35 -> 4 กม. ไรเดอร์ ฿45, ลูกค้ายัง ฿30");
 delete store.talathub_fleet_settings;
 
-console.log("== กำไรแอป >= 10% ของค่าสินค้า ทุกยอด ทุกระยะ (GP 15%, ร้านเดียว = กรณีแย่สุด)");
+console.log("== กำไรแอป >= 10% ของค่าสินค้า ทุกยอด ทุกระยะ (GP 20%, ร้านเดียว = กรณีแย่สุด)");
 const gp = run("getMerchantGpRate()") / 100;
-ok(gp === 0.15, "GP ตั้งต้น 15%");
+ok(gp === 0.20, "GP ตั้งต้น 20%");
 let worst = null, bad = 0;
 for (let s = 1; s <= 3000; s += 1) {
-    for (let km10 = 0; km10 <= 70; km10++) {
+    for (let km10 = 0; km10 <= 30; km10++) {
         const km = km10 / 10;
         const profit = gp * s + run(`calculateDeliveryFee(${km})`) + run(`smallOrderFee(${s})`) - run(`riderTripFeeForKm(${km})`);
         const pct = profit / s;
@@ -76,8 +76,8 @@ for (let s = 1; s <= 3000; s += 1) {
         if (!worst || pct < worst.pct) worst = { s, km, pct };
     }
 }
-ok(bad === 0, `ไม่มีกรณีที่กำไรต่ำกว่า 10% (ตรวจ ${3000 * 71} กรณี; ต่ำสุด ${(worst.pct * 100).toFixed(2)}% ที่ยอด ฿${worst.s} ${worst.km} กม.)`);
-ok(Math.abs(worst.pct - 0.10) < 1e-9, "กรณีต่ำสุดได้ 10% พอดี (ตัวเลขชุดนี้ไม่เผื่อเกินและไม่ขาด)");
+ok(bad === 0, `ไม่มีกรณีที่กำไรต่ำกว่า 10% (ตรวจ ${3000 * 31} กรณี; ต่ำสุด ${(worst.pct * 100).toFixed(2)}% ที่ยอด ฿${worst.s} ${worst.km} กม.)`);
+ok(worst.pct >= 0.10 - 1e-9, "กรณีต่ำสุดไม่ต่ำกว่า 10% (ตอนนี้ GP 20% ระยะ <= 3 กม. จึงมีกำไรเกินเป้า)");
 
 console.log("== งานด่วนของแม่ค้า = ค่ารอบไรเดอร์ + ค่าธรรมเนียมแอป 20");
 [[2, 50], [3.5, 55], [5, 70], [7, 90]].forEach(([km, fee]) =>

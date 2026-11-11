@@ -2911,13 +2911,13 @@ const PRICING = Object.freeze({
     stepFee: 5,
     defaultRiderBaseFee: 30,
     customerBaseFee: 20,
-    maxKm: 7,
+    maxKm: 3,
     smallOrderFullAt: 200,
     smallOrderMidAt: 100,
     smallOrderFeeMid: 5,
     smallOrderFeeLow: 10,
     expressAppFee: 20,
-    defaultGpRate: 15,
+    defaultGpRate: 20,
     multiStallFeePerShop: 10,
     maxStallsPerOrder: 4
 });
@@ -7229,7 +7229,7 @@ function renderHubDailyReport(targetDateKey) {
                 <div class="text-xl font-black text-white">฿${hubGrossRevenue.toLocaleString()}</div>
                 <div class="text-[10px] text-slate-300 space-y-1 pt-1 border-t border-white/10 font-mono">
                     <div class="flex justify-between"><span>• ค่าส่งลูกค้า:</span><strong>฿${totalDeliveryFees.toLocaleString()}</strong></div>
-                    <div class="flex justify-between"><span>• GP แผงค้า (${report.vendorSettlement.gpRate || 10}%):</span><strong class="text-amber-300">฿${totalVendorGP.toLocaleString()}</strong></div>
+                    <div class="flex justify-between"><span>• GP แผงค้า (${report.vendorSettlement.gpRate || PRICING.defaultGpRate}%):</span><strong class="text-amber-300">฿${totalVendorGP.toLocaleString()}</strong></div>
                     <div class="flex justify-between"><span>• ค่าส่งด่วน Express:</span><strong>฿${totalExpressFees.toLocaleString()}</strong></div>
                 </div>
             </div>
@@ -7472,7 +7472,7 @@ function renderHubDailyReport(targetDateKey) {
                         <th class="p-2.5">เจ้าของ / เบอร์พร้อมเพย์</th>
                         <th class="p-2.5 text-center">จำนวนที่ขาย</th>
                         <th class="p-2.5 text-right">ยอดขายรวม</th>
-                        <th class="p-2.5 text-right">หัก GP (${report.vendorSettlement.gpRate || 10}%)</th>
+                        <th class="p-2.5 text-right">หัก GP (${report.vendorSettlement.gpRate || PRICING.defaultGpRate}%)</th>
                         <th class="p-2.5 text-right">ยอดโอนสุทธิ</th>
                         <th class="p-2.5 text-center">สถานะ</th>
                         <th class="p-2.5 text-center">โอนเคลียร์</th>
@@ -7517,7 +7517,7 @@ function renderHubDailyReport(targetDateKey) {
                             </span>`}
                         </td>
                         <td class="p-2.5 text-center">
-                            <button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, ${(s.payoutAmount !== undefined ? s.payoutAmount : s.totalAmount)}, ${jsArg(s.phone)}, ${jsArg(s.ownerName)}, ${jsArg(s.stallNumber)}, ${s.totalAmount}, ${s.gpAmount || 0}, ${s.gpRate || 10})" class="px-2.5 py-1.5 ${s.isSettled ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'} font-bold rounded-xl text-[10px] active:scale-95 transition-all flex items-center gap-1 mx-auto">
+                            <button onclick="openVendorPayoutModal(${jsArg(s.stallId)}, ${jsArg(s.stallName)}, ${(s.payoutAmount !== undefined ? s.payoutAmount : s.totalAmount)}, ${jsArg(s.phone)}, ${jsArg(s.ownerName)}, ${jsArg(s.stallNumber)}, ${s.totalAmount}, ${s.gpAmount || 0}, ${s.gpRate || PRICING.defaultGpRate})" class="px-2.5 py-1.5 ${s.isSettled ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'} font-bold rounded-xl text-[10px] active:scale-95 transition-all flex items-center gap-1 mx-auto">
                                 <span class="material-symbols-outlined text-xs">qr_code_2</span>
                                 <span>${s.isSettled ? 'ดู QR / โอนซ้ำ' : '💳 โอนพร้อมเพย์'}</span>
                             </button>
@@ -8317,7 +8317,7 @@ function settleAllVendors(dateKey) {
             amount: netPayout,
             grossAmount: s.totalAmount,
             gpAmount: s.gpAmount || 0,
-            gpRate: s.gpRate || 10,
+            gpRate: s.gpRate || PRICING.defaultGpRate,
             stallName: s.stallName
         };
     });
@@ -9173,7 +9173,7 @@ function printThermalVendorSlip(stallId, dateKey) {
         <div class="slip-row"><span class="slip-label">จำนวนออเดอร์ที่เข้ารับ:</span><span class="slip-value">${s.orderCount} บิล</span></div>
         <div class="slip-row"><span class="slip-label">จำนวนสินค้าที่ขายได้จริง:</span><span class="slip-value">${s.itemsCount} ชิ้น</span></div>
         <div class="slip-row"><span class="slip-label">ยอดจำหน่ายรวม:</span><span class="slip-value">฿${s.totalAmount.toLocaleString()}</span></div>
-        <div class="slip-row"><span class="slip-label">หัก GP ตลาด (${s.gpRate || 10}%):</span><span class="slip-value" style="color: #b91c1c;">-฿${(s.gpAmount || 0).toLocaleString()}</span></div>
+        <div class="slip-row"><span class="slip-label">หัก GP ตลาด (${s.gpRate || PRICING.defaultGpRate}%):</span><span class="slip-value" style="color: #b91c1c;">-฿${(s.gpAmount || 0).toLocaleString()}</span></div>
         <div class="settle-box">
             <div class="settle-title">ยอดเงินโอนสุทธิให้แผงค้า</div>
             <div class="settle-amount">฿${(s.payoutAmount !== undefined ? s.payoutAmount : Math.max(0, s.totalAmount - (s.gpAmount || 0))).toLocaleString()}</div>
@@ -9522,7 +9522,7 @@ function printA4VendorsSummary(dateKey) {
                 <div style="font-size: 15px; font-weight: bold; color: #1e293b;">฿${report.vendorSettlement.totalVendorGross.toLocaleString()}</div>
             </div>
             <div class="summary-box">
-                <div>หัก GP ตลาด (${report.vendorSettlement.gpRate || 10}%):</div>
+                <div>หัก GP ตลาด (${report.vendorSettlement.gpRate || PRICING.defaultGpRate}%):</div>
                 <div style="font-size: 15px; font-weight: bold; color: #b91c1c;">-฿${report.vendorSettlement.totalVendorGP.toLocaleString()}</div>
             </div>
             <div class="summary-box">
@@ -9542,7 +9542,7 @@ function printA4VendorsSummary(dateKey) {
                     <th class="text-center">ชิ้นที่ขาย</th>
                     <th class="text-center">ออเดอร์</th>
                     <th class="text-right">ยอดขายรวม</th>
-                    <th class="text-right">หัก GP (${report.vendorSettlement.gpRate || 10}%)</th>
+                    <th class="text-right">หัก GP (${report.vendorSettlement.gpRate || PRICING.defaultGpRate}%)</th>
                     <th class="text-right">ยอดโอนสุทธิ</th>
                     <th class="text-center">สถานะ</th>
                 </tr>
@@ -20374,7 +20374,7 @@ function printA4VendorSettlementsReport(targetDateKey) {
     const totalDue = report && report.vendorSettlement ? (report.vendorSettlement.totalVendorAmount || 0) : 0;
     const settledAmt = report && report.vendorSettlement ? (report.vendorSettlement.totalSettledAmount || 0) : 0;
     const unsettledAmt = report && report.vendorSettlement ? (report.vendorSettlement.totalPendingAmount || 0) : 0;
-    const gpRate = report && report.vendorSettlement ? (report.vendorSettlement.gpRate || 10) : 10;
+    const gpRate = report && report.vendorSettlement ? (report.vendorSettlement.gpRate || PRICING.defaultGpRate) : PRICING.defaultGpRate;
 
     let rowsHtml = "";
     if (vendors.length === 0) {
@@ -21158,7 +21158,7 @@ function renderAdminStalls() {
         const vendorList = vendorSettlement.stalls || [];
         const settledCount = vendorList.filter(v => v.isSettled).length;
         const unsettledCount = vendorList.length - settledCount;
-        const currentGPRate = vendorSettlement.gpRate !== undefined ? vendorSettlement.gpRate : 10;
+        const currentGPRate = vendorSettlement.gpRate !== undefined ? vendorSettlement.gpRate : PRICING.defaultGpRate;
 
         subTabContentHtml = `
             <!-- Financial Summary KPIs (3 Cards) -->
@@ -21341,9 +21341,9 @@ function renderAdminStalls() {
                         <div class="space-y-1">
                             <label class="font-bold text-slate-700 flex items-center justify-between">
                                 <span>ค่าธรรมเนียม GP ตลาด (% GP)</span>
-                                <span class="text-purple-700 font-bold">ปัจจุบัน ${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || 10)}%</span>
+                                <span class="text-purple-700 font-bold">ปัจจุบัน ${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || PRICING.defaultGpRate)}%</span>
                             </label>
-                            <input id="admin-market-gp-input" type="number" min="1" max="30" value="${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || 10)}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            <input id="admin-market-gp-input" type="number" min="1" max="30" value="${marketSettings.gpRate !== undefined ? marketSettings.gpRate : (report?.vendorSettlement?.gpRate || PRICING.defaultGpRate)}" class="w-full p-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none">
                             <p class="text-[10.5px] text-slate-400">อัตราค่าธรรมเนียมส่วนแบ่งยอดขายร้านค้า (GP) คำนวณหักอัตโนมัติก่อนโอนเคลียร์เงินรอบวัน</p>
                         </div>
 
