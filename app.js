@@ -1165,6 +1165,7 @@ function stopStallOrdersListener() {
     if (_stallOrdersRef) { try { _stallOrdersRef.off(); } catch (e) { } }
     _stallOrdersRef = null;
     state.merchantStallOrders = [];
+    if (typeof updateMerchantOrderAlertLoop === "function") updateMerchantOrderAlertLoop(false);   // ออกจากระบบร้าน -> หยุดเสียงเตือนออเดอร์ใหม่
 }
 
 // แม่ค้าแก้กลุ่มสินค้าของร้านตัวเอง: เขียนทั้งในออเดอร์เต็ม (stalls/<ตำแหน่งจริง>) และในสำเนาของร้าน
@@ -16914,9 +16915,21 @@ function renderMerchantIncomingOrders() {
             const statusText = o.status === "delivered" ? "✓ ส่งสำเร็จแล้ว" : (o.status === "delivering" ? "🛵 ไรเดอร์กำลังส่ง" : "⏳ กำลังรวบรวมของสด");
             
             const isStallReady = !!o.ready;
+            const isNewUnacked = !isStallReady && o.status !== 'delivered' && !isMerchantOrderAcked(o.orderId);
 
             html += `
-                <div class="bg-white rounded-2xl border ${isStallReady ? 'border-emerald-400/80 shadow-md ring-1 ring-emerald-400/40' : 'border-slate-200/80 shadow-xs'} p-3.5 sm:p-4 space-y-3 hover:shadow-md transition-all">
+                <div class="bg-white rounded-2xl border ${isStallReady ? 'border-emerald-400/80 shadow-md ring-1 ring-emerald-400/40' : (isNewUnacked ? 'border-rose-400 shadow-md ring-1 ring-rose-300' : 'border-slate-200/80 shadow-xs')} p-3.5 sm:p-4 space-y-3 hover:shadow-md transition-all">
+                    ${isNewUnacked ? `
+                        <div class="bg-gradient-to-r from-rose-600 via-orange-500 to-rose-600 text-white rounded-2xl p-3 shadow-md flex items-center justify-between gap-2 animate-pulse">
+                            <div class="flex items-center gap-2 font-black text-xs">
+                                <span class="text-base">🔔</span>
+                                <span>ออเดอร์ใหม่เข้าร้าน! กดรับเพื่อหยุดเสียงเตือน</span>
+                            </div>
+                            <button type="button" onclick="merchantAcknowledgeNewOrder(${jsArg(o.orderId)})" class="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 font-extrabold rounded-xl text-xs shadow-2xs active:scale-95 transition-all cursor-pointer shrink-0">
+                                ✓ รับทราบ
+                            </button>
+                        </div>
+                    ` : ''}
                     <div class="flex items-center justify-between pb-2 border-b border-slate-100">
                         <div class="flex items-center gap-2">
                             <span class="font-mono font-black text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">${escapeHtml(o.orderId)}</span>
@@ -17008,6 +17021,10 @@ function renderMerchantIncomingOrders() {
     }
 
     listEl.innerHTML = html;
+
+    // เสียงเตือนออเดอร์ใหม่: ดังซ้ำจนกว่าร้านจะกดรับ (ไม่สนตัวกรองช่วงเวลาที่เลือกดูอยู่บนจอ)
+    const hasUnackedOrders = allStallOrders.some(o => !o.ready && o.status !== 'delivered' && !isMerchantOrderAcked(o.orderId));
+    updateMerchantOrderAlertLoop(hasUnackedOrders);
 }
 window.renderMerchantIncomingOrders = renderMerchantIncomingOrders;
 
@@ -17070,6 +17087,8 @@ function _refreshAfterMerchantOrderChange() {
 }
 
 function merchantMarkStallReady(orderId, stallId) {
+    // ถ้าร้านข้ามปุ่ม "รับทราบ" แล้วกดเตรียมของเสร็จแล้วตรง ๆ เลย ก็ถือว่ารับออเดอร์แล้ว หยุดเสียงเตือนด้วย
+    if (typeof merchantAcknowledgeNewOrder === "function") merchantAcknowledgeNewOrder(orderId, true);
     let sIdx = -1;
     const order = mutateOrderEverywhere(orderId, o => {
         const i = _merchantOrderStallIndex(o, stallId);
@@ -27540,6 +27559,77 @@ function playOrderAlertSound() {
         }, 180);
     } catch (e) {
         console.warn("Audio notification notice:", e);
+    }
+}
+
+// เสียงเตือน "มีออเดอร์ใหม่เข้าร้าน" (แยกจาก playOrderAlertSound ที่ใช้ตอนฮับได้รับแจ้งเงินโอนเข้า)
+// เจ้าของตัดสินใจ 2026-11-25: ดังซ้ำทุก ๆ MERCHANT_ORDER_ALERT_REPEAT_MS จนกว่าร้านจะกดรับ
+function playMerchantNewOrderAlertSound() {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        [0, 260, 520].forEach(delay => {
+            setTimeout(() => {
+                try {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = "square";
+                    osc.frequency.setValueAtTime(784, ctx.currentTime);   // เสียงบี๊บกระชับ ต่างจากเสียงระฆัง "เงินโอนเข้า"
+                    gain.gain.setValueAtTime(0.22, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime);
+                    osc.stop(ctx.currentTime + 0.18);
+                } catch (e) { }
+            }, delay);
+        });
+    } catch (e) {
+        console.warn("Merchant order alert notice:", e);
+    }
+}
+
+// ----- แม่ค้า "กดรับ" ออเดอร์ใหม่: หยุดเสียงเตือนที่ดังซ้ำ -----
+const MERCHANT_ORDER_ALERT_REPEAT_MS = 8000;
+let _merchantOrderAlertTimer = null;
+
+function merchantAckedOrderIdsSet() {
+    try { return new Set(JSON.parse(localStorage.getItem("talathub_merchant_acked_orders") || "[]")); }
+    catch (e) { return new Set(); }
+}
+function saveMerchantAckedOrderIds(set) {
+    try {
+        const arr = Array.from(set).slice(-300);   // กันไฟล์โตไม่จำกัด เก็บแค่ล่าสุดพอ
+        localStorage.setItem("talathub_merchant_acked_orders", JSON.stringify(arr));
+    } catch (e) { }
+}
+function isMerchantOrderAcked(orderId) {
+    return merchantAckedOrderIdsSet().has(orderId);
+}
+
+// ร้านกดปุ่ม "🔔 รับทราบออเดอร์ใหม่" (หยุดเสียง ไม่เปลี่ยนสถานะออเดอร์ ยังต้องกด "เตรียมของเสร็จแล้ว" ทีหลังตามปกติ)
+// silent = true: เรียกจาก merchantMarkStallReady เอง (กดเตรียมของเสร็จแล้วตรง ๆ โดยไม่กดรับทราบก่อน) ไม่ต้องขึ้น toast/render ซ้ำ
+function merchantAcknowledgeNewOrder(orderId, silent) {
+    if (isMerchantOrderAcked(orderId)) return;
+    const set = merchantAckedOrderIdsSet();
+    set.add(orderId);
+    saveMerchantAckedOrderIds(set);
+    if (!silent) {
+        showToast(`🔔 รับทราบออเดอร์ ${orderId} แล้ว กรุณาเตรียมของแล้วกด "เตรียมของเสร็จแล้ว" ด้วยนะครับ`);
+        renderMerchantIncomingOrders();
+    }
+}
+window.merchantAcknowledgeNewOrder = merchantAcknowledgeNewOrder;
+
+function updateMerchantOrderAlertLoop(hasUnackedOrders) {
+    if (hasUnackedOrders) {
+        if (_merchantOrderAlertTimer) return;
+        playMerchantNewOrderAlertSound();
+        _merchantOrderAlertTimer = setInterval(playMerchantNewOrderAlertSound, MERCHANT_ORDER_ALERT_REPEAT_MS);
+    } else if (_merchantOrderAlertTimer) {
+        clearInterval(_merchantOrderAlertTimer);
+        _merchantOrderAlertTimer = null;
     }
 }
 
