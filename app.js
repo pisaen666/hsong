@@ -917,15 +917,29 @@ function buildStallOrderCopy(order, idx) {
     return { orderId: String(order.orderId), savedAt: Number(order.savedAt) || Date.now(), stallIndex: idx, stall };
 }
 
-function saveOrderSideCopiesToCloud(orderKey, order) {
-    if (!isFirebaseReady() || !order || !_newOrderIds.has(order.orderId)) return;
-    if (!order.customerUid || order.customerUid !== getAuthUid()) return;
-    _newOrderIds.delete(order.orderId);
+// ออเดอร์โอนผ่านพร้อมเพย์/SCB ที่ฮับยังไม่กดยืนยันสลิป ต้อง "รอ" ก่อน ไม่ส่งให้ร้าน/ไรเดอร์เห็น
+// (เจ้าของตัดสินใจ 2026-11-25: คืนเงินเฉพาะรายการที่ขาดยังคงไว้ตามเดิม แต่เพิ่มการรอตรวจสลิปนี้แยกต่างหาก)
+function orderNeedsPaymentVerification(order) {
+    return !!order && (order.paymentType === "promptpay" || order.paymentType === "bank_transfer") && order.paymentVerified !== true;
+}
+
+// สร้างใบงานไรเดอร์ + สำเนาของร้าน ให้ร้านค้า/ไรเดอร์เห็นออเดอร์นี้จริง ๆ (เรียกตอนสร้างออเดอร์ที่ไม่ต้องรอตรวจสลิป
+// หรือตอนฮับกดยืนยันสลิปผ่านแล้วใน approveOrderPayment)
+function releaseOrderSideCopies(orderKey, order) {
+    if (!isFirebaseReady() || !order) return;
     db.ref(`rider_jobs/${orderKey}`).set(buildRiderJobCard(order)).catch(e => console.warn("rider_jobs create failed:", e && e.message));
     (Array.isArray(order.stalls) ? order.stalls : []).forEach((s, idx) => {
         if (!s || !s.stallId) return;
         db.ref(`stall_orders/${staffKeyId(s.stallId)}/${orderKey}`).set(buildStallOrderCopy(order, idx)).catch(() => { });
     });
+}
+
+function saveOrderSideCopiesToCloud(orderKey, order) {
+    if (!isFirebaseReady() || !order || !_newOrderIds.has(order.orderId)) return;
+    if (!order.customerUid || order.customerUid !== getAuthUid()) return;
+    if (orderNeedsPaymentVerification(order)) return;   // รอฮับตรวจสลิปก่อน — approveOrderPayment จะเรียก releaseOrderSideCopies ให้เองตอนยืนยันผ่าน
+    _newOrderIds.delete(order.orderId);
+    releaseOrderSideCopies(orderKey, order);
 }
 
 // สถานะออเดอร์ (กำลังส่ง/ส่งแล้ว) ไปถึงใบงานไรเดอร์และสำเนาของแม่ค้า
@@ -34290,7 +34304,12 @@ function approveOrderPayment(orderId) {
         }
     }
 
-    showToast(`✅ ยืนยันยอดเงินออเดอร์ ${order.orderId} สำเร็จ! ปลดล็อคการจ่ายงานแล้ว`);
+    // ปลดล็อค: เพิ่งผ่านจุด "รอตรวจสลิป" ให้ร้านค้า/ไรเดอร์เห็นออเดอร์นี้ตอนนี้ (saveOrderSideCopiesToCloud ข้ามไปตอนสร้างออเดอร์)
+    if (typeof isFirebaseReady === "function" && isFirebaseReady() && typeof toFirebaseKey === "function" && typeof releaseOrderSideCopies === "function") {
+        releaseOrderSideCopies(toFirebaseKey(order.orderId), order);
+    }
+
+    showToast(`✅ ยืนยันยอดเงินออเดอร์ ${order.orderId} สำเร็จ! ส่งออเดอร์ให้ร้านค้าเตรียมของ & ปลดล็อคการจ่ายงานแล้ว`);
     playOrderAlertSound();
 
     renderHubPickingList();
