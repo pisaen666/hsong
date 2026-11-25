@@ -29972,7 +29972,7 @@ function openDeliveryPhotoModal(orderId) {
     if (!isFirebaseReady()) { showToast("⚠️ ต้องเชื่อมต่ออินเทอร์เน็ตเพื่อดูรูป"); return; }
     const key = toFirebaseKey(orderId);
     showToast("⏳ กำลังโหลดรูปถ่ายส่งของ...");
-    db.ref(`delivery_photos/${key}`).once("value").then(snap => {
+    _withTimeout(db.ref(`delivery_photos/${key}`).once("value"), 10000).then(snap => {
         const rec = snap.val();
         if (!rec || !rec.photo) { showToast("⚠️ ยังไม่มีรูปถ่ายส่งของสำหรับออเดอร์นี้"); return; }
         let modal = document.getElementById("delivery-photo-view-modal");
@@ -30124,61 +30124,11 @@ function openRiderDeliveryCompleteModal() {
             if (refundRow) refundRow.classList.add("hidden");
         }
 
-        // Setup Photo Proof Preview
-        const proofImg = document.getElementById("rider-proof-img");
-        const proofBox = document.getElementById("rider-proof-preview-box");
-        const proofTag = document.getElementById("rider-proof-status-tag");
-        const proofBtn = document.getElementById("rider-proof-btn-text");
-        if (o.deliveryProofImage && proofImg && proofBox) {
-            proofImg.src = o.deliveryProofImage;
-            proofBox.classList.remove("hidden");
-            if (proofTag) {
-                proofTag.textContent = "✓ แนบรูปแล้ว";
-                proofTag.className = "text-[9px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full";
-            }
-            if (proofBtn) proofBtn.textContent = "📷 เปลี่ยนรูปหลักฐานการวางของ";
-        } else {
-            if (proofBox) proofBox.classList.add("hidden");
-            if (proofImg) proofImg.src = "";
-            if (proofTag) {
-                proofTag.textContent = "ยังไม่แนบรูป";
-                proofTag.className = "text-[9px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-bold";
-            }
-            if (proofBtn) proofBtn.textContent = "📷 ถ่ายรูป / แนบรูปการวางของสด";
-        }
     }
 
     modal.classList.remove("hidden");
 }
 window.openRiderDeliveryCompleteModal = openRiderDeliveryCompleteModal;
-
-// Rider Photo Proof Upload Handler
-function handleRiderDeliveryProofUpload(event) {
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        const dataUrl = e.target.result;
-        const img = document.getElementById("rider-proof-img");
-        const box = document.getElementById("rider-proof-preview-box");
-        const tag = document.getElementById("rider-proof-status-tag");
-        const btnText = document.getElementById("rider-proof-btn-text");
-        if (img) img.src = dataUrl;
-        if (box) box.classList.remove("hidden");
-        if (tag) {
-            tag.textContent = "✓ แนบรูปแล้ว";
-            tag.className = "text-[9px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full";
-        }
-        if (btnText) btnText.textContent = "📷 เปลี่ยนรูปหลักฐานการวางของ";
-        if (state.activeOrder) {
-            state.activeOrder.deliveryProofImage = dataUrl;
-            saveActiveOrderToStorage(state.activeOrder);
-        }
-        showToast("📸 แนบรูปถ่ายหลักฐานการส่งมอบของสดเรียบร้อยแล้ว!");
-    };
-    reader.readAsDataURL(file);
-}
-window.handleRiderDeliveryProofUpload = handleRiderDeliveryProofUpload;
 
 // Rider Arrival Alert (LINE / SMS notification to customer)
 function sendRiderArrivalAlert() {
@@ -34751,46 +34701,6 @@ function markRiderArrivedAtCustomer() {
     showToast(`🏠 ส่งสัญญาณเรียบร้อย: ไรเดอร์ถึงหน้าบ้านลูกค้าแล้ว (${timeStr})`);
 }
 window.markRiderArrivedAtCustomer = markRiderArrivedAtCustomer;
-
-function openRiderProofModal() {
-    const modal = document.getElementById("rider-proof-upload-modal");
-    if (modal) modal.classList.remove("hidden");
-}
-window.openRiderProofModal = openRiderProofModal;
-
-function closeRiderProofModal() {
-    const modal = document.getElementById("rider-proof-upload-modal");
-    if (modal) modal.classList.add("hidden");
-}
-window.closeRiderProofModal = closeRiderProofModal;
-
-function handleRiderProofFileUpload(event) {
-    const file = event && event.target && event.target.files ? event.target.files[0] : null;
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const base64Data = e.target.result;
-        const img = document.getElementById("rider-proof-img-preview");
-        const container = document.getElementById("rider-proof-preview-container");
-        if (img) img.src = base64Data;
-        if (container) container.classList.remove("hidden");
-        if (state.activeOrder) {
-            state.activeOrder.deliveryProofImage = base64Data;
-        }
-    };
-    reader.readAsDataURL(file);
-}
-window.handleRiderProofFileUpload = handleRiderProofFileUpload;
-
-function confirmRiderDeliveryWithProof() {
-    if (state.activeOrder && !state.activeOrder.deliveryProofImage) {
-        state.activeOrder.deliveryProofImage = "https://images.unsplash.com/photo-1526367790999-0150786686a2?auto=format&fit=crop&w=400&q=80";
-    }
-    closeRiderProofModal();
-    handleRiderCompleteDelivery();
-}
-window.confirmRiderDeliveryWithProof = confirmRiderDeliveryWithProof;
 
 function renderRiderWallet() {
     const container = document.getElementById("rider-wallet-container");

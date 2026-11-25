@@ -33,6 +33,11 @@ console.log("== index.html: ช่องถ่ายรูปในหน้า�
 ok(/id="rider-delivery-photo-box"/.test(htmlSrc), "มีกล่องถ่ายรูปส่งของในหน้าไรเดอร์");
 ok(/handleDeliveryPhotoUpload/.test(htmlSrc), "ช่องอัปโหลดรูปเรียก handleDeliveryPhotoUpload");
 
+console.log("== ล้างโค้ด/UI เก่าที่ซ้ำซ้อนหรือตายแล้วเรื่องรูปถ่ายส่งของ (พบระหว่างทำงานนี้) ==");
+ok(!/rider-proof-upload-modal/.test(htmlSrc), "ลบ modal 'ถ่ายรูปหลักฐานการจัดส่ง' ที่ไม่มีปุ่มไหนเปิดได้เลย (ตายอยู่ก่อนแล้ว)");
+ok(!/confirmRiderDeliveryWithProof|openRiderProofModal|handleRiderProofFileUpload/.test(appSrc), "ลบฟังก์ชันของ modal ที่ตายแล้ว (มีบั๊กใส่รูป stock ปลอมถ้าไม่แนบรูปด้วย)");
+ok(!/deliveryProofImage|rider-proof-btn-text|handleRiderDeliveryProofUpload/.test(appSrc + htmlSrc), "ลบปุ่มแนบรูปเดิมในหน้าสรุปหลังส่งของ (เก็บแค่ในเครื่องไรเดอร์เอง ไม่เคยส่งขึ้นคลาวด์ ฮับไม่เคยเห็น) ถูกแทนที่ด้วยระบบใหม่แล้ว");
+
 console.log("== โค้ดต้นฉบับ: บังคับถ่ายรูปก่อนส่งมอบสำเร็จ ==");
 const complete = fn("handleRiderCompleteDelivery");
 ok(/if \(!state\.currentDeliveryPhoto\)/.test(complete), "เช็คว่ามีรูปแล้วหรือยังก่อนทำอย่างอื่น");
@@ -40,6 +45,7 @@ ok(/return;/.test(complete.slice(0, complete.indexOf("order.status = \"delivered
 ok(/saveDeliveryPhotoToCloud/.test(complete), "บันทึกรูปขึ้นคลาวด์ตอนส่งมอบสำเร็จ");
 ok(/db\.ref\(`delivery_photos\/\$\{.*\}`\)\.set/.test(fn("saveDeliveryPhotoToCloud")), "เก็บรูปแยกโหนด delivery_photos ไม่ปนกับ orders");
 ok(!/db\.ref\(`orders/.test(fn("saveDeliveryPhotoToCloud")), "ไม่เขียนรูปลง orders/<k> โดยตรง (ลูกค้า/ไรเดอร์คนอื่นจะอ่านเจอ)");
+ok(/_withTimeout\(db\.ref\(`delivery_photos/.test(fn("openDeliveryPhotoModal")), "โหลดรูปมีกันไทม์เอาต์ (เหมือนจุดอื่นที่อ่านฐานข้อมูลทั้งหมด) ไม่ค้างตลอดไปถ้าเน็ตมีปัญหา");
 
 // ---- สภาพแวดล้อมจำลอง (ไม่มีอินเทอร์เน็ต ไม่มีฐานข้อมูลจริง) ----
 const toasts = [];
