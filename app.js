@@ -1138,7 +1138,67 @@ function checkUnclaimedJobAlerts() {
         showToast(`🚨 มี ${late.length} งานที่ไม่มีไรเดอร์รับเกิน ${UNCLAIMED_JOB_ALERT_MIN} นาที กรุณาจ่ายงานที่หน้าจัดส่ง (ฮับ)`);
     }
 }
-setInterval(() => { if (isOwnerSignedIn()) { renderHubRiderJobsPanel(); checkUnclaimedJobAlerts(); } }, 30000);
+
+// ── ร้านไหนยังไม่กด "เตรียมของเสร็จแล้ว" เกินเวลาที่ตั้งไว้ (เจ้าของตัดสินใจ 2026-11-25, ข้อ 4 ของ 8 เรื่องที่ตรวจไว้ 2026-11-18) ──
+// ใช้ค่า alertPrepMinutes เดิมที่ตั้งค่าไว้แล้ว (ค่าเริ่มต้น 15 นาที) ซึ่งเดิมเป็นแค่ข้อความ ไม่มีตัวจับเวลาจริง
+function lateStallEntries() {
+    if (!isOwnerSignedIn() || typeof _collectAllOrders !== "function") return [];
+    const mins = Number(loadMarketStallSettings().alertPrepMinutes) || 15;
+    const now = Date.now();
+    const out = [];
+    _collectAllOrders().forEach(o => {
+        if (!o || !Array.isArray(o.stalls) || o.status === "delivered" || o.status === "delivering") return;
+        if (o.orderType === "MERCHANT_EXPRESS") return;   // งานด่วนที่แผงค้าเรียกเองไม่เกี่ยวกับการจัดของที่ฮับ
+        const created = Number(o.savedAt) || Number(o.createdAt) || now;
+        const elapsedMin = (now - created) / 60000;
+        if (elapsedMin < mins) return;
+        o.stalls.forEach(s => {
+            if (s && s.stallId && !s.ready) {
+                out.push({ key: o.orderId + "|" + s.stallId, orderId: o.orderId, stallId: s.stallId, stallName: s.name || "", mins: Math.floor(elapsedMin) });
+            }
+        });
+    });
+    return out;
+}
+
+function renderHubLateStallsPanel() {
+    const el = document.getElementById("hub-late-stalls-panel");
+    if (!el) return;
+    const entries = lateStallEntries();
+    if (!entries.length) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+    el.classList.remove("hidden");
+    el.innerHTML = `
+        <div class="bg-white rounded-2xl border-2 border-rose-300 p-3 space-y-2">
+            <div class="font-extrabold text-sm text-slate-800 flex items-center gap-1.5">🏪 ร้านที่ยังไม่เตรียมของเกินเวลา (${entries.length})</div>
+            ${entries.map(e => `
+                <div class="rounded-xl p-2.5 border border-rose-400 bg-rose-50 space-y-2">
+                    <div class="flex items-center justify-between gap-2 flex-wrap text-xs">
+                        <span class="font-mono font-black text-slate-900">${escapeHtml(e.orderId)}</span>
+                        <span class="font-bold text-rose-700">🚨 รอมาแล้ว ${e.mins} นาที</span>
+                    </div>
+                    <div class="text-xs text-slate-600">🏪 ${escapeHtml(e.stallName || e.stallId)}</div>
+                    <button type="button" onclick="contactExpressStall(${jsArg(e.stallId)}, ${jsArg(e.orderId)})" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold active:scale-95 transition-all">📞 โทรตามร้าน</button>
+                </div>`).join("")}
+        </div>`;
+}
+window.renderHubLateStallsPanel = renderHubLateStallsPanel;
+
+const _lateStallsAlerted = new Set();
+function checkLateStallAlerts() {
+    if (!isOwnerSignedIn()) return;
+    const entries = lateStallEntries();
+    const fresh = entries.filter(e => !_lateStallsAlerted.has(e.key));
+    fresh.forEach(e => _lateStallsAlerted.add(e.key));
+    const hubBadge = document.getElementById("hub-badge-count");
+    if (entries.length && hubBadge) { hubBadge.classList.remove("hidden"); hubBadge.textContent = "!"; }
+    if (fresh.length) {
+        playOrderAlertSound();
+        const mins = Number(loadMarketStallSettings().alertPrepMinutes) || 15;
+        showToast(`🚨 มีร้านค้า ${fresh.length} ร้าน ยังไม่กด "เตรียมของเสร็จแล้ว" เกิน ${mins} นาที กรุณาติดตามหรือตัดของแทนร้าน`);
+    }
+}
+
+setInterval(() => { if (isOwnerSignedIn()) { renderHubRiderJobsPanel(); checkUnclaimedJobAlerts(); renderHubLateStallsPanel(); checkLateStallAlerts(); } }, 30000);
 
 // ── แม่ค้า: ฟังสำเนาออเดอร์ของร้านตัวเอง (stall_orders/<ร้าน>) ──
 let _stallOrdersRef = null;
@@ -28460,6 +28520,9 @@ function renderHubPickingList() {
     }
 
     container.innerHTML = finalHtml;
+
+    if (typeof renderHubLateStallsPanel === "function") renderHubLateStallsPanel();
+    if (typeof checkLateStallAlerts === "function") checkLateStallAlerts();
 }
 
 // Out-of-Stock Toggle Handler (ขั้นตอนที่ 2: ฮับกดแจ้งของหมด)

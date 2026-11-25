@@ -1706,6 +1706,9 @@
             <!-- งานที่ยังไม่มีไรเดอร์รับ (เห็นทุกแท็บ; เตือนสีแดงเมื่อรอเกิน 10 นาที) — renderHubRiderJobsPanel() -->
             <div id="hub-rider-jobs-panel" class="hidden px-4 pt-4"></div>
 
+            <!-- ร้านไหนยังไม่กด "เตรียมของเสร็จแล้ว" เกินเวลาที่ตั้งไว้ (ตั้งค่าระบบ > alertPrepMinutes) — renderHubLateStallsPanel() -->
+            <div id="hub-late-stalls-panel" class="hidden px-4 pt-4"></div>
+
             <!-- Tab 1: Picking List (Dynamic) -->
             <div id="hub-content-picking" class="p-4 flex-1 overflow-y-auto space-y-4">
                 <!-- Dynamically populated via renderHubPickingList() -->
@@ -7210,7 +7213,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.94_merchant_order_alert"></script>
+    <script src="app.js?v=10.95_late_stall_alert"></script>
 </body>
 
 </html>
