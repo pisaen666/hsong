@@ -2462,6 +2462,21 @@
                                 </span>
                             </div>
 
+                            <!-- บังคับถ่ายรูปส่งของก่อนกด "ส่งมอบสำเร็จ" (เจ้าของตัดสินใจ 2026-11-25) -->
+                            <div id="rider-delivery-photo-box" class="space-y-1.5">
+                                <label
+                                    class="cursor-pointer p-2.5 rounded-xl border border-amber-300 bg-amber-50/60 hover:bg-amber-100/60 text-amber-800 text-xs font-bold flex items-center justify-center gap-1 active:scale-95 transition-all shadow-2xs">
+                                    <span class="material-symbols-outlined text-sm">photo_camera</span>
+                                    <span id="rider-delivery-photo-label">📷 ถ่ายรูปส่งของ</span>
+                                    <input type="file" accept="image/*" capture="environment" onchange="handleDeliveryPhotoUpload(event)" class="hidden">
+                                </label>
+                                <div id="rider-delivery-photo-preview-box"
+                                    class="p-2 bg-slate-50 rounded-xl border border-emerald-200 hidden text-center space-y-1">
+                                    <img id="rider-delivery-photo-img" class="w-full max-h-40 object-cover rounded-lg mx-auto" />
+                                    <div class="text-[10.5px] text-emerald-700 font-bold">✓ แนบรูปแล้ว พร้อมกดส่งมอบสำเร็จ</div>
+                                </div>
+                            </div>
+
                             <div class="grid grid-cols-2 gap-2" id="rider-action-buttons-grid">
                                 <button type="button" id="btn-rider-start-delivery" onclick="handleRiderStartDelivery()"
                                     class="p-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 text-xs active:scale-95 transition-all">
@@ -7213,7 +7228,7 @@
     <!-- Firebase Config & Init -->
     <script src="firebase-config.js?v=10.24_owner_auth"></script>
     <!-- App Logic -->
-    <script src="app.js?v=10.95_late_stall_alert"></script>
+    <script src="app.js?v=10.96_rider_delivery_photo"></script>
 </body>
 
 </html>

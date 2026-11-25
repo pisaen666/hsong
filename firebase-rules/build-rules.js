@@ -1,7 +1,10 @@
-// สร้างไฟล์กฎ Firebase รุ่น v8 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
+// สร้างไฟล์กฎ Firebase รุ่น v9 จากแม่แบบเดียว (ต่างกันแค่ UID เจ้าของของแต่ละโปรเจกต์)
 //   node firebase-rules/build-rules.js
-// ผลลัพธ์: hsong-test.rules.v8.json และ hsong-1f342.rules.v8.json
-//   (ไฟล์ .rules.v7.json / v6 / v5 / v4 / v3 / v2 = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+// ผลลัพธ์: hsong-test.rules.v9.json และ hsong-1f342.rules.v9.json
+//   (ไฟล์ .rules.v8.json / v7 / v6 / v5 / v4 / v3 / v2 = รุ่นก่อนหน้า เก็บไว้ถอยกลับ ห้ามแก้มือ)
+//
+// v9 (2026-11-25) — ไรเดอร์ถ่ายรูปส่งของ (เจ้าของตัดสินใจ: บังคับถ่าย, ฮับ/เจ้าของเท่านั้นดูได้, เก็บตลอดไป):
+//   delivery_photos/<ออเดอร์> : {photo, deliveredAt} อ่านได้เฉพาะเจ้าของ; ไรเดอร์ที่รับงานนั้นสร้างได้ครั้งเดียว (แก้/ลบทีหลังไม่ได้ กันแก้หลักฐาน)
 //
 // v8 (2026-09-28) — GP ร้านค้าเก็บที่ฐานข้อมูลกลาง (โครงสร้างราคาใหม่ เจ้าของตัดสินใจ GP 15%):
 //   app_settings/pricing : { gpRate (0 < x <= 50), updatedAt } ทุกคนอ่านได้ เขียนได้เฉพาะเจ้าของ; ส่วนอื่นเหมือน v7 ทุกอย่าง
@@ -123,6 +126,15 @@ function build(uids) {
                         // สถานะออเดอร์ (กำลังส่ง/ส่งแล้ว) ให้ไรเดอร์ที่รับงานนี้อัปเดตให้แม่ค้าเห็นได้
                         status: { ".write": RIDER + " && root.child('orders/' + $oid + '/assignedRiderId').val() === " + SID, ".validate": "newData.isString()" }
                     })
+                }
+            },
+
+            delivery_photos: {
+                ".read": OWNER,
+                ".write": OWNER,
+                "$oid": {
+                    ".write": "auth != null && !data.exists() && " + RIDER + " && root.child('orders/' + $oid + '/assignedRiderId').val() === " + SID,
+                    ".validate": "newData.hasChildren(['photo', 'deliveredAt'])"
                 }
             },
 
@@ -329,7 +341,7 @@ function build(uids) {
 }
 
 Object.entries(PROJECTS).forEach(([project, uids]) => {
-    const file = path.join(__dirname, project + ".rules.v8.json");
+    const file = path.join(__dirname, project + ".rules.v9.json");
     fs.writeFileSync(file, JSON.stringify(build(uids), null, 2) + "\n");
     console.log("wrote", path.basename(file));
 });

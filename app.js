@@ -7738,6 +7738,12 @@ function renderHubDailyReport(targetDateKey) {
                                         <span class="material-symbols-outlined text-xs">print</span>
                                         <span>สลิป</span>
                                     </button>
+                                    ${o.hasDeliveryPhoto ? `
+                                        <button onclick="openDeliveryPhotoModal(${jsArg(o.orderId)})" class="px-2 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ดูรูปถ่ายส่งของที่ไรเดอร์ถ่ายไว้">
+                                            <span class="material-symbols-outlined text-xs">photo_camera</span>
+                                            <span>ดูรูปส่งของ</span>
+                                        </button>
+                                    ` : ''}
                                     <button onclick="openOrderLineNoticeModal(${jsArg(o.orderId)})" class="px-2 py-1.5 bg-[#06C755]/15 hover:bg-[#06C755]/25 text-[#04883b] border border-[#06C755]/40 font-bold rounded-xl text-[10px] active:scale-95 transition-all shadow-2xs flex items-center gap-1 cursor-pointer" title="ส่งข้อมูลสรุปออเดอร์ให้ลูกค้าทาง LINE">
                                         <span class="text-xs">💬</span>
                                         <span>LINE</span>
@@ -29452,6 +29458,9 @@ function renderRiderScreen() {
     const btnCompleteText = document.getElementById("rider-btn-complete-text");
     const btnCompleteIcon = document.getElementById("rider-btn-complete-icon");
     const completedBanner = document.getElementById("rider-completed-banner");
+    const photoBox = document.getElementById("rider-delivery-photo-box");
+    // กล่องถ่ายรูปส่งของ: โชว์เฉพาะตอนกำลังนำส่ง (ยังไม่กด "ส่งมอบสำเร็จ") ไม่ต้องโชว์ตอนยังไม่ออกส่ง/ส่งเสร็จแล้ว
+    if (photoBox) photoBox.classList.toggle("hidden", !(order && order.status === "delivering"));
 
     // ปุ่มคืนงาน: เฉพาะงานที่อยู่ในชื่อไรเดอร์คนนี้ และยังไม่ได้ออกส่ง
     const releaseBtn = document.getElementById("btn-rider-release-job");
@@ -29919,8 +29928,85 @@ function handleRiderStartDelivery() {
 }
 window.handleRiderStartDelivery = handleRiderStartDelivery;
 
+// ── ไรเดอร์ถ่ายรูปส่งของ (เจ้าของตัดสินใจ 2026-11-25: บังคับถ่าย, ฮับ/เจ้าของเท่านั้นดูได้, เก็บตลอดไป) ──
+function handleDeliveryPhotoUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    showToast("⏳ กำลังเตรียมรูปถ่ายส่งของ...");
+    compressSlipImage(file, function (dataUrl) {
+        state.currentDeliveryPhoto = dataUrl;
+        const img = document.getElementById("rider-delivery-photo-img");
+        const previewBox = document.getElementById("rider-delivery-photo-preview-box");
+        const labelEl = document.getElementById("rider-delivery-photo-label");
+        if (img && previewBox) {
+            img.src = dataUrl;
+            previewBox.classList.remove("hidden");
+        }
+        if (labelEl) labelEl.textContent = "📷 ถ่ายรูปใหม่";
+        showToast("✓ แนบรูปถ่ายส่งของเรียบร้อยแล้ว! กดปุ่ม \"ส่งมอบสำเร็จ\" ได้เลย");
+    });
+}
+window.handleDeliveryPhotoUpload = handleDeliveryPhotoUpload;
+
+function clearDeliveryPhotoInput() {
+    state.currentDeliveryPhoto = null;
+    const img = document.getElementById("rider-delivery-photo-img");
+    const previewBox = document.getElementById("rider-delivery-photo-preview-box");
+    const labelEl = document.getElementById("rider-delivery-photo-label");
+    if (previewBox) previewBox.classList.add("hidden");
+    if (img) img.src = "";
+    if (labelEl) labelEl.textContent = "📷 ถ่ายรูปส่งของ";
+}
+window.clearDeliveryPhotoInput = clearDeliveryPhotoInput;
+
+// เก็บรูปแยกโหนด delivery_photos/<ออเดอร์> (ไม่ใช่ orders/<k>) เพราะเป็นข้อมูลส่วนตัวหน้าบ้านลูกค้า
+// กฎฐานข้อมูล v9 ให้อ่านได้เฉพาะเจ้าของ/ฮับเท่านั้น ลูกค้า/ไรเดอร์คนอื่นอ่านไม่ได้
+function saveDeliveryPhotoToCloud(orderId, dataUrl) {
+    if (!isFirebaseReady() || !orderId || !dataUrl) return;
+    const key = toFirebaseKey(orderId);
+    db.ref(`delivery_photos/${key}`).set({ photo: dataUrl, deliveredAt: Date.now() }).catch(e => console.warn("delivery photo save failed:", e && e.message));
+}
+
+// ฮับ/เจ้าของเปิดดูรูปส่งของ (ดึงสดจาก delivery_photos เฉพาะตอนเปิดดู ไม่โหลดล่วงหน้าทุกใบ)
+function openDeliveryPhotoModal(orderId) {
+    if (!isFirebaseReady()) { showToast("⚠️ ต้องเชื่อมต่ออินเทอร์เน็ตเพื่อดูรูป"); return; }
+    const key = toFirebaseKey(orderId);
+    showToast("⏳ กำลังโหลดรูปถ่ายส่งของ...");
+    db.ref(`delivery_photos/${key}`).once("value").then(snap => {
+        const rec = snap.val();
+        if (!rec || !rec.photo) { showToast("⚠️ ยังไม่มีรูปถ่ายส่งของสำหรับออเดอร์นี้"); return; }
+        let modal = document.getElementById("delivery-photo-view-modal");
+        if (!modal) {
+            modal = document.createElement("div");
+            modal.id = "delivery-photo-view-modal";
+            modal.className = "fixed inset-0 bg-black/80 z-[999999] flex items-center justify-center p-4";
+            modal.innerHTML = `
+                <div class="bg-white rounded-2xl p-3 max-w-sm w-full space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div class="font-extrabold text-sm text-slate-800">📷 รูปถ่ายส่งของ: <span id="delivery-photo-view-orderid"></span></div>
+                        <button type="button" onclick="document.getElementById('delivery-photo-view-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-700 text-xl leading-none">✕</button>
+                    </div>
+                    <img id="delivery-photo-view-img" class="w-full rounded-xl border border-slate-200" />
+                    <div id="delivery-photo-view-time" class="text-[11px] text-slate-500 text-center"></div>
+                </div>`;
+            document.body.appendChild(modal);
+        }
+        modal.querySelector("#delivery-photo-view-orderid").textContent = orderId;
+        modal.querySelector("#delivery-photo-view-img").src = rec.photo;
+        modal.querySelector("#delivery-photo-view-time").textContent = rec.deliveredAt ? ("ถ่ายเมื่อ " + new Date(rec.deliveredAt).toLocaleString("th-TH")) : "";
+        modal.classList.remove("hidden");
+    }).catch(() => showToast("⚠️ โหลดรูปไม่สำเร็จ ลองใหม่อีกครั้ง"));
+}
+window.openDeliveryPhotoModal = openDeliveryPhotoModal;
+
 // ── ไรเดอร์กด Step 2: ส่งมอบสำเร็จ (ถึงหน้าบ้านลูกค้า) ──────────────────────────
 function handleRiderCompleteDelivery() {
+    if (!state.currentDeliveryPhoto) {
+        showToast("⚠️ กรุณาถ่ายรูปส่งของให้ลูกค้าก่อนกดส่งมอบสำเร็จ");
+        const box = document.getElementById("rider-delivery-photo-box");
+        if (box) box.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+    }
     if (!state.activeOrder) {
         state.activeOrder = loadSavedActiveOrder();
     }
@@ -29964,8 +30050,14 @@ function handleRiderCompleteDelivery() {
     }
 
     // 1. บันทึก order ให้เรียบร้อย ทั้ง localStorage และ Firebase
+    order.hasDeliveryPhoto = true;   // แค่สถานะ (บอกว่ามีรูป) ไม่ใช่ตัวรูป — ตัวรูปเก็บแยกที่ delivery_photos/<k> ให้ฮับ/เจ้าของอ่านได้เท่านั้น
     saveActiveOrderToStorage(order);
     updateOrderStatusInFirebase(order.orderId, "delivered");
+    saveDeliveryPhotoToCloud(order.orderId, state.currentDeliveryPhoto);
+    if (typeof isFirebaseReady === "function" && isFirebaseReady() && typeof db !== "undefined") {
+        db.ref(`orders/${toFirebaseKey(order.orderId)}`).update({ hasDeliveryPhoto: true }).catch(() => {});
+    }
+    clearDeliveryPhotoInput();
 
     // 2. Aggregate รายงานประจำวันทันที เพื่อให้ Admin Tab 1 & Tab 2 อัปเดตยอด
     try {
